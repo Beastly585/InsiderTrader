@@ -1,116 +1,304 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// app.jsx  — React UI for SEC Form 4 Insider Trading Tracker
-// ─────────────────────────────────────────────────────────────────────────────
-
+// src/app.jsx
 const { useState, useEffect, useMemo, useCallback } = React;
 const cfg = window.APP_CONFIG;
 
-// ── Utility ──────────────────────────────────────────────────────────────────
+// ── Utils ──────────────────────────────────────────────────────────────────────
+const fmt = {
+  money: n => {
+    if (n == null) return '—';
+    const a = Math.abs(n), s = n < 0 ? '-' : '';
+    if (a >= 1_000_000_000) return `${s}$${(a/1e9).toFixed(1)}B`;
+    if (a >= 1_000_000)     return `${s}$${(a/1e6).toFixed(1)}M`;
+    if (a >= 1_000)         return `${s}$${(a/1e3).toFixed(0)}K`;
+    return `${s}$${a.toFixed(0)}`;
+  },
+  price:  n => n == null ? '—' : `$${parseFloat(n).toFixed(2)}`,
+  number: n => n == null ? '—' : Number(n).toLocaleString(),
+  pct:    n => n == null ? '—' : `${n > 0 ? '+' : ''}${Number(n).toFixed(1)}%`,
+  date:   d => {
+    if (!d) return '—';
+    return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  },
+  dateShort: d => {
+    if (!d) return '—';
+    return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  },
+};
 
-function fmtNumber(n) {
-  if (n == null) return '—';
-  return Number(n).toLocaleString();
+// ── Theme ──────────────────────────────────────────────────────────────────────
+function useTheme() {
+  const [dark, setDark] = useState(() => {
+    try { const s = localStorage.getItem('theme'); if (s) return s==='dark'; } catch(_){}
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch(_){}
+  }, [dark]);
+  return [dark, setDark];
 }
-function fmtMoney(n) {
-  if (n == null) return '—';
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n}`;
-}
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function StatCard({ label, value, color }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value" style={color ? { color } : {}}>{value}</div>
-    </div>
-  );
-}
-
+// ── Components ─────────────────────────────────────────────────────────────────
 function Badge({ type, children }) {
   return <span className={`badge badge--${type}`}>{children}</span>;
 }
 
-function SortableHeader({ label, colKey, sortCol, sortDir, onSort }) {
+function StatCard({ label, value, sub, color }) {
+  return (
+    <div className="stat-card">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value" style={color ? {color} : {}}>{value}</div>
+      {sub && <div className="stat-sub">{sub}</div>}
+    </div>
+  );
+}
+
+function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title: ttl }) {
   const active = sortCol === colKey;
   return (
-    <th onClick={() => onSort(colKey)} className={active ? 'th--active' : ''}>
-      {label}
-      {active && <span className="sort-arrow">{sortDir > 0 ? ' ↑' : ' ↓'}</span>}
+    <th onClick={() => onSort(colKey)}
+        className={`th-sort${active?' th--active':''}${right?' th--right':''}`}
+        title={ttl}>
+      {label}{active ? (sortDir > 0 ? ' ↑' : ' ↓') : ''}
     </th>
   );
 }
 
-function FilingRow({ filing }) {
-  const { date, ticker, company, insiderName, title, transactionType,
-          shares, price, value, sector, relationship, relLabel } = filing;
+// ── Alert banner ───────────────────────────────────────────────────────────────
+function AlertBanner({ alerts }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed || alerts.length === 0) return null;
+
   return (
-    <tr>
-      <td className="td-date">{date}</td>
-      <td><span className="ticker">{ticker || '—'}</span></td>
-      <td className="td-overflow" title={company}>{company}</td>
-      <td className="td-overflow" title={insiderName}>{insiderName}</td>
-      <td className="td-overflow td-muted" title={title}>{title || '—'}</td>
-      <td>
-        <Badge type={transactionType === 'buy' ? 'buy' : 'sell'}>
-          {transactionType === 'buy' ? '▲ Buy' : '▼ Sell'}
-        </Badge>
+    <div className="alert-banner">
+      <div className="alert-banner__icon">🔔</div>
+      <div className="alert-banner__content">
+        <div className="alert-banner__title">
+          {alerts.length} high-conviction C-suite open-market {alerts.length === 1 ? 'buy' : 'buys'} in the last 3 days
+        </div>
+        <div className="alert-banner__items">
+          {alerts.slice(0,5).map((f,i) => (
+            <span key={i} className="alert-item">
+              <span className="ticker">{f.ticker}</span>
+              <span className="alert-item__detail">
+                {f.insiderName?.split(' ').slice(-1)[0]} · {fmt.money(f.value)}
+                {f.pctOwnedChange != null && ` · +${f.pctOwnedChange.toFixed(0)}% pos`}
+              </span>
+            </span>
+          ))}
+          {alerts.length > 5 && <span className="alert-item__more">+{alerts.length-5} more</span>}
+        </div>
+      </div>
+      <button className="alert-banner__dismiss" onClick={() => setDismissed(true)}>✕</button>
+    </div>
+  );
+}
+
+// ── Filing row ─────────────────────────────────────────────────────────────────
+function FilingRow({ f }) {
+  const txDate   = f.transactionDate || f.date;
+  const fileDate = f.date;
+  const showFiled = fileDate && txDate && fileDate !== txDate;
+  return (
+    <tr className={`row-${f.transactionType}`}>
+      <td className="td-date">
+        <div className="td-date-main">{fmt.dateShort(txDate)}</div>
+        {showFiled && <div className="td-date-sub">filed {fmt.dateShort(fileDate)}</div>}
       </td>
-      <td className="td-mono">{fmtNumber(shares)}</td>
-      <td className="td-mono">${parseFloat(price || 0).toFixed(2)}</td>
-      <td className="td-mono">{fmtMoney(value)}</td>
-      <td className="td-sector">{sector}</td>
-      <td><Badge type={`rel-${relationship}`}>{relLabel}</Badge></td>
+      <td><span className="ticker">{f.ticker||'—'}</span></td>
+      <td className="td-company">
+        <div className="td-overflow" title={f.company}>{f.company}</div>
+        <div className="td-sector-inline">{f.sector !== 'Other' ? f.sector : ''}</div>
+      </td>
+      <td className="td-insider">
+        <div className="td-overflow" title={f.insiderName}>{f.insiderName}</div>
+        <div className="td-muted td-overflow" title={f.title}>{f.title||'—'}</div>
+      </td>
+      <td>
+        <Badge type={f.transactionType==='buy'?'buy':f.transactionType==='sell'?'sell':'other'}>
+          {f.transactionType==='buy'?'▲ Buy':f.transactionType==='sell'?'▼ Sell':'◆ Other'}
+        </Badge>
+        {f.transactionCode && (
+          <div className="td-code" title={f.transactionCodeLabel}>
+            {f.transactionCode}{f.isOpenMarket && <span className="om-dot" title="Open market"> ●</span>}
+          </div>
+        )}
+      </td>
+      <td className="td-right td-mono">{fmt.number(f.shares)}</td>
+      <td className="td-right td-mono">{fmt.price(f.price)}</td>
+      <td className="td-right td-mono td-value-cell">
+        <span className={f.transactionType==='buy'?'val-buy':f.transactionType==='sell'?'val-sell':''}>
+          {fmt.money(f.value)}
+        </span>
+      </td>
+      <td className="td-right td-mono">
+        {f.pctOwnedChange != null
+          ? <span className={f.transactionType==='buy'?'val-buy':'val-sell'}>
+              {f.transactionType==='buy'?'+':''}{f.pctOwnedChange.toFixed(1)}%
+            </span>
+          : '—'
+        }
+      </td>
+      <td><Badge type={`rel-${f.relationship}`}>{f.relLabel}</Badge></td>
     </tr>
   );
 }
 
-// ── Main App ──────────────────────────────────────────────────────────────────
+// ── Signal row ─────────────────────────────────────────────────────────────────
+function ConvictionBar({ score, max=20 }) {
+  const pct = Math.min((score/max)*100, 100);
+  const color = pct>65?'var(--green-600)':pct>35?'var(--amber-600)':'var(--text-3)';
+  return (
+    <div className="conv-bar-wrap" title={`Conviction: ${score.toFixed(1)}`}>
+      <div className="conv-bar" style={{width:`${pct}%`,background:color}}/>
+    </div>
+  );
+}
 
+function SignalRow({ s, rank, onClick, selected }) {
+  const net = s.netValue > 0 ? 'buy' : s.netValue < 0 ? 'sell' : 'other';
+  return (
+    <tr className={`signal-row${selected?' signal-row--selected':''}`} onClick={()=>onClick(s)}>
+      <td className="td-rank">{rank}</td>
+      <td><span className="ticker">{s.ticker}</span></td>
+      <td className="td-company">
+        <div className="td-overflow" title={s.company}>{s.company}</div>
+        <div className="td-sector-inline">{s.sector!=='Other'?s.sector:''}</div>
+      </td>
+      <td className="td-center">
+        <span className="sig-count buy-count">{s.buys}</span>
+        <span className="sig-sep"> / </span>
+        <span className="sig-count sell-count">{s.sells}</span>
+      </td>
+      <td className="td-right td-mono">{fmt.money(s.buyValue)}</td>
+      <td className="td-right td-mono">
+        <span className={net==='buy'?'val-buy':net==='sell'?'val-sell':''}>
+          {s.netValue>=0?'+':''}{fmt.money(s.netValue)}
+        </span>
+      </td>
+      <td className="td-center">
+        {s.cSuiteBuys > 0 ? <span className="csuite-badge">{s.cSuiteBuys} exec</span> : '—'}
+      </td>
+      <td className="td-right td-mono">
+        {s.maxPctChange != null
+          ? <span className="val-buy">+{s.maxPctChange.toFixed(0)}%</span>
+          : '—'}
+      </td>
+      <td className="td-center">{s.insiderCount}</td>
+      <td className="td-date-main">{fmt.dateShort(s.lastTradeDate)}</td>
+      <td style={{width:'100px'}}><ConvictionBar score={s.conviction}/></td>
+    </tr>
+  );
+}
+
+function SignalDetail({ signal, onClose }) {
+  if (!signal) return null;
+  const trades = [...signal.trades].sort((a,b) =>
+    (b.transactionDate||b.date).localeCompare(a.transactionDate||a.date));
+  return (
+    <div className="signal-detail">
+      <div className="signal-detail__header">
+        <div>
+          <span className="ticker" style={{fontSize:'18px'}}>{signal.ticker}</span>
+          <span className="signal-detail__co"> — {signal.company}</span>
+        </div>
+        <button className="btn btn--ghost" onClick={onClose}>✕</button>
+      </div>
+      <div className="signal-detail__stats">
+        <div className="sd-stat"><span className="sd-label">Buys</span><span className="val-buy">{signal.buys}</span></div>
+        <div className="sd-stat"><span className="sd-label">Sells</span><span className="val-sell">{signal.sells}</span></div>
+        <div className="sd-stat"><span className="sd-label">Buy $</span><span>{fmt.money(signal.buyValue)}</span></div>
+        <div className="sd-stat"><span className="sd-label">Exec</span><span>{signal.cSuiteBuys}</span></div>
+        <div className="sd-stat"><span className="sd-label">Max Pos+</span>
+          <span>{signal.maxPctChange!=null?`+${signal.maxPctChange.toFixed(0)}%`:'—'}</span></div>
+        <div className="sd-stat"><span className="sd-label">Insiders</span><span>{signal.insiderCount}</span></div>
+      </div>
+      <div className="signal-detail__trades">
+        {trades.map((f,i) => (
+          <div key={i} className={`sd-trade sd-trade--${f.transactionType}`}>
+            <div className="sd-trade-left">
+              <Badge type={f.transactionType==='buy'?'buy':'sell'}>
+                {f.transactionType==='buy'?'▲':'▼'}
+              </Badge>
+              <div>
+                <div className="sd-trade-name">{f.insiderName}</div>
+                <div className="td-muted" style={{fontSize:'11px'}}>{f.title}</div>
+              </div>
+            </div>
+            <div className="sd-trade-right">
+              <div className="td-mono" style={{fontWeight:500}}>{fmt.money(f.value)}</div>
+              <div className="td-muted" style={{fontSize:'11px'}}>
+                {fmt.date(f.transactionDate||f.date)} · {f.transactionCode}
+                {f.pctOwnedChange!=null && ` · pos +${f.pctOwnedChange.toFixed(0)}%`}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Date presets ───────────────────────────────────────────────────────────────
+const DATE_PRESETS = [
+  {label:'7d',days:7},{label:'30d',days:30},{label:'90d',days:90},
+  {label:'1yr',days:365},{label:'All',days:null},
+];
+
+// ── Main App ───────────────────────────────────────────────────────────────────
 function App() {
-  const [filings, setFilings]     = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
-  const [lastUpdated, setUpdated] = useState(null);
+  const [dark, setDark]             = useTheme();
+  const [filings, setFilings]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [updated, setUpdated]       = useState(null);
+  const [tab, setTab]               = useState('signals');
+  const [selectedSignal, setSelected] = useState(null);
 
   // Filters
-  const [search, setSearch]   = useState('');
-  const [typeF,  setTypeF]    = useState('');
-  const [relF,   setRelF]     = useState('');
-  const [sectorF,setSectorF]  = useState('');
+  const [search,  setSearch]    = useState('');
+  const [typeF,   setTypeF]     = useState('');
+  const [relF,    setRelF]      = useState('');
+  const [sectorF, setSectorF]   = useState('');
+  const [openMktOnly, setOpenMktOnly] = useState(false);
+  const [datePreset, setDatePreset]   = useState(30);
+  const [dateFrom, setDateFrom]       = useState('');
+  const [dateTo,   setDateTo]         = useState('');
 
   // Sort
-  const [sortCol, setSortCol] = useState('date');
+  const [sortCol, setSortCol] = useState('transactionDate');
   const [sortDir, setSortDir] = useState(-1);
+  const [sigSort, setSigSort] = useState('conviction');
+  const [sigDir,  setSigDir]  = useState(-1);
 
-  // Pagination
   const [page, setPage] = useState(0);
   const PAGE = cfg.PAGE_SIZE || 25;
 
-  // ── Load data ──────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const data = await EdgarData.loadFilings();
-      setFilings(data);
-      setUpdated(new Date());
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+      setFilings(data); setUpdated(new Date());
+    } catch(e) { setError(e.message); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Derived sectors for filter dropdown ──────────────────────────────────
   const sectors = useMemo(() =>
-    [...new Set(filings.map(f => f.sector))].sort(), [filings]);
+    [...new Set(filings.map(f=>f.sector).filter(Boolean))].sort(), [filings]);
 
-  // ── Filter + sort ─────────────────────────────────────────────────────────
+  const effectiveDateFrom = useMemo(() => {
+    if (dateFrom) return dateFrom;
+    if (datePreset === null) return '';
+    const d = new Date(); d.setDate(d.getDate() - datePreset);
+    return d.toISOString().split('T')[0];
+  }, [dateFrom, datePreset]);
+
+  // Alerts: high-conviction C-suite open-market buys in last 3 days
+  const alerts = useMemo(() => EdgarData.getAlerts(filings), [filings]);
+
+  // Filtered filings for the table
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     let out = filings.filter(f => {
@@ -118,169 +306,288 @@ function App() {
       if (typeF   && f.transactionType !== typeF)   return false;
       if (relF    && f.relationship    !== relF)    return false;
       if (sectorF && f.sector          !== sectorF) return false;
+      if (openMktOnly && !f.isOpenMarket)            return false;
+      const tx = f.transactionDate || f.date;
+      if (effectiveDateFrom && tx && tx < effectiveDateFrom) return false;
+      if (dateTo            && tx && tx > dateTo)            return false;
       return true;
     });
-    out = [...out].sort((a, b) => {
+    return [...out].sort((a,b) => {
       let av = a[sortCol], bv = b[sortCol];
-      if (['shares','price','value'].includes(sortCol)) {
-        av = parseFloat(av) || 0; bv = parseFloat(bv) || 0;
+      if (['shares','price','value','conviction','pctOwnedChange'].includes(sortCol)) {
+        av = parseFloat(av)||0; bv = parseFloat(bv)||0;
       }
       if (av < bv) return  sortDir;
       if (av > bv) return -sortDir;
       return 0;
     });
-    return out;
-  }, [filings, search, typeF, relF, sectorF, sortCol, sortDir]);
+  }, [filings, search, typeF, relF, sectorF, openMktOnly,
+      effectiveDateFrom, dateTo, sortCol, sortDir]);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  const stats = useMemo(() => ({
-    total:   filings.length,
-    buys:    filings.filter(f => f.transactionType === 'buy').length,
-    sells:   filings.filter(f => f.transactionType === 'sell').length,
-    tickers: new Set(filings.map(f => f.ticker).filter(Boolean)).size,
-  }), [filings]);
+  // Signals aggregated by ticker
+  const signals = useMemo(() => {
+    const base = filings.filter(f => {
+      const tx = f.transactionDate || f.date;
+      if (effectiveDateFrom && tx && tx < effectiveDateFrom) return false;
+      if (dateTo            && tx && tx > dateTo)            return false;
+      if (sectorF && f.sector !== sectorF) return false;
+      return true;
+    });
+    const raw = EdgarData.computeSignals(base);
+    return [...raw].sort((a,b) => {
+      let av=a[sigSort], bv=b[sigSort];
+      if (typeof av==='number') { if (av<bv) return sigDir; if (av>bv) return -sigDir; }
+      else { const r=String(av||'').localeCompare(String(bv||'')); return sigDir>0?r:-r; }
+      return 0;
+    });
+  }, [filings, effectiveDateFrom, dateTo, sectorF, sigSort, sigDir]);
 
-  // ── Paged rows ────────────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const buys  = filings.filter(f=>f.transactionType==='buy');
+    const sells = filings.filter(f=>f.transactionType==='sell');
+    const omBuys = filings.filter(f=>f.isOpenMarket&&f.transactionType==='buy'&&f.relationship==='strong');
+    return {
+      total:    filings.length,
+      buys:     buys.length,
+      sells:    sells.length,
+      buyVal:   buys.reduce((s,f)=>s+(f.value||0),0),
+      sellVal:  sells.reduce((s,f)=>s+(f.value||0),0),
+      execBuys: omBuys.length,
+      alerts:   alerts.length,
+    };
+  }, [filings, alerts]);
+
   const totalPages = Math.ceil(filtered.length / PAGE);
-  const pageRows   = filtered.slice(page * PAGE, (page + 1) * PAGE);
+  const pageRows   = filtered.slice(page*PAGE, (page+1)*PAGE);
 
   function onSort(col) {
-    if (sortCol === col) setSortDir(d => -d);
+    if (sortCol===col) setSortDir(d=>-d);
     else { setSortCol(col); setSortDir(-1); }
     setPage(0);
   }
-
-  function onFilterChange(setter) {
-    return e => { setter(e.target.value); setPage(0); };
+  function onSigSort(col) {
+    if (sigSort===col) setSigDir(d=>-d);
+    else { setSigSort(col); setSigDir(-1); }
   }
+  function onFilter(setter) { return e => { setter(e.target.value); setPage(0); }; }
+  function setPreset(days) { setDatePreset(days); setDateFrom(''); setDateTo(''); setPage(0); }
+  function clearFilters() { setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setOpenMktOnly(false); setPage(0); }
+  const hasFilters = search||typeF||relF||sectorF||openMktOnly;
 
-  const sharedHeaderProps = { sortCol, sortDir, onSort };
+  const shp = { sortCol, sortDir, onSort };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="layout">
+
+      {/* Header */}
       <header className="top-bar">
-        <div className="top-bar__title">
-          <span className="top-bar__icon">
-            <i className="ti ti-report-money" aria-hidden="true"></i>
-          </span>
+        <div className="top-bar__left">
           <div>
-            <h1>SEC Form 4 — Insider Trading</h1>
+            <h1>Insider Trading Desk</h1>
             <p className="subtitle">
-              {lastUpdated
-                ? `Updated ${lastUpdated.toLocaleTimeString()} · ${filings.length} filings`
-                : cfg.DATA_SOURCE === 'demo'
-                  ? 'Demo mode — edit src/config.js to connect live data'
-                  : 'Loading…'}
+              {updated
+                ? `Updated ${updated.toLocaleTimeString()} · ${filings.length.toLocaleString()} filings`
+                : cfg.DATA_SOURCE==='demo' ? 'Demo mode — set DATA_SOURCE in config.js' : 'Loading…'}
             </p>
           </div>
         </div>
-        <button className="btn btn--refresh" onClick={load} disabled={loading}>
-          <i className={`ti ti-refresh${loading ? ' spin' : ''}`} aria-hidden="true"></i>
-          {loading ? ' Loading…' : ' Refresh'}
-        </button>
+        <div className="top-bar__right">
+          <button className="btn btn--ghost" onClick={()=>setDark(d=>!d)}>
+            {dark?'☀ Light':'☾ Dark'}
+          </button>
+          <button className="btn btn--primary" onClick={load} disabled={loading}>
+            {loading?'↻ Loading…':'↻ Refresh'}
+          </button>
+        </div>
       </header>
+
+      {/* Alert banner */}
+      {!loading && <AlertBanner alerts={alerts} />}
 
       {/* Stats */}
       <div className="stats-row">
-        <StatCard label="Filings"        value={loading ? '…' : stats.total} />
-        <StatCard label="Buys"           value={loading ? '…' : stats.buys}  color="var(--green-700)" />
-        <StatCard label="Sells"          value={loading ? '…' : stats.sells} color="var(--red-700)" />
-        <StatCard label="Unique tickers" value={loading ? '…' : stats.tickers} />
+        <StatCard label="Total Filings"   value={loading?'…':stats.total.toLocaleString()} />
+        <StatCard label="Buys"            value={loading?'…':stats.buys.toLocaleString()}
+          sub={loading?'':fmt.money(stats.buyVal)} color="var(--green-600)" />
+        <StatCard label="Sells"           value={loading?'…':stats.sells.toLocaleString()}
+          sub={loading?'':fmt.money(stats.sellVal)} color="var(--red-600)" />
+        <StatCard label="Exec Open Buys"  value={loading?'…':stats.execBuys.toLocaleString()}
+          sub="C-suite, open market" color="var(--blue-600)" />
+        <StatCard label="🔔 Alerts"       value={loading?'…':stats.alerts.toLocaleString()}
+          sub="last 3 days" color={stats.alerts>0?'var(--amber-600)':undefined} />
       </div>
 
-      {/* Filters */}
-      <div className="filters">
-        <div className="search-wrap">
-          <i className="ti ti-search" aria-hidden="true"></i>
-          <input
-            type="search"
-            placeholder="Ticker, name, company…"
-            value={search}
-            onChange={onFilterChange(setSearch)}
-            aria-label="Search filings"
-          />
+      {/* Date bar */}
+      <div className="date-row">
+        <span className="date-row__label">Period:</span>
+        <div className="date-pills">
+          {DATE_PRESETS.map(p => (
+            <button key={p.label}
+              className={`pill${datePreset===p.days&&!dateFrom?' pill--active':''}`}
+              onClick={()=>setPreset(p.days)}>{p.label}</button>
+          ))}
         </div>
-
-        <select value={typeF} onChange={onFilterChange(setTypeF)} aria-label="Filter by type">
-          <option value="">All types</option>
-          <option value="buy">Buy / Acquisition</option>
-          <option value="sell">Sell / Disposition</option>
-        </select>
-
-        <select value={relF} onChange={onFilterChange(setRelF)} aria-label="Filter by relationship">
-          <option value="">All relationships</option>
-          <option value="strong">Strong — Insider (C-suite)</option>
-          <option value="medium">Medium — Officer (SVP/EVP)</option>
-          <option value="weak">Weak — Director / 10%</option>
-        </select>
-
-        <select value={sectorF} onChange={onFilterChange(setSectorF)} aria-label="Filter by sector">
+        <span className="date-row__sep">|</span>
+        <span className="date-row__label">Custom:</span>
+        <input type="date" value={dateFrom}
+          onChange={e=>{setDateFrom(e.target.value);setDatePreset(null);setPage(0);}}/>
+        <span className="date-row__label">→</span>
+        <input type="date" value={dateTo}
+          onChange={e=>{setDateTo(e.target.value);setDatePreset(null);setPage(0);}}/>
+        <select value={sectorF} onChange={onFilter(setSectorF)} style={{marginLeft:'auto'}}>
           <option value="">All sectors</option>
-          {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+          {sectors.map(s=><option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
-      {/* Table */}
-      {error ? (
-        <div className="state-box state-box--error">
-          <i className="ti ti-alert-circle" aria-hidden="true"></i>
-          <p>{error}</p>
-          <button className="btn" onClick={load}>Retry</button>
-        </div>
-      ) : loading ? (
-        <div className="state-box">
-          <i className="ti ti-loader spin" aria-hidden="true"></i>
-          <p>Fetching filings…</p>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="state-box">
-          <i className="ti ti-inbox" aria-hidden="true"></i>
-          <p>No filings match your filters.</p>
-        </div>
-      ) : (
-        <div className="table-wrap" role="region" aria-label="Insider trading filings">
-          <table>
-            <thead>
-              <tr>
-                <SortableHeader label="Date"         colKey="date"            {...sharedHeaderProps} />
-                <SortableHeader label="Ticker"       colKey="ticker"          {...sharedHeaderProps} />
-                <SortableHeader label="Company"      colKey="company"         {...sharedHeaderProps} />
-                <SortableHeader label="Insider"      colKey="insiderName"     {...sharedHeaderProps} />
-                <SortableHeader label="Title"        colKey="title"           {...sharedHeaderProps} />
-                <SortableHeader label="Type"         colKey="transactionType" {...sharedHeaderProps} />
-                <SortableHeader label="Shares"       colKey="shares"          {...sharedHeaderProps} />
-                <SortableHeader label="Price"        colKey="price"           {...sharedHeaderProps} />
-                <SortableHeader label="Value"        colKey="value"           {...sharedHeaderProps} />
-                <SortableHeader label="Sector"       colKey="sector"          {...sharedHeaderProps} />
-                <SortableHeader label="Relationship" colKey="relationship"    {...sharedHeaderProps} />
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((f, i) => <FilingRow key={`${f.date}-${f.insiderName}-${i}`} filing={f} />)}
-            </tbody>
-          </table>
+      {/* Tabs */}
+      <div className="tabs">
+        <button className={`tab${tab==='signals'?' tab--active':''}`}
+          onClick={()=>{setTab('signals');setSelected(null);}}>
+          Signals
+          {!loading && <span className="tab-count">{signals.length}</span>}
+        </button>
+        <button className={`tab${tab==='filings'?' tab--active':''}`}
+          onClick={()=>setTab('filings')}>
+          All Filings
+          {!loading && <span className="tab-count">{filtered.length.toLocaleString()}</span>}
+        </button>
+      </div>
+
+      {/* ── Signals tab ── */}
+      {tab==='signals' && (
+        <div className="signals-layout">
+          <div>
+            <div className="signals-hint">
+              Ranked by conviction — C-suite open-market buys weighted highest.
+              <strong> Pos%</strong> = how much their position size changed.
+              Click a row for full detail.
+            </div>
+            {loading ? (
+              <div className="state-box"><div className="spinner"/><p>Computing signals…</p></div>
+            ) : signals.length===0 ? (
+              <div className="state-box"><div>◎</div><p>No signals in this period.</p></div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead><tr>
+                    <th>#</th>
+                    <SortTh label="Ticker"     colKey="ticker"       sortCol={sigSort} sortDir={sigDir} onSort={onSigSort}/>
+                    <SortTh label="Company"    colKey="company"      sortCol={sigSort} sortDir={sigDir} onSort={onSigSort}/>
+                    <th title="Open-market buys / sells">B/S</th>
+                    <SortTh label="Buy $"      colKey="buyValue"     sortCol={sigSort} sortDir={sigDir} onSort={onSigSort} right/>
+                    <SortTh label="Net $"      colKey="netValue"     sortCol={sigSort} sortDir={sigDir} onSort={onSigSort} right
+                      title="Buy value minus sell value"/>
+                    <SortTh label="Exec Buys"  colKey="cSuiteBuys"   sortCol={sigSort} sortDir={sigDir} onSort={onSigSort}/>
+                    <SortTh label="Max Pos+"   colKey="maxPctChange" sortCol={sigSort} sortDir={sigDir} onSort={onSigSort}
+                      title="Largest single position size increase — the key quality metric"/>
+                    <SortTh label="# Insiders" colKey="insiderCount" sortCol={sigSort} sortDir={sigDir} onSort={onSigSort}/>
+                    <SortTh label="Last Trade" colKey="lastTradeDate" sortCol={sigSort} sortDir={sigDir} onSort={onSigSort}/>
+                    <SortTh label="Conviction" colKey="conviction"   sortCol={sigSort} sortDir={sigDir} onSort={onSigSort}
+                      title="Weighted: C-suite × open-market × value × position change"/>
+                  </tr></thead>
+                  <tbody>
+                    {signals.map((s,i) => (
+                      <SignalRow key={s.ticker} s={s} rank={i+1}
+                        selected={selectedSignal?.ticker===s.ticker}
+                        onClick={setSelected}/>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          {selectedSignal && (
+            <SignalDetail signal={selectedSignal} onClose={()=>setSelected(null)}/>
+          )}
         </div>
       )}
 
-      {/* Pagination */}
-      {!loading && !error && totalPages > 1 && (
-        <div className="pagination">
-          <span className="pagination__info">
-            Showing {page * PAGE + 1}–{Math.min((page + 1) * PAGE, filtered.length)} of {filtered.length}
-          </span>
-          <div className="pagination__btns">
-            <button className="btn" onClick={() => setPage(p => p - 1)} disabled={page === 0}>← Prev</button>
-            <span className="pagination__counter">{page + 1} / {totalPages}</span>
-            <button className="btn" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1}>Next →</button>
+      {/* ── Filings tab ── */}
+      {tab==='filings' && (
+        <>
+          <div className="filters">
+            <div className="search-wrap">
+              <span className="search-icon">⌕</span>
+              <input type="search" placeholder="Ticker, insider, company…"
+                value={search} onChange={onFilter(setSearch)}/>
+            </div>
+            <select value={typeF} onChange={onFilter(setTypeF)}>
+              <option value="">All types</option>
+              <option value="buy">▲ Buy</option>
+              <option value="sell">▼ Sell</option>
+              <option value="other">◆ Other</option>
+            </select>
+            <select value={relF} onChange={onFilter(setRelF)}>
+              <option value="">All roles</option>
+              <option value="strong">C-Suite</option>
+              <option value="medium">Officer</option>
+              <option value="weak">Director</option>
+            </select>
+            <label className="filter-toggle">
+              <input type="checkbox" checked={openMktOnly}
+                onChange={e=>{setOpenMktOnly(e.target.checked);setPage(0);}}/>
+              Open market only
+            </label>
+            {hasFilters && (
+              <button className="btn btn--ghost" onClick={clearFilters}>✕ Clear</button>
+            )}
           </div>
-        </div>
+
+          {error ? (
+            <div className="state-box state-box--error">
+              <div>⚠</div><p>{error}</p>
+              <button className="btn btn--primary" onClick={load}>Retry</button>
+            </div>
+          ) : loading ? (
+            <div className="state-box"><div className="spinner"/><p>Fetching…</p></div>
+          ) : filtered.length===0 ? (
+            <div className="state-box"><div>◎</div><p>No filings match your filters.</p></div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr>
+                  <SortTh label="Trade Date"  colKey="transactionDate" {...shp} title="Actual transaction date"/>
+                  <SortTh label="Ticker"      colKey="ticker"          {...shp}/>
+                  <SortTh label="Company"     colKey="company"         {...shp}/>
+                  <SortTh label="Insider"     colKey="insiderName"     {...shp}/>
+                  <SortTh label="Type"        colKey="transactionType" {...shp}/>
+                  <SortTh label="Shares"      colKey="shares"          {...shp} right/>
+                  <SortTh label="Price"       colKey="price"           {...shp} right/>
+                  <SortTh label="Value"       colKey="value"           {...shp} right/>
+                  <SortTh label="Pos %" colKey="pctOwnedChange"        {...shp} right
+                    title="Position size change — most important signal quality metric"/>
+                  <SortTh label="Role"        colKey="relationship"    {...shp}/>
+                </tr></thead>
+                <tbody>
+                  {pageRows.map((f,i) => <FilingRow key={`${f.accessionNumber}-${i}`} f={f}/>)}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!loading && !error && totalPages>1 && (
+            <div className="pagination">
+              <span className="pagination__info">
+                {page*PAGE+1}–{Math.min((page+1)*PAGE,filtered.length)} of {filtered.length.toLocaleString()}
+              </span>
+              <div className="pagination__btns">
+                <button className="btn" onClick={()=>setPage(0)} disabled={page===0}>««</button>
+                <button className="btn" onClick={()=>setPage(p=>p-1)} disabled={page===0}>‹</button>
+                <span className="pagination__counter">{page+1}/{totalPages}</span>
+                <button className="btn" onClick={()=>setPage(p=>p+1)} disabled={page>=totalPages-1}>›</button>
+                <button className="btn" onClick={()=>setPage(totalPages-1)} disabled={page>=totalPages-1}>»»</button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <footer className="footer">
-        Data from <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4&dateb=&owner=include&count=40" target="_blank" rel="noreferrer">SEC EDGAR</a>.
-        Not financial advice.
-        {cfg.DATA_SOURCE === 'demo' && ' · Demo mode — see README to connect live data.'}
+        Data: <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=4"
+          target="_blank" rel="noreferrer">SEC EDGAR Form 4</a>
+        {' · '}Not financial advice.
+        {cfg.DATA_SOURCE==='demo' && ' · Demo mode.'}
       </footer>
     </div>
   );
