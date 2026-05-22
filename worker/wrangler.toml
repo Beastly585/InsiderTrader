@@ -2,11 +2,8 @@ name = "neon-proxy"
 main = "neon-proxy.js"
 compatibility_date = "2024-01-01"
 
-[vars]
-NEON_API_URL  = "https://ep-proud-sound-aqxwens1.c-8.us-east-1.aws.neon.tech"
-NEON_DATABASE = "neondb"
-NEON_ROLE     = "neondb_owner"
-
-# NEON_API_KEY is set as a secret via:
-#   wrangler secret put NEON_API_KEY
-# Never put the actual key in this file.
+# No vars needed — everything is in the NEON_CONNECTION_STRING secret.
+# Set it once via:
+#   wrangler secret put NEON_CONNECTION_STRING
+# Then paste your full connection string:
+#   postgresql://neondb_owner:PASSWORD@ep-proud-sound-aqxwens1.c-8.us-east-1.aws.neon.tech/neondb
