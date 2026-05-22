@@ -9,8 +9,8 @@ window.APP_CONFIG = {
   NEON_ROLE:     "neondb_owner",
 
   // Cloudflare Worker (DATA_SOURCE = "proxy")
-  PROXY_URL: "https://beastly-insider-trades.workers.dev",
+  NEON_PROXY_URL: "https://beastly-insider-trades.workers.dev",
 
-  DEFAULT_DAYS_BACK: 30,
+  DEFAULT_DAYS_BACK: 14,
   PAGE_SIZE: 25,
 };
