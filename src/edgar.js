@@ -58,9 +58,7 @@
 
   // ── Neon HTTP SQL API ──────────────────────────────────────────────────────
   async function fetchFromNeon(cfg) {
-    const days  = cfg.DEFAULT_DAYS_BACK || 30;
-    const since = new Date(); since.setDate(since.getDate() - days);
-    const iso   = since.toISOString().split('T')[0];
+    const iso = '2024-01-01'
 
     const sql = `
       SELECT
@@ -91,7 +89,7 @@
       FROM public.filings
       WHERE COALESCE(transaction_date, filing_date) >= '${iso}'
       ORDER BY COALESCE(transaction_date, filing_date) DESC, value DESC NULLS LAST
-      LIMIT 2000
+      LIMIT 5000
     `;
 
     // Call the Cloudflare Worker proxy — it forwards to Neon and adds CORS headers.
