@@ -58,54 +58,67 @@
 
   // ── Neon HTTP SQL API ──────────────────────────────────────────────────────
   async function fetchFromNeon(cfg) {
-    const iso = '2024-01-01'
+    if (!cfg.NEON_PROXY_URL) {
+      throw new Error('NEON_PROXY_URL not set in config.js');
+    }
 
     const sql = `
       SELECT
-        accession_number,
-        filing_date            AS date,
-        transaction_date,
-        company_name           AS company,
-        ticker,
-        insider_name,
-        insider_title          AS title,
-        is_officer,
-        is_director,
-        is_ten_pct_owner       AS is_ten_pct,
-        transaction_type,
-        transaction_code,
-        transaction_code_label,
-        shares::float,
-        price_per_share::float AS price,
-        value::float,
-        shares_owned_after::float,
-        is_open_market,
-        is_derivative,
-        shares_owned_before::float,
-        pct_owned_change::float,
-        sector,
-        relationship,
-        footnotes
-      FROM public.filings
-      WHERE COALESCE(transaction_date, filing_date) >= '${iso}'
-      ORDER BY COALESCE(transaction_date, filing_date) DESC, value DESC NULLS LAST
-      LIMIT 10000
+        f.accession_number,
+        f.filing_date            AS date,
+        f.transaction_date,
+        f.company_name           AS company,
+        f.ticker,
+        f.insider_name,
+        f.insider_title          AS title,
+        f.is_officer,
+        f.is_director,
+        f.is_ten_pct_owner       AS is_ten_pct,
+        f.transaction_type,
+        f.transaction_code,
+        f.transaction_code_label,
+        f.is_open_market,
+        f.shares::float,
+        f.price_per_share::float              AS price,
+        f.value::float,
+        f.shares_owned_after::float,
+        f.shares_owned_before::float,
+        f.pct_owned_change::float,
+        f.is_derivative,
+        f.sector,
+        f.relationship,
+        f.footnotes,
+        p.price_current::float                AS current_price,
+        p.day_change_pct::float               AS day_change_pct,
+        p.week_52_high::float                 AS high_52w,
+        p.week_52_low::float                  AS low_52w,
+        CASE
+          WHEN f.price_per_share IS NOT NULL
+               AND f.price_per_share > 0
+               AND p.price_current IS NOT NULL
+          THEN ROUND(
+            ((p.price_current - f.price_per_share) / f.price_per_share * 100)::numeric, 1
+          )
+          ELSE NULL
+        END                                   AS return_pct
+      FROM public.filings f
+      LEFT JOIN public.prices p ON p.ticker = f.ticker
+      WHERE COALESCE(f.transaction_date, f.filing_date) >= '2024-01-01'
+        AND f.is_open_market = true
+      ORDER BY COALESCE(f.transaction_date, f.filing_date) DESC,
+               f.value DESC NULLS LAST
+      LIMIT 5000
     `;
 
-    // Call the Cloudflare Worker proxy — it forwards to Neon and adds CORS headers.
-    // The Neon API key lives in the worker as a secret, never in the browser.
-    if (!cfg.NEON_PROXY_URL) {
-      throw new Error('NEON_PROXY_URL not set in config.js — deploy the Cloudflare Worker first');
-    }
     const res = await fetch(cfg.NEON_PROXY_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ query: sql }),
     });
 
-    if (!res.ok) throw new Error(`Neon proxy ${res.status}: ${await res.text().catch(()=>'')}`);
+    if (!res.ok) throw new Error(`Proxy ${res.status}: ${await res.text().catch(()=>'')}`);
     const data = await res.json();
-    if (data.error) throw new Error(`Neon error: ${data.error}`);
+    if (data.error) throw new Error(data.error);
 
     return (data.rows || []).map(r => enrich({
       accessionNumber:      r.accession_number,
@@ -121,17 +134,22 @@
       transactionType:      r.transaction_type,
       transactionCode:      r.transaction_code,
       transactionCodeLabel: r.transaction_code_label,
+      isOpenMarket:         r.is_open_market,
       shares:               r.shares,
       price:                r.price,
       value:                r.value,
       sharesOwnedAfter:     r.shares_owned_after,
-      isOpenMarket:         r.is_open_market,
-      isDerivative:         r.is_derivative,
       sharesOwnedBefore:    r.shares_owned_before,
       pctOwnedChange:       r.pct_owned_change,
+      isDerivative:         r.is_derivative,
       sector:               r.sector,
       relationship:         r.relationship,
       footnotes:            r.footnotes,
+      currentPrice:         r.current_price,
+      dayChangePct:         r.day_change_pct,
+      high52w:              r.high_52w,
+      low52w:               r.low_52w,
+      returnPct:            r.return_pct,
     }));
   }
 
@@ -258,6 +276,11 @@
       // Conviction score: higher = more bullish signal
       // Weights: C-suite open-market buys > value > count > recency
       conviction: (s.cSuiteBuys * 5) + (s.buys - s.sells) + Math.min(Math.log10(s.buyValue + 1), 5),
+      avgReturn: (() => {
+        const withReturn = s.trades.filter(t => t.returnPct != null);
+        if (!withReturn.length) return null;
+        return +(withReturn.reduce((sum, t) => sum + t.returnPct, 0) / withReturn.length).toFixed(1);
+      })(),
     })).sort((a,b) => b.conviction - a.conviction);
   }
 

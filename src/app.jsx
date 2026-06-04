@@ -25,6 +25,11 @@ const fmt = {
     return new Date(d + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
   },
   pct: n => n == null ? '—' : `${n > 0 ? '+' : ''}${Number(n).toFixed(0)}%`,
+  ret: n => {
+    if (n == null) return null;
+    const sign = n > 0 ? '+' : '';
+    return `${sign}${Number(n).toFixed(1)}%`;
+  },
 };
 
 // ── Theme ──────────────────────────────────────────────────────────────────────
@@ -114,6 +119,21 @@ function FilingRow({ f }) {
           {fmt.money(f.value)}
         </span>
       </td>
+      <td className="td-right td-mono">
+        {f.currentPrice ? fmt.price(f.currentPrice) : '—'}
+        {f.dayChangePct != null && (
+          <div className={`td-day-chg ${f.dayChangePct >= 0 ? 'val-buy' : 'val-sell'}`}>
+            {f.dayChangePct > 0 ? '+' : ''}{f.dayChangePct.toFixed(1)}%
+          </div>
+        )}
+      </td>
+      <td className="td-right td-mono">
+        {f.returnPct != null ? (
+          <span className={`ret-badge ${f.returnPct >= 0 ? 'ret-pos' : 'ret-neg'}`}>
+            {fmt.ret(f.returnPct)}
+          </span>
+        ) : '—'}
+      </td>
       <td><Badge type={`rel-${f.relationship}`}>{f.relLabel}</Badge></td>
       <td className="td-om">
         {f.isOpenMarket && <span className="om-dot" title="Open market transaction">●</span>}
@@ -173,6 +193,14 @@ function SignalDetail({ signal, onClose }) {
         <div className="sd-stat"><span className="sd-label">Buy $</span><span>{fmt.money(signal.buyValue)}</span></div>
         <div className="sd-stat"><span className="sd-label">Exec Buys</span><span>{signal.cSuiteBuys}</span></div>
         <div className="sd-stat"><span className="sd-label">Insiders</span><span>{signal.insiderCount}</span></div>
+        {signal.avgReturn != null && (
+          <div className="sd-stat">
+            <span className="sd-label">Avg Return</span>
+            <span className={signal.avgReturn >= 0 ? 'val-buy' : 'val-sell'}>
+              {signal.avgReturn > 0 ? '+' : ''}{signal.avgReturn.toFixed(1)}%
+            </span>
+          </div>
+        )}
       </div>
       <div className="signal-detail__trades">
         {trades.map((f, i) => (
@@ -463,6 +491,10 @@ function App() {
                     <SortTh label="Shares"       colKey="shares"          {...shp} right />
                     <SortTh label="Price"        colKey="price"           {...shp} right />
                     <SortTh label="Value"        colKey="value"           {...shp} right />
+                    <SortTh label="Now"          colKey="currentPrice"    {...shp} right
+                      title="Current stock price" />
+                    <SortTh label="Return"       colKey="returnPct"       {...shp} right
+                      title="% gain/loss since insider bought" />
                     <SortTh label="Role"         colKey="relationship"    {...shp} />
                     <th title="Open market transaction (P or S code) — highest signal">OM</th>
                   </tr>
