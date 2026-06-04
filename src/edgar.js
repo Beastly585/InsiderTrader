@@ -89,7 +89,7 @@
       FROM public.filings
       WHERE COALESCE(transaction_date, filing_date) >= '${iso}'
       ORDER BY COALESCE(transaction_date, filing_date) DESC, value DESC NULLS LAST
-      LIMIT 5000
+      LIMIT 10000
     `;
 
     // Call the Cloudflare Worker proxy — it forwards to Neon and adds CORS headers.
