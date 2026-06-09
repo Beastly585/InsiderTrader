@@ -2,16 +2,12 @@ name: Daily Form 4 Ingestion
 
 on:
   schedule:
-    # 11 PM ET Monday–Friday (4 AM UTC Tuesday–Saturday)
-    - cron: '0 4 * * 2-6'
-  workflow_dispatch:   # allows manual trigger from GitHub Actions tab
+    - cron: '0 4 * * 1-5'   # 11 PM ET weekdays
+  workflow_dispatch:          # manual trigger
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: db
 
     steps:
       - uses: actions/checkout@v4
@@ -19,24 +15,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
       - name: Install dependencies
-        run: pip install "psycopg[binary]" requests python-dotenv lxml
-
-      - name: Write .env
         run: |
-          cat > .env << EOF
-          DATABASE_URL=${{ secrets.DATABASE_URL }}
-          USER_AGENT_EMAIL=${{ secrets.USER_AGENT_EMAIL }}
-          POLYGON_API_KEY=${{ secrets.POLYGON_API_KEY }}
-          DAYS_BACK=3
-          MAX_WORKERS=2
-          EOF
+          pip install requests psycopg2-binary python-dotenv \
+                      beautifulsoup4 pdfplumber lxml psycopg
 
-      - name: Fetch Form 4 filings
-        run: python fetch_filings_neon.py
+      - name: Fetch latest filings (last 3 days)
+        env:
+          DATABASE_URL:     ${{ secrets.DATABASE_URL }}
+          USER_AGENT_EMAIL: ${{ secrets.USER_AGENT_EMAIL }}
+        run: cd db && python fetch_filings_neon.py
 
-      - name: Enrich prices
-        run: python enrich_prices.py
-        continue-on-error: true   # don't fail the whole job if Polygon has issues
+      - name: Enrich prices (yesterday's close)
+        env:
+          DATABASE_URL:    ${{ secrets.DATABASE_URL }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+        run: cd db && python enrich_prices.py
+
+      - name: Fetch congressional trades (last 7 days)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: cd db && python fetch_political_trades.py --house --days 7
