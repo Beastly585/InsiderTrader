@@ -3,11 +3,12 @@ name: Daily Form 4 Ingestion
 on:
   schedule:
     - cron: '0 4 * * 1-5'   # 11 PM ET weekdays
-  workflow_dispatch:          # manual trigger
+  workflow_dispatch:
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -27,11 +28,12 @@ jobs:
           USER_AGENT_EMAIL: ${{ secrets.USER_AGENT_EMAIL }}
         run: cd db && python fetch_filings_neon.py
 
-      - name: Enrich prices (yesterday's close)
+      - name: Update prices for recent tickers only
         env:
           DATABASE_URL:    ${{ secrets.DATABASE_URL }}
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
-        run: cd db && python enrich_prices.py
+        run: |
+          cd db && python backfill_prices.py --from $(date -d '2 days ago' +%Y-%m-%d 2>/dev/null || date -v-2d +%Y-%m-%d)
 
       - name: Fetch congressional trades (last 7 days)
         env:
