@@ -88,21 +88,27 @@
         f.sector,
         f.relationship,
         f.footnotes,
-        p.price_current::float                AS current_price,
-        p.day_change_pct::float               AS day_change_pct,
-        p.week_52_high::float                 AS high_52w,
-        p.week_52_low::float                  AS low_52w,
+        ph.close::float                       AS current_price,
+        NULL::float                           AS day_change_pct,
+        NULL::float                           AS high_52w,
+        NULL::float                           AS low_52w,
         CASE
           WHEN f.price_per_share IS NOT NULL
                AND f.price_per_share > 0
-               AND p.price_current IS NOT NULL
+               AND ph.close IS NOT NULL
           THEN ROUND(
-            ((p.price_current - f.price_per_share) / f.price_per_share * 100)::numeric, 1
+            ((ph.close - f.price_per_share) / f.price_per_share * 100)::numeric, 1
           )
           ELSE NULL
         END                                   AS return_pct
       FROM public.filings f
-      LEFT JOIN public.prices p ON p.ticker = f.ticker
+      LEFT JOIN LATERAL (
+        SELECT close
+        FROM public.prices_history
+        WHERE ticker = f.ticker
+        ORDER BY date DESC
+        LIMIT 1
+      ) ph ON true
       WHERE COALESCE(f.transaction_date, f.filing_date) >= '2024-01-01'
         AND f.is_open_market = true
       ORDER BY COALESCE(f.transaction_date, f.filing_date) DESC,
