@@ -22,20 +22,75 @@ jobs:
           pip install requests psycopg2-binary python-dotenv \
                       beautifulsoup4 pdfplumber lxml psycopg
 
-      - name: Fetch latest filings (last 3 days)
+      - name: Fetch latest Form 4 filings (last 3 days)
         env:
           DATABASE_URL:     ${{ secrets.DATABASE_URL }}
           USER_AGENT_EMAIL: ${{ secrets.USER_AGENT_EMAIL }}
         run: cd db && python fetch_filings_neon.py
 
-      - name: Update prices for recent tickers only
+      - name: Update prices for today's new tickers only
         env:
           DATABASE_URL:    ${{ secrets.DATABASE_URL }}
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
         run: |
-          cd db && python backfill_prices.py --from $(date -d '2 days ago' +%Y-%m-%d 2>/dev/null || date -v-2d +%Y-%m-%d)
+          cd db && python - <<'PYEOF'
+import os, time, requests
+from datetime import date, timedelta
 
-      - name: Fetch congressional trades (last 7 days)
+DATABASE_URL    = os.environ["DATABASE_URL"]
+POLYGON_API_KEY = os.environ["POLYGON_API_KEY"]
+
+try:
+    import psycopg; conn = psycopg.connect(DATABASE_URL)
+except ImportError:
+    import psycopg2; conn = psycopg2.connect(DATABASE_URL)
+
+# Only tickers from filings in the last 3 days
+cutoff = (date.today() - timedelta(days=3)).isoformat()
+with conn.cursor() as cur:
+    cur.execute("""
+        SELECT DISTINCT ticker FROM public.filings
+        WHERE ticker IS NOT NULL AND ticker != ''
+          AND COALESCE(filing_date, transaction_date) >= %s
+        ORDER BY ticker
+    """, (cutoff,))
+    tickers = [r[0] for r in cur.fetchall()]
+
+print(f"Updating prices for {len(tickers)} recent tickers")
+
+today = date.today()
+written = 0
+for i, ticker in enumerate(tickers, 1):
+    time.sleep(12.5)
+    try:
+        r = requests.get(
+            f"https://api.polygon.io/v2/aggs/ticker/{ticker}/prev",
+            params={"apiKey": POLYGON_API_KEY}, timeout=15
+        )
+        results = r.json().get("results", [])
+        if not results: continue
+        bar = results[0]
+        close = bar.get("c")
+        ts    = bar.get("t")
+        if not close or not ts: continue
+        bar_date = date.fromtimestamp(ts/1000)
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO public.prices_history (ticker, date, close)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
+            """, (ticker, bar_date, round(float(close), 4)))
+        conn.commit()
+        written += 1
+        print(f"  [{i}/{len(tickers)}] {ticker}: ${close}")
+    except Exception as e:
+        print(f"  [{i}/{len(tickers)}] {ticker}: skip ({e})")
+
+conn.close()
+print(f"Done. {written} tickers updated.")
+PYEOF
+
+      - name: Fetch congressional trades (House + Senate if available)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: cd db && python fetch_political_trades.py --house --days 7
+        run: cd db && python fetch_political_trades.py --days 7
