@@ -96,11 +96,21 @@
           WHEN f.price_per_share IS NOT NULL
                AND f.price_per_share > 0
                AND ph.close IS NOT NULL
+               -- suppress return for implausible values (foreign issuer currency mismatch)
+               AND ABS((ph.close - f.price_per_share) / f.price_per_share) < 3.0
           THEN ROUND(
             ((ph.close - f.price_per_share) / f.price_per_share * 100)::numeric, 1
           )
           ELSE NULL
-        END                                   AS return_pct
+        END                                   AS return_pct,
+        CASE
+          WHEN f.price_per_share IS NOT NULL
+               AND f.price_per_share > 0
+               AND ph.close IS NOT NULL
+               AND ABS((ph.close - f.price_per_share) / f.price_per_share) >= 3.0
+          THEN true
+          ELSE false
+        END                                   AS is_foreign_price
       FROM public.filings f
       LEFT JOIN LATERAL (
         SELECT close
@@ -156,6 +166,7 @@
       high52w:              r.high_52w,
       low52w:               r.low_52w,
       returnPct:            r.return_pct,
+      isForeignPrice:       r.is_foreign_price,
     }));
   }
 
