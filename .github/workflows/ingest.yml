@@ -1,40 +1,75 @@
-name: Daily Form 4 Ingestion
+name: Ingest Form 4 Filings
 
 on:
   schedule:
-    - cron: '0 4 * * 1-5'   # 11 PM ET weekdays
+    # Twice daily on NYSE trading days — catches morning filings and end-of-day batch
+    # All times UTC; New York is UTC-4 in summer (EDT), UTC-5 in winter (EST)
+    #
+    # Run 1: 13:30 UTC = 9:30am EDT / 8:30am EST — catches overnight + pre-market filings
+    #   EDGAR processes most late-previous-day filings by ~9am ET
+    - cron: '30 13 * * 1-5'
+    #
+    # Run 2: 21:00 UTC = 5:00pm EDT / 4:00pm EST — catches full trading day filings
+    #   Most same-day Form 4s appear on EDGAR within 30-60min of submission
+    - cron: '0 21 * * 1-5'
+    #
+    # Run 3: 14:00 UTC Monday = 10:00am EDT — safety net for Monday mornings specifically
+    #   Catches any late Friday filings that EDGAR accepted over the weekend.
+    #   EDGAR accepts filings 24/7 and often has a weekend backlog processed Sunday night.
+    - cron: '0 14 * * 1'
+
+  # Allow manual trigger from Actions tab (useful for backfills, debugging)
   workflow_dispatch:
+    inputs:
+      days_back:
+        description: 'Number of days to look back (default: 3)'
+        required: false
+        default: '3'
+      dry_run:
+        description: 'Dry run only — parse but do not write to DB'
+        required: false
+        default: 'false'
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
-          pip install requests psycopg2-binary python-dotenv \
-                      beautifulsoup4 pdfplumber lxml psycopg
+          pip install --upgrade pip
+          pip install "psycopg[binary]" requests python-dotenv lxml
 
-      - name: Fetch latest Form 4 filings (last 3 days)
-        env:
-          DATABASE_URL:     ${{ secrets.DATABASE_URL }}
-          USER_AGENT_EMAIL: ${{ secrets.USER_AGENT_EMAIL }}
-        run: cd db && python fetch_filings_neon.py
-
-      - name: Update prices for recent tickers
-        env:
-          DATABASE_URL:    ${{ secrets.DATABASE_URL }}
-          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
-        run: cd db && python update_recent_prices.py
-
-      - name: Fetch congressional trades (House + Senate if available)
+      - name: Run Form 4 ingestion
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: cd db && python fetch_political_trades.py --days 7
+          USER_AGENT_EMAIL: ${{ secrets.USER_AGENT_EMAIL }}
+          DAYS_BACK: ${{ github.event.inputs.days_back || '3' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          MAX_WORKERS: '2'
+        run: |
+          cd db
+          python fetch_filings_neon.py
+
+      - name: Update price history
+        if: success()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+        run: |
+          cd db
+          if [ -f update_recent_prices.py ]; then
+            python update_recent_prices.py
+          else
+            echo "update_recent_prices.py not found, skipping"
+          fi

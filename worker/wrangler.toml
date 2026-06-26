@@ -1,9 +1,12 @@
+# InsiderDesk — Cloudflare Worker config
+# Deploy: wrangler deploy
+# Secrets (run once each):
+#   wrangler secret put NEON_CONNECTION_STRING
+#   wrangler secret put WORKER_API_KEY
+#   wrangler secret put ALPACA_KEY
+#   wrangler secret put ALPACA_SECRET
+
 name = "neon-proxy"
 main = "neon-proxy.js"
-compatibility_date = "2024-01-01"
-
-# No vars needed — everything is in the NEON_CONNECTION_STRING secret.
-# Set it once via:
-#   wrangler secret put NEON_CONNECTION_STRING
-# Then paste your full connection string:
-#   postgresql://neondb_owner:PASSWORD@ep-proud-sound-aqxwens1.c-8.us-east-1.aws.neon.tech/neondb
+compatibility_date = "2024-09-23"
+workers_dev = true

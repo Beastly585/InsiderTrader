@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 # ── Config ─────────────────────────────────────────────────────────────────────
 DATABASE_URL        = os.environ.get("DATABASE_URL", "")
 USER_AGENT_EMAIL    = os.environ.get("USER_AGENT_EMAIL", "your@email.com")
-DAYS_BACK           = int(os.environ.get("DAYS_BACK", "1"))
+DAYS_BACK           = int(os.environ.get("DAYS_BACK", "3"))
 MAX_WORKERS         = int(os.environ.get("MAX_WORKERS", "2"))
 DRY_RUN             = os.environ.get("DRY_RUN", "0") == "1"
 START_DATE_OVERRIDE = os.environ.get("START_DATE")
@@ -129,6 +129,16 @@ def safe_float(v):
     if v is None: return None
     try: return float(str(v).replace(",","").strip())
     except: return None
+
+def safe_date(v) -> Optional[str]:
+    """
+    Strip timezone offsets and extra chars from date strings.
+    EDGAR EFTS returns dates like '2025-06-15-04:00' or '2025-06-15T00:00:00'.
+    Postgres DATE type rejects these — extract just YYYY-MM-DD.
+    """
+    if not v: return None
+    m = re.match(r'(\d{4}-\d{2}-\d{2})', str(v).strip())
+    return m.group(1) if m else None
 
 def xtxt(el, *tags):
     cur = el
@@ -217,11 +227,12 @@ def edgar_get_accessions(start_date: str, end_date: str) -> list[dict]:
             xml_url    = (f"{EDGAR_BASE_URL}/Archives/edgar/data/"
                           f"{cik_padded}/{nodash}/{xml_filename}") if xml_filename else None
             all_hits.append({
-                "accession":   accession,
-                "cik":         cik,
-                "file_date":   src.get("file_date") or src.get("period_of_report"),
-                "entity_name": src.get("entity_name",""),
-                "xml_url":     xml_url,
+                "accession":        accession,
+                "cik":              cik,
+                "file_date":        src.get("file_date"),           # real EDGAR acceptance date
+                "period_of_report": src.get("period_of_report"),    # period covered by the report
+                "entity_name":      src.get("entity_name",""),
+                "xml_url":          xml_url,
             })
 
         total = data.get("hits",{}).get("total",{})
@@ -238,7 +249,14 @@ def edgar_get_accessions(start_date: str, end_date: str) -> list[dict]:
 def _sanitize(text):
     return re.sub(r'&(?!amp;|lt;|gt;|apos;|quot;|#\d+;|#x[0-9a-fA-F]+;)', '&amp;', text)
 
-def parse_form4_xml(xml_text, accession, cik, fallback_date=None, fallback_company=None):
+def parse_form4_xml(xml_text, accession, cik, fallback_filing_date=None, fallback_period=None, fallback_company=None):
+    # fallback_filing_date: the real EDGAR file acceptance date from EFTS metadata
+    # fallback_period:      the period_of_report from EFTS metadata (close to transaction date)
+    # These are kept separate because filing_date and transaction_date are different concepts:
+    #   filing_date    = when EDGAR accepted the form (should be the real acceptance datetime)
+    #   transaction_date = when the actual trade happened (from <transactionDate> in the XML,
+    #                      falling back to <periodOfReport> since that's the period covered,
+    #                      but NEVER silently falling back to today's date)
     xml_text = xml_text.strip().lstrip("\ufeff")
     if not xml_text.startswith("<"):
         s = xml_text.find("<")
@@ -299,7 +317,13 @@ def parse_form4_xml(xml_text, accession, cik, fallback_date=None, fallback_compa
     in_name  = pri.get("name"); in_cik = pri.get("cik")
     in_title = pri.get("title","Unknown")
     isd_v    = pri.get("isd",False); iso_v=pri.get("iso",False); ist_v=pri.get("ist",False)
-    period   = xtxt(root,"periodOfReport") or xtxt(root,"period_of_report") or fallback_date
+    period   = safe_date(xtxt(root,"periodOfReport") or xtxt(root,"period_of_report") or fallback_period)
+    # filing_date should be the real EDGAR acceptance date, not periodOfReport.
+    # periodOfReport is the period *covered* by the filing — for a normal Form 4 this
+    # equals the transaction date, but for late/amended filings it can be historical.
+    # Using it as filing_date caused both dates to appear as "today" when filings
+    # with NULL transaction_date fell through to today's ingest date.
+    real_filing_date = safe_date(fallback_filing_date)  # EDGAR acceptance date from EFTS
     rel      = get_relationship(in_title, iso_v, isd_v, ist_v)
 
     def base():
@@ -307,7 +331,7 @@ def parse_form4_xml(xml_text, accession, cik, fallback_date=None, fallback_compa
             accession_number=accession, cik=cik, company_name=company, ticker=ticker,
             cik_issuer=cik_issuer, insider_name=in_name, insider_cik=in_cik,
             insider_title=in_title, is_director=isd_v, is_officer=iso_v,
-            is_ten_pct_owner=ist_v, filing_date=period,
+            is_ten_pct_owner=ist_v, filing_date=real_filing_date,
             relationship=rel, sector=get_sector(ticker),
         )
 
@@ -316,7 +340,8 @@ def parse_form4_xml(xml_text, accession, cik, fallback_date=None, fallback_compa
     nd = root.find("nonDerivativeTable")
     if nd is not None:
         for tx in nd.findall("nonDerivativeTransaction"):
-            sec=xtxt(tx,"securityTitle","value"); txd=xtxt(tx,"transactionDate","value")
+            sec=xtxt(tx,"securityTitle","value")
+            txd=safe_date(xtxt(tx,"transactionDate","value") or period)  # strip tz, fall back to periodOfReport
             ce=tx.find("transactionCoding"); tc=xtxt(ce,"transactionCode") if ce is not None else None
             ad=xtxt(tx,"transactionAmounts","transactionAcquiredDisposedCode","value")
             sh=safe_float(xtxt(tx,"transactionAmounts","transactionShares","value"))
@@ -340,7 +365,8 @@ def parse_form4_xml(xml_text, accession, cik, fallback_date=None, fallback_compa
     dt = root.find("derivativeTable")
     if dt is not None:
         for tx in dt.findall("derivativeTransaction"):
-            sec=xtxt(tx,"securityTitle","value"); txd=xtxt(tx,"transactionDate","value")
+            sec=xtxt(tx,"securityTitle","value")
+            txd=safe_date(xtxt(tx,"transactionDate","value") or period)  # strip tz, fall back to periodOfReport
             ce=tx.find("transactionCoding"); tc=xtxt(ce,"transactionCode") if ce is not None else None
             ad=xtxt(tx,"transactionAmounts","transactionAcquiredDisposedCode","value")
             sh=safe_float(xtxt(tx,"transactionAmounts","transactionShares","value") or
@@ -377,8 +403,9 @@ def process_one(meta: dict) -> tuple[str, list[Transaction]]:
     r = sec_get(xml_url, timeout=25)
     if r is None: return accession, []
     txns = parse_form4_xml(r.text, accession, cik,
-                           fallback_date    = meta.get("file_date"),
-                           fallback_company = meta.get("entity_name"))
+                           fallback_filing_date    = meta.get("file_date"),
+                           fallback_period         = meta.get("period_of_report"),
+                           fallback_company        = meta.get("entity_name"))
     return accession, txns
 
 # ── DB ──────────────────────────────────────────────────────────────────────────
@@ -393,6 +420,8 @@ DO UPDATE SET
     transaction_type=EXCLUDED.transaction_type,
     transaction_code_label=EXCLUDED.transaction_code_label,
     is_open_market=EXCLUDED.is_open_market,
+    filing_date=EXCLUDED.filing_date,
+    transaction_date=COALESCE(EXCLUDED.transaction_date, public.filings.transaction_date),
     price_per_share=EXCLUDED.price_per_share, value=EXCLUDED.value,
     shares_owned_after=EXCLUDED.shares_owned_after,
     shares_owned_before=EXCLUDED.shares_owned_before,
@@ -400,6 +429,18 @@ DO UPDATE SET
     sector=EXCLUDED.sector, relationship=EXCLUDED.relationship,
     footnotes=EXCLUDED.footnotes, updated_at=now()
 """
+# NOTE: The ON CONFLICT target (accession_number, transaction_date, shares, transaction_code)
+# requires a matching unique index in Postgres. If transaction_date can be NULL (it can),
+# Postgres treats NULLs as distinct and the conflict will never fire for NULL-dated rows.
+# To fix this properly in the DB, run this migration once:
+#
+#   CREATE UNIQUE INDEX IF NOT EXISTS filings_dedup_idx
+#   ON public.filings (accession_number, COALESCE(transaction_date, '1900-01-01'), shares, transaction_code);
+#
+#   DROP INDEX IF EXISTS <old_unique_index_name>;  -- drop whatever enforces the current constraint
+#
+# This coerces NULLs to a sentinel date so conflicts fire correctly for NULL-dated rows.
+
 
 def get_connection():
     try:

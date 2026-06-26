@@ -41,7 +41,7 @@ DATABASE_URL        = os.environ.get("DATABASE_URL", "")
 USER_AGENT_EMAIL    = os.environ.get("USER_AGENT_EMAIL", "your@email.com")
 MAX_WORKERS         = int(os.environ.get("MAX_WORKERS", "2"))
 DRY_RUN             = os.environ.get("DRY_RUN", "0") == "1"
-INTER_REQUEST_SLEEP = 0.4   # conservative — 2 workers × 2.5 req/s = 5 req/s
+INTER_REQUEST_SLEEP = 0.5   # conservative — 2 workers × 2.5 req/s = 5 req/s
 
 EDGAR_BASE = "https://www.sec.gov"
 SUBM_BASE  = "https://data.sec.gov/submissions"
@@ -303,7 +303,11 @@ def _sanitize(text: str) -> str:
     return re.sub(r'&(?!amp;|lt;|gt;|apos;|quot;|#\d+;|#x[0-9a-fA-F]+;)', '&amp;', text)
 
 def parse_form4_xml(xml_text: str, accession: str, cik: str,
-                    fallback_date=None, fallback_company=None) -> list[Transaction]:
+                    fallback_filing_date=None, fallback_company=None) -> list[Transaction]:
+    # fallback_filing_date: real EDGAR acceptance date from form.idx (column "Date Filed")
+    # This is kept separate from periodOfReport — they mean different things:
+    #   filing_date    = when EDGAR accepted the form
+    #   transaction_date = when the trade actually happened (from XML, falls back to periodOfReport)
     xml_text = xml_text.strip().lstrip("\ufeff")
 
     # Reject HTML error pages immediately
@@ -371,7 +375,10 @@ def parse_form4_xml(xml_text: str, accession: str, cik: str,
     in_name  = pri.get("name");    in_cik  = pri.get("cik")
     in_title = pri.get("title","Unknown")
     isd_v    = pri.get("isd",False); iso_v=pri.get("iso",False); ist_v=pri.get("ist",False)
-    period   = safe_date(xtxt(root,"periodOfReport") or xtxt(root,"period_of_report") or fallback_date)
+    period   = safe_date(xtxt(root,"periodOfReport") or xtxt(root,"period_of_report"))
+    # filing_date = real EDGAR acceptance date from form.idx, not periodOfReport.
+    # periodOfReport is used only as a fallback for transaction_date inference below.
+    real_filing_date = safe_date(fallback_filing_date)
     rel      = get_rel(in_title, iso_v, isd_v, ist_v)
 
     def base() -> dict:
@@ -379,7 +386,7 @@ def parse_form4_xml(xml_text: str, accession: str, cik: str,
             accession_number=accession, cik=cik, company_name=company, ticker=ticker,
             cik_issuer=cik_issuer, insider_name=in_name, insider_cik=in_cik,
             insider_title=in_title, is_director=isd_v, is_officer=iso_v,
-            is_ten_pct_owner=ist_v, filing_date=period,
+            is_ten_pct_owner=ist_v, filing_date=real_filing_date,
             relationship=rel, sector=get_sector(ticker),
         )
 
@@ -389,7 +396,7 @@ def parse_form4_xml(xml_text: str, accession: str, cik: str,
     if nd is not None:
         for tx in nd.findall("nonDerivativeTransaction"):
             sec = xtxt(tx,"securityTitle","value")
-            txd = safe_date(xtxt(tx,"transactionDate","value"))   # ← safe_date strips timezone
+            txd = safe_date(xtxt(tx,"transactionDate","value")) or period  # fall back to periodOfReport
             ce  = tx.find("transactionCoding")
             tc  = xtxt(ce,"transactionCode") if ce is not None else None
             ad  = xtxt(tx,"transactionAmounts","transactionAcquiredDisposedCode","value")
@@ -417,7 +424,7 @@ def parse_form4_xml(xml_text: str, accession: str, cik: str,
     if dt is not None:
         for tx in dt.findall("derivativeTransaction"):
             sec = xtxt(tx,"securityTitle","value")
-            txd = safe_date(xtxt(tx,"transactionDate","value"))   # ← safe_date strips timezone
+            txd = safe_date(xtxt(tx,"transactionDate","value")) or period  # fall back to periodOfReport
             ce  = tx.find("transactionCoding")
             tc  = xtxt(ce,"transactionCode") if ce is not None else None
             ad  = xtxt(tx,"transactionAmounts","transactionAcquiredDisposedCode","value")
@@ -490,8 +497,8 @@ def process_cik(cik_str: str, filings: list[dict]) -> list[Transaction]:
 
         txns = parse_form4_xml(
             xml_resp.text, accession, cik_str,
-            fallback_date    = meta.get("file_date"),
-            fallback_company = meta.get("company"),
+            fallback_filing_date = meta.get("file_date"),
+            fallback_company     = meta.get("company"),
         )
         all_txns.extend(txns)
 
@@ -509,6 +516,8 @@ DO UPDATE SET
     transaction_type=EXCLUDED.transaction_type,
     transaction_code_label=EXCLUDED.transaction_code_label,
     is_open_market=EXCLUDED.is_open_market,
+    filing_date=EXCLUDED.filing_date,
+    transaction_date=COALESCE(EXCLUDED.transaction_date, public.filings.transaction_date),
     price_per_share=EXCLUDED.price_per_share, value=EXCLUDED.value,
     shares_owned_after=EXCLUDED.shares_owned_after,
     shares_owned_before=EXCLUDED.shares_owned_before,

@@ -1,0 +1,6 @@
+beautifulsoup4==4.15.0
+pdfplumber==0.11.8
+psycopg==3.2.13
+psycopg-binary==3.2.13
+python-dotenv==1.2.1
+requests==2.32.5
