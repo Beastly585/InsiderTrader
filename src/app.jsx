@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
-// src/app.jsx — InsiderDesk — sidebar nav, 4 pages, Alpaca portfolio
+import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton, UserProfile } from '@clerk/clerk-react';
+// src/app.jsx — Disclo — insider trading intelligence platform
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
 import { loadFilings, computeSignals, getSector, REL_LABELS } from './edgar.js';
@@ -102,30 +102,156 @@ function useCompanyProfile(ticker, cik) {
 // ─── Watchlist utilities ──────────────────────────────────────────────────────
 // Stored in localStorage as a JSON array of ticker strings.
 // No auth needed — entirely client-side.
-const WL_KEY = 'insiderdesk_watchlist_v1';
-function wlGet()           { try { return JSON.parse(localStorage.getItem(WL_KEY)||'[]'); } catch { return []; } }
-function wlSet(tickers)    { try { localStorage.setItem(WL_KEY, JSON.stringify(tickers)); } catch {} }
-function wlAdd(ticker)     { const w=wlGet(); if (!w.includes(ticker)) wlSet([...w,ticker]); }
-function wlRemove(ticker)  { wlSet(wlGet().filter(t=>t!==ticker)); }
-function wlToggle(ticker)  { wlGet().includes(ticker)?wlRemove(ticker):wlAdd(ticker); }
-function wlHas(ticker)     { return wlGet().includes(ticker); }
+// ─── Pro plan check ───────────────────────────────────────────────────────────
+// Hardcoded during dev — replace with user.publicMetadata?.plan === 'pro'
+// once Stripe is wired up.
+const PRO_USER_IDS = new Set(['user_3FgTBJcnwHsjWQVZPQVNjt3mUiZ']);
+function isPro(user) {
+  if (!user) return false;
+  // Stripe plan check (Phase 3) — uncomment when ready:
+  // if (user.publicMetadata?.plan === 'pro') return true;
+  return PRO_USER_IDS.has(user.id);
+}
 
-// Hook so components can react to watchlist changes
-function useWatchlist() {
-  const [tickers, setTickers] = useState(()=>wlGet());
-  const toggle = useCallback((ticker)=>{
-    wlToggle(ticker);
-    setTickers(wlGet());
-  },[]);
-  const has = useCallback((ticker)=>tickers.includes(ticker),[tickers]);
-  return { tickers, toggle, has };
+// ─── Upgrade modal ────────────────────────────────────────────────────────────
+// Shown when a free user tries to use a Pro feature.
+// Intentionally minimal — one value prop, one CTA, easy to dismiss.
+function UpgradeModal({ feature, onClose }) {
+  useEffect(()=>{
+    const h = e => { if (e.key==='Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  },[onClose]);
+
+  const FEATURE_COPY = {
+    watchlist: {
+      icon: '★',
+      title: 'Track tickers & insiders',
+      body: 'Star stocks and follow insiders to build your personal watchlist. Get email alerts the moment they file a new trade.',
+    },
+    default: {
+      icon: '⬆',
+      title: 'Pro feature',
+      body: 'Upgrade to Pro to unlock this feature and get the most out of Disclo.',
+    },
+  };
+  const copy = FEATURE_COPY[feature] || FEATURE_COPY.default;
+
+  return (
+    <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
+      <div className="upgrade-modal">
+        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close">✕</button>
+        <div className="upgrade-modal__icon">{copy.icon}</div>
+        <div className="upgrade-modal__title">{copy.title}</div>
+        <div className="upgrade-modal__body">{copy.body}</div>
+        <div className="upgrade-modal__price">
+          <span className="upgrade-modal__amount">$8</span>
+          <span className="upgrade-modal__period">/month</span>
+        </div>
+        <button className="upgrade-modal__cta" onClick={onClose}>
+          Upgrade to Pro →
+        </button>
+        <div className="upgrade-modal__note">Coming soon — join the waitlist</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Watchlist ────────────────────────────────────────────────────────────────
+// Two item types: 'ticker' and 'insider'
+// Storage: localStorage (instant) + Neon (persistent, Pro users only)
+// Free users: watchlist is NOT saved — clicking star shows upgrade modal
+
+const WL_KEY = 'disclo_watchlist_v1';
+const WL_INSIDER_KEY = 'disclo_insiders_v1';
+
+function wlGet(key=WL_KEY) { try { return JSON.parse(localStorage.getItem(key)||'[]'); } catch { return []; } }
+function wlSet(items, key=WL_KEY) { try { localStorage.setItem(key, JSON.stringify(items)); } catch {} }
+
+// Neon-backed watchlist mutation — writes to user_watchlist table via Worker
+async function neonWatchlistMutate(itemType, itemValue, action) {
+  if (!cfg.NEON_PROXY_URL) return;
+  try {
+    const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+    await fetch(`${cfg.NEON_PROXY_URL}/watchlist`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action, item_type: itemType, item_value: itemValue }),
+    });
+  } catch {}
+}
+
+// Load watchlist from Neon on mount for Pro users
+async function neonWatchlistLoad() {
+  if (!cfg.NEON_PROXY_URL) return null;
+  try {
+    const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+    const res = await fetch(`${cfg.NEON_PROXY_URL}/watchlist`, { method: 'GET', headers });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.items || null;
+  } catch { return null; }
+}
+
+function useWatchlist(user) {
+  const pro = isPro(user);
+  const [tickers,  setTickers]  = useState(()=> pro ? wlGet(WL_KEY)        : []);
+  const [insiders, setInsiders] = useState(()=> pro ? wlGet(WL_INSIDER_KEY) : []);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  // Load from Neon on mount for Pro users
+  useEffect(()=>{
+    if (!pro || !user) return;
+    neonWatchlistLoad().then(items=>{
+      if (!items) return;
+      const t = items.filter(i=>i.item_type==='ticker').map(i=>i.item_value);
+      const ins = items.filter(i=>i.item_type==='insider').map(i=>i.item_value);
+      if (t.length)   { wlSet(t, WL_KEY);           setTickers(t); }
+      if (ins.length) { wlSet(ins, WL_INSIDER_KEY);  setInsiders(ins); }
+    });
+  },[pro, user?.id]);
+
+  // Toggle ticker
+  const toggleTicker = useCallback((ticker) => {
+    if (!pro) { setShowUpgrade(true); return; }
+    setTickers(prev => {
+      const next = prev.includes(ticker) ? prev.filter(t=>t!==ticker) : [...prev, ticker];
+      wlSet(next, WL_KEY);
+      neonWatchlistMutate('ticker', ticker, prev.includes(ticker) ? 'remove' : 'add');
+      return next;
+    });
+  }, [pro]);
+
+  // Toggle insider
+  const toggleInsider = useCallback((name) => {
+    if (!pro) { setShowUpgrade(true); return; }
+    setInsiders(prev => {
+      const next = prev.includes(name) ? prev.filter(n=>n!==name) : [...prev, name];
+      wlSet(next, WL_INSIDER_KEY);
+      neonWatchlistMutate('insider', name, prev.includes(name) ? 'remove' : 'add');
+      return next;
+    });
+  }, [pro]);
+
+  const hasTicker  = useCallback((ticker) => tickers.includes(ticker),  [tickers]);
+  const hasInsider = useCallback((name)   => insiders.includes(name),   [insiders]);
+
+  // Legacy compat — existing code calls watchlist.toggle(ticker) and watchlist.has(ticker)
+  const toggle = toggleTicker;
+  const has    = hasTicker;
+
+  return {
+    tickers, insiders, toggle, has,
+    toggleTicker, toggleInsider, hasTicker, hasInsider,
+    showUpgrade, setShowUpgrade, pro,
+  };
 }
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 function useTheme() {
   const [dark, setDark] = useState(() => {
     try { const s = localStorage.getItem('theme'); if (s) return s==='dark'; } catch(_){}
-    // Default new visitors to dark — InsiderDesk's primary identity — unless
+    // Default new visitors to dark — Disclo's primary identity — unless
     // their system explicitly prefers light.
     return !window.matchMedia('(prefers-color-scheme: light)').matches;
   });
@@ -191,18 +317,22 @@ function ConvictionBar({ score, max=15, showLabel=false }) {
 
 // ─── Sidebar nav ──────────────────────────────────────────────────────────────
 const NAV = [
-  {id:'dashboard', icon:'◈', label:'Dashboard'},
-  {id:'signals',   icon:'⬆', label:'Insights'},
-  {id:'data',      icon:'≡', label:'Data'},
+  {id:'dashboard', icon:'⊞', label:'Dashboard'},
+  {id:'signals',   icon:'↑', label:'Insights'},
+  {id:'data',      icon:'☰', label:'Data'},
+  {id:'watchlist', icon:'★', label:'Watchlist'},
 ];
 function Sidebar({ page, setPage, dark, setDark }) {
   return (
     <nav className="sidebar sidebar--compact">
+      {/* Logo */}
       <div className="sidebar__logo" title="Disclo">
         <div className="logo-mark">
-          <span style={{letterSpacing:'-1px',fontWeight:800,fontSize:13}}>ID</span>
+          <span style={{letterSpacing:'-1px',fontWeight:800,fontSize:13}}>D</span>
         </div>
       </div>
+
+      {/* Primary nav — main pages only */}
       <div className="sidebar__nav">
         {NAV.map(n => (
           <button key={n.id}
@@ -214,12 +344,23 @@ function Sidebar({ page, setPage, dark, setDark }) {
           </button>
         ))}
       </div>
+
+      {/* Footer — utility items */}
       <div className="sidebar__footer">
+        {/* Settings — gear at bottom, separate from primary nav */}
+        <button
+          className={`nav-item nav-item--icon-only nav-item--sm${page==='settings'?' nav-item--active':''}`}
+          onClick={()=>setPage('settings')}
+          title="Settings"
+          aria-label="Settings">
+          <span className="nav-icon">⚙</span>
+        </button>
+        {/* Dark mode toggle */}
         <button className="nav-item nav-item--icon-only nav-item--sm"
           onClick={()=>setDark(d=>!d)}
-          title={dark?'Light mode':'Dark mode'}
+          title={dark?'Switch to light mode':'Switch to dark mode'}
           aria-label={dark?'Switch to light mode':'Switch to dark mode'}>
-          <span className="nav-icon">{dark?'○':'●'}</span>
+          <span className="nav-icon sidebar__theme-icon">{dark?'☀':'☽'}</span>
         </button>
       </div>
     </nav>
@@ -455,12 +596,27 @@ function CompanyDescExpanded({ desc }) {
 // ─── Star (watchlist) button ──────────────────────────────────────────────────
 function StarBtn({ ticker, watchlist }) {
   const isWatched = watchlist.has(ticker);
+  const isPro     = watchlist.pro;
   return (
     <button
-      className={`star-btn${isWatched?' star-btn--active':''}`}
-      title={isWatched?'Remove from watchlist':'Add to watchlist'}
+      className={`star-btn${isWatched?' star-btn--active':''}${!isPro?' star-btn--locked':''}`}
+      title={isPro ? (isWatched?'Remove from watchlist':'Add to watchlist') : 'Pro feature — upgrade to track tickers'}
       onClick={e=>{e.stopPropagation();watchlist.toggle(ticker);}}>
-      {isWatched?'★':'☆'}
+      {isWatched ? '★' : isPro ? '☆' : '☆'}
+    </button>
+  );
+}
+
+// Follow button for insiders — same pattern as StarBtn
+function FollowBtn({ name, watchlist }) {
+  const isFollowing = watchlist.hasInsider(name);
+  const isPro       = watchlist.pro;
+  return (
+    <button
+      className={`follow-btn${isFollowing?' follow-btn--active':''}${!isPro?' follow-btn--locked':''}`}
+      title={isPro ? (isFollowing?'Unfollow insider':'Follow insider — get alerts on their trades') : 'Pro feature — upgrade to follow insiders'}
+      onClick={e=>{e.stopPropagation();watchlist.toggleInsider(name);}}>
+      {isFollowing ? '● Following' : '○ Follow'}
     </button>
   );
 }
@@ -856,7 +1012,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   };
 
   const header=()=>{
-    if(d.type==='trader')return<div><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual">⚠ entity</span>}</div>{traderStats?.title&&<div className="td-muted" style={{fontSize:11}}>{traderStats.title}</div>}</div>;
+    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual">⚠ entity</span>}</div>{traderStats?.title&&<div className="td-muted" style={{fontSize:11}}>{traderStats.title}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
     if(d.type==='ticker')return(
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
@@ -1139,7 +1295,7 @@ const DASH_SORT_OPTS = [
 // Replaces the raw 5-stat pulse strip with meaningful market context:
 //  • Fear & Greed score from feargreedchart.com (free, no key, CORS-enabled)
 //  • SPY / QQQ / VIX prices from the same endpoint
-//  • InsiderDesk's own 30-day insider net-buy ratio computed from your filings
+//  • Disclo's own 30-day insider net-buy ratio computed from your filings
 // All of this is stable enough over a day to not feel stale on normal usage.
 // ─── Market Pulse Tile ────────────────────────────────────────────────────────
 // Consolidated: F&G score + index prices + insider flow + sector heatmap.
@@ -1762,7 +1918,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail }) {
               <span className="dash-tile__sub">by hit rate · 2yr</span>
             </div>
             <div className="dash-tile__body">
-              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail}/>
+              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
             </div>
           </div>
           <div className="dash-tile dash-tile--news">
@@ -2036,7 +2192,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             </button>
           </div>
           <div className="ins-lb-panel__body">
-            <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail}/>
+            <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
           </div>
         </div>
 
@@ -2803,7 +2959,7 @@ function ActiveInsidersPanel({ filings, days, onOpenDetail }) {
 }
 
 // ─── Leaderboard sidebar ────────────────────────────────────────────────────────
-function InsiderLeaderboardSidebar({ onOpenDetail }) {
+function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
 
@@ -2824,7 +2980,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail }) {
           <div key={i} className="ins-lb-card" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
             <div className="ins-lb-card__rank">{i+1}</div>
             <div className="ins-lb-card__body">
-              <div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>
+              <div style={{display:'flex',alignItems:'center',gap:6}}><div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>{watchlist&&<FollowBtn name={r.insider_name} watchlist={watchlist}/>}</div>
               <div className="td-muted" style={{fontSize:10}}>{r.insider_title||'Unknown'}</div>
               <div className="ins-lb-card__meta">
                 <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
@@ -3921,9 +4077,11 @@ function PortfolioSuggestions({ filings, ownedTickers, onOpenDetail }) {
 // Entirely localStorage-backed — no auth needed.
 function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
   const [days, setDays] = useState(30);
+  const [tab, setTab]   = useState('tickers');
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
 
-  const watchedTickers = watchlist.tickers;
+  const watchedTickers  = watchlist.tickers;
+  const watchedInsiders = watchlist.insiders || [];
 
   const signals = useMemo(()=>{
     if (!watchedTickers.length) return [];
@@ -3949,7 +4107,9 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
       <div className="wl-header">
         <div>
           <h2 className="page-title">Watchlist</h2>
-          <p className="page-sub">{watchedTickers.length} ticker{watchedTickers.length!==1?'s':''} tracked · star any ticker to add it</p>
+          <p className="page-sub">
+            {watchedTickers.length} ticker{watchedTickers.length!==1?'s':''} · {watchedInsiders.length} insider{watchedInsiders.length!==1?'s':''} tracked
+          </p>
         </div>
         <div className="dash-tile-pills">
           {[7,30,90].map(d=>(
@@ -3958,7 +4118,51 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
         </div>
       </div>
 
-      {watchedTickers.length===0 ? (
+      {/* Tabs */}
+      <div className="settings-tabs" style={{marginBottom:20}}>
+        <button className={`settings-tab${tab==='tickers'?' settings-tab--active':''}`} onClick={()=>setTab('tickers')}>
+          Tickers {watchedTickers.length>0&&<span className="wl-tab-count">{watchedTickers.length}</span>}
+        </button>
+        <button className={`settings-tab${tab==='insiders'?' settings-tab--active':''}`} onClick={()=>setTab('insiders')}>
+          Insiders {watchedInsiders.length>0&&<span className="wl-tab-count">{watchedInsiders.length}</span>}
+        </button>
+      </div>
+
+      {tab==='insiders' ? (
+        watchedInsiders.length===0 ? (
+          <div className="wl-empty">
+            <div className="wl-empty__icon">○</div>
+            <div className="wl-empty__title">No insiders followed yet</div>
+            <div className="wl-empty__sub">Click "○ Follow" on any insider in the leaderboard or trader profile to track their activity here.</div>
+          </div>
+        ) : (
+          <div className="wl-body">
+            <div className="wl-chip-row">
+              {watchedInsiders.map(n=>(
+                <div key={n} className="wl-chip">
+                  <span className="wl-chip__name" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:n,title:''})}>{n}</span>
+                  <button className="wl-chip__remove" onClick={()=>watchlist.toggleInsider(n)} title="Unfollow">✕</button>
+                </div>
+              ))}
+            </div>
+            <div className="wl-insider-feed">
+              {filings
+                .filter(f=>watchedInsiders.includes(f.insiderName) && (f.transactionDate||f.date||'')>=cutoff)
+                .sort((a,b)=>((b.transactionDate||b.date||'')>(a.transactionDate||a.date||''))?1:-1)
+                .slice(0,100)
+                .map((f,i)=>(
+                  <div key={i} className="wl-trade-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:f.insiderName,title:f.title})}>
+                    <span className="td-muted" style={{fontSize:11,minWidth:90}}>{f.insiderName?.split(' ').slice(-1)[0]}</span>
+                    <span className="ticker" style={{fontSize:12}}>{f.ticker}</span>
+                    <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?'▲':'▼'}</Badge>
+                    <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</span>
+                    <span className="td-muted" style={{fontSize:10}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )
+      ) : watchedTickers.length===0 ? (
         <div className="wl-empty">
           <div className="wl-empty__icon">☆</div>
           <div className="wl-empty__title">No tickers watched yet</div>
@@ -3966,7 +4170,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
         </div>
       ) : (
         <div className="wl-body">
-          {/* Watched tickers strip */}
+          {/* Watched tickers strip — ticker tab only */}
           <div className="wl-chip-row">
             {watchedTickers.map(t=>(
               <div key={t} className="wl-chip">
@@ -4199,16 +4403,529 @@ function PortfolioPage({ filings, onOpenDetail }) {
 }
 
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
+
+// ─── TERMS OF SERVICE ─────────────────────────────────────────────────────────
+function TermsPage() {
+  return (
+    <div className="legal-page" data-theme="dark">
+      <nav className="lp-nav">
+        <a className="lp-nav__logo" href="/">
+          <div className="lp-logo-mark">D</div>
+          <span className="lp-wordmark">Disclo</span>
+        </a>
+      </nav>
+      <div className="legal-content">
+        <h1>Terms of Service</h1>
+        <p className="legal-date">Last updated: June 26, 2025</p>
+
+        <h2>1. Acceptance of Terms</h2>
+        <p>By accessing or using Disclo ("the Service"), operated by Kevin Maresca ("we," "us," or "our"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
+
+        <h2>2. Description of Service</h2>
+        <p>Disclo is a financial intelligence platform that aggregates and displays publicly available SEC Form 4 insider trading disclosures, congressional trading disclosures filed under the STOCK Act, and related market data. All data displayed is sourced from public government databases including the SEC's EDGAR system.</p>
+
+        <h2>3. Not Financial Advice</h2>
+        <p>The information provided by Disclo is for informational and educational purposes only. Nothing on this Service constitutes financial, investment, legal, or tax advice. We are not a registered investment advisor, broker-dealer, or financial planner. You should consult a qualified financial professional before making any investment decisions. Past insider trading patterns are not indicative of future results.</p>
+
+        <h2>4. Data Accuracy</h2>
+        <p>We make reasonable efforts to display accurate data sourced from public filings. However, we make no representations or warranties about the completeness, accuracy, or timeliness of the data. SEC filings may contain errors, and there may be delays between filing dates and our display of data. You assume all risk associated with your use of this information.</p>
+
+        <h2>5. User Accounts</h2>
+        <p>You must create an account to access certain features. You are responsible for maintaining the security of your account credentials. You agree to provide accurate information and to notify us immediately of any unauthorized use of your account.</p>
+
+        <h2>6. Brokerage Connections</h2>
+        <p>If you connect a brokerage account, you authorize us to retrieve read-only account data (positions, balances, and account information) on your behalf. We do not store your brokerage credentials. We do not execute trades on your behalf. You may disconnect your brokerage account at any time through your account settings.</p>
+
+        <h2>7. Subscriptions and Billing</h2>
+        <p>Certain features require a paid subscription. Subscriptions are billed monthly. You may cancel at any time; cancellation takes effect at the end of the current billing period. We reserve the right to change pricing with 30 days notice. Payments are processed by Stripe and subject to their terms of service.</p>
+
+        <h2>8. Prohibited Uses</h2>
+        <p>You may not: (a) use the Service for any unlawful purpose; (b) scrape, crawl, or otherwise systematically extract data from the Service; (c) resell or redistribute our data without written permission; (d) attempt to gain unauthorized access to any part of the Service; (e) use the Service to facilitate insider trading or securities fraud.</p>
+
+        <h2>9. Intellectual Property</h2>
+        <p>The Service, including its design, algorithms, and conviction scoring methodology, is the property of Kevin Maresca. The underlying SEC filing data is public domain. You may not copy, modify, or distribute our proprietary systems without permission.</p>
+
+        <h2>10. Disclaimer of Warranties</h2>
+        <p>The Service is provided "as is" without warranty of any kind. We disclaim all warranties, express or implied, including warranties of merchantability, fitness for a particular purpose, and non-infringement.</p>
+
+        <h2>11. Limitation of Liability</h2>
+        <p>To the maximum extent permitted by law, Kevin Maresca shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the Service, including any investment losses.</p>
+
+        <h2>12. Governing Law</h2>
+        <p>These Terms are governed by the laws of the State of New Mexico, United States, without regard to conflict of law principles.</p>
+
+        <h2>13. Changes to Terms</h2>
+        <p>We may update these Terms at any time. Continued use of the Service after changes constitutes acceptance of the new Terms.</p>
+
+        <h2>14. Contact</h2>
+        <p>Questions about these Terms? Contact us at <a href="mailto:7withak@gmail.com">7withak@gmail.com</a>.</p>
+      </div>
+      <footer className="lp-footer">
+        <div className="lp-footer__logo">
+          <div className="lp-logo-mark lp-logo-mark--sm">D</div>
+          <span className="lp-wordmark">Disclo</span>
+        </div>
+        <div className="lp-footer__links">
+          <a href="/">Home</a>
+          <span>·</span>
+          <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// ─── PRIVACY POLICY ───────────────────────────────────────────────────────────
+function PrivacyPage() {
+  return (
+    <div className="legal-page" data-theme="dark">
+      <nav className="lp-nav">
+        <a className="lp-nav__logo" href="/">
+          <div className="lp-logo-mark">D</div>
+          <span className="lp-wordmark">Disclo</span>
+        </a>
+      </nav>
+      <div className="legal-content">
+        <h1>Privacy Policy</h1>
+        <p className="legal-date">Last updated: June 26, 2025</p>
+
+        <h2>1. Overview</h2>
+        <p>Disclo, operated by Kevin Maresca, is committed to protecting your privacy. This policy explains what information we collect, how we use it, and your rights regarding your data.</p>
+
+        <h2>2. Information We Collect</h2>
+        <h3>Account Information</h3>
+        <p>When you create an account, we collect your email address and, if you sign in with Google, your Google profile name and profile picture. Authentication is handled by Clerk (clerk.com) — we do not store your password.</p>
+
+        <h3>Watchlist Data</h3>
+        <p>If you add tickers or insiders to your watchlist, we store those preferences in our database associated with your account identifier.</p>
+
+        <h3>Brokerage Connection Data</h3>
+        <p>If you connect a brokerage account, we store an encrypted access token in our database to retrieve your portfolio data. We store your position data temporarily for display purposes. We do not store your brokerage username or password.</p>
+
+        <h3>Usage Data</h3>
+        <p>We collect standard server logs including IP addresses, browser type, and pages visited for security and performance monitoring. We do not sell this data.</p>
+
+        <h2>3. How We Use Your Information</h2>
+        <p>We use your information to: (a) provide and improve the Service; (b) display your portfolio alongside relevant insider trading signals; (c) send transactional emails (account verification, password reset) through Clerk; (d) send alert emails if you subscribe to Pro notifications; (e) process payments through Stripe.</p>
+
+        <h2>4. Data Sharing</h2>
+        <p>We do not sell your personal data. We share data only with the following service providers who process it on our behalf:</p>
+        <ul>
+          <li><strong>Clerk</strong> (clerk.com) — authentication and user management</li>
+          <li><strong>Stripe</strong> (stripe.com) — payment processing</li>
+          <li><strong>Neon</strong> (neon.tech) — database hosting</li>
+          <li><strong>Cloudflare</strong> (cloudflare.com) — hosting and security</li>
+        </ul>
+
+        <h2>5. Data Retention</h2>
+        <p>We retain your account data for as long as your account is active. If you delete your account, we will delete your personal data within 30 days. Watchlist and broker connection data is deleted immediately upon disconnection or account deletion.</p>
+
+        <h2>6. Security</h2>
+        <p>We use industry-standard security measures including encrypted connections (HTTPS), encrypted storage of sensitive tokens (AES-256), and access controls. No system is 100% secure — you use the Service at your own risk.</p>
+
+        <h2>7. Your Rights</h2>
+        <p>You may: (a) access or export your data by contacting us; (b) delete your account and associated data at any time; (c) disconnect any brokerage connection at any time through account settings; (d) opt out of marketing emails at any time.</p>
+
+        <h2>8. Cookies</h2>
+        <p>We use only essential cookies required for authentication (managed by Clerk). We do not use advertising or tracking cookies.</p>
+
+        <h2>9. Children's Privacy</h2>
+        <p>The Service is not directed at children under 13. We do not knowingly collect personal information from children under 13.</p>
+
+        <h2>10. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy periodically. We will notify you of material changes by email or through the Service.</p>
+
+        <h2>11. Contact</h2>
+        <p>Questions about this Privacy Policy? Contact us at <a href="mailto:7withak@gmail.com">7withak@gmail.com</a>.</p>
+      </div>
+      <footer className="lp-footer">
+        <div className="lp-footer__logo">
+          <div className="lp-logo-mark lp-logo-mark--sm">D</div>
+          <span className="lp-wordmark">Disclo</span>
+        </div>
+        <div className="lp-footer__links">
+          <a href="/">Home</a>
+          <span>·</span>
+          <a href="/terms" className="lp-footer__link-muted">Terms of Service</a>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+
+// ─── SETTINGS PAGE ────────────────────────────────────────────────────────────
+// Three sections: Account (Clerk), Notifications, Connected accounts
+// Notifications prefs saved to Neon user_preferences table via Worker
+// Connected accounts: placeholder for Alpaca OAuth (Phase 2)
+
+// ─── SETTINGS ─────────────────────────────────────────────────────────────────
+
+// Default prefs — matches expanded Neon schema
+const DEFAULT_PREFS = {
+  // Digests
+  daily_digest:           false,
+  weekly_digest:          false,
+  digest_top_signals:     true,
+  digest_congressional:   true,
+  digest_corporate:       true,
+  digest_watchlist_only:  false,
+  digest_min_conviction:  'any',
+  // Instant alerts
+  instant_watchlist_ticker: false,
+  instant_followed_insider: false,
+  instant_high_conviction:  false,
+  instant_reversal:         false,
+};
+
+function useNotificationPrefs(userId, pro) {
+  const [prefs,  setPrefs]  = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
+  const [error,  setError]  = useState(null);
+
+  useEffect(()=>{
+    if (!userId) return;
+    // Try localStorage first for instant load
+    const cached = localStorage.getItem(`disclo_prefs_${userId}`);
+    if (cached) { try { setPrefs({...DEFAULT_PREFS,...JSON.parse(cached)}); } catch {} }
+    // Then sync from Neon
+    if (!cfg.NEON_PROXY_URL || !pro) { setPrefs(p=>p||{...DEFAULT_PREFS}); return; }
+    queryNeon(`
+      SELECT daily_digest, weekly_digest,
+             digest_top_signals, digest_congressional, digest_corporate,
+             digest_watchlist_only, digest_min_conviction,
+             instant_watchlist_ticker, instant_followed_insider,
+             instant_high_conviction, instant_reversal
+      FROM public.user_preferences
+      WHERE clerk_user_id = '${userId.replace(/'/g,"''")}'
+      LIMIT 1
+    `).then(rows=>{
+      const p = rows.length ? {...DEFAULT_PREFS,...rows[0]} : {...DEFAULT_PREFS};
+      setPrefs(p);
+      localStorage.setItem(`disclo_prefs_${userId}`, JSON.stringify(p));
+    }).catch(()=>setPrefs(p=>p||{...DEFAULT_PREFS}));
+  },[userId, pro]);
+
+  async function save(updated) {
+    if (!userId) return;
+    setSaving(true); setError(null);
+    try {
+      localStorage.setItem(`disclo_prefs_${userId}`, JSON.stringify(updated));
+      // Write to Neon when Worker prefs route is available (Phase 3 — email alerts)
+      setPrefs(updated);
+      setSaved(true);
+      setTimeout(()=>setSaved(false), 2500);
+    } catch(e) { setError('Save failed — try again'); }
+    setSaving(false);
+  }
+
+  return { prefs, saving, saved, error, save };
+}
+
+// ── Settings toggle row ────────────────────────────────────────────────────────
+function SettingsToggle({ label, sub, checked, onChange, pro, disabled }) {
+  return (
+    <div className={`settings-row settings-row--toggle${disabled?' settings-row--disabled':''}`}>
+      <div style={{flex:1}}>
+        <div className="settings-row__label">{label}</div>
+        {sub&&<div className="settings-row__sub">{sub}</div>}
+      </div>
+      <label className={`settings-toggle${(!pro||disabled)?' settings-toggle--locked':''}`}>
+        <input type="checkbox" checked={!!checked} onChange={onChange} disabled={!pro||disabled}/>
+        <span className="settings-toggle__track"/>
+      </label>
+    </div>
+  );
+}
+
+function SettingsPage({ user }) {
+  const pro   = isPro(user);
+  const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
+  const [section, setSection] = useState('account');
+  const [local,   setLocal]   = useState(null);
+
+  useEffect(()=>{ if (prefs && !local) setLocal({...prefs}); },[prefs]);
+
+  function upd(key, val) { setLocal(p=>({...p, [key]:val})); }
+
+  const SECTIONS = [
+    {id:'account',  label:'Account',        icon:'◎'},
+    {id:'digests',  label:'Email digests',  icon:'✉'},
+    {id:'instant',  label:'Instant alerts', icon:'⚡'},
+    {id:'brokers',  label:'Connections',    icon:'⛓'},
+  ];
+
+  return (
+    <div className="settings-page">
+      <div className="settings-layout">
+
+        {/* ── Left sidebar nav ─────────────────────────────────────────── */}
+        <div className="settings-sidenav">
+          {SECTIONS.map(s=>(
+            <button key={s.id}
+              className={`settings-sidenav__item${section===s.id?' settings-sidenav__item--active':''}`}
+              onClick={()=>setSection(s.id)}>
+              <span className="settings-sidenav__icon">{s.icon}</span>
+              {s.label}
+            </button>
+          ))}
+          {/* Spacer pushes footer to bottom */}
+          <div className="settings-sidenav__spacer"/>
+          <div className="settings-sidenav__plan">
+            <span className={`settings-plan-badge ${pro?'settings-plan-badge--pro':'settings-plan-badge--free'}`}>
+              {pro ? '★ Pro' : 'Free plan'}
+            </span>
+            {!pro&&<div className="settings-sidenav__upgrade" onClick={()=>{}}>Upgrade →</div>}
+            <button className="settings-sidenav__signout"
+              onClick={()=>{ window.__clerkSignOut && window.__clerkSignOut(); }}>
+              Sign out
+            </button>
+            <div style={{height:8}}/>
+          </div>
+        </div>
+
+        {/* ── Content ──────────────────────────────────────────────────── */}
+        <div className="settings-content">
+
+          {/* ACCOUNT */}
+          {section==='account'&&(
+            <div className="settings-section">
+              <div className="settings-section__title">Account</div>
+              <div className="settings-section__desc">Manage your profile, email, and sign-in options.</div>
+
+              <div className="settings-clerk-wrap">
+                <UserProfile appearance={{
+                  variables: {
+                    colorPrimary:    '#7c6fff',
+                    borderRadius:    '8px',
+                    fontSize:        '13px',
+                  },
+                  elements:{
+                    rootBox:       'clerk-profile-root',
+                    card:          'clerk-profile-card',
+                    navbar:        'clerk-profile-navbar',
+                    pageScrollBox: 'clerk-profile-scroll',
+                  }
+                }}/>
+              </div>
+            </div>
+          )}
+
+          {/* EMAIL DIGESTS */}
+          {section==='digests'&&(
+            <div className="settings-section">
+              <div className="settings-section__title">
+                Email digests
+                {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
+              </div>
+              <div className="settings-section__desc">
+                Scheduled summaries delivered to your inbox. Choose your frequency and what to include.
+                {!pro&&<span className="settings-section__lock"> Upgrade to Pro to enable email digests.</span>}
+              </div>
+
+              {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
+
+                {/* Frequency — independent toggles, not mutually exclusive */}
+                <div className="settings-group">
+                  <div className="settings-group__label">Frequency</div>
+                  <SettingsToggle
+                    label="Daily digest"
+                    sub="Every weekday morning at 8am ET"
+                    checked={local.daily_digest}
+                    onChange={e=>upd('daily_digest', e.target.checked)}
+                    pro={pro}
+                  />
+                  <SettingsToggle
+                    label="Weekly digest"
+                    sub="Every Monday morning at 8am ET"
+                    checked={local.weekly_digest}
+                    onChange={e=>upd('weekly_digest', e.target.checked)}
+                    pro={pro}
+                  />
+                </div>
+
+                {/* Content — what to include in digests */}
+                <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
+                  <div className="settings-group__label">What to include</div>
+                  <SettingsToggle
+                    label="Top insider signals"
+                    sub="Highest-conviction buys from the selected window"
+                    checked={local.digest_top_signals}
+                    onChange={e=>upd('digest_top_signals', e.target.checked)}
+                    pro={pro}
+                    disabled={!local.daily_digest && !local.weekly_digest}
+                  />
+                  <SettingsToggle
+                    label="Corporate trades (Form 4)"
+                    sub="C-suite and officer open-market transactions"
+                    checked={local.digest_corporate}
+                    onChange={e=>upd('digest_corporate', e.target.checked)}
+                    pro={pro}
+                    disabled={!local.daily_digest && !local.weekly_digest}
+                  />
+                  <SettingsToggle
+                    label="Congressional trades (STOCK Act)"
+                    sub="Senator and representative disclosures"
+                    checked={local.digest_congressional}
+                    onChange={e=>upd('digest_congressional', e.target.checked)}
+                    pro={pro}
+                    disabled={!local.daily_digest && !local.weekly_digest}
+                  />
+                  <SettingsToggle
+                    label="Watchlist activity only"
+                    sub="Limit digest to tickers and insiders you follow"
+                    checked={local.digest_watchlist_only}
+                    onChange={e=>upd('digest_watchlist_only', e.target.checked)}
+                    pro={pro}
+                    disabled={!local.daily_digest && !local.weekly_digest}
+                  />
+                </div>
+
+                {/* Conviction filter */}
+                <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
+                  <div className="settings-group__label">Minimum signal strength</div>
+                  <div className="settings-group__desc">Only include signals above this conviction level</div>
+                  <div className="settings-pills" style={{marginTop:10}}>
+                    {[
+                      {v:'any',    l:'Any signal',  d:'All open-market trades'},
+                      {v:'medium', l:'Medium+',     d:'Exec participation or $100K+'},
+                      {v:'high',   l:'High only',   d:'C-suite clusters above $1M'},
+                    ].map(o=>(
+                      <button key={o.v}
+                        className={`settings-pill${local.digest_min_conviction===o.v?' settings-pill--active':''}${!pro?' settings-pill--locked':''}`}
+                        onClick={()=>pro&&upd('digest_min_conviction', o.v)}
+                        title={o.d}>
+                        {o.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="settings-save-row">
+                  <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
+                    {saving?'Saving…':saved?'✓ Saved':'Save digest settings'}
+                  </button>
+                  {saved&&<span className="settings-saved-msg">✓ Saved</span>}
+                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}>⚠ {error}</span>}
+                  {!pro&&<span className="settings-section__lock">Upgrade to Pro to save</span>}
+                </div>
+              </>)}
+            </div>
+          )}
+
+          {/* INSTANT ALERTS */}
+          {section==='instant'&&(
+            <div className="settings-section">
+              <div className="settings-section__title">
+                Instant alerts
+                {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
+              </div>
+              <div className="settings-section__desc">
+                Real-time emails fired within minutes of a filing. Each trigger is independent.
+                {!pro&&<span className="settings-section__lock"> Upgrade to Pro to enable instant alerts.</span>}
+              </div>
+
+              {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
+
+                <div className="settings-group">
+                  <div className="settings-group__label">Watchlist triggers</div>
+                  <SettingsToggle
+                    label="Watched ticker traded"
+                    sub="Any insider trades a stock on your watchlist"
+                    checked={local.instant_watchlist_ticker}
+                    onChange={e=>upd('instant_watchlist_ticker', e.target.checked)}
+                    pro={pro}
+                  />
+                  <SettingsToggle
+                    label="Followed insider filed"
+                    sub="Someone you follow submits a new Form 4"
+                    checked={local.instant_followed_insider}
+                    onChange={e=>upd('instant_followed_insider', e.target.checked)}
+                    pro={pro}
+                  />
+                </div>
+
+                <div className="settings-group">
+                  <div className="settings-group__label">Signal triggers</div>
+                  <SettingsToggle
+                    label="High conviction signal"
+                    sub="C-suite cluster buy above $1M — regardless of watchlist"
+                    checked={local.instant_high_conviction}
+                    onChange={e=>upd('instant_high_conviction', e.target.checked)}
+                    pro={pro}
+                  />
+                  <SettingsToggle
+                    label="Reversal detected"
+                    sub="An insider on a watched ticker changes direction"
+                    checked={local.instant_reversal}
+                    onChange={e=>upd('instant_reversal', e.target.checked)}
+                    pro={pro}
+                  />
+                </div>
+
+                <div className="settings-save-row">
+                  <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
+                    {saving?'Saving…':saved?'✓ Saved':'Save alert settings'}
+                  </button>
+                  {saved&&<span className="settings-saved-msg">✓ Saved</span>}
+                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}>⚠ {error}</span>}
+                  {!pro&&<span className="settings-section__lock">Upgrade to Pro to save</span>}
+                </div>
+              </>)}
+            </div>
+          )}
+
+          {/* CONNECTIONS */}
+          {section==='brokers'&&(
+            <div className="settings-section">
+              <div className="settings-section__title">
+                Brokerage connections
+                {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
+              </div>
+              <div className="settings-section__desc">
+                Connect your brokerage to see insider activity on your holdings. Read-only — we never trade on your behalf.
+                {!pro&&<span className="settings-section__lock"> Upgrade to Pro to connect a brokerage.</span>}
+              </div>
+
+              {[
+                {name:'Alpaca',               sub:'Commission-free trading · Paper + live accounts', note:'Pending OAuth approval'},
+                {name:'Tradier',              sub:'Commission-free trading · Options support',        note:'Coming soon'},
+                {name:'Interactive Brokers',  sub:'Professional-grade platform',                      note:'Coming soon'},
+              ].map(b=>(
+                <div key={b.name} className="settings-broker-card">
+                  <div className="settings-broker-card__left">
+                    <div className="settings-broker-card__name">{b.name}</div>
+                    <div className="settings-broker-card__sub">{b.sub}</div>
+                  </div>
+                  <div className="settings-broker-card__right">
+                    <span className="settings-broker-status settings-broker-status--disconnected">Not connected</span>
+                    <button className="btn btn--ghost btn--sm" disabled title={b.note}>Connect</button>
+                  </div>
+                </div>
+              ))}
+
+              <p className="settings-section__note">
+                OAuth approval from each brokerage is required before connections go live.
+                Connections are read-only — positions and balances only, no trading access.
+              </p>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── LANDING PAGE ─────────────────────────────────────────────────────────────
 // Linear-inspired: stark, large type, single purpose per section.
 // Stripe-inspired: structured nav, clear hierarchy, trust signals.
 const FEATURES = [
-  {icon:'⬆', title:'Real-time signals', body:'Form 4 filings ingested within 15 minutes of EDGAR publication. C-suite buys, position changes, and cluster detection — scored automatically.'},
-  {icon:'◈', title:'Sector heatmap', body:'S&P 500 sector performance at a glance, sized by market weight. Overlay insider net-buy flow to see where smart money is moving.'},
-  {icon:'★', title:'Conviction scoring', body:'Every signal scored on exec participation, position size change, and insider clustering. Filter to High-conviction signals in one click.'},
-  {icon:'≡', title:'Full transaction data', body:'Every open-market Form 4 since 2021. Filter by role, sector, transaction type, date range, and value. Export to CSV.'},
-  {icon:'◎', title:'Portfolio integration', body:'Connect Alpaca to see insider activity on your holdings. Get flagged when an insider reverses direction on a stock you own.'},
-  {icon:'⤢', title:'Deep-dive explorer', body:'Two-pane drill-down for signals and insiders. Click a signal → see every transaction. Click an insider → see their full track record.'},
+  {icon:'01', title:'Real-time filings',        body:'Every SEC Form 4 ingested within minutes of publication — corporate C-suite trades and congressional STOCK Act disclosures. No delays, no manual lookups.'},
+  {icon:'02', title:'Conviction scoring',        body:'Signals ranked by exec participation, position size change, and clustering. Cut through noise instantly — filter to High-conviction buys in one click.'},
+  {icon:'03', title:'Portfolio overlay',         body:'Connect your brokerage. See exactly which insiders are trading stocks you own. Get alerted the moment a reversal hits your holdings.'},
+  {icon:'04', title:'Corporate + congressional', body:'Track Form 4 filings from company insiders alongside STOCK Act disclosures from senators and representatives — in the same dashboard.'},
 ];
 
 function LandingPage({ onEnter, dark, setDark }) {
@@ -4258,7 +4975,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Hero */}
       <section className="lp-hero">
         <div className="lp-hero__eyebrow reveal reveal--delay-0">
-          <span className="lp-badge">Now backfilling 2021→present</span>
+          <span className="lp-badge">Form 4 · STOCK Act · Real-time</span>
         </div>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
           Insider trading signals.<br/>
@@ -4287,7 +5004,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-preview__dots">
               <span/><span/><span/>
             </div>
-            <span className="lp-preview__url">insiderdesk.app · Dashboard</span>
+            <span className="lp-preview__url">disclo.co · Dashboard</span>
           </div>
           <div className="lp-preview__screen">
             {/* Simulated dashboard UI */}
@@ -4349,8 +5066,8 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Features */}
       <section className="lp-features" id="features">
         <div className="lp-section-label reveal">What's inside</div>
-        <h2 className="lp-section-h2 reveal reveal--delay-1">Everything you need to trade on insider intelligence.</h2>
-        <div className="lp-features-grid">
+        <h2 className="lp-section-h2 reveal reveal--delay-1">The edge retail investors haven't had. Until now.</h2>
+        <div className="lp-features-grid lp-features-grid--2col">
           {FEATURES.map((f,i)=>(
             <div key={f.title} className={`lp-feature-card reveal reveal--delay-${i%3}`}>
               <div className="lp-feature-icon">{f.icon}</div>
@@ -4365,29 +5082,72 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-pricing" id="pricing">
         <div className="lp-section-label reveal">Pricing</div>
         <h2 className="lp-section-h2 reveal reveal--delay-1">Simple, transparent pricing.</h2>
+
+        {/* Main plans — two vertical cards */}
         <div className="lp-pricing-grid">
           <div className="lp-price-card reveal reveal--delay-1">
             <div className="lp-price-card__name">Free</div>
             <div className="lp-price-card__price">$0<span>/mo</span></div>
-            <div className="lp-price-card__desc">Full access during beta. No credit card required.</div>
+            <div className="lp-price-card__desc">Start tracking insider moves today. No card required.</div>
             <ul className="lp-price-card__features">
-              {['Dashboard & sector heatmap','7-day signal history','Top 15 insiders leaderboard','Form 4 data table'].map(f=>(
+              {['Dashboard & sector heatmap','7-day signal window','Top insiders leaderboard','Corporate + congressional trades','Form 4 data table'].map(f=>(
                 <li key={f}><span className="lp-check">✓</span>{f}</li>
               ))}
             </ul>
-            <button className="lp-btn-ghost lp-btn-ghost--full" onClick={onEnter}>Open app →</button>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="lp-btn-ghost lp-btn-ghost--full">Get started free →</button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <button className="lp-btn-ghost lp-btn-ghost--full" onClick={onEnter}>Open app →</button>
+            </SignedIn>
           </div>
           <div className="lp-price-card lp-price-card--featured reveal reveal--delay-2">
             <div className="lp-price-card__badge">Coming soon</div>
             <div className="lp-price-card__name">Pro</div>
             <div className="lp-price-card__price">$8<span>/mo</span></div>
-            <div className="lp-price-card__desc">For serious investors who can't afford to miss a move.</div>
+            <div className="lp-price-card__desc">For investors who need to act before the market catches up.</div>
             <ul className="lp-price-card__features">
-              {['Everything in Free','Real-time email alerts','Custom signal filters','Portfolio reversal notifications','Full historical data 2021→','Deep-dive explorer'].map(f=>(
+              {['Everything in Free','Full historical data (2021→present)','Email alerts — instant or digest','Custom alert filters (conviction, sector)','Portfolio reversal notifications','Brokerage connection (Alpaca, more)','CSV export','Deep-dive explorer'].map(f=>(
                 <li key={f}><span className="lp-check">✓</span>{f}</li>
               ))}
             </ul>
-            <button className="lp-btn-primary lp-btn-primary--full" onClick={onEnter}>Join waitlist →</button>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="lp-btn-primary lp-btn-primary--full">Join waitlist →</button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <button className="lp-btn-primary lp-btn-primary--full" onClick={onEnter}>Join waitlist →</button>
+            </SignedIn>
+          </div>
+        </div>
+
+        {/* Data export — horizontal card, opt-out framing */}
+        <div className="lp-data-export-card reveal reveal--delay-3">
+          <div className="lp-data-export-card__left">
+            <div className="lp-data-export-card__eyebrow">Don't need a subscription?</div>
+            <div className="lp-data-export-card__title">Just download the data</div>
+            <div className="lp-data-export-card__desc">
+              The complete Form 4 dataset — every open-market insider trade from 2021 to present.
+              Tickers, insiders, values, dates, roles, congressional trades. CSV, instant download.
+            </div>
+          </div>
+          <div className="lp-data-export-card__right">
+            <div className="lp-data-export-card__price">
+              <span className="lp-data-export-card__amount">$9.99</span>
+              <span className="lp-data-export-card__period">one-time</span>
+            </div>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="lp-data-export-card__btn">Download dataset →</button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <button className="lp-data-export-card__btn" onClick={onEnter}>Download dataset →</button>
+            </SignedIn>
+            <div className="lp-data-export-card__note">No subscription · Instant download</div>
           </div>
         </div>
       </section>
@@ -4395,17 +5155,28 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Footer */}
       <footer className="lp-footer">
         <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm">ID</div>
+          <div className="lp-logo-mark lp-logo-mark--sm">D</div>
           <span className="lp-wordmark">Disclo</span>
         </div>
         <div className="lp-footer__links">
           <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
           <span>·</span>
-          <span>Not financial advice</span>
+          <a href="/terms" className="lp-footer__link-muted">Terms</a>
           <span>·</span>
-          <span>Data sourced from public SEC filings</span>
+          <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+          <span>·</span>
+          <span>Not financial advice</span>
         </div>
-        <button className="lp-btn-ghost" onClick={onEnter} style={{marginLeft:'auto'}}>Open app →</button>
+        <div style={{marginLeft:'auto',display:'flex',gap:8}}>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="lp-btn-ghost">Sign in →</button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <button className="lp-btn-ghost" onClick={onEnter}>Open app →</button>
+          </SignedIn>
+        </div>
       </footer>
 
     </div>
@@ -4420,13 +5191,16 @@ export default function App() {
 
   // Register Clerk token getter globally so edgar.js can use it without
   // needing to import Clerk directly (edgar.js is a plain ES module)
+  const { signOut } = useAuth();
   useEffect(()=>{
     if (isSignedIn && getToken) {
       window.__clerkGetToken = () => getToken();
+      window.__clerkSignOut  = () => signOut({ redirectUrl: '/' });
     } else {
       window.__clerkGetToken = null;
+      window.__clerkSignOut  = null;
     }
-  }, [isSignedIn, getToken]);
+  }, [isSignedIn, getToken, signOut]);
 
   // Show landing page if: Clerk hasn't loaded yet OR user is not signed in
   const showLanding = !isLoaded || !isSignedIn;
@@ -4488,9 +5262,25 @@ export default function App() {
   function navTo(p){setPage(p);setDetail(null);setDetailHistory([]);setSelSig(null);setHlTick(null);}
 
   const panelOpen = !!detail;
-  const watchlist = useWatchlist();
+  const watchlist = useWatchlist(user);
 
   // ── Landing page gate ──────────────────────────────────────────────────────
+  // ── Simple client-side routing for legal pages ────────────────────────────
+  const path = window.location.pathname;
+  if (path === '/terms') return <TermsPage />;
+  if (path === '/privacy') return <PrivacyPage />;
+
+  // ── Loading state — show minimal spinner while Clerk initializes
+  // Prevents the flash of landing page that appears for ~200ms on first load
+  if (!isLoaded) return (
+    <div style={{
+      minHeight:'100vh', background:'var(--bg)',
+      display:'flex', alignItems:'center', justifyContent:'center',
+    }}>
+      <div className="spinner" style={{width:32,height:32}}/>
+    </div>
+  );
+
   if (showLanding) return <LandingPage onEnter={enterApp} dark={dark} setDark={setDark} isLoaded={isLoaded}/>;
 
   return (
@@ -4498,8 +5288,12 @@ export default function App() {
       <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark}/>
       <main className="main-area">
         <div className="status-bar">
-          <span className="status-bar__info">{NAV.find(n=>n.id===page)?.label||'Disclo'}</span>
+          {/* Page title — left */}
+          <span className="status-bar__info">
+            {page==='settings'?'Settings':NAV.find(n=>n.id===page)?.label||'Disclo'}
+          </span>
           <div className="status-bar__meta">
+            {/* Data freshness */}
             {lastFilingDate&&(()=>{
               const daysSince = Math.floor((new Date()-new Date(lastFilingDate+'T12:00:00'))/(1000*60*60*24));
               const stale = daysSince>=3;
@@ -4511,11 +5305,23 @@ export default function App() {
               );
             })()}
             {!lastFilingDate&&<span><span className="status-bar__dot"/>{loading?'Syncing…':'Ready'}</span>}
-            <span>{new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
+            {/* Avatar — clicking opens settings page, not Clerk dropdown */}
             <SignedIn>
-              <UserButton afterSignOutUrl="/" appearance={{
-                elements: { avatarBox: 'clerk-avatar' }
-              }}/>
+              <button
+                className="status-bar__avatar-btn"
+                onClick={()=>navTo('settings')}
+                title="Account settings">
+                <UserButton
+                  afterSignOutUrl="/"
+                  appearance={{
+                    elements: {
+                      avatarBox:          'clerk-avatar',
+                      userButtonTrigger:  'clerk-avatar-trigger',
+                      userButtonAvatarBox:'clerk-avatar-box',
+                    }
+                  }}
+                />
+              </button>
             </SignedIn>
             <SignedOut>
               <SignInButton mode="modal">
@@ -4531,12 +5337,21 @@ export default function App() {
             onSelectSignal={selectSignal} selectedSignal={selSignal}
             onOpenDetail={openDetail}/>}
           {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers}/>}
+          {page==='settings'  &&<SettingsPage user={user}/>}
+          {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist}/>}
         </div>
         <footer className="footer">
           <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
+          {' · '}
+          <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
+          {' · '}
+          <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
           {' · '}Not financial advice.
         </footer>
       </main>
+      {watchlist.showUpgrade&&(
+        <UpgradeModal feature="watchlist" onClose={()=>watchlist.setShowUpgrade(false)}/>
+      )}
       {panelOpen&&(
         <>
           <div className="panel-overlay" onClick={closeDetail}/>

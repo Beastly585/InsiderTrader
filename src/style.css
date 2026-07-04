@@ -82,6 +82,17 @@
 /* ── Reset ────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { background: var(--bg); }
+
+/* Global button reset — without this, browsers disagree on default button
+   margin/padding (Firefox especially adds its own), which can show up as
+   inconsistent spacing on things like the settings sidenav across browsers
+   even when nothing in our own CSS changed. */
+button {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  box-sizing: border-box;
+}
 body {
   font-family: var(--font); font-size: 13px; line-height: 1.55;
   background: var(--bg); color: var(--text);
@@ -127,12 +138,15 @@ pre {
   box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset;
 }
 .sidebar__nav {
-  flex: 1; padding: 10px 0;
+  padding: 10px 0;
   display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%;
 }
+/* Push footer to bottom */
+.sidebar__footer { margin-top: auto; }
 .sidebar__footer {
   padding: 10px 0; border-top: 1px solid var(--border);
-  width: 100%; display: flex; justify-content: center;
+  width: 100%; display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
 }
 /* Nav items — icon only, left accent bar on active */
 .nav-item {
@@ -2204,4 +2218,864 @@ td { padding:7px 11px; vertical-align:middle; }
     transform: none;
     transition: none;
   }
+}
+
+/* ── Legal pages (Terms + Privacy) ────────────────────────────────────────── */
+.legal-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+.legal-content {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 60px 48px 80px;
+}
+.legal-content h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+.legal-date {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-bottom: 48px;
+}
+.legal-content h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin-top: 36px;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+.legal-content h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 20px;
+  margin-bottom: 8px;
+  color: var(--text-2);
+}
+.legal-content p {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-2);
+  margin-bottom: 16px;
+}
+.legal-content ul {
+  padding-left: 20px;
+  margin-bottom: 16px;
+}
+.legal-content li {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+.legal-content a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+.lp-footer__link-muted {
+  color: var(--text-3);
+  text-decoration: none;
+}
+.lp-footer__link-muted:hover {
+  color: var(--text-2);
+}
+@media (max-width: 640px) {
+  .legal-content { padding: 40px 24px 60px; }
+  .legal-content h1 { font-size: 26px; }
+}
+
+/* ── Landing page layout overrides ─────────────────────────────────────────── */
+/* 2-col features grid (was 3-col) */
+.lp-features-grid--2col {
+  grid-template-columns: repeat(2, 1fr);
+}
+@media (max-width: 640px) {
+  .lp-features-grid--2col { grid-template-columns: 1fr; }
+}
+
+/* 3-col pricing grid */
+.lp-pricing-grid--3col {
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 960px;
+}
+@media (max-width: 900px) {
+  .lp-pricing-grid--3col { grid-template-columns: 1fr; max-width: 480px; }
+}
+
+/* Data export price styling */
+.lp-price-card__price span {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text-3);
+  letter-spacing: 0;
+}
+
+/* ── Settings page ──────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SETTINGS — unified design system
+   All settings CSS in one place. Every element shares the same tokens.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Page container */
+.settings-page {
+  /* Fill entire content-area — no padding, no title, layout IS the page */
+  padding: 0;
+  margin: -22px -24px -32px; /* cancel parent content-area padding */
+  height: calc(100vh - 44px); /* 44px = status bar */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Layout: left sidenav + right content ─────────────────────────────────── */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 0;
+  align-items: stretch; /* both columns same height */
+  flex: 1;
+  overflow: hidden;
+  border-top: 0.5px solid var(--border);
+}
+@media (max-width: 680px) {
+  
+}
+
+/* ── Sidenav ──────────────────────────────────────────────────────────────── */
+.settings-sidenav {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  border-right: 0.5px solid var(--border);
+  padding: 12px 10px;
+  overflow-y: auto;
+}
+.settings-sidenav__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+  font-family: var(--font);
+  width: 100%;
+}
+.settings-sidenav__item:hover {
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.settings-sidenav__item--active {
+  background: var(--accent-50, rgba(124,111,255,0.12));
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+.settings-sidenav__icon {
+  font-size: 13px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.settings-sidenav__item--active .settings-sidenav__icon { opacity: 1; }
+
+/* Plan badge — sits at bottom of sidenav */
+.settings-sidenav__spacer { flex: 1; }
+.settings-sidenav__plan {
+  padding: 10px;
+  border-top: 0.5px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Pro / Free badge — same shape as nav items */
+.settings-plan-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  width: 100%;
+  letter-spacing: 0;
+  box-sizing: border-box;
+}
+.settings-plan-badge--pro {
+  background: rgba(124,111,255,0.14);
+  color: var(--accent-strong);
+  border: 1px solid rgba(124,111,255,0.25);
+}
+.settings-plan-badge--pro::before { content: '★'; font-size: 11px; }
+.settings-plan-badge--free {
+  background: var(--surface-3);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+.settings-plan-badge--free::before { content: '○'; font-size: 11px; }
+
+/* Upgrade link */
+.settings-sidenav__upgrade {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-strong);
+  cursor: pointer;
+  transition: background 0.12s;
+  width: 100%;
+  border: 1px solid rgba(124,111,255,0.25);
+  background: rgba(124,111,255,0.06);
+  box-sizing: border-box;
+}
+.settings-sidenav__upgrade::before { content: '⬆'; font-size: 11px; }
+.settings-sidenav__upgrade:hover {
+  background: rgba(124,111,255,0.14);
+  text-decoration: none;
+}
+
+/* Sign out — matches nav item shape, red */
+.settings-sidenav__signout {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font);
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+  width: 100%;
+}
+.settings-sidenav__signout::before { content: '→'; font-size: 13px; }
+.settings-sidenav__signout:hover {
+  background: rgba(229,90,85,0.08);
+  color: var(--red-600);
+}
+
+/* ── Content area ─────────────────────────────────────────────────────────── */
+.settings-content {
+  min-width: 0;
+  padding: 32px 36px 48px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Section header — consistent across all tabs */
+.settings-section { display: flex; flex-direction: column; gap: 0; }
+.settings-section__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: -0.2px;
+}
+.settings-section__desc {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.settings-section__lock {
+  color: var(--amber-600);
+  font-size: 12px;
+  font-weight: 500;
+}
+.settings-section__note {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 16px;
+  line-height: 1.6;
+  padding: 11px 13px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  border: 0.5px solid var(--border);
+}
+.settings-pro-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--accent-strong);
+  padding: 1px 6px;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+/* ── Groups — bordered blocks within a section ────────────────────────────── */
+.settings-group {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  transition: opacity 0.15s;
+}
+.settings-group--dimmed { opacity: 0.4; pointer-events: none; }
+.settings-group__label {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  padding: 9px 14px;
+  background: var(--surface-2);
+  border-bottom: 0.5px solid var(--border);
+}
+.settings-group__desc {
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 8px 14px;
+  background: var(--surface-2);
+  border-bottom: 0.5px solid var(--border);
+  line-height: 1.5;
+}
+
+/* ── Rows inside groups ───────────────────────────────────────────────────── */
+.settings-row {
+  padding: 13px 16px;
+  border-bottom: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row--toggle { justify-content: space-between; }
+.settings-row--disabled { opacity: 0.35; pointer-events: none; }
+.settings-row__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.settings-row__sub {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+/* ── Toggle switch ────────────────────────────────────────────────────────── */
+.settings-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.settings-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.settings-toggle__track {
+  width: 38px;
+  height: 21px;
+  background: var(--surface-3);
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  transition: background 0.18s, border-color 0.18s;
+  position: relative;
+}
+.settings-toggle__track::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  background: var(--text-3);
+  transition: transform 0.18s, background 0.18s;
+}
+.settings-toggle input:checked + .settings-toggle__track {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+.settings-toggle input:checked + .settings-toggle__track::after {
+  transform: translateX(17px);
+  background: #fff;
+}
+.settings-toggle--locked { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Pills ────────────────────────────────────────────────────────────────── */
+.settings-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.settings-pill {
+  padding: 5px 13px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: var(--font);
+}
+.settings-pill:hover { border-color: var(--accent-strong); color: var(--text); }
+.settings-pill--active {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+.settings-pill--locked { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Save row ─────────────────────────────────────────────────────────────── */
+.settings-save-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 18px;
+  flex-wrap: wrap;
+}
+.settings-saved-msg {
+  font-size: 13px;
+  color: var(--green-600);
+  font-weight: 500;
+}
+
+/* ── Broker cards ─────────────────────────────────────────────────────────── */
+.settings-broker-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  background: var(--surface);
+  gap: 16px;
+}
+.settings-broker-card__left { flex: 1; min-width: 0; }
+.settings-broker-card__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.settings-broker-card__sub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.settings-broker-card__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.settings-broker-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.settings-broker-status--connected {
+  background: rgba(45,184,122,0.12);
+  color: var(--green-600);
+}
+.settings-broker-status--disconnected {
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+
+
+
+/* ── Clerk UserProfile — dark theme enforcement ───────────────────────────── */
+/* ── Clerk UserProfile — neutral styling, works in dark and light ─────────── */
+/* Let Clerk render its own theme — we only override accent color and
+   remove card chrome since we're already inside a styled container */
+.settings-clerk-wrap { margin-top: 0; }
+.clerk-profile-root { width: 100% !important; }
+.clerk-profile-card {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+/* Only override accent/primary color to match Disclo brand */
+.clerk-profile-card [class*="cl-formButtonPrimary"] {
+  background: var(--accent-strong) !important;
+  border-color: var(--accent-strong) !important;
+  border-radius: 8px !important;
+}
+.clerk-profile-card [class*="cl-accordionTriggerButton"],
+.clerk-profile-card [class*="cl-profileSectionPrimaryButton__"],
+.clerk-profile-card [class*="cl-badge"] {
+  color: var(--accent-strong) !important;
+}
+
+/* ── Upgrade modal ───────────────────────────────────────────────────────────── */
+.upgrade-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(2px);
+}
+.upgrade-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px 28px;
+  max-width: 340px;
+  width: calc(100% - 32px);
+  text-align: center;
+  position: relative;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.4);
+}
+.upgrade-modal__close {
+  position: absolute; top: 14px; right: 14px;
+  background: none; border: none;
+  color: var(--text-3); font-size: 16px;
+  cursor: pointer; padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+.upgrade-modal__close:hover { color: var(--text); }
+.upgrade-modal__icon {
+  font-size: 28px; margin-bottom: 12px;
+  color: var(--accent-strong);
+}
+.upgrade-modal__title {
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text); margin-bottom: 10px;
+}
+.upgrade-modal__body {
+  font-size: 13px; line-height: 1.6;
+  color: var(--text-3); margin-bottom: 20px;
+}
+.upgrade-modal__price {
+  margin-bottom: 16px;
+}
+.upgrade-modal__amount {
+  font-size: 32px; font-weight: 800;
+  color: var(--text); letter-spacing: -1px;
+}
+.upgrade-modal__period {
+  font-size: 14px; color: var(--text-3);
+}
+.upgrade-modal__cta {
+  width: 100%;
+  padding: 12px;
+  background: var(--accent-strong);
+  color: #fff;
+  border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  margin-bottom: 10px;
+}
+.upgrade-modal__cta:hover { opacity: 0.9; }
+.upgrade-modal__note {
+  font-size: 11px; color: var(--text-3);
+}
+
+/* ── Follow button (insider tracking) ────────────────────────────────────────── */
+.follow-btn {
+  padding: 3px 10px;
+  font-size: 11px; font-weight: 600;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.follow-btn:hover {
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+}
+.follow-btn--active {
+  background: var(--accent-50);
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+}
+.follow-btn--locked {
+  opacity: 0.5;
+}
+.follow-btn--locked:hover {
+  border-color: var(--border);
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+/* ── Star button — locked state for free users ───────────────────────────────── */
+.star-btn--locked {
+  opacity: 0.4;
+}
+.star-btn--locked:hover {
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+/* ── Watchlist page ──────────────────────────────────────────────────────────── */
+.wl-tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px;
+  background: var(--accent-strong);
+  color: #fff; font-size: 10px; font-weight: 700;
+  border-radius: 9px; padding: 0 5px;
+  margin-left: 6px;
+}
+.wl-chip__name {
+  font-size: 12px; font-weight: 500;
+  color: var(--text-2); cursor: pointer;
+}
+.wl-chip__name:hover { color: var(--accent-strong); }
+.wl-insider-feed {
+  display: flex; flex-direction: column; gap: 0;
+  border: 0.5px solid var(--border);
+  border-radius: 8px; overflow: hidden;
+  margin-top: 16px;
+}
+.wl-insider-feed .wl-trade-row {
+  border-bottom: 0.5px solid var(--border);
+  border-radius: 0;
+}
+.wl-insider-feed .wl-trade-row:last-child { border-bottom: none; }
+
+/* ── Feature card numbered icons ─────────────────────────────────────────────── */
+.lp-feature-icon {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--accent-strong);
+  opacity: 0.7;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+}
+
+/* ── Data export card — horizontal layout ────────────────────────────────────── */
+.lp-data-export-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  max-width: 720px;
+  margin: 24px auto 0;
+  padding: 24px 28px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.lp-data-export-card__left { flex: 1; min-width: 0; }
+.lp-data-export-card__eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.lp-data-export-card__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+.lp-data-export-card__desc {
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+.lp-data-export-card__right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 160px;
+}
+.lp-data-export-card__price {
+  text-align: center;
+}
+.lp-data-export-card__amount {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -1px;
+}
+.lp-data-export-card__period {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-left: 4px;
+}
+.lp-data-export-card__btn {
+  width: 100%;
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  font-family: var(--font);
+  white-space: nowrap;
+}
+.lp-data-export-card__btn:hover {
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+}
+.lp-data-export-card__note {
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .lp-data-export-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .lp-data-export-card__right { width: 100%; }
+  .lp-data-export-card__btn { text-align: center; }
+}
+
+/* ── Settings account section ────────────────────────────────────────────────── */
+.settings-account-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  margin-bottom: 20px;
+}
+.settings-account-user__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.settings-account-user__email {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.settings-signout-btn {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.settings-signout-btn:hover {
+  border-color: var(--red-600);
+  color: var(--red-600);
+}
+
+/* ── Clerk UserProfile dark theme override ───────────────────────────────────── */
+/* Force dark background on the Clerk component regardless of Clerk's theme */
+.clerk-profile-card,
+.clerk-profile-card * {
+  --cl-color-background:        var(--surface-2) !important;
+  --cl-color-input-background:  var(--surface) !important;
+  --cl-color-text:              var(--text) !important;
+  --cl-color-text-secondary:    var(--text-3) !important;
+  --cl-color-primary:           var(--accent-strong) !important;
+}
+.clerk-profile-card {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border: 0.5px solid var(--border) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+/* Override Clerk's white backgrounds inside the card */
+.clerk-profile-card [class*="cl-card"],
+.clerk-profile-card [class*="cl-main"],
+.clerk-profile-card [class*="cl-content"],
+.clerk-profile-card [class*="cl-page"] {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+}
+.clerk-profile-card [class*="cl-navbar"] {
+  background: var(--surface) !important;
+  border-right: 0.5px solid var(--border) !important;
+}
+.clerk-profile-card [class*="cl-navbarButton"] {
+  color: var(--text-3) !important;
+}
+.clerk-profile-card [class*="cl-navbarButton"]:hover,
+.clerk-profile-card [class*="cl-navbarButton--active"] {
+  color: var(--text) !important;
+  background: var(--surface-2) !important;
+}
+.clerk-profile-card [class*="cl-formFieldInput"] {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+.clerk-profile-card [class*="cl-headerTitle"],
+.clerk-profile-card [class*="cl-profileSectionTitle"],
+.clerk-profile-card [class*="cl-accordionTriggerButton"] {
+  color: var(--text) !important;
+}
+.clerk-profile-card [class*="cl-profileSectionContent"] {
+  color: var(--text-2) !important;
+}
+.clerk-profile-card [class*="cl-dividerLine"] {
+  background: var(--border) !important;
+}
+
+/* ── UserButton avatar — no grey ring, no background ────────────────────────── */
+.status-bar__avatar-btn { outline: none; }
+.status-bar__avatar-btn:focus { outline: none; box-shadow: none; }
+
+/* Clerk renders a <button> with inline background — override everything */
+.clerk-avatar-trigger { pointer-events: none; }
+
+/* Target by attribute pattern since Clerk uses hashed classnames */
+.status-bar__avatar-btn button,
+.status-bar__avatar-btn [class*="cl-"],
+.status-bar__avatar-btn span[class],
+[class*="cl-userButtonTrigger"],
+[class*="cl-userButtonTrigger"]:focus,
+[class*="cl-userButtonTrigger"]:hover,
+[class*="cl-userButtonTrigger"]:focus-visible,
+[class*="cl-avatarBox"],
+[class*="cl-userButtonBox"] {
+  background:       transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border:           none !important;
+  box-shadow:       none !important;
+  outline:          none !important;
+  padding:          0 !important;
+}
+/* The avatar image itself should have no ring */
+[class*="cl-avatarImage"],
+[class*="cl-userButtonAvatarImage"] {
+  border-radius: 50% !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: block !important;
 }
