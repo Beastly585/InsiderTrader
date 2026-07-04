@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 DATABASE_URL        = os.environ.get("DATABASE_URL", "")
 USER_AGENT_EMAIL    = os.environ.get("USER_AGENT_EMAIL", "your@email.com")
 DAYS_BACK           = int(os.environ.get("DAYS_BACK", "3"))
-MAX_WORKERS         = int(os.environ.get("MAX_WORKERS", "4"))
+MAX_WORKERS         = int(os.environ.get("MAX_WORKERS", "2"))
 DRY_RUN             = os.environ.get("DRY_RUN", "0") == "1"
 START_DATE_OVERRIDE = os.environ.get("START_DATE")
 END_DATE_OVERRIDE   = os.environ.get("END_DATE")

@@ -27,11 +27,13 @@ on:
 
     # ── TIER D: Daily wide safety net ─────────────────────────────────────
     # Runs every single day (including weekends) at 4:00am ET (08:00 UTC).
-    # DAYS_BACK=7 re-scans the past week — this is what catches late filers,
-    # Form 4/A amendments, and anything EDGAR processed on an odd schedule
-    # (weekend backlog, holiday delays, etc). Safe to re-scan because the
-    # upsert is idempotent — nothing gets duplicated, only genuinely new or
-    # corrected rows get written.
+    # DAYS_BACK=4 re-scans the past few days — this is what catches late
+    # filers, Form 4/A amendments, and anything EDGAR processed on an odd
+    # schedule (weekend backlog, holiday delays, etc). Safe to re-scan
+    # because the upsert is idempotent — nothing gets duplicated, only
+    # genuinely new or corrected rows get written. (Trimmed from 7→4 days
+    # after testing showed 7 days' volume at the safer 2-worker rate would
+    # run ~36min, past even the extended timeout below.)
     - cron: '0 8 * * *'
 
   workflow_dispatch:
@@ -83,7 +85,7 @@ jobs:
 
             if [ "$HOUR_UTC" = "08" ]; then
               # Tier D — daily wide safety net
-              echo "days_back=7" >> "$GITHUB_OUTPUT"
+              echo "days_back=4" >> "$GITHUB_OUTPUT"
               echo "update_prices=true" >> "$GITHUB_OUTPUT"
             elif [ "$HOUR_UTC" = "12" ]; then
               # Tier B — pre-market
@@ -106,7 +108,7 @@ jobs:
           USER_AGENT_EMAIL: ${{ secrets.USER_AGENT_EMAIL }}
           DAYS_BACK: ${{ steps.vars.outputs.days_back }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
-          MAX_WORKERS: '4'
+          MAX_WORKERS: '2'
         run: |
           cd db
           python fetch_filings_neon.py
