@@ -2,23 +2,38 @@ name: Ingest Form 4 Filings
 
 on:
   schedule:
-    # Twice daily on NYSE trading days — catches morning filings and end-of-day batch
-    # All times UTC; New York is UTC-4 in summer (EDT), UTC-5 in winter (EST)
-    #
-    # Run 1: 13:30 UTC = 9:30am EDT / 8:30am EST — catches overnight + pre-market filings
-    #   EDGAR processes most late-previous-day filings by ~9am ET
-    - cron: '30 13 * * 1-5'
-    #
-    # Run 2: 21:00 UTC = 5:00pm EDT / 4:00pm EST — catches full trading day filings
-    #   Most same-day Form 4s appear on EDGAR within 30-60min of submission
-    - cron: '0 21 * * 1-5'
-    #
-    # Run 3: 14:00 UTC Monday = 10:00am EDT — safety net for Monday mornings specifically
-    #   Catches any late Friday filings that EDGAR accepted over the weekend.
-    #   EDGAR accepts filings 24/7 and often has a weekend backlog processed Sunday night.
-    - cron: '0 14 * * 1'
+    # ── TIER A: Market-hours polling ──────────────────────────────────────
+    # Every 15 minutes, 9:30am-4:00pm ET (EDT/UTC-4), Mon-Fri.
+    # DAYS_BACK=1 keeps each run fast — it's just catching whatever's new
+    # since the last poll. Upsert is idempotent (ON CONFLICT on
+    # accession_number + transaction_date + shares + transaction_code) so
+    # overlapping windows never create duplicates.
+    # NOTE: these times are EDT (UTC-4). In EST (UTC-5, roughly Nov-Mar),
+    # actual market hours will run ~1hr later than these UTC times —
+    # shift everything below by +1 hour in winter if you want to be precise.
+    - cron: '30,45 13 * * 1-5'
+    - cron: '0,15,30,45 14-19 * * 1-5'
+    - cron: '0 20 * * 1-5'
 
-  # Allow manual trigger from Actions tab (useful for backfills, debugging)
+    # ── TIER B: Pre-market ────────────────────────────────────────────────
+    # 8:00am ET (12:00 UTC) — 90min buffer before the 9:30 open.
+    # DAYS_BACK=2 to sweep up anything filed overnight before Tier A starts.
+    - cron: '0 12 * * 1-5'
+
+    # ── TIER C: Post-market ───────────────────────────────────────────────
+    # 5:00pm ET (21:00 UTC) — 1hr after close, giving EDGAR time to process
+    # same-day filings submitted right at the bell. Also refreshes prices.
+    - cron: '0 21 * * 1-5'
+
+    # ── TIER D: Daily wide safety net ─────────────────────────────────────
+    # Runs every single day (including weekends) at 4:00am ET (08:00 UTC).
+    # DAYS_BACK=7 re-scans the past week — this is what catches late filers,
+    # Form 4/A amendments, and anything EDGAR processed on an odd schedule
+    # (weekend backlog, holiday delays, etc). Safe to re-scan because the
+    # upsert is idempotent — nothing gets duplicated, only genuinely new or
+    # corrected rows get written.
+    - cron: '0 8 * * *'
+
   workflow_dispatch:
     inputs:
       days_back:
@@ -29,6 +44,10 @@ on:
         description: 'Dry run only — parse but do not write to DB'
         required: false
         default: 'false'
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
 
 jobs:
   ingest:
@@ -50,11 +69,42 @@ jobs:
           pip install --upgrade pip
           pip install "psycopg[binary]" requests python-dotenv lxml
 
+      - name: Determine DAYS_BACK for this run
+        id: vars
+        run: |
+          # workflow_dispatch always wins if manually triggered.
+          if [ -n "${{ github.event.inputs.days_back }}" ]; then
+            echo "days_back=${{ github.event.inputs.days_back }}" >> "$GITHUB_OUTPUT"
+            echo "update_prices=true" >> "$GITHUB_OUTPUT"
+          else
+            HOUR_UTC=$(date -u +%H)
+            MIN_UTC=$(date -u +%M)
+            DOW=$(date -u +%u)   # 1=Mon .. 7=Sun
+
+            if [ "$HOUR_UTC" = "08" ]; then
+              # Tier D — daily wide safety net
+              echo "days_back=7" >> "$GITHUB_OUTPUT"
+              echo "update_prices=true" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR_UTC" = "12" ]; then
+              # Tier B — pre-market
+              echo "days_back=2" >> "$GITHUB_OUTPUT"
+              echo "update_prices=true" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR_UTC" = "21" ]; then
+              # Tier C — post-market
+              echo "days_back=1" >> "$GITHUB_OUTPUT"
+              echo "update_prices=true" >> "$GITHUB_OUTPUT"
+            else
+              # Tier A — intraday polling, skip the price refresh
+              echo "days_back=1" >> "$GITHUB_OUTPUT"
+              echo "update_prices=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
       - name: Run Form 4 ingestion
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           USER_AGENT_EMAIL: ${{ secrets.USER_AGENT_EMAIL }}
-          DAYS_BACK: ${{ github.event.inputs.days_back || '3' }}
+          DAYS_BACK: ${{ steps.vars.outputs.days_back }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           MAX_WORKERS: '2'
         run: |
@@ -62,7 +112,9 @@ jobs:
           python fetch_filings_neon.py
 
       - name: Update price history
-        if: success()
+        # Only bother refreshing prices around the open/close/safety-net —
+        # no need to hit Polygon every 15 minutes intraday.
+        if: success() && steps.vars.outputs.update_prices == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
