@@ -106,7 +106,7 @@ jobs:
           USER_AGENT_EMAIL: ${{ secrets.USER_AGENT_EMAIL }}
           DAYS_BACK: ${{ steps.vars.outputs.days_back }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
-          MAX_WORKERS: '2'
+          MAX_WORKERS: '4'
         run: |
           cd db
           python fetch_filings_neon.py
