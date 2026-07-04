@@ -63,23 +63,30 @@ HEADERS = {
 # ── Retry-aware GET ────────────────────────────────────────────────────────────
 
 def sec_get(url: str, params: dict = None, timeout: int = 25,
-            max_retries: int = 5) -> Optional[requests.Response]:
+            max_retries: int = 3) -> Optional[requests.Response]:
+    # Worst case per URL now: min(65,90)+min(130,90)+min(195,90) = 270s (4.5min)
+    # instead of the old 65+130+195+260+325 = 975s (16.25min). GitHub-hosted
+    # runners share IP pools with many other jobs hitting sec.gov, so 429s
+    # here are more likely than on a personal machine — capping the backoff
+    # means a bad run fails fast and cheap instead of burning the full job
+    # timeout with nothing committed to the DB.
+    MAX_BACKOFF = 90
     for attempt in range(max_retries):
         time.sleep(INTER_REQUEST_SLEEP)
         try:
             r = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
         except requests.exceptions.Timeout:
-            time.sleep(5 * (attempt + 1)); continue
+            time.sleep(min(5 * (attempt + 1), MAX_BACKOFF)); continue
         except Exception as e:
             log.debug(f"Request error: {e}"); time.sleep(5); continue
 
         if r.status_code == 200:   return r
         if r.status_code == 404:   return None
         if r.status_code == 429:
-            wait = 65 * (attempt + 1)
+            wait = min(65 * (attempt + 1), MAX_BACKOFF)
             log.warning(f"429 — waiting {wait}s"); time.sleep(wait); continue
         if r.status_code in (500, 502, 503, 504):
-            time.sleep(10 * (attempt + 1)); continue
+            time.sleep(min(10 * (attempt + 1), MAX_BACKOFF)); continue
         return None
     return None
 
@@ -452,13 +459,17 @@ def upsert_to_neon(transactions: list[Transaction], batch_size: int = 500) -> in
     conn = get_connection()
     written = 0
     try:
-        with conn:
-            cur = conn.cursor()
-            for i in range(0, len(transactions), batch_size):
-                batch = transactions[i:i+batch_size]
-                cur.executemany(UPSERT_SQL, [t.to_tuple() for t in batch])
-                written += len(batch)
-                log.info(f"  Batch {i//batch_size+1}: {len(batch)} rows ({written} total)")
+        cur = conn.cursor()
+        for i in range(0, len(transactions), batch_size):
+            batch = transactions[i:i+batch_size]
+            cur.executemany(UPSERT_SQL, [t.to_tuple() for t in batch])
+            conn.commit()  # commit per-batch — if the job gets killed later,
+                            # everything committed so far is still safe in the DB
+            written += len(batch)
+            log.info(f"  Batch {i//batch_size+1}: {len(batch)} rows ({written} total)")
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
     return written
