@@ -204,11 +204,16 @@ class Transaction:
 
 def edgar_get_accessions(start_date: str, end_date: str) -> list[dict]:
     all_hits: list[dict] = []
-    offset, page_size = 0, 40
+    seen_ids: set[str] = set()
+    offset, page_size = 0, 100  # EDGAR EFTS returns 100/page regardless of what
+                                  # we assume — this was previously 40, causing
+                                  # each request to overlap the last one by 60
+                                  # results and collect the same filings 2-3x over.
 
     while True:
         params = {"forms":"4","dateRange":"custom",
-                  "startdt":start_date,"enddt":end_date,"from":offset}
+                  "startdt":start_date,"enddt":end_date,"from":offset,
+                  "size":page_size}  # explicit — don't rely on EDGAR's default
         r = sec_get(EDGAR_EFTS_URL, params=params, timeout=30)
         if r is None:
             log.error(f"EDGAR EFTS failed at offset {offset}")
@@ -221,9 +226,16 @@ def edgar_get_accessions(start_date: str, end_date: str) -> list[dict]:
         hits = data.get("hits", {}).get("hits", [])
         if not hits: break
 
+        new_this_page = 0
         for h in hits:
-            src    = h.get("_source", {})
             raw_id = h.get("_id", "")
+            if raw_id in seen_ids:
+                continue  # defensive dedupe — belt-and-suspenders against any
+                          # remaining pagination overlap regardless of cause
+            seen_ids.add(raw_id)
+            new_this_page += 1
+
+            src    = h.get("_source", {})
             if ":" in raw_id:
                 accession, xml_filename = raw_id.split(":", 1)
             else:
@@ -244,7 +256,7 @@ def edgar_get_accessions(start_date: str, end_date: str) -> list[dict]:
 
         total = data.get("hits",{}).get("total",{})
         if isinstance(total, dict): total = total.get("value", 0)
-        log.info(f"  EFTS offset={offset}: {len(hits)} hits (total: {total})")
+        log.info(f"  EFTS offset={offset}: {len(hits)} hits, {new_this_page} new (total: {total})")
 
         offset += page_size
         if len(hits) < page_size: break
