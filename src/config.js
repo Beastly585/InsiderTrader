@@ -7,6 +7,7 @@ const cfg = {
   WORKER_API_KEY: import.meta.env.VITE_WORKER_API_KEY || '',
   FINNHUB_API_KEY:import.meta.env.VITE_FINNHUB_API_KEY|| '',
   ALPACA_LIVE:    import.meta.env.VITE_ALPACA_LIVE === 'true',
+  STRIPE_PUBLISHABLE_KEY: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '',
   DEFAULT_DAYS_BACK: 14,
   PAGE_SIZE: 25,
 };

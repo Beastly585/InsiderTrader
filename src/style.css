@@ -2578,6 +2578,64 @@ td { padding:7px 11px; vertical-align:middle; }
   line-height: 1.4;
 }
 
+/* ── Billing tab additions ─────────────────────────────────────────────────── */
+.settings-danger-btn {
+  background: transparent;
+  border: 0.5px solid var(--border);
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.settings-danger-btn:hover { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.4); }
+.settings-danger-btn:disabled { opacity: 0.5; cursor: default; }
+
+.settings-error-banner {
+  background: rgba(239,68,68,0.08);
+  border: 0.5px solid rgba(239,68,68,0.35);
+  color: #ef4444;
+  font-size: 13px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.checkout-error {
+  color: #ef4444;
+  font-size: 12.5px;
+  margin-top: 10px;
+  line-height: 1.4;
+}
+.checkout-retry {
+  background: transparent;
+  border: 0.5px solid currentColor;
+  color: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.checkout-modal { min-width: 380px; }
+.upgrade-modal__secondary {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-top: 10px;
+  padding: 4px;
+}
+.upgrade-modal__secondary:hover { color: var(--text); }
+
 /* ── Toggle switch ────────────────────────────────────────────────────────── */
 .settings-toggle {
   position: relative;

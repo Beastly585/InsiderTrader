@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton, UserProfile } from '@clerk/clerk-react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 // src/app.jsx — Disclo — insider trading intelligence platform
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
@@ -103,14 +105,16 @@ function useCompanyProfile(ticker, cik) {
 // Stored in localStorage as a JSON array of ticker strings.
 // No auth needed — entirely client-side.
 // ─── Pro plan check ───────────────────────────────────────────────────────────
-// Hardcoded during dev — replace with user.publicMetadata?.plan === 'pro'
-// once Stripe is wired up.
-const PRO_USER_IDS = new Set(['user_3FgTBJcnwHsjWQVZPQVNjt3mUiZ']);
+// plan and hasDataExport are written into Clerk publicMetadata by the Stripe
+// webhook in neon-proxy.js — Neon is the real source of truth, this is just
+// a fast client-side read of what the webhook already confirmed server-side.
 function isPro(user) {
   if (!user) return false;
-  // Stripe plan check (Phase 3) — uncomment when ready:
-  // if (user.publicMetadata?.plan === 'pro') return true;
-  return PRO_USER_IDS.has(user.id);
+  return user.publicMetadata?.plan === 'pro';
+}
+function hasDataExport(user) {
+  if (!user) return false;
+  return user.publicMetadata?.hasDataExport === true;
 }
 
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
@@ -122,6 +126,8 @@ function UpgradeModal({ feature, onClose }) {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   },[onClose]);
+
+  const [checkoutProduct, setCheckoutProduct] = useState(null); // null | 'pro' | 'data_export'
 
   const FEATURE_COPY = {
     watchlist: {
@@ -137,6 +143,16 @@ function UpgradeModal({ feature, onClose }) {
   };
   const copy = FEATURE_COPY[feature] || FEATURE_COPY.default;
 
+  if (checkoutProduct) {
+    return (
+      <CheckoutModal
+        product={checkoutProduct}
+        onClose={() => setCheckoutProduct(null)}
+        onSuccess={onClose}
+      />
+    );
+  }
+
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
       <div className="upgrade-modal">
@@ -145,19 +161,245 @@ function UpgradeModal({ feature, onClose }) {
         <div className="upgrade-modal__title">{copy.title}</div>
         <div className="upgrade-modal__body">{copy.body}</div>
         <div className="upgrade-modal__price">
-          <span className="upgrade-modal__amount">$8</span>
+          <span className="upgrade-modal__amount">$11.99</span>
           <span className="upgrade-modal__period">/month</span>
         </div>
-        <button className="upgrade-modal__cta" onClick={onClose}>
+        <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct('pro')}>
           Upgrade to Pro →
         </button>
-        <div className="upgrade-modal__note">Coming soon — join the waitlist</div>
+        <button className="upgrade-modal__secondary" onClick={()=>setCheckoutProduct('data_export')}>
+          Just need the data? Buy a one-time export — $9.99
+        </button>
       </div>
     </div>
   );
 }
 
-// ─── Watchlist ────────────────────────────────────────────────────────────────
+// ─── Checkout (Stripe Elements) ────────────────────────────────────────────────
+// Handles BOTH products — Pro subscription and the one-time data export.
+// Same component either way: the backend returns a client_secret regardless
+// of whether it's backing a Subscription's PaymentIntent or a standalone one,
+// and Elements mounts the right payment UI automatically from that secret.
+let _stripePromise = null;
+function getStripePromise() {
+  if (!_stripePromise) _stripePromise = loadStripe(cfg.STRIPE_PUBLISHABLE_KEY);
+  return _stripePromise;
+}
+
+const PRODUCT_COPY = {
+  pro:          { title: 'Upgrade to Pro',        price: '$11.99/month',  endpoint: '/billing/create-subscription' },
+  data_export:  { title: 'Buy full data export',  price: '$9.99 one-time', endpoint: '/billing/create-data-purchase' },
+};
+
+function CheckoutModal({ product, onClose, onSuccess }) {
+  const { user } = useUser();
+  const [clientSecret, setClientSecret] = useState(null);
+  const [error, setError] = useState(null);
+  const copy = PRODUCT_COPY[product];
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+        const res = await fetch(`${cfg.NEON_PROXY_URL}${copy.endpoint}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ email: user?.primaryEmailAddress?.emailAddress }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not start checkout');
+        if (!cancelled) setClientSecret(data.clientSecret);
+      } catch (e) {
+        if (!cancelled) setError(e.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [product]);
+
+  return (
+    <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
+      <div className="upgrade-modal checkout-modal">
+        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close">✕</button>
+        <div className="upgrade-modal__title">{copy.title}</div>
+        <div className="upgrade-modal__price">
+          <span className="upgrade-modal__amount">{copy.price}</span>
+        </div>
+
+        {error && <div className="checkout-error">{error} — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
+
+        {!error && !clientSecret && (
+          <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+        )}
+
+        {!error && clientSecret && (
+          <Elements stripe={getStripePromise()} options={{ clientSecret }}>
+            <CheckoutForm product={product} onSuccess={onSuccess} onClose={onClose} />
+          </Elements>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CheckoutForm({ product, onSuccess, onClose }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState(null);
+
+  async function handleConfirm() {
+    if (!stripe || !elements) return;
+    setSubmitting(true);
+    setFormError(null);
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: window.location.href },
+      redirect: 'if_required',
+    });
+
+    if (error) {
+      setFormError(error.message);
+      setSubmitting(false);
+      return;
+    }
+
+    // Payment succeeded client-side — the webhook updates Neon/Clerk metadata
+    // async. isPro()/hasDataExport() reads from Clerk metadata, so there's a
+    // brief window where this device knows before the metadata catches up.
+    setSubmitting(false);
+    onSuccess && onSuccess();
+  }
+
+  return (
+    <>
+      <PaymentElement />
+      {formError && <div className="checkout-error">{formError}</div>}
+      <button
+        className="upgrade-modal__cta"
+        disabled={!stripe || submitting}
+        onClick={handleConfirm}
+        style={{marginTop:16}}
+      >
+        {submitting ? 'Processing…' : (product === 'pro' ? 'Subscribe' : 'Buy export')}
+      </button>
+      <div className="upgrade-modal__note">
+        {product === 'pro'
+          ? 'Cancel anytime from Settings → Billing.'
+          : 'One-time charge. You can re-purchase later for a fresh pull.'}
+      </div>
+    </>
+  );
+}
+
+// ─── Billing section (Settings tab) ────────────────────────────────────────────
+function BillingSection({ user }) {
+  const [status, setStatus]   = useState(null);
+  const [loadErr, setLoadErr] = useState(null); // distinct from "no data" — see audit note
+  const [busy, setBusy]       = useState(false);
+  const [actionErr, setActionErr] = useState(null);
+  const [checkoutProduct, setCheckoutProduct] = useState(null);
+
+  async function load() {
+    setLoadErr(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/status`, { headers });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data = await res.json();
+      setStatus(data);
+    } catch (e) {
+      // Explicit error state — NOT silently treated as "free plan, no data".
+      // This is exactly the gap flagged in the UX audit: failures were
+      // previously indistinguishable from empty results.
+      setLoadErr(e.message || 'Could not load billing status');
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function handleCancel() {
+    setBusy(true); setActionErr(null);
+    try {
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/cancel`, { method: 'POST', headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Cancel failed');
+      await load();
+    } catch (e) {
+      setActionErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loadErr) {
+    return (
+      <div className="settings-error-banner">
+        Couldn't load your billing info right now ({loadErr}).
+        <button className="checkout-retry" onClick={load}>Retry</button>
+      </div>
+    );
+  }
+  if (!status) return <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>;
+
+  const isProPlan = status.plan === 'pro' && (status.status === 'active' || status.status === 'trialing');
+
+  return (
+    <>
+      <div className="settings-group">
+        <div className="settings-group__label">Current plan</div>
+        <div className="settings-row settings-row--toggle">
+          <div>
+            <div className="settings-row__label">{isProPlan ? 'Pro — $11.99/month' : 'Free'}</div>
+            {isProPlan && status.current_period_end && (
+              <div className="settings-row__sub">
+                {status.cancel_at_period_end
+                  ? `Cancels on ${new Date(status.current_period_end).toLocaleDateString()}`
+                  : `Renews on ${new Date(status.current_period_end).toLocaleDateString()}`}
+              </div>
+            )}
+          </div>
+          {!isProPlan && (
+            <button className="settings-sidenav__upgrade" onClick={()=>setCheckoutProduct('pro')}>Upgrade →</button>
+          )}
+          {isProPlan && !status.cancel_at_period_end && (
+            <button className="settings-danger-btn" disabled={busy} onClick={handleCancel}>
+              {busy ? 'Canceling…' : 'Cancel subscription'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <div className="settings-group__label">Full data export</div>
+        <div className="settings-row settings-row--toggle">
+          <div>
+            <div className="settings-row__label">
+              {status.hasDataExport ? 'Purchased' : 'Not purchased'}
+            </div>
+            <div className="settings-row__sub">One-time pull of everything in the database — $9.99</div>
+          </div>
+          <button className="settings-sidenav__upgrade" onClick={()=>setCheckoutProduct('data_export')}>
+            {status.hasDataExport ? 'Buy again' : 'Buy →'}
+          </button>
+        </div>
+      </div>
+
+      {actionErr && <div className="checkout-error">{actionErr}</div>}
+
+      {checkoutProduct && (
+        <CheckoutModal
+          product={checkoutProduct}
+          onClose={()=>setCheckoutProduct(null)}
+          onSuccess={()=>{ setCheckoutProduct(null); load(); }}
+        />
+      )}
+    </>
+  );
+}
+
+
 // Two item types: 'ticker' and 'insider'
 // Storage: localStorage (instant) + Neon (persistent, Pro users only)
 // Free users: watchlist is NOT saved — clicking star shows upgrade modal
@@ -4651,6 +4893,7 @@ function SettingsPage({ user }) {
 
   const SECTIONS = [
     {id:'account',  label:'Account',        icon:'◎'},
+    {id:'billing',  label:'Billing',        icon:'$'},
     {id:'digests',  label:'Email digests',  icon:'✉'},
     {id:'instant',  label:'Instant alerts', icon:'⚡'},
     {id:'brokers',  label:'Connections',    icon:'⛓'},
@@ -4709,6 +4952,15 @@ function SettingsPage({ user }) {
                   }
                 }}/>
               </div>
+            </div>
+          )}
+
+          {/* BILLING */}
+          {section==='billing'&&(
+            <div className="settings-section">
+              <div className="settings-section__title">Billing</div>
+              <div className="settings-section__desc">Manage your plan, payment, and data export purchases.</div>
+              <BillingSection user={user} />
             </div>
           )}
 

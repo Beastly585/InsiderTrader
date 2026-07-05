@@ -11,16 +11,25 @@
  *   NEON_API_KEY             Neon API key (napi_xxxx...)
  *   ALPACA_KEY
  *   ALPACA_SECRET
+ *   STRIPE_SECRET_KEY        sk_live_... / sk_test_...
+ *   STRIPE_WEBHOOK_SECRET    whsec_... — from the Stripe Dashboard webhook endpoint
+ *   STRIPE_PRICE_PRO         price_... for the $11.99/mo Pro plan (the only
+ *                            recurring plan — the $9.99 data export is a
+ *                            one-time PaymentIntent, no Price object needed)
+ *   CLERK_SECRET_KEY         sk_live_... / sk_test_... — used to mirror plan
+ *                            status into Clerk publicMetadata after webhook events
+ *
+ * Requires `npm install stripe` in this Worker's package.json — Stripe's SDK
+ * runs on Workers via createFetchHttpClient()/createSubtleCryptoProvider(),
+ * no Node-specific APIs needed.
  */
 
 const ALLOWED_ORIGINS = new Set([
+  'https://disclo.co',
+  'https://disclo-1wp.pages.dev',
   'https://beastly585.github.io',
-  'https://insiderdesk.app',
-  'http://127.0.0.1:5500',
-  'http://localhost:5500',
-  'http://localhost:3000',
-  'http://localhost:5173',   // Vite dev server
-  'http://127.0.0.1:5173',  // Vite dev server (IP form)
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
 ]);
 
 export default {
@@ -30,6 +39,16 @@ export default {
     // CORS preflight
     if (request.method === 'OPTIONS') {
       return corsResponse(null, 204, origin, env);
+    }
+
+    const url = new URL(request.url);
+
+    // ── Stripe webhook — MUST run before origin/auth checks below.        ──
+    // Stripe's requests have no Origin header we'd recognize and no
+    // X-API-Key/Clerk JWT — its own signature (verified inside the handler
+    // against the raw, unparsed body) IS the auth check for this route.
+    if (url.pathname === '/stripe/webhook' && request.method === 'POST') {
+      return handleStripeWebhook(request, env);
     }
 
     // Allow GET and POST
@@ -70,7 +89,25 @@ export default {
       }
     }
 
-    const url = new URL(request.url);
+    // ── Billing routes ───────────────────────────────────────────────────
+    if (url.pathname === '/billing/create-subscription') {
+      return handleCreateSubscription(request, env, origin);
+    }
+    if (url.pathname === '/billing/create-data-purchase') {
+      return handleCreateDataPurchase(request, env, origin);
+    }
+    if (url.pathname === '/billing/cancel') {
+      return handleCancelSubscription(request, env, origin);
+    }
+    if (url.pathname === '/billing/status') {
+      return handleBillingStatus(request, env, origin);
+    }
+
+    // ── Watchlist routes ───────────────────────────────────────────────────
+    if (url.pathname === '/watchlist') {
+      return handleWatchlist(request, env, origin);
+    }
+
     if (url.pathname === '/portfolio' || url.pathname.startsWith('/portfolio')) {
       return handlePortfolio(request, env, origin);
     }
@@ -110,6 +147,40 @@ async function handleQuery(request, env, origin) {
   // SELECT only guard
   if (!query.trim().toUpperCase().startsWith('SELECT')) {
     return corsResponse({ error: 'Only SELECT queries allowed' }, 403, origin, env);
+  }
+
+  // ── Free-tier date floor enforcement ────────────────────────────────────
+  // This can't live in edgar.js alone — the client builds the SQL string
+  // itself and sends it here, so a free user could just edit the request in
+  // dev tools and delete the date filter. This clamps it server-side instead:
+  // if the caller isn't Pro, any date-floor literal this query contains gets
+  // rewritten to no earlier than 1 year ago, regardless of what was sent.
+  if (query.toLowerCase().includes('public.filings')) {
+    const clerkUserId = await verifiedUserId(request, env);
+    let isPro = false;
+    if (clerkUserId) {
+      try {
+        const result = await neonFetch(env,
+          `SELECT status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+        );
+        isPro = result.rows?.[0]?.[0] === 'active' || result.rows?.[0]?.[0] === 'trialing';
+      } catch (e) {
+        console.error('[Worker] Plan check failed, defaulting to free-tier restrictions:', e.message);
+      }
+    }
+
+    if (!isPro) {
+      const freeFloor = new Date();
+      freeFloor.setDate(freeFloor.getDate() - 365);
+      const floorStr = freeFloor.toISOString().slice(0, 10);
+
+      // Find any `>= 'YYYY-MM-DD'` date-floor literal in the query and clamp
+      // it to no earlier than the free floor — never let the client's date
+      // reach further back than this, whatever they sent.
+      query = query.replace(/>=\s*'(\d{4}-\d{2}-\d{2})'/g, (match, dateStr) => {
+        return dateStr < floorStr ? `>= '${floorStr}'` : match;
+      });
+    }
   }
 
   // Parse connection string to get host, role, database
@@ -153,6 +224,78 @@ async function handleQuery(request, env, origin) {
   return corsResponse(result, resp.status, origin, env);
 }
 
+
+async function handleWatchlist(request, env, origin) {
+  // Extract user ID from JWT (required — watchlist is always per-user)
+  const authHeader = request.headers.get('Authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+  }
+  let userId;
+  try {
+    const token  = authHeader.slice(7);
+    const parts  = token.split('.');
+    const b64    = s => atob(s.replace(/-/g,'+').replace(/_/g,'/'));
+    const payload = JSON.parse(b64(parts[1]));
+    userId = payload.sub;
+  } catch {
+    return corsResponse({ error: 'Invalid token' }, 401, origin, env);
+  }
+  if (!userId) return corsResponse({ error: 'Invalid token' }, 401, origin, env);
+
+  const connStr = env.NEON_CONNECTION_STRING;
+  const u = new URL(connStr);
+  const host = u.hostname;
+
+  const neonFetch = async (query) => {
+    const resp = await fetch(`https://${host}/sql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': connStr },
+      body: JSON.stringify({ query }),
+    });
+    const text = await resp.text();
+    return JSON.parse(text);
+  };
+
+  // GET — load watchlist
+  if (request.method === 'GET') {
+    const uid = userId.replace(/'/g, "''");
+    const result = await neonFetch(
+      `SELECT item_type, item_value FROM public.user_watchlist WHERE clerk_user_id='${uid}' ORDER BY added_at DESC`
+    );
+    return corsResponse({ items: result.rows || [] }, 200, origin, env);
+  }
+
+  // POST — add or remove item
+  if (request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
+    const { action, item_type, item_value } = body;
+    if (!['add','remove'].includes(action))   return corsResponse({ error: 'Invalid action' }, 400, origin, env);
+    if (!['ticker','insider'].includes(item_type)) return corsResponse({ error: 'Invalid item_type' }, 400, origin, env);
+    if (!item_value || typeof item_value !== 'string') return corsResponse({ error: 'Missing item_value' }, 400, origin, env);
+
+    const uid = userId.replace(/'/g, "''");
+    const val = item_value.slice(0,200).replace(/'/g, "''");
+    const typ = item_type.replace(/'/g, "''");
+
+    if (action === 'add') {
+      await neonFetch(
+        `INSERT INTO public.user_watchlist (clerk_user_id, item_type, item_value)
+         VALUES ('${uid}','${typ}','${val}')
+         ON CONFLICT (clerk_user_id, item_type, item_value) DO NOTHING`
+      );
+    } else {
+      await neonFetch(
+        `DELETE FROM public.user_watchlist WHERE clerk_user_id='${uid}' AND item_type='${typ}' AND item_value='${val}'`
+      );
+    }
+    return corsResponse({ ok: true }, 200, origin, env);
+  }
+
+  return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
+}
+
 async function handlePortfolio(request, env, origin) {
   const alpacaKey    = env.ALPACA_KEY;
   const alpacaSecret = env.ALPACA_SECRET;
@@ -176,7 +319,382 @@ async function handlePortfolio(request, env, origin) {
   }
 }
 
-function corsHeaders(origin, env) {
+// ── Shared helpers for billing routes ───────────────────────────────────────
+
+function getUserIdFromAuthHeader(request) {
+  const authHeader = request.headers.get('Authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+  try {
+    const token = authHeader.slice(7);
+    const parts = token.split('.');
+    const b64 = s => atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(b64(parts[1]));
+    return payload.sub || null;
+  } catch {
+    return null;
+  }
+}
+
+// Unlike getUserIdFromAuthHeader, this actually VERIFIES the JWT signature
+// against CLERK_JWKS_URL before trusting the sub claim. Use this — not the
+// plain decode above — anywhere identity feeds a security decision: billing
+// creation, the free-tier date-floor check, anything that grants access or
+// spends money. Fails CLOSED: no CLERK_JWKS_URL configured, or verification
+// fails for any reason, returns null rather than trusting the client.
+async function verifiedUserId(request, env) {
+  if (!env.CLERK_JWKS_URL) return null;
+  const authHeader = request.headers.get('Authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+  try {
+    const payload = await verifyClerkJWT(authHeader.slice(7), env.CLERK_JWKS_URL);
+    return payload.sub || null;
+  } catch {
+    return null;
+  }
+}
+
+function sqlVal(v) {
+  if (v === null || v === undefined) return 'NULL';
+  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+  if (typeof v === 'number') return String(v);
+  return `'${String(v).replace(/'/g, "''")}'`; // same escaping convention as handleWatchlist below
+}
+
+async function neonFetch(env, query) {
+  const connStr = env.NEON_CONNECTION_STRING;
+  const u = new URL(connStr);
+  const resp = await fetch(`https://${u.hostname}/sql`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': connStr },
+    body: JSON.stringify({ query }),
+  });
+  const text = await resp.text();
+  return JSON.parse(text);
+}
+
+// Mirrors billing state into Clerk publicMetadata so the frontend can read
+// isPro()/hasDataExport()-style checks instantly without an extra network
+// round trip. Neon stays the source of truth — this is a read-optimization
+// only. Clerk's metadata PATCH endpoint merges shallowly at the top level,
+// so calling this with {plan} and later with {hasDataExport} won't clobber
+// the other key.
+async function syncClerkMetadata(env, clerkUserId, metadataPatch) {
+  if (!env.CLERK_SECRET_KEY) return; // not fatal — Neon is still correct
+  try {
+    await fetch(`https://api.clerk.com/v1/users/${clerkUserId}/metadata`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${env.CLERK_SECRET_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ public_metadata: metadataPatch }),
+    });
+  } catch (e) {
+    console.error('[Worker] Clerk metadata sync failed:', e.message);
+    // Don't fail the webhook over this — Neon already has the correct state.
+  }
+}
+
+function planFromPriceId(env, priceId) {
+  return priceId === env.STRIPE_PRICE_PRO ? 'pro' : 'free';
+}
+
+// ── Stripe webhook ───────────────────────────────────────────────────────────
+// Verifies Stripe's signature against the RAW body (never JSON.parse before
+// verifying) and upserts subscription state. This is the ONLY writer of
+// public.subscriptions — never trust plan/status from the client.
+async function handleStripeWebhook(request, env) {
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+    httpClient: Stripe.createFetchHttpClient(),
+  });
+
+  const sig = request.headers.get('Stripe-Signature') || '';
+  const rawBody = await request.text(); // raw — must not be parsed before this
+
+  let event;
+  try {
+    event = await stripe.webhooks.constructEventAsync(
+      rawBody, sig, env.STRIPE_WEBHOOK_SECRET,
+      undefined, Stripe.createSubtleCryptoProvider()
+    );
+  } catch (e) {
+    console.error('[Worker] Stripe signature verification failed:', e.message);
+    return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 400 });
+  }
+
+  try {
+    switch (event.type) {
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object;
+        const priceId = sub.items?.data?.[0]?.price?.id;
+        // Only 'active'/'trialing' actually grants Pro. Every other status —
+        // 'incomplete' (checkout started but never paid), 'past_due' (card
+        // failing on renewal), 'unpaid', 'incomplete_expired', 'canceled' —
+        // maps to 'free'. The previous version only checked for 'canceled',
+        // which meant an abandoned checkout or a failing card kept Pro access.
+        const plan = (sub.status === 'active' || sub.status === 'trialing')
+          ? planFromPriceId(env, priceId)
+          : 'free';
+        const clerkUserId = sub.metadata?.clerk_user_id;
+        if (!clerkUserId) break; // shouldn't happen — we always set this on creation
+
+        await neonFetch(env, `
+          INSERT INTO public.subscriptions
+            (clerk_user_id, stripe_customer_id, stripe_subscription_id, plan, status,
+             current_period_end, cancel_at_period_end, updated_at)
+          VALUES (${sqlVal(clerkUserId)}, ${sqlVal(sub.customer)}, ${sqlVal(sub.id)},
+                  ${sqlVal(plan)}, ${sqlVal(sub.status)},
+                  to_timestamp(${sub.current_period_end}), ${sqlVal(sub.cancel_at_period_end)}, now())
+          ON CONFLICT (clerk_user_id) DO UPDATE SET
+            stripe_customer_id     = EXCLUDED.stripe_customer_id,
+            stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+            plan                   = EXCLUDED.plan,
+            status                 = EXCLUDED.status,
+            current_period_end     = EXCLUDED.current_period_end,
+            cancel_at_period_end    = EXCLUDED.cancel_at_period_end,
+            updated_at              = now()
+        `);
+
+        await syncClerkMetadata(env, clerkUserId, { plan });
+        break;
+      }
+      case 'payment_intent.succeeded': {
+        const pi = event.data.object;
+        if (pi.metadata?.product !== 'data_export') break; // not ours to handle
+        const clerkUserId = pi.metadata?.clerk_user_id;
+        if (!clerkUserId) break;
+
+        await neonFetch(env, `
+          INSERT INTO public.data_purchases
+            (clerk_user_id, stripe_payment_intent_id, amount_cents, purchased_at)
+          VALUES (${sqlVal(clerkUserId)}, ${sqlVal(pi.id)}, ${pi.amount}, now())
+          ON CONFLICT (stripe_payment_intent_id) DO NOTHING
+        `);
+        await syncClerkMetadata(env, clerkUserId, { hasDataExport: true });
+        break;
+      }
+      case 'charge.refunded':
+      case 'charge.dispute.created': {
+        // Someone got their money back (refund) or is trying to (dispute) —
+        // either way, don't let them keep permanent access to the thing they
+        // paid for. Dispute objects carry .payment_intent directly too.
+        const obj = event.data.object;
+        const paymentIntentId = obj.payment_intent;
+        if (!paymentIntentId) break;
+
+        const deleted = await neonFetch(env, `
+          DELETE FROM public.data_purchases
+          WHERE stripe_payment_intent_id = ${sqlVal(paymentIntentId)}
+          RETURNING clerk_user_id
+        `);
+        const clerkUserId = deleted.rows?.[0]?.[0];
+        if (clerkUserId) {
+          // Only clear the metadata flag if they have no OTHER purchases —
+          // this is a repeatable product, so a refund on one purchase
+          // shouldn't revoke access earned by a separate, legitimate one.
+          const remaining = await neonFetch(env,
+            `SELECT EXISTS (SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)})`
+          );
+          if (!remaining.rows?.[0]?.[0]) {
+            await syncClerkMetadata(env, clerkUserId, { hasDataExport: false });
+          }
+        }
+        break;
+      }
+      case 'charge.dispute.closed': {
+        const dispute = event.data.object;
+        if (dispute.status !== 'won') break; // 'lost' = stays revoked, matches a refund
+
+        const paymentIntentId = dispute.payment_intent;
+        if (!paymentIntentId) break;
+
+        // The row was deleted when the dispute opened, so pull the original
+        // clerk_user_id/amount back from Stripe rather than our own DB —
+        // we no longer have a local record of it.
+        const Stripe = (await import('stripe')).default;
+        const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+        try {
+          const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+          const clerkUserId = pi.metadata?.clerk_user_id;
+          if (!clerkUserId || pi.metadata?.product !== 'data_export') break;
+
+          await neonFetch(env, `
+            INSERT INTO public.data_purchases
+              (clerk_user_id, stripe_payment_intent_id, amount_cents, purchased_at)
+            VALUES (${sqlVal(clerkUserId)}, ${sqlVal(pi.id)}, ${pi.amount}, now())
+            ON CONFLICT (stripe_payment_intent_id) DO NOTHING
+          `);
+          await syncClerkMetadata(env, clerkUserId, { hasDataExport: true });
+        } catch (e) {
+          console.error('[Worker] Failed to restore access after won dispute:', e.message);
+        }
+        break;
+      }
+      case 'invoice.payment_failed': {
+        // Stripe will retry automatically per its own retry schedule and fire
+        // customer.subscription.updated (status -> past_due) separately —
+        // nothing to write here, but useful to log for now.
+        console.warn('[Worker] Payment failed for invoice', event.data.object.id);
+        break;
+      }
+      default:
+        break; // ignore event types we don't act on
+    }
+  } catch (e) {
+    console.error('[Worker] Webhook handler error:', e.message);
+    // Return 500 so Stripe retries — we want it to keep trying on our bugs,
+    // not silently drop the event.
+    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+  }
+
+  return new Response(JSON.stringify({ received: true }), { status: 200 });
+}
+
+// ── Create subscription (Stripe Elements flow) ──────────────────────────────
+// Frontend calls this to start checkout, then uses the returned client_secret
+// with stripe.confirmPayment() via the PaymentElement.
+async function handleCreateSubscription(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  let body;
+  try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
+  const { email } = body; // only one recurring plan now — Pro
+  const priceId = env.STRIPE_PRICE_PRO;
+
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+
+  try {
+    // Reuse existing Stripe customer if we already have one on file.
+    const existing = await neonFetch(env,
+      `SELECT stripe_customer_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+    );
+    let customerId = existing.rows?.[0]?.[0];
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email,
+        metadata: { clerk_user_id: clerkUserId },
+      });
+      customerId = customer.id;
+    }
+
+    const subscription = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: priceId }],
+      payment_behavior: 'default_incomplete',
+      payment_settings: { save_default_payment_method: 'on_subscription' },
+      expand: ['latest_invoice.payment_intent'],
+      metadata: { clerk_user_id: clerkUserId },
+    });
+
+    const clientSecret = subscription.latest_invoice.payment_intent.client_secret;
+    return corsResponse({ clientSecret, subscriptionId: subscription.id }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] create-subscription failed:', e.message);
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+// ── Cancel subscription ──────────────────────────────────────────────────────
+// Cancels at period end (not immediately) — user keeps access through what
+// they already paid for. The webhook updates our DB when Stripe confirms it.
+// ── Create one-time data purchase ($9.99, not a subscription) ──────────────
+// Repeatable — a user can buy this more than once. Uses a PaymentIntent,
+// not a Subscription; the frontend uses the same PaymentElement UI either
+// way, it just confirms a one-time payment instead of a recurring one.
+async function handleCreateDataPurchase(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+
+  try {
+    const existing = await neonFetch(env,
+      `SELECT stripe_customer_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+    );
+    let customerId = existing.rows?.[0]?.[0];
+
+    let body = {};
+    try { body = await request.json(); } catch {}
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: body.email,
+        metadata: { clerk_user_id: clerkUserId },
+      });
+      customerId = customer.id;
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: 999, // $9.99, in cents
+      currency: 'usd',
+      customer: customerId,
+      metadata: { clerk_user_id: clerkUserId, product: 'data_export' },
+    });
+
+    return corsResponse({ clientSecret: paymentIntent.client_secret }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] create-data-purchase failed:', e.message);
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+
+  try {
+    const row = await neonFetch(env,
+      `SELECT stripe_subscription_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+    );
+    const subId = row.rows?.[0]?.[0];
+    if (!subId) return corsResponse({ error: 'No active subscription' }, 404, origin, env);
+
+    await stripe.subscriptions.update(subId, { cancel_at_period_end: true });
+    return corsResponse({ ok: true }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] cancel-subscription failed:', e.message);
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+// ── Billing status (for the Billing settings tab) ───────────────────────────
+async function handleBillingStatus(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  try {
+    const subResult = await neonFetch(env,
+      `SELECT plan, status, current_period_end, cancel_at_period_end
+       FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+    );
+    const subRow = subResult.rows?.[0];
+
+    const purchaseResult = await neonFetch(env,
+      `SELECT EXISTS (
+         SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+       )`
+    );
+    const hasDataExport = !!purchaseResult.rows?.[0]?.[0];
+
+    if (!subRow) {
+      return corsResponse({ plan: 'free', status: 'inactive', hasDataExport }, 200, origin, env);
+    }
+    const [plan, status, current_period_end, cancel_at_period_end] = subRow;
+    return corsResponse({ plan, status, current_period_end, cancel_at_period_end, hasDataExport }, 200, origin, env);
+  } catch (e) {
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
   const isProd = !!(env.NEON_API_KEY || env.NEON_CONNECTION_STRING);
   const allowed = (!isProd || ALLOWED_ORIGINS.has(origin)) ? origin : '';
   return {
