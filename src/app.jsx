@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton, UserProfile } from '@clerk/clerk-react';
+import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 // src/app.jsx — Disclo — insider trading intelligence platform
@@ -119,7 +119,12 @@ function hasDataExport(user) {
 
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
 // Shown when a free user tries to use a Pro feature.
-// Intentionally minimal — one value prop, one CTA, easy to dismiss.
+// Comparison-table style, matching the reference layout's structure:
+// logo, title, Free/Pro feature comparison, a plan selector, one CTA.
+// Deliberately NOT including a fake testimonial/star-rating like the
+// reference had — Disclo doesn't have real customer reviews yet, and
+// fabricating one would be dishonest. That visual slot is an honest
+// trust line instead.
 function UpgradeModal({ feature, onClose }) {
   useEffect(()=>{
     const h = e => { if (e.key==='Escape') onClose(); };
@@ -128,20 +133,15 @@ function UpgradeModal({ feature, onClose }) {
   },[onClose]);
 
   const [checkoutProduct, setCheckoutProduct] = useState(null); // null | 'pro' | 'data_export'
+  const [plan, setPlan] = useState('pro'); // which card is selected in the picker
 
-  const FEATURE_COPY = {
-    watchlist: {
-      icon: '★',
-      title: 'Track tickers & insiders',
-      body: 'Star stocks and follow insiders to build your personal watchlist. Get email alerts the moment they file a new trade.',
-    },
-    default: {
-      icon: '⬆',
-      title: 'Pro feature',
-      body: 'Upgrade to Pro to unlock this feature and get the most out of Disclo.',
-    },
-  };
-  const copy = FEATURE_COPY[feature] || FEATURE_COPY.default;
+  const COMPARISON = [
+    { label: 'Live dashboard & signals',  free: true,  pro: true },
+    { label: 'Full historical data',      free: false, pro: true },
+    { label: 'Portfolio linking',         free: false, pro: true },
+    { label: 'Instant alerts',            free: false, pro: true },
+    { label: 'CSV export',                free: false, pro: true },
+  ];
 
   if (checkoutProduct) {
     return (
@@ -155,21 +155,53 @@ function UpgradeModal({ feature, onClose }) {
 
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
-      <div className="upgrade-modal">
+      <div className="upgrade-modal upgrade-modal--large">
         <button className="upgrade-modal__close" onClick={onClose} aria-label="Close">✕</button>
-        <div className="upgrade-modal__icon">{copy.icon}</div>
-        <div className="upgrade-modal__title">{copy.title}</div>
-        <div className="upgrade-modal__body">{copy.body}</div>
-        <div className="upgrade-modal__price">
-          <span className="upgrade-modal__amount">$11.99</span>
-          <span className="upgrade-modal__period">/month</span>
+
+        <div className="logo-mark upgrade-modal__logo"><span style={{letterSpacing:'-1px',fontWeight:800}}>D</span></div>
+        <div className="upgrade-modal__title">Upgrade to Pro</div>
+        <div className="upgrade-modal__subtitle">Full insider data, real-time alerts, and your own portfolio — in one view.</div>
+
+        <div className="upgrade-modal__table">
+          <div className="upgrade-modal__table-header">
+            <span/>
+            <span>Free</span>
+            <span className="upgrade-modal__table-header--pro">Pro</span>
+          </div>
+          {COMPARISON.map(row=>(
+            <div className="upgrade-modal__table-row" key={row.label}>
+              <span className="upgrade-modal__table-label">{row.label}</span>
+              <span className={row.free?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.free?'✓':'–'}</span>
+              <span className={row.pro?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.pro?'✓':'–'}</span>
+            </div>
+          ))}
         </div>
-        <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct('pro')}>
-          Upgrade to Pro →
+
+        <div className="upgrade-modal__plans">
+          <button className={`upgrade-plan-card${plan==='pro'?' upgrade-plan-card--active':''}`} onClick={()=>setPlan('pro')}>
+            <span className="upgrade-plan-card__radio"/>
+            <span>
+              <span className="upgrade-plan-card__title">Pro</span>
+              <span className="upgrade-plan-card__price">$11.99/month</span>
+            </span>
+          </button>
+          <button className={`upgrade-plan-card${plan==='data_export'?' upgrade-plan-card--active':''}`} onClick={()=>setPlan('data_export')}>
+            <span className="upgrade-plan-card__radio"/>
+            <span>
+              <span className="upgrade-plan-card__title">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
+              <span className="upgrade-plan-card__price">$9.99</span>
+            </span>
+          </button>
+        </div>
+
+        <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct(plan)}>
+          {plan==='pro' ? 'Upgrade Now — $11.99/mo' : 'Buy Export — $9.99'}
         </button>
-        <button className="upgrade-modal__secondary" onClick={()=>setCheckoutProduct('data_export')}>
-          Just need the data? Buy a one-time export — $9.99
-        </button>
+
+        <div className="upgrade-modal__trust">
+          <span>✓ Secure checkout via Stripe</span>
+          <span>✓ Cancel anytime</span>
+        </div>
       </div>
     </div>
   );
@@ -361,7 +393,7 @@ function BillingSection({ user }) {
             )}
           </div>
           {!isProPlan && (
-            <button className="settings-sidenav__upgrade" onClick={()=>setCheckoutProduct('pro')}>Upgrade →</button>
+            <button className="btn btn--primary" onClick={()=>setCheckoutProduct('pro')}>Upgrade →</button>
           )}
           {isProPlan && !status.cancel_at_period_end && (
             <button className="settings-danger-btn" disabled={busy} onClick={handleCancel}>
@@ -380,7 +412,7 @@ function BillingSection({ user }) {
             </div>
             <div className="settings-row__sub">One-time pull of everything in the database — $9.99</div>
           </div>
-          <button className="settings-sidenav__upgrade" onClick={()=>setCheckoutProduct('data_export')}>
+          <button className="btn btn--primary" onClick={()=>setCheckoutProduct('data_export')}>
             {status.hasDataExport ? 'Buy again' : 'Buy →'}
           </button>
         </div>
@@ -558,19 +590,34 @@ function ConvictionBar({ score, max=15, showLabel=false }) {
 }
 
 // ─── Sidebar nav ──────────────────────────────────────────────────────────────
+// ─── Sidebar icon set ───────────────────────────────────────────────────────
+// Outlined / 2px stroke / rounded corners, per the brand guide. Standard,
+// widely-recognized icon shapes (same convention as Feather/Lucide) rather
+// than inventing new ones — familiarity matters more than novelty here.
+const ICON_PROPS = { viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round' };
+function IconHome(p)      { return <svg {...ICON_PROPS} {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>; }
+function IconInsights(p)  { return <svg {...ICON_PROPS} {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>; }
+function IconData(p)      { return <svg {...ICON_PROPS} {...p}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>; }
+function IconFavorites(p) { return <svg {...ICON_PROPS} {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>; }
+function IconSettings(p)  { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>; }
+function IconSun(p)       { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>; }
+function IconMoon(p)      { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>; }
+function IconSignOut(p)   { return <svg {...ICON_PROPS} {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>; }
+
 const NAV = [
-  {id:'dashboard', icon:'⊞', label:'Dashboard'},
-  {id:'signals',   icon:'↑', label:'Insights'},
-  {id:'data',      icon:'☰', label:'Data'},
-  {id:'watchlist', icon:'★', label:'Watchlist'},
+  {id:'dashboard', Icon:IconHome,      label:'Dashboard'},
+  {id:'signals',   Icon:IconInsights,  label:'Insights'},
+  {id:'data',      Icon:IconData,      label:'Data'},
+  {id:'watchlist', Icon:IconFavorites, label:'Watchlist'},
 ];
-function Sidebar({ page, setPage, dark, setDark }) {
+function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
+  const pro = isPro(user);
   return (
     <nav className="sidebar sidebar--compact">
       {/* Logo */}
       <div className="sidebar__logo" title="Disclo">
         <div className="logo-mark">
-          <span style={{letterSpacing:'-1px',fontWeight:800,fontSize:13}}>D</span>
+          <span style={{letterSpacing:'-1px',fontWeight:800}}>D</span>
         </div>
       </div>
 
@@ -582,27 +629,46 @@ function Sidebar({ page, setPage, dark, setDark }) {
             onClick={()=>setPage(n.id)}
             title={n.label}
             aria-label={n.label}>
-            <span className="nav-icon">{n.icon}</span>
+            <n.Icon className="nav-icon nav-icon--svg"/>
           </button>
         ))}
       </div>
 
-      {/* Footer — utility items */}
+      {/* Footer — utility items + plan status (visible from every page, not just Settings) */}
       <div className="sidebar__footer">
-        {/* Settings — gear at bottom, separate from primary nav */}
+        {pro ? (
+          <span className="sidebar__pro-badge" title="Pro plan">★</span>
+        ) : (
+          <button className="nav-item nav-item--icon-only nav-item--sm nav-item--upgrade"
+            onClick={onUpgrade}
+            title="Upgrade to Pro"
+            aria-label="Upgrade to Pro">
+            <span className="nav-icon">$</span>
+          </button>
+        )}
+        <div className="sidebar__footer-divider"/>
+        {/* Settings — gear, separate from primary nav */}
         <button
           className={`nav-item nav-item--icon-only nav-item--sm${page==='settings'?' nav-item--active':''}`}
           onClick={()=>setPage('settings')}
           title="Settings"
           aria-label="Settings">
-          <span className="nav-icon">⚙</span>
+          <IconSettings className="nav-icon nav-icon--svg"/>
         </button>
         {/* Dark mode toggle */}
         <button className="nav-item nav-item--icon-only nav-item--sm"
           onClick={()=>setDark(d=>!d)}
           title={dark?'Switch to light mode':'Switch to dark mode'}
           aria-label={dark?'Switch to light mode':'Switch to dark mode'}>
-          <span className="nav-icon sidebar__theme-icon">{dark?'☀':'☽'}</span>
+          {dark
+            ? <IconSun className="nav-icon nav-icon--svg sidebar__theme-icon"/>
+            : <IconMoon className="nav-icon nav-icon--svg sidebar__theme-icon"/>}
+        </button>
+        <button className="nav-item nav-item--icon-only nav-item--sm nav-item--signout"
+          onClick={()=>{ window.__clerkSignOut && window.__clerkSignOut(); }}
+          title="Sign out"
+          aria-label="Sign out">
+          <IconSignOut className="nav-icon nav-icon--svg"/>
         </button>
       </div>
     </nav>
@@ -664,8 +730,9 @@ async function queryNeon(sql) {
     headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
     body: JSON.stringify({ query: sql }),
   });
-  if (r.status === 401) throw new Error('Authentication required');
-  if (r.status === 403) throw new Error('Access denied');
+  if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
+  if (r.status === 403) throw new Error('You don\'t have access to this — check your plan in Settings');
+  if (!r.ok) throw new Error('Something went wrong loading this — try again in a moment');
   const d = await r.json();
   if (d.error) throw new Error(d.error);
   return d.rows || [];
@@ -2245,7 +2312,7 @@ function detectReversals(filings) {
 }
 
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
-function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail }) {
+function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail }) {
   const watchlist = useWatchlist();
   const [days, setDays] = useState(7);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
@@ -2256,7 +2323,16 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const [tab, setTab] = useState('research');
   const [minStrength, setMinStrength] = useState(1); // 1=any 2=medium+ 3=high only
   const [modal, setModal] = useState(null); // 'signals' | 'insiders' | null
+  const [modalInitial, setModalInitial] = useState(null); // pre-selected item when opening
   const hlRef = useRef(null);
+
+  // Opens the Explore drawer pre-selected to whatever was clicked, instead of
+  // the small centered quick-info modal — keeps this page's detail-viewing
+  // in one consistent environment rather than two different ones.
+  function openInDrawer(d) {
+    if (d.type==='trader') { setModal('insiders'); setModalInitial(d); }
+    else { setModal('signals'); setModalInitial(d); }
+  }
 
   const sectors = useMemo(()=>[...new Set(filings.map(f=>f.sector).filter(s=>s&&s!=='Other'))].sort(),[filings]);
 
@@ -2290,6 +2366,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   },[highlightTicker,signals]);
 
   function sigOnSort(col){if(sigSort===col)setSigDir(d=>-d);else{setSigSort(col);setSigDir(-1);}}
+  function resetFilters(){setDays(7);setMinStrength(1);setSourceF('');setSectorF('');}
+  const filtersAreDefault = days===7 && minStrength===1 && !sourceF && !sectorF;
 
   const [portModal, setPortModal] = useState(false);
 
@@ -2310,64 +2388,73 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
       {/* Portfolio bar — above everything, full width */}
       <InsightsPortfolioBar
         filings={filings} cutoff={cutoff} days={days}
-        onOpenDetail={onOpenDetail}
-        onExpand={()=>setPortModal(true)}
+        onOpenDetail={openInDrawer}
+        onExpand={()=>{onCloseDetail&&onCloseDetail();setPortModal(true);}}
       />
-
-      {/* Signal/insider controls */}
-      <div className="ins-controls-bar">
-        <div className="dash-tile-pills">
-          {[1,3,7,30].map(d=>(
-            <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>setDays(d)}>{d}d</button>
-          ))}
-        </div>
-        <div className="ins-strength-filter" title="Filter by signal strength — exec participation × position size × clustering">
-          <span className="ins-strength-filter__label">Strength</span>
-          <div className="ins-strength-pills">
-            {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
-              <button key={o.v}
-                className={`ins-strength-pill${minStrength===o.v?' ins-strength-pill--active':''}`}
-                style={o.v===3&&minStrength===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:
-                       o.v===2&&minStrength===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
-                onClick={()=>setMinStrength(o.v)}>{o.l}</button>
-            ))}
-          </div>
-        </div>
-        <select className="ins-filter-select" value={sourceF} onChange={e=>setSourceF(e.target.value)}>
-          <option value="">All types</option>
-          <option value="corporate">Corporate only</option>
-          <option value="political">Congressional only</option>
-        </select>
-        <select className="ins-filter-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
-          <option value="">All sectors</option>
-          {sectors.map(s=><option key={s} value={s}>{s}</option>)}
-        </select>
-        <span className="td-muted" style={{fontSize:11,marginLeft:4}}>{signals.length} signals</span>
-      </div>
 
       {/* Two-column body — signals | insiders */}
       <div className="ins-3col" ref={colRef}>
 
         {/* LEFT: Signals */}
         <div className="ins-sig-panel ins-3col__signals">
-          <div className="ins-sig-panel__hdr">
-            <span className="ins-sig-panel__title">Insider signals</span>
-            <div className="dash-sig-sort" style={{marginLeft:'auto'}}>
-              {[['conviction','Conviction'],['netValue','Net $'],['cSuiteBuys','Exec'],['insiderCount','Count'],['lastTradeDate','Recent']].map(([k,l])=>(
-                <button key={k} className={`dash-sort-btn${sigSort===k?' dash-sort-btn--active':''}`} onClick={()=>sigOnSort(k)}>
-                  {l}{sigSort===k&&(sigDir<0?'↓':'↑')}
-                </button>
-              ))}
-            </div>
-            <button className="ins-expand-btn" title="Deep-dive signals" onClick={()=>setModal('signals')}>
-              ⤢ Explore
+          <div className="ins-sig-panel__hdr ins-sig-panel__hdr--explorable">
+            <button className="ins-panel-title-link" title="Open full Explore view" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('signals');}}>
+              Insider signals
+              <span className="ins-explore-hint" aria-hidden="true">⤢</span>
             </button>
           </div>
+
+          {/* Filters — belong to this panel specifically, not floating above
+              both columns ambiguously. Each group gets its own labeled block
+              with real spacing so they read as distinct controls. */}
+          <div className="ins-filter-row">
+            <div className="ins-filter-group">
+              <span className="ins-filter-group__label">Window</span>
+              <div className="dash-tile-pills">
+                {[1,3,7,30].map(d=>(
+                  <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>setDays(d)}>{d}d</button>
+                ))}
+              </div>
+            </div>
+            <div className="ins-filter-group">
+              <span className="ins-filter-group__label">Strength</span>
+              <div className="ins-strength-pills">
+                {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
+                  <button key={o.v}
+                    className={`ins-strength-pill${minStrength===o.v?' ins-strength-pill--active':''}`}
+                    style={o.v===3&&minStrength===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:
+                           o.v===2&&minStrength===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
+                    onClick={()=>setMinStrength(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ins-filter-group">
+              <span className="ins-filter-group__label">Type</span>
+              <select className="ins-filter-select" value={sourceF} onChange={e=>setSourceF(e.target.value)}>
+                <option value="">All types</option>
+                <option value="corporate">Corporate only</option>
+                <option value="political">Congressional only</option>
+              </select>
+            </div>
+            <div className="ins-filter-group">
+              <span className="ins-filter-group__label">Sector</span>
+              <select className="ins-filter-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
+                <option value="">All sectors</option>
+                {sectors.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <span className="td-muted ins-filter-count">{signals.length} signals</span>
+            {!filtersAreDefault&&(
+              <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
+            )}
+          </div>
+
           <div className="ins-sig-col-hdrs">
-            <span>Ticker · Company</span>
+            <button className="ins-col-sort" onClick={()=>sigOnSort('ticker')}>Ticker · Company{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
             <span>Type</span>
-            <span title="Conviction = exec participation × buy size × clustering">Signal ⓘ</span>
-            <span style={{textAlign:'right'}}>Net flow</span>
+            <button className="ins-col-sort" onClick={()=>sigOnSort('cSuiteBuys')}>Exec{sigSort==='cSuiteBuys'&&(sigDir<0?' ↓':' ↑')}</button>
+            <button className="ins-col-sort" title="Conviction = exec participation × buy size × clustering" onClick={()=>sigOnSort('conviction')}>Signal ⓘ{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
+            <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>sigOnSort('netValue')}>Net flow{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
           </div>
           <div className="ins-sig-panel__body">
             {loading?<div className="state-box"><Spinner/><p>Computing signals…</p></div>
@@ -2384,13 +2471,12 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 const hasReversal=detectReversalForTicker(s.ticker,filings);
                 const isCongress=s.isPolitical;
                 const typeLabel=isCongress?'Congressional':'Corporate';
-                const typeColor=isCongress?'var(--blue-600)':'var(--accent-strong)';
                 const convPct=Math.min((s.conviction/15)*100,100);
                 const tier=convPct>66?'high':convPct>33?'medium':'low';
                 return (
                   <div key={s.ticker} ref={isHL?hlRef:null}
                     className={`ins-sig-row ins-sig-row--${tier}${isSel?' ins-sig-row--selected':''}`}
-                    onClick={()=>{setHighlightTicker(s.ticker);onSelectSignal(s);onOpenDetail&&onOpenDetail({type:'signal',...s});}}>
+                    onClick={()=>{setHighlightTicker(s.ticker);onSelectSignal(s);openInDrawer({type:'signal',...s});}}>
                     <div className="ins-sig-row__left">
                       <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
                         <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
@@ -2402,10 +2488,15 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                       {s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:10}}>{s.sector}</div>}
                     </div>
                     <div className="ins-sig-row__type">
-                      <span style={{fontSize:11,fontWeight:600,color:typeColor}}>{typeLabel}</span>
-                      {s.cSuiteBuys>0&&<span className="csuite-badge" style={{marginTop:2}}>{s.cSuiteBuys}× exec</span>}
-                      <span className="td-muted" style={{fontSize:10}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>
-                      <span className="td-muted" style={{fontSize:10}}>{fmt.ago(s.lastTradeDate)}</span>
+                      <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}`}>{typeLabel}</span>
+                      <div className="td-muted ins-sig-row__type-meta">
+                        {s.insiderCount} insider{s.insiderCount!==1?'s':''} · {fmt.ago(s.lastTradeDate)}
+                      </div>
+                    </div>
+                    <div className="ins-sig-row__exec">
+                      {s.cSuiteBuys>0
+                        ? <span className="csuite-badge">{s.cSuiteBuys}×</span>
+                        : <span className="td-muted" style={{fontSize:11}}>—</span>}
                     </div>
                     <div className="ins-sig-row__signal">
                       <ConvictionBar score={s.conviction} showLabel={true}/>
@@ -2427,14 +2518,15 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 
         {/* MIDDLE: Top insiders leaderboard */}
         <div className="ins-lb-panel-wrap ins-3col__insiders">
-          <div className="ins-sig-panel__hdr">
-            <span className="ins-sig-panel__title">Top insiders <span className="td-muted" style={{fontWeight:400,fontSize:11}}>· hit rate · 2yr</span></span>
-            <button className="ins-expand-btn" onClick={()=>setModal('insiders')} style={{marginLeft:'auto'}} title="Deep-dive insiders">
-              ⤢ Explore
+          <div className="ins-sig-panel__hdr ins-sig-panel__hdr--explorable">
+            <button className="ins-panel-title-link" title="Open full Explore view" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('insiders');}}>
+              Top insiders
+              <span className="ins-explore-hint" aria-hidden="true">⤢</span>
             </button>
+            <span className="td-muted" style={{fontWeight:400,fontSize:11}}>· hit rate · 2yr</span>
           </div>
           <div className="ins-lb-panel__body">
-            <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
+            <InsiderLeaderboardSidebar onOpenDetail={openInDrawer} watchlist={watchlist}/>
           </div>
         </div>
 
@@ -2444,8 +2536,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         <InsightsDrawer
           type={modal}
           filings={filings}
-          signals={signals}
-          onClose={()=>setModal(null)}
+          initialDetail={modalInitial}
+          onClose={()=>{setModal(null);setModalInitial(null);}}
           sigSort={sigSort} sigDir={sigDir} sigOnSort={sigOnSort}
         />
       )}
@@ -2467,7 +2559,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // Clicking any row in the left pane drives the right pane without closing.
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
-function InsightsDrawer({ type, filings, signals, onClose, sigSort, sigDir, sigOnSort }) {
+function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail }) {
   const watchlist = useWatchlist();
 
   // ── left pane state ──────────────────────────────────────────────────────
@@ -2478,6 +2570,8 @@ function InsightsDrawer({ type, filings, signals, onClose, sigSort, sigDir, sigO
   const [srcF,   setSrcF]     = useState('');
   const [secF,   setSecF]     = useState('');
   const [minStr, setMinStr]   = useState(1);
+  const [daysBack, setDaysBack] = useState(30); // null = All time
+  const [minValue, setMinValue] = useState(0);  // $ net value floor
 
   // ── right pane nav stack ─────────────────────────────────────────────────
   // Each entry is a {type, ...props} detail object — same shape as DetailPanel's `detail` prop
@@ -2500,15 +2594,36 @@ function InsightsDrawer({ type, filings, signals, onClose, sigSort, sigDir, sigO
   // Strength threshold
   const strengthThreshold = minStr===3?10:minStr===2?5:0;
 
-  // Filtered signals
+  // Filtered signals — computed directly from raw `filings`, NOT from the
+  // `signals` prop the parent page passes in. The parent's own signal set is
+  // already bounded by whatever day-range IT has selected (default 7d), so
+  // filtering further inside the drawer could only ever narrow within that —
+  // widening the Window filter here would do nothing, since data outside the
+  // parent's window was never in the array to begin with. Building fresh from
+  // `filings` makes the drawer's own Window filter the real source of truth.
   const filteredSignals = useMemo(()=>{
-    let s = signals.filter(sig=>sig.conviction>=strengthThreshold);
-    if (srcF==='corporate') s=s.filter(sig=>!sig.isPolitical);
-    if (srcF==='political') s=s.filter(sig=>sig.isPolitical);
-    if (secF) s=s.filter(sig=>sig.sector===secF);
+    const cutoff = daysBack!=null ? (()=>{ const d=new Date(); d.setDate(d.getDate()-daysBack); return d.toISOString().split('T')[0]; })() : null;
+    const base = filings.filter(f=>{
+      const tx = f.transactionDate||f.date||'';
+      if (cutoff && tx<cutoff) return false;
+      const isPol = !!(f.transactionCode&&f.transactionCode.startsWith('CONGRESS'));
+      if (srcF==='corporate'&&isPol) return false;
+      if (srcF==='political'&&!isPol) return false;
+      if (secF&&f.sector!==secF) return false;
+      return true;
+    });
+    let s = buildSignals(base)
+      .filter(sig=>sig.cSuiteBuys>=1||sig.insiderCount>=2||sig.netValue>=100_000)
+      .filter(sig=>sig.conviction>=strengthThreshold);
+    if (minValue>0) s = s.filter(sig=>Math.abs(sig.netValue)>=minValue);
     if (search) { const q=search.toLowerCase(); s=s.filter(sig=>sig.ticker.toLowerCase().includes(q)||sig.company.toLowerCase().includes(q)); }
-    return s;
-  },[signals,strengthThreshold,srcF,secF,search]);
+    return s.sort((a,b)=>{
+      const av=a[sigSort],bv=b[sigSort];
+      if(typeof av==='number'){if(av<bv)return sigDir;if(av>bv)return -sigDir;}
+      else{const r=String(av||'').localeCompare(String(bv||''));return sigDir>0?r:-r;}
+      return 0;
+    });
+  },[filings,strengthThreshold,srcF,secF,daysBack,minValue,search,sigSort,sigDir]);
 
   // Insiders
   useEffect(()=>{
@@ -2529,6 +2644,9 @@ function InsightsDrawer({ type, filings, signals, onClose, sigSort, sigDir, sigO
   },[lbRows,lbSort,lbDir,search]);
   function lbOnSort(col){ if(lbSort===col)setLbDir(d=>-d); else{setLbSort(col);setLbDir(-1);} }
 
+  function resetDrawerFilters(){setMinStr(1);setDaysBack(30);setMinValue(0);setSrcF('');setSecF('');setSearch('');}
+  const drawerFiltersDefault = minStr===1 && daysBack===30 && minValue===0 && !srcF && !secF && !search;
+
   // Escape key
   useEffect(()=>{
     const h=e=>{ if(e.key==='Escape') { if(detail&&detailStack.length) goBack(); else if(detail) setDetail(null); else onClose(); }};
@@ -2536,64 +2654,138 @@ function InsightsDrawer({ type, filings, signals, onClose, sigSort, sigDir, sigO
     return()=>window.removeEventListener('keydown',h);
   },[detail,detailStack,onClose]);
 
-  // Auto-select first item on open
+  // Open pre-selected to whatever was clicked, if anything — otherwise fall
+  // back to the first item so the pane is never empty on open.
   useEffect(()=>{
     if (detail) return;
+    if (initialDetail) { setDetail(initialDetail); return; }
     if (type==='signals' && filteredSignals.length) setDetail({type:'signal',...filteredSignals[0]});
-  },[type, filteredSignals.length > 0]);
+  },[type, filteredSignals.length > 0, initialDetail]);
 
   useEffect(()=>{
     if (detail) return;
+    if (initialDetail) return; // already handled above
     if (type==='insiders' && sortedLb.length) setDetail({type:'trader',name:sortedLb[0].insider_name,title:sortedLb[0].insider_title});
-  },[type, sortedLb.length > 0]);
+  },[type, sortedLb.length > 0, initialDetail]);
 
   return (
     <div className="drawer-overlay" onClick={e=>{ if(e.target.classList.contains('drawer-overlay')) onClose(); }}>
       <div className="drawer">
 
         {/* ── Drawer header ─────────────────────────────────────────── */}
-        <div className="drawer__hdr">
-          <span className="drawer__title">
-            {type==='signals' ? 'Insider Signals' : 'Top Insiders'}
-          </span>
+        <div className="drawer__hdr drawer__hdr--stacked">
+          {/* Row 1 — identity + close only. Filters (including search) live
+              together in row 2 as one real toolbar, not split across two
+              places. */}
+          <div className="drawer__hdr-row1">
+            <span className="drawer__title">
+              {type==='signals' ? 'Insider Signals' : 'Top Insiders'}
+            </span>
+            <button className="modal-close" onClick={onClose} title="Close (Esc)">✕</button>
+          </div>
 
-          {/* Filters — contextual for each type */}
+          {/* Row 2 — one unified toolbar. Search is a filter like any other,
+              so it lives in the same row with the same divider treatment
+              instead of floating alone above everything else. */}
           {type==='signals'&&(
-            <div className="drawer__filters">
-              <div className="dash-tile-pills" style={{gap:2}}>
-                {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
-                  <button key={o.v}
-                    className={`dash-tile-pill${minStr===o.v?' dash-tile-pill--active':''}`}
-                    style={o.v===3&&minStr===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:
-                           o.v===2&&minStr===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
-                    onClick={()=>setMinStr(o.v)}>{o.l}</button>
-                ))}
+            <div className="drawer__toolbar">
+              <div className="drawer__filter-group drawer__filter-group--search">
+                <span className="drawer__filter-label">Search</span>
+                <div className="drawer__search-wrap">
+                  <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input className="drawer__search" placeholder="Ticker or company…"
+                    value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
+                </div>
               </div>
-              <select className="ins-filter-select" value={srcF} onChange={e=>setSrcF(e.target.value)}>
-                <option value="">All types</option>
-                <option value="corporate">Corporate</option>
-                <option value="political">Congressional</option>
-              </select>
-              <select className="ins-filter-select" value={secF} onChange={e=>setSecF(e.target.value)}>
-                <option value="">All sectors</option>
-                {sectors.map(s=><option key={s} value={s}>{s}</option>)}
-              </select>
+
+              <div className="drawer__toolbar-divider"/>
+
+              <div className="drawer__filter-group">
+                <span className="drawer__filter-label">Strength</span>
+                <div className="dash-tile-pills" style={{gap:2}}>
+                  {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
+                    <button key={o.v}
+                      className={`dash-tile-pill${minStr===o.v?' dash-tile-pill--active':''}`}
+                      style={o.v===3&&minStr===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:
+                             o.v===2&&minStr===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
+                      onClick={()=>setMinStr(o.v)}>{o.l}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="drawer__toolbar-divider"/>
+
+              <div className="drawer__filter-group">
+                <span className="drawer__filter-label">Window</span>
+                <div className="dash-tile-pills" style={{gap:2}}>
+                  {[{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
+                    <button key={o.l} className={`dash-tile-pill${daysBack===o.v?' dash-tile-pill--active':''}`}
+                      onClick={()=>setDaysBack(o.v)}>{o.l}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="drawer__toolbar-divider"/>
+
+              <div className="drawer__filter-group">
+                <span className="drawer__filter-label">Min value</span>
+                <select className="ins-filter-select" value={minValue} onChange={e=>setMinValue(Number(e.target.value))}>
+                  <option value={0}>Any</option>
+                  <option value={100000}>$100K+</option>
+                  <option value={500000}>$500K+</option>
+                  <option value={1000000}>$1M+</option>
+                </select>
+              </div>
+
+              <div className="drawer__toolbar-divider"/>
+
+              <div className="drawer__filter-group">
+                <span className="drawer__filter-label">Type</span>
+                <select className="ins-filter-select" value={srcF} onChange={e=>setSrcF(e.target.value)}>
+                  <option value="">All types</option>
+                  <option value="corporate">Corporate</option>
+                  <option value="political">Congressional</option>
+                </select>
+              </div>
+
+              <div className="drawer__toolbar-divider"/>
+
+              <div className="drawer__filter-group">
+                <span className="drawer__filter-label">Sector</span>
+                <select className="ins-filter-select" value={secF} onChange={e=>setSecF(e.target.value)}>
+                  <option value="">All sectors</option>
+                  {sectors.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div className="drawer__toolbar-spacer"/>
+              {!drawerFiltersDefault&&(
+                <button className="ins-filter-reset" onClick={resetDrawerFilters}>Reset filters</button>
+              )}
             </div>
           )}
           {type==='insiders'&&(
-            <div className="drawer__filters">
-              <div className="dash-tile-pills" style={{gap:2}}>
-                {[['hit_rate','Hit rate'],['om_buys','Buys'],['bought_value','Bought']].map(([k,l])=>(
-                  <button key={k} className={`dash-tile-pill${lbSort===k?' dash-tile-pill--active':''}`}
-                    onClick={()=>lbOnSort(k)}>{l}{lbSort===k&&(lbDir<0?'↓':'↑')}</button>
-                ))}
+            <div className="drawer__toolbar">
+              <div className="drawer__filter-group drawer__filter-group--search">
+                <span className="drawer__filter-label">Search</span>
+                <div className="drawer__search-wrap">
+                  <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input className="drawer__search" placeholder="Insider name…"
+                    value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
+                </div>
+              </div>
+              <div className="drawer__toolbar-divider"/>
+              <div className="drawer__filter-group">
+                <span className="drawer__filter-label">Sort by</span>
+                <div className="dash-tile-pills" style={{gap:2}}>
+                  {[['hit_rate','Hit rate'],['om_buys','Buys'],['bought_value','Bought']].map(([k,l])=>(
+                    <button key={k} className={`dash-tile-pill${lbSort===k?' dash-tile-pill--active':''}`}
+                      onClick={()=>lbOnSort(k)}>{l}{lbSort===k&&(lbDir<0?'↓':'↑')}</button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
-
-          <input className="drawer__search" placeholder={type==='signals'?'Ticker or company…':'Insider name…'}
-            value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
-          <button className="modal-close" onClick={onClose} title="Close (Esc)">✕</button>
         </div>
 
         {/* ── Two-pane body ──────────────────────────────────────────── */}
@@ -3475,169 +3667,6 @@ function InsightsSnapshot({ filings, loading, onOpenDetail, onGoTo }) {
 }
 
 // ─── SIGNALS environment (existing table logic, now scoped as a sub-view) ─────
-function SignalsEnvironment({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail }) {
-  const [preset,  setPreset]  = useState(3);
-  const [from,    setFrom]    = useState('');
-  const [to,      setTo]      = useState('');
-  const [sectorF, setSectorF] = useState('');
-  const [sourceF, setSourceF] = useState('');
-  const [minNet,  setMinNet]  = useState(500_000);
-  const [sSort,   setSSort]   = useState('conviction');
-  const [sDir,    setSDir]    = useState(-1);
-  const hlRef = useRef(null);
-
-  const sectors = useMemo(()=>[...new Set(filings.map(f=>f.sector).filter(Boolean))].sort(),[filings]);
-
-  const effFrom = useMemo(()=>{
-    if (from) return from;
-    if (preset===null) return '';
-    const d=new Date(); d.setDate(d.getDate()-preset);
-    return d.toISOString().split('T')[0];
-  },[from,preset]);
-
-  const signals = useMemo(()=>{
-    const base=filings.filter(f=>{
-      const tx=f.transactionDate||f.date||'';
-      if (effFrom&&tx<effFrom) return false;
-      if (to&&tx>to) return false;
-      if (sectorF&&f.sector!==sectorF) return false;
-      const isPol=!!(f.transactionCode&&f.transactionCode.startsWith('CONGRESS'));
-      if (sourceF==='corporate'&&isPol) return false;
-      if (sourceF==='political'&&!isPol) return false;
-      return true;
-    });
-    return buildSignals(base)
-      .filter(s=>{
-        if (minNet>0 && s.netValue<minNet) return false;
-        return s.cSuiteBuys>=1 || s.insiderCount>=2 || s.netValue>=100_000;
-      })
-      .sort((a,b)=>{
-        let av=a[sSort],bv=b[sSort];
-        if (typeof av==='number'){if(av<bv)return sDir;if(av>bv)return -sDir;}
-        else{const r=String(av||'').localeCompare(String(bv||''));return sDir>0?r:-r;}
-        return 0;
-      });
-  },[filings,effFrom,to,sectorF,sourceF,minNet,sSort,sDir]);
-
-  const reversals = useMemo(()=>detectReversals(filings),[filings]);
-
-  useEffect(()=>{
-    if (highlightTicker&&hlRef.current)
-      hlRef.current.scrollIntoView({behavior:'smooth',block:'center'});
-  },[highlightTicker,signals]);
-
-  function onSort(col){if(sSort===col)setSDir(d=>-d);else{setSSort(col);setSDir(-1);}}
-  function doPreset(days){setPreset(days);setFrom('');setTo('');}
-  const shp={sortCol:sSort,sortDir:sDir,onSort};
-
-  return (
-    <div>
-      {reversals.length>0&&(
-        <div className="reversal-section">
-          <div className="reversal-header">
-            ⟲ Reversal Signals <span className="reversal-sub">insiders who changed direction in the last 30 days</span>
-          </div>
-          {reversals.slice(0,8).map((r,i)=>(
-            <div key={i} className="reversal-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:r.insiderName,title:r.title})}>
-              <span className="ticker" style={{fontSize:12}}>{r.ticker}</span>
-              <span className="dp-clickable" style={{fontSize:12,flex:1}}>{r.insiderName}</span>
-              <span className="reversal-dir">
-                <Badge type={r.priorType==='buy'?'buy':'sell'}>{r.priorType}</Badge>
-                <span className="td-muted">→</span>
-                <Badge type={r.recentType==='buy'?'buy':'sell'}>{r.recentType}</Badge>
-              </span>
-              <span className={r.isExit?'val-sell':'val-buy'} style={{fontSize:11,fontWeight:600}}>
-                {r.isExit?'exit signal':'re-entry'}
-              </span>
-              <span className="td-muted" style={{fontSize:10}}>{fmt.dateShort(r.recentDate)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="filter-bar filter-bar--wrap">
-        <div className="date-pills">
-          {DATE_PRESETS.map(p=>(
-            <button key={p.label} className={`pill${preset===p.days&&!from?' pill--active':''}`}
-              onClick={()=>doPreset(p.days)}>{p.label}</button>
-          ))}
-        </div>
-        <div className="filter-sep"/>
-        <select value={sectorF} onChange={e=>setSectorF(e.target.value)}>
-          <option value="">All sectors</option>
-          {sectors.map(s=><option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={sourceF} onChange={e=>setSourceF(e.target.value)}>
-          <option value="">All sources</option>
-          <option value="corporate">Corporate</option>
-          <option value="political">Political</option>
-        </select>
-        <div className="filter-sep"/>
-        <span style={{fontSize:12,color:'var(--text-3)'}}>Min net $</span>
-        <select value={minNet} onChange={e=>setMinNet(Number(e.target.value))}>
-          <option value={0}>Any</option>
-          <option value={500_000}>$500K+</option>
-          <option value={1_000_000}>$1M+</option>
-          <option value={2_000_000}>$2M+</option>
-          <option value={5_000_000}>$5M+</option>
-        </select>
-      </div>
-
-      {loading ? <div className="state-box"><Spinner/><p>Computing signals…</p></div>
-      : signals.length===0 ? <div className="state-box"><div>◎</div><p>No signals meet threshold.</p></div>
-      : <div className="table-wrap">
-          <table>
-            <thead><tr>
-              <th>#</th>
-              <SortTh label="Ticker"     colKey="ticker"       {...shp}/>
-              <SortTh label="Company"    colKey="company"      {...shp}/>
-              <th>Src</th>
-              <th>B/S</th>
-              <SortTh label="Net $"      colKey="netValue"     {...shp} right/>
-              <SortTh label="Exec"       colKey="cSuiteBuys"   {...shp}/>
-              <SortTh label="Insiders"   colKey="insiderCount" {...shp}/>
-              <SortTh label="Last Trade" colKey="lastTradeDate"{...shp}/>
-              <SortTh label="Conviction" colKey="conviction"   {...shp}/>
-            </tr></thead>
-            <tbody>
-              {signals.map((s,i)=>{
-                const isHL=s.ticker===highlightTicker;
-                const isSel=s.ticker===selectedSignal?.ticker;
-                return (
-                  <tr key={s.ticker}
-                    ref={isHL?hlRef:null}
-                    className={`signal-row${isSel?' signal-row--selected':''}${isHL&&!isSel?' signal-row--highlighted':''}`}
-                    onClick={()=>{setHighlightTicker(s.ticker);onSelectSignal(s);onOpenDetail&&onOpenDetail({type:'signal',...s});}}>
-                    <td className="td-rank">{i+1}</td>
-                    <td><span className="ticker">{s.ticker}</span></td>
-                    <td className="td-company">
-                      <div className="td-overflow">{s.company}</div>
-                      <div className="td-sector-inline">{s.sector!=='Other'?s.sector:''}</div>
-                    </td>
-                    <td>{s.isPolitical?<span className="badge badge--src-congress">⚑</span>:<span className="badge badge--src-sec">SEC</span>}</td>
-                    <td className="td-center">
-                      <span className="sig-count buy-count">{s.buys}</span>
-                      <span className="sig-sep"> / </span>
-                      <span className="sig-count sell-count">{s.sells}</span>
-                    </td>
-                    <td className="td-right td-mono">
-                      <span className={s.netValue>=0?'val-buy':'val-sell'}>
-                        {s.netValue>=0?'+':''}{fmt.money(s.netValue)}
-                      </span>
-                    </td>
-                    <td className="td-center">{s.cSuiteBuys>0?<span className="csuite-badge">{s.cSuiteBuys}×</span>:'—'}</td>
-                    <td className="td-center">{s.insiderCount}</td>
-                    <td className="td-date-main">{fmt.dateShort(s.lastTradeDate)}</td>
-                    <td style={{width:90}}><ConvictionBar score={s.conviction}/></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>}
-    </div>
-  );
-}
 
 // ─── INSIDER LEADERBOARD environment ───────────────────────────────────────────
 // Aggregate query: ranks insiders by a simplified, query-computable proxy for
@@ -3706,97 +3735,6 @@ function processLeaderboardRows(rows) {
   }).sort((a,b)=>(b.proxy_score-a.proxy_score)||(b.wins-a.wins));
 }
 
-function LeaderboardEnvironment({ onOpenDetail }) {
-  const [rows, setRows] = useState(null);
-  const [error, setError] = useState(null);
-  const [sectorF, setSectorF] = useState('');
-  const [sectors, setSectors] = useState([]);
-  const [minTrades, setMinTrades] = useState(5);
-  const [sortKey, setSortKey] = useState('proxy_score');
-  const [sortDir, setSortDir] = useState(-1);
-
-  useEffect(()=>{
-    if (!cfg.NEON_PROXY_URL) return;
-    queryNeon(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
-      .then(r=>setSectors(r.map(x=>x.sector).filter(Boolean))).catch(()=>{});
-  },[]);
-
-  useEffect(()=>{
-    if (!cfg.NEON_PROXY_URL){setError('NEON_PROXY_URL not set');return;}
-    setRows(null); setError(null);
-    queryNeon(LEADERBOARD_QUERY(50, sectorF||null, minTrades))
-      .then(r=>setRows(processLeaderboardRows(r)))
-      .catch(e=>setError(e.message));
-  },[sectorF,minTrades]);
-
-  const sortedRows = useMemo(()=>{
-    if (!rows) return null;
-    return [...rows].sort((a,b)=>{
-      let av=a[sortKey], bv=b[sortKey];
-      if (sortKey==='insider_name') { av=av||''; bv=bv||''; const r=String(av).localeCompare(String(bv)); return sortDir>0?r:-r; }
-      av = av==null?-Infinity:av; bv = bv==null?-Infinity:bv;
-      if (av<bv) return sortDir; if (av>bv) return -sortDir; return 0;
-    });
-  },[rows,sortKey,sortDir]);
-
-  function onSort(key){ if(sortKey===key) setSortDir(d=>-d); else { setSortKey(key); setSortDir(-1); } }
-  const shp={sortCol:sortKey,sortDir,onSort};
-
-  return (
-    <div>
-      <div className="filter-bar filter-bar--wrap">
-        <select value={sectorF} onChange={e=>setSectorF(e.target.value)}>
-          <option value="">All sectors</option>
-          {sectors.map(s=><option key={s} value={s}>{s}</option>)}
-        </select>
-        <div className="filter-sep"/>
-        <span style={{fontSize:12,color:'var(--text-3)'}}>Min OM trades</span>
-        <select value={minTrades} onChange={e=>setMinTrades(Number(e.target.value))}>
-          <option value={2}>2+</option>
-          <option value={5}>5+</option>
-          <option value={10}>10+</option>
-          <option value={20}>20+</option>
-        </select>
-      </div>
-
-      {error?<div className="state-box state-box--error"><p>⚠ {error}</p></div>
-      :sortedRows===null?<div className="state-box"><Spinner/><p>Ranking insiders…</p></div>
-      :sortedRows.length===0?<div className="state-box"><div>◎</div><p>No insiders meet this threshold.</p></div>
-      :<div className="table-wrap">
-        <table>
-          <thead><tr>
-            <th>#</th>
-            <SortTh label="Insider" colKey="insider_name" {...shp}/>
-            <th>Role</th><th>Sectors</th>
-            <SortTh label="OM Buys"  colKey="om_buys"      {...shp} right/>
-            <SortTh label="OM Sells" colKey="om_sells"     {...shp} right/>
-            <SortTh label="Bought $" colKey="bought_value" {...shp} right/>
-            <SortTh label="Hit Rate" colKey="hit_rate"     {...shp} right/>
-            <SortTh label="Proxy Score" colKey="proxy_score" {...shp}/>
-          </tr></thead>
-          <tbody>
-            {sortedRows.map((r,i)=>(
-              <tr key={i} className="row-clickable" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
-                <td className="td-rank">{i+1}</td>
-                <td>
-                  <div className="dp-clickable" style={{fontWeight:500}}>{r.insider_name}</div>
-                  <div className="td-muted" style={{fontSize:11}}>{r.insider_title}</div>
-                </td>
-                <td><Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Director'}</Badge></td>
-                <td className="td-muted" style={{fontSize:11}}>{(r.sectors||[]).slice(0,2).join(', ')||'—'}</td>
-                <td className="td-right val-buy td-mono">{r.om_buys}</td>
-                <td className="td-right val-sell td-mono">{r.om_sells}</td>
-                <td className="td-right td-mono">{fmt.money(r.bought_value)}</td>
-                <td className="td-right td-mono">{r.hit_rate!=null?`${r.hit_rate}%`:'—'}</td>
-                <td style={{width:90}}><ConvictionBar score={r.proxy_score} max={4}/></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>}
-    </div>
-  );
-}
 
 // ─── SECTOR MONEY FLOW environment ─────────────────────────────────────────────
 function SECTOR_FLOW_QUERY(days=30) {
@@ -3816,66 +3754,6 @@ function SECTOR_FLOW_QUERY(days=30) {
   `;
 }
 
-function SectorFlowEnvironment({ onOpenDetail }) {
-  const [rows, setRows] = useState(null);
-  const [error, setError] = useState(null);
-  const [days, setDays] = useState(30);
-
-  useEffect(()=>{
-    if (!cfg.NEON_PROXY_URL){setError('NEON_PROXY_URL not set');return;}
-    setRows(null); setError(null);
-    queryNeon(SECTOR_FLOW_QUERY(days)).then(setRows).catch(e=>setError(e.message));
-  },[days]);
-
-  const maxAbs = useMemo(()=>{
-    if (!rows?.length) return 1;
-    return Math.max(...rows.map(r=>Math.abs(r.net_value||0)), 1);
-  },[rows]);
-
-  return (
-    <div>
-      <div className="filter-bar filter-bar--wrap">
-        <div className="date-pills">
-          {[{l:'7d',d:7},{l:'30d',d:30},{l:'90d',d:90}].map(p=>(
-            <button key={p.l} className={`pill${days===p.d?' pill--active':''}`} onClick={()=>setDays(p.d)}>{p.l}</button>
-          ))}
-        </div>
-      </div>
-      <p className="td-muted" style={{fontSize:11,marginBottom:10}}>
-        Sector coverage is based on a fixed large-cap ticker map — tickers outside that map ("Other") are excluded here since they're not a meaningful sector grouping.
-      </p>
-
-      {error?<div className="state-box state-box--error"><p>⚠ {error}</p></div>
-      :rows===null?<div className="state-box"><Spinner/><p>Aggregating sector flow…</p></div>
-      :rows.length===0?<div className="state-box"><div>◎</div><p>No data in this window.</p></div>
-      :<div className="sector-flow-list">
-        {rows.map((r,i)=>{
-          const pct = (Math.abs(r.net_value||0)/maxAbs)*100;
-          const isPositive = (r.net_value||0)>=0;
-          return (
-            <div key={i} className="sector-flow-row">
-              <div className="sector-flow-row__top">
-                <span className="sector-flow-row__name">{r.sector}</span>
-                <span className={`td-mono sector-flow-row__net ${isPositive?'val-buy':'val-sell'}`}>
-                  {isPositive?'+':''}{fmt.money(r.net_value)}
-                </span>
-              </div>
-              <div className="sector-flow-bar-track">
-                <div className={`sector-flow-bar ${isPositive?'sector-flow-bar--buy':'sector-flow-bar--sell'}`} style={{width:`${pct}%`}}/>
-              </div>
-              <div className="sector-flow-row__meta">
-                <span>{fmt.money(r.buy_value)} bought</span>
-                <span>{fmt.money(r.sell_value)} sold</span>
-                <span>{r.insider_count} insiders</span>
-                <span>{r.ticker_count} tickers</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>}
-    </div>
-  );
-}
 
 // ─── ALL DATA ─────────────────────────────────────────────────────────────────
 const DATA_PAGE = 100;
@@ -3899,7 +3777,9 @@ async function proxySQL(sql) {
     headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
     body: JSON.stringify({ query: sql }),
   });
-  if (!r.ok) throw new Error(`Proxy ${r.status}`);
+  if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
+  if (r.status === 403) throw new Error('You don\'t have access to this — check your plan in Settings');
+  if (!r.ok) throw new Error('Something went wrong loading this — try again in a moment');
   const d = await r.json();
   if (d.error) throw new Error(d.error);
   return d.rows || [];
@@ -3964,7 +3844,8 @@ function FilterPanel({
   );
 }
 
-function DataPage({ onOpenDetail, portfolioTickers }) {
+function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
+  const pro = isPro(user);
   const [rows,    setRows]    = useState([]);
   const [total,   setTotal]   = useState(null);
   const [loading, setLoading] = useState(false);
@@ -4084,8 +3965,12 @@ function DataPage({ onOpenDetail, portfolioTickers }) {
     <div className="page-content">
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,gap:12}}>
         <p className="page-sub" style={{margin:0}}>{total!=null?`${total.toLocaleString()} filings matching filters · ${DATA_PAGE}/page`:'Loading…'}</p>
-        <button className="btn btn--primary" onClick={doExport} disabled={exporting}>
-          {exporting?'⏳ Exporting…':'⬇ Export CSV'}
+        <button className="btn btn--primary" onClick={pro ? doExport : onUpgrade} disabled={exporting}>
+          {exporting
+            ? (<><span className="spinner" style={{width:13,height:13,borderWidth:2,marginRight:6}}/>Exporting…</>)
+            : pro
+              ? '↓ Export CSV'
+              : (<>Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>Pro</span></>)}
         </button>
       </div>
 
@@ -4353,21 +4238,21 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
             {watchedTickers.length} ticker{watchedTickers.length!==1?'s':''} · {watchedInsiders.length} insider{watchedInsiders.length!==1?'s':''} tracked
           </p>
         </div>
-        <div className="dash-tile-pills">
-          {[7,30,90].map(d=>(
-            <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>setDays(d)}>{d}d</button>
-          ))}
+        <div className="wl-header__right">
+          <div className="settings-tabs">
+            <button className={`settings-tab${tab==='tickers'?' settings-tab--active':''}`} onClick={()=>setTab('tickers')}>
+              Tickers {watchedTickers.length>0&&<span className="wl-tab-count">{watchedTickers.length}</span>}
+            </button>
+            <button className={`settings-tab${tab==='insiders'?' settings-tab--active':''}`} onClick={()=>setTab('insiders')}>
+              Insiders {watchedInsiders.length>0&&<span className="wl-tab-count">{watchedInsiders.length}</span>}
+            </button>
+          </div>
+          <div className="dash-tile-pills">
+            {[7,30,90].map(d=>(
+              <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>setDays(d)}>{d}d</button>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="settings-tabs" style={{marginBottom:20}}>
-        <button className={`settings-tab${tab==='tickers'?' settings-tab--active':''}`} onClick={()=>setTab('tickers')}>
-          Tickers {watchedTickers.length>0&&<span className="wl-tab-count">{watchedTickers.length}</span>}
-        </button>
-        <button className={`settings-tab${tab==='insiders'?' settings-tab--active':''}`} onClick={()=>setTab('insiders')}>
-          Insiders {watchedInsiders.length>0&&<span className="wl-tab-count">{watchedInsiders.length}</span>}
-        </button>
       </div>
 
       {tab==='insiders' ? (
@@ -4881,10 +4766,10 @@ function SettingsToggle({ label, sub, checked, onChange, pro, disabled }) {
   );
 }
 
-function SettingsPage({ user }) {
+function SettingsPage({ user, onUpgrade }) {
   const pro   = isPro(user);
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
-  const [section, setSection] = useState('account');
+  const [section, setSection] = useState('billing');
   const [local,   setLocal]   = useState(null);
 
   useEffect(()=>{ if (prefs && !local) setLocal({...prefs}); },[prefs]);
@@ -4892,7 +4777,6 @@ function SettingsPage({ user }) {
   function upd(key, val) { setLocal(p=>({...p, [key]:val})); }
 
   const SECTIONS = [
-    {id:'account',  label:'Account',        icon:'◎'},
     {id:'billing',  label:'Billing',        icon:'$'},
     {id:'digests',  label:'Email digests',  icon:'✉'},
     {id:'instant',  label:'Instant alerts', icon:'⚡'},
@@ -4913,47 +4797,10 @@ function SettingsPage({ user }) {
               {s.label}
             </button>
           ))}
-          {/* Spacer pushes footer to bottom */}
-          <div className="settings-sidenav__spacer"/>
-          <div className="settings-sidenav__plan">
-            <span className={`settings-plan-badge ${pro?'settings-plan-badge--pro':'settings-plan-badge--free'}`}>
-              {pro ? '★ Pro' : 'Free plan'}
-            </span>
-            {!pro&&<div className="settings-sidenav__upgrade" onClick={()=>{}}>Upgrade →</div>}
-            <button className="settings-sidenav__signout"
-              onClick={()=>{ window.__clerkSignOut && window.__clerkSignOut(); }}>
-              Sign out
-            </button>
-            <div style={{height:8}}/>
-          </div>
         </div>
 
         {/* ── Content ──────────────────────────────────────────────────── */}
         <div className="settings-content">
-
-          {/* ACCOUNT */}
-          {section==='account'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">Account</div>
-              <div className="settings-section__desc">Manage your profile, email, and sign-in options.</div>
-
-              <div className="settings-clerk-wrap">
-                <UserProfile appearance={{
-                  variables: {
-                    colorPrimary:    '#7c6fff',
-                    borderRadius:    '8px',
-                    fontSize:        '13px',
-                  },
-                  elements:{
-                    rootBox:       'clerk-profile-root',
-                    card:          'clerk-profile-card',
-                    navbar:        'clerk-profile-navbar',
-                    pageScrollBox: 'clerk-profile-scroll',
-                  }
-                }}/>
-              </div>
-            </div>
-          )}
 
           {/* BILLING */}
           {section==='billing'&&(
@@ -4973,7 +4820,7 @@ function SettingsPage({ user }) {
               </div>
               <div className="settings-section__desc">
                 Scheduled summaries delivered to your inbox. Choose your frequency and what to include.
-                {!pro&&<span className="settings-section__lock"> Upgrade to Pro to enable email digests.</span>}
+                {!pro&&<button className="settings-section__lock" onClick={onUpgrade}> Upgrade to Pro to enable email digests.</button>}
               </div>
 
               {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
@@ -5060,7 +4907,7 @@ function SettingsPage({ user }) {
                   </button>
                   {saved&&<span className="settings-saved-msg">✓ Saved</span>}
                   {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}>⚠ {error}</span>}
-                  {!pro&&<span className="settings-section__lock">Upgrade to Pro to save</span>}
+                  {!pro&&<button className="settings-section__lock" onClick={onUpgrade}>Upgrade to Pro to save</button>}
                 </div>
               </>)}
             </div>
@@ -5075,7 +4922,7 @@ function SettingsPage({ user }) {
               </div>
               <div className="settings-section__desc">
                 Real-time emails fired within minutes of a filing. Each trigger is independent.
-                {!pro&&<span className="settings-section__lock"> Upgrade to Pro to enable instant alerts.</span>}
+                {!pro&&<button className="settings-section__lock" onClick={onUpgrade}> Upgrade to Pro to enable instant alerts.</button>}
               </div>
 
               {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
@@ -5122,7 +4969,7 @@ function SettingsPage({ user }) {
                   </button>
                   {saved&&<span className="settings-saved-msg">✓ Saved</span>}
                   {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}>⚠ {error}</span>}
-                  {!pro&&<span className="settings-section__lock">Upgrade to Pro to save</span>}
+                  {!pro&&<button className="settings-section__lock" onClick={onUpgrade}>Upgrade to Pro to save</button>}
                 </div>
               </>)}
             </div>
@@ -5137,7 +4984,7 @@ function SettingsPage({ user }) {
               </div>
               <div className="settings-section__desc">
                 Connect your brokerage to see insider activity on your holdings. Read-only — we never trade on your behalf.
-                {!pro&&<span className="settings-section__lock"> Upgrade to Pro to connect a brokerage.</span>}
+                {!pro&&<button className="settings-section__lock" onClick={onUpgrade}> Upgrade to Pro to connect a brokerage.</button>}
               </div>
 
               {[
@@ -5466,6 +5313,7 @@ export default function App() {
   const [detail,setDetail]    = useState(null);
   const [detailHistory,setDetailHistory] = useState([]);
   const [portfolioTickers, setPortfolioTickers] = useState([]);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // enterApp now triggers Clerk sign-in via SignInButton — kept for
   // compatibility with LandingPage's onEnter prop
@@ -5506,7 +5354,7 @@ export default function App() {
   },[]);
 
   function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setDetailHistory([]);setPage('signals');}
-  function selectSignal(s){setSelSig(s);if(s){setHlTick(s.ticker);setDetail({type:'signal',...s});setDetailHistory([]);}else setDetail(null);}
+  function selectSignal(s){setSelSig(s);if(s)setHlTick(s.ticker);}
   function openDetail(d){setDetail(d);setDetailHistory([]);} // fresh open from outside the panel resets history
   function closeDetail(){setDetail(null);setDetailHistory([]);setSelSig(null);}
   function panelNav(d){setDetail(prev=>{if(prev)setDetailHistory(h=>[...h,prev]);return d;});}
@@ -5537,7 +5385,7 @@ export default function App() {
 
   return (
     <div className={`app-shell${panelOpen?' app-shell--panel-open':''}`}>
-      <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark}/>
+      <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark} user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>
       <main className="main-area">
         <div className="status-bar">
           {/* Page title — left */}
@@ -5557,23 +5405,19 @@ export default function App() {
               );
             })()}
             {!lastFilingDate&&<span><span className="status-bar__dot"/>{loading?'Syncing…':'Ready'}</span>}
-            {/* Avatar — clicking opens settings page, not Clerk dropdown */}
+            {/* Avatar — Clerk's own dropdown (manage account, sign out, etc).
+                Settings/billing are reachable via the gear icon in the sidebar. */}
             <SignedIn>
-              <button
-                className="status-bar__avatar-btn"
-                onClick={()=>navTo('settings')}
-                title="Account settings">
-                <UserButton
-                  afterSignOutUrl="/"
-                  appearance={{
-                    elements: {
-                      avatarBox:          'clerk-avatar',
-                      userButtonTrigger:  'clerk-avatar-trigger',
-                      userButtonAvatarBox:'clerk-avatar-box',
-                    }
-                  }}
-                />
-              </button>
+              <UserButton
+                afterSignOutUrl="/"
+                appearance={{
+                  elements: {
+                    avatarBox:          'clerk-avatar',
+                    userButtonTrigger:  'clerk-avatar-trigger',
+                    userButtonAvatarBox:'clerk-avatar-box',
+                  }
+                }}
+              />
             </SignedIn>
             <SignedOut>
               <SignInButton mode="modal">
@@ -5587,9 +5431,9 @@ export default function App() {
           {page==='signals'  &&<InsightsPage   filings={filings} loading={loading}
             highlightTicker={hlTicker} setHighlightTicker={setHlTick}
             onSelectSignal={selectSignal} selectedSignal={selSignal}
-            onOpenDetail={openDetail}/>}
-          {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers}/>}
-          {page==='settings'  &&<SettingsPage user={user}/>}
+            onOpenDetail={openDetail} onCloseDetail={closeDetail}/>}
+          {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>}
+          {page==='settings'  &&<SettingsPage user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>}
           {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist}/>}
         </div>
         <footer className="footer">
@@ -5603,6 +5447,9 @@ export default function App() {
       </main>
       {watchlist.showUpgrade&&(
         <UpgradeModal feature="watchlist" onClose={()=>watchlist.setShowUpgrade(false)}/>
+      )}
+      {showUpgradeModal&&(
+        <UpgradeModal feature="default" onClose={()=>setShowUpgradeModal(false)}/>
       )}
       {panelOpen&&(
         <>

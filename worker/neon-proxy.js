@@ -18,6 +18,8 @@
  *                            one-time PaymentIntent, no Price object needed)
  *   CLERK_SECRET_KEY         sk_live_... / sk_test_... — used to mirror plan
  *                            status into Clerk publicMetadata after webhook events
+ *   CLERK_JWKS_URL           https://<your-clerk-domain>/.well-known/jwks.json
+ *                            — from the PRODUCTION Clerk instance, not Dev
  *
  * Requires `npm install stripe` in this Worker's package.json — Stripe's SDK
  * runs on Workers via createFetchHttpClient()/createSubtleCryptoProvider(),
@@ -247,7 +249,7 @@ async function handleWatchlist(request, env, origin) {
   const u = new URL(connStr);
   const host = u.hostname;
 
-  const neonFetch = async (query) => {
+  const neonFetchLocal = async (query) => {
     const resp = await fetch(`https://${host}/sql`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': connStr },
@@ -260,7 +262,7 @@ async function handleWatchlist(request, env, origin) {
   // GET — load watchlist
   if (request.method === 'GET') {
     const uid = userId.replace(/'/g, "''");
-    const result = await neonFetch(
+    const result = await neonFetchLocal(
       `SELECT item_type, item_value FROM public.user_watchlist WHERE clerk_user_id='${uid}' ORDER BY added_at DESC`
     );
     return corsResponse({ items: result.rows || [] }, 200, origin, env);
@@ -280,13 +282,13 @@ async function handleWatchlist(request, env, origin) {
     const typ = item_type.replace(/'/g, "''");
 
     if (action === 'add') {
-      await neonFetch(
+      await neonFetchLocal(
         `INSERT INTO public.user_watchlist (clerk_user_id, item_type, item_value)
          VALUES ('${uid}','${typ}','${val}')
          ON CONFLICT (clerk_user_id, item_type, item_value) DO NOTHING`
       );
     } else {
-      await neonFetch(
+      await neonFetchLocal(
         `DELETE FROM public.user_watchlist WHERE clerk_user_id='${uid}' AND item_type='${typ}' AND item_value='${val}'`
       );
     }
@@ -357,7 +359,7 @@ function sqlVal(v) {
   if (v === null || v === undefined) return 'NULL';
   if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
   if (typeof v === 'number') return String(v);
-  return `'${String(v).replace(/'/g, "''")}'`; // same escaping convention as handleWatchlist below
+  return `'${String(v).replace(/'/g, "''")}'`; // same escaping convention as handleWatchlist above
 }
 
 async function neonFetch(env, query) {
@@ -433,7 +435,7 @@ async function handleStripeWebhook(request, env) {
         // Only 'active'/'trialing' actually grants Pro. Every other status —
         // 'incomplete' (checkout started but never paid), 'past_due' (card
         // failing on renewal), 'unpaid', 'incomplete_expired', 'canceled' —
-        // maps to 'free'. The previous version only checked for 'canceled',
+        // maps to 'free'. An earlier version only checked for 'canceled',
         // which meant an abandoned checkout or a failing card kept Pro access.
         const plan = (sub.status === 'active' || sub.status === 'trialing')
           ? planFromPriceId(env, priceId)
@@ -514,10 +516,10 @@ async function handleStripeWebhook(request, env) {
         // The row was deleted when the dispute opened, so pull the original
         // clerk_user_id/amount back from Stripe rather than our own DB —
         // we no longer have a local record of it.
-        const Stripe = (await import('stripe')).default;
-        const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+        const StripeD = (await import('stripe')).default;
+        const stripeD = new StripeD(env.STRIPE_SECRET_KEY, { httpClient: StripeD.createFetchHttpClient() });
         try {
-          const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+          const pi = await stripeD.paymentIntents.retrieve(paymentIntentId);
           const clerkUserId = pi.metadata?.clerk_user_id;
           if (!clerkUserId || pi.metadata?.product !== 'data_export') break;
 
@@ -600,9 +602,6 @@ async function handleCreateSubscription(request, env, origin) {
   }
 }
 
-// ── Cancel subscription ──────────────────────────────────────────────────────
-// Cancels at period end (not immediately) — user keeps access through what
-// they already paid for. The webhook updates our DB when Stripe confirms it.
 // ── Create one-time data purchase ($9.99, not a subscription) ──────────────
 // Repeatable — a user can buy this more than once. Uses a PaymentIntent,
 // not a Subscription; the frontend uses the same PaymentElement UI either
@@ -645,7 +644,10 @@ async function handleCreateDataPurchase(request, env, origin) {
   }
 }
 
-
+// ── Cancel subscription ──────────────────────────────────────────────────────
+// Cancels at period end (not immediately) — user keeps access through what
+// they already paid for. The webhook updates our DB when Stripe confirms it.
+async function handleCancelSubscription(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
@@ -695,6 +697,8 @@ async function handleBillingStatus(request, env, origin) {
     return corsResponse({ error: e.message }, 500, origin, env);
   }
 }
+
+function corsHeaders(origin, env) {
   const isProd = !!(env.NEON_API_KEY || env.NEON_CONNECTION_STRING);
   const allowed = (!isProd || ALLOWED_ORIGINS.has(origin)) ? origin : '';
   return {

@@ -112,7 +112,7 @@ pre {
 }
 
 /* ── App shell ────────────────────────────────────────────────────────────── */
-.app-shell { display: flex; min-height: 100vh; }
+.app-shell { display: flex; height: 100vh; overflow: hidden; }
 .app-shell--panel-open .main-area { margin-right: var(--panel-w); }
 
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
@@ -125,17 +125,19 @@ pre {
 }
 .sidebar__logo {
   display: flex; align-items: center; justify-content: center;
-  padding: 13px 0; border-bottom: 1px solid var(--border); width: 100%;
+  padding: 14px 0; border-bottom: 1px solid var(--border); width: 100%;
+  height: 64px; box-sizing: border-box;
 }
 /* Logo mark — distinctive rectangular form */
 .logo-mark {
-  width: 30px; height: 30px;
+  width: 36px; height: 36px;
   background: var(--accent);
-  border-radius: 7px;
+  border-radius: 8px;
   color: #fff;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; cursor: default; user-select: none;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset;
+  font-size: 15px;
 }
 .sidebar__nav {
   padding: 10px 0;
@@ -148,6 +150,22 @@ pre {
   width: 100%; display: flex; flex-direction: column;
   align-items: center; gap: 4px;
 }
+.sidebar__footer-divider {
+  width: 24px; height: 1px; background: var(--border); margin: 4px 0;
+}
+/* Upgrade icon button — accent-colored to stand out from the neutral utility icons */
+.nav-item--upgrade {
+  color: var(--accent-strong);
+}
+.nav-item--upgrade:hover { background: var(--accent-50); }
+/* Pro badge — small static indicator, not a button */
+.sidebar__pro-badge {
+  width: 40px; height: 28px; display: flex; align-items: center; justify-content: center;
+  color: var(--accent-strong); font-size: 13px; cursor: default;
+}
+/* Sign out — same icon-only sizing as everything else, red only on hover so it
+   doesn't read as an alarming default state */
+.nav-item--signout:hover { background: rgba(239,68,68,0.08); color: #ef4444; }
 /* Nav items — icon only, left accent bar on active */
 .nav-item {
   position: relative;
@@ -176,18 +194,20 @@ pre {
   border-radius: var(--radius-md); flex-shrink: 0;
 }
 .nav-icon { font-size: 15px; width: 18px; text-align: center; flex-shrink: 0; line-height: 1; }
+.nav-icon--svg { width: 18px; height: 18px; flex-shrink: 0; }
 
 /* ── Main area ────────────────────────────────────────────────────────────── */
 .main-area {
   flex: 1; margin-left: var(--sidebar-w);
-  display: flex; flex-direction: column; min-height: 100vh;
+  display: flex; flex-direction: column; height: 100vh;
   transition: margin-right .2s; min-width: 0;
+  overflow: hidden; /* content-area scrolls internally, header/footer never move */
 }
 
 /* Status bar — app topbar, owns the page identity */
 .status-bar {
   padding: 0 22px;
-  height: 44px;
+  height: 64px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
@@ -195,7 +215,7 @@ pre {
   position: sticky; top: 0; z-index: 50;
 }
 .status-bar__info {
-  font-size: 13px; font-weight: 600; letter-spacing: -0.1px;
+  font-size: 15px; font-weight: 700; letter-spacing: -0.1px;
   color: var(--text);
 }
 .status-bar__meta {
@@ -207,7 +227,7 @@ pre {
   background: var(--green-600); display: inline-block; margin-right: 4px;
 }
 
-.content-area { flex: 1; padding: 0 24px 32px; }
+.content-area { flex: 1; padding: 0 24px 32px; overflow-y: auto; }
 .page-content  { padding-top: 22px; }
 .page-header   { margin-bottom: 20px; }
 
@@ -227,6 +247,7 @@ pre {
 .footer {
   font-size:11.5px; color:var(--text-3); text-align:center;
   padding:14px 22px 10px; border-top:0.5px solid var(--border); margin-top:20px;
+  flex-shrink: 0; /* lives in main-area's flex column — never squeezed or scrolled away */
 }
 
 /* ── Right detail panel ───────────────────────────────────────────────────── */
@@ -878,6 +899,7 @@ td { padding:7px 11px; vertical-align:middle; }
   background: transparent; border: 0.5px solid var(--border-md);
   border-radius: 999px; color: var(--text-3); cursor: pointer;
   transition: all .1s; white-space: nowrap;
+  height: 26px; box-sizing: border-box; display: inline-flex; align-items: center;
 }
 .dash-tile-pill:hover { color: var(--text-2); background: var(--surface-3); }
 .dash-tile-pill--active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
@@ -1229,16 +1251,37 @@ td { padding:7px 11px; vertical-align:middle; }
 ══════════════════════════════════════════════════════════════════════════ */
 
 /* Page header + filter controls */
-/* ── Insights page — no page header, controls bar + 3-col layout ─────────── */
-.ins-controls-bar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin-bottom: 10px; padding-bottom: 10px;
-  border-bottom: 0.5px solid var(--border);
+/* ── Insights page — filter row lives inside the Signals panel itself,
+   not floating above both columns ambiguously. Same labeled-group pattern
+   as the Explore drawer's filter row, for visual consistency between the
+   two places you filter signals. ─────────────────────────────────────── */
+.ins-filter-row {
+  display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap;
+  padding: 12px 14px; border-bottom: 0.5px solid var(--border);
+  background: var(--surface-2);
 }
+.ins-filter-group {
+  display: flex; flex-direction: column; gap: 5px;
+}
+.ins-filter-group__label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+  text-transform: uppercase; color: var(--text-3);
+}
+.ins-filter-count {
+  font-size: 11px; margin-left: auto; align-self: center;
+}
+.ins-filter-reset {
+  font-size: 11px; font-weight: 600; color: var(--accent-strong);
+  background: none; border: none; padding: 0; cursor: pointer;
+  align-self: center; text-decoration: underline; text-decoration-color: transparent;
+  transition: text-decoration-color .12s;
+}
+.ins-filter-reset:hover { text-decoration-color: var(--accent-strong); }
 .ins-filter-select {
   font-size: 12px; font-family: var(--font); color: var(--text-2);
   background: var(--surface); border: 0.5px solid var(--border-md);
   border-radius: var(--radius-md); padding: 4px 8px; cursor: pointer;
+  height: 26px; box-sizing: border-box;
 }
 .ins-filter-select:hover { background: var(--surface-2); }
 
@@ -1294,21 +1337,44 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--surface-2); flex-shrink: 0;
 }
 .ins-sig-panel__title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-2); }
+
+/* Explore trigger — title itself is the link, icon only reveals on hover of
+   the header. Replaces the old bordered "⤢ Explore" button, which competed
+   visually with the title instead of feeling like part of it. */
+.ins-panel-title-link {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-2); background: none; border: none; padding: 0; margin: 0;
+  font-family: var(--font); cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: color .12s;
+}
+.ins-panel-title-link:hover { color: var(--accent-strong); }
+.ins-explore-hint {
+  font-size: 12px; opacity: 0; transform: translateX(-2px);
+  transition: opacity .15s, transform .15s;
+}
+.ins-sig-panel__hdr--explorable:hover .ins-explore-hint { opacity: 1; transform: translateX(0); }
 .ins-empty { padding: 20px 16px; font-size: 12.5px; color: var(--text-2); }
 
 /* Signal rows */
 /* Signal table column headers */
 .ins-sig-col-hdrs {
-  display: grid; grid-template-columns: 200px 130px 1fr 110px;
+  display: grid; grid-template-columns: 1fr 100px 60px 130px 110px;
   gap: 12px; padding: 5px 16px 4px;
   font-size: 9.5px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .05em; color: var(--text-3);
   border-bottom: 0.5px solid var(--border); background: var(--surface-2);
 }
-/* Signal rows — 4 columns: ticker+co | type | conviction+spent | net flow */
+.ins-col-sort {
+  background: none; border: none; padding: 0; margin: 0; text-align: left;
+  font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit;
+  cursor: pointer; display: flex; align-items: center;
+}
+.ins-col-sort:hover { color: var(--text-2); }
+/* Signal rows — 5 columns: ticker+co | type | exec | conviction | net flow */
 .ins-sig-list { display: flex; flex-direction: column; }
 .ins-sig-row {
-  display: grid; grid-template-columns: 200px 130px 1fr 110px;
+  display: grid; grid-template-columns: 1fr 100px 60px 130px 110px;
   align-items: center; gap: 12px;
   padding: 9px 16px; border-bottom: 0.5px solid var(--border);
   cursor: pointer; transition: background .07s;
@@ -1321,14 +1387,23 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-sig-row__ticker { font-size: 14px; font-weight: 700; }
 .ins-sig-row__co { font-size: 12px; color: var(--text-2); margin-top: 1px; }
 .ins-sig-row__left   { display: flex; flex-direction: column; gap: 2px; }
-.ins-sig-row__type   { display: flex; flex-direction: column; gap: 2px; }
+.ins-sig-row__type   { display: flex; flex-direction: column; gap: 4px; }
+.ins-sig-row__type-top { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.ins-sig-row__type-meta { font-size: 10px; }
+.ins-type-badge {
+  font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: var(--accent-50); color: var(--accent-strong);
+}
+.ins-type-badge--congress { background: var(--blue-50); color: var(--blue-600); }
 .ins-sig-row__signal { display: flex; flex-direction: column; gap: 3px; }
+.ins-sig-row__exec { display: flex; align-items: center; justify-content: center; }
 .ins-sig-row__right  { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
 .ins-sig-row__net { font-size: 14px; font-weight: 700; font-family: var(--font-mono); letter-spacing: -0.3px; white-space: nowrap; }
 @media (max-width: 900px) {
   .ins-sig-col-hdrs { display: none; }
   .ins-sig-row { grid-template-columns: 160px 1fr auto; }
   .ins-sig-row__type { display: none; }
+  .ins-sig-row__exec { display: none; }
 }
 
 /* Spent / fresh badge */
@@ -1576,12 +1651,42 @@ td { padding:7px 11px; vertical-align:middle; }
    WATCHLIST PAGE
 ══════════════════════════════════════════════════════════════════════════ */
 .wl-header {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  flex-wrap: wrap; gap: 12px; margin-bottom: 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; margin-bottom: 18px;
 }
+.wl-header__right {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+
+/* Tickers/Insiders switcher — a real grouped segmented control, not two
+   bare unstyled buttons (these classes had NO css rule before at all). */
+.settings-tabs {
+  display: flex; gap: 2px; padding: 3px;
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: 10px; width: fit-content;
+}
+.settings-tab {
+  padding: 6px 14px; font-size: 12.5px; font-weight: 500; font-family: var(--font);
+  background: transparent; border: none; border-radius: 7px;
+  color: var(--text-3); cursor: pointer; transition: all .12s;
+  display: flex; align-items: center; gap: 6px;
+}
+.settings-tab:hover { color: var(--text-2); }
+.settings-tab--active {
+  background: var(--surface); color: var(--text); font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.wl-tab-count {
+  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+  background: var(--surface-3); color: var(--text-3);
+}
+.settings-tab--active .wl-tab-count { background: var(--accent-50); color: var(--accent-strong); }
+
 .wl-empty {
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; padding: 80px 20px; text-align: center; gap: 10px;
+  background: var(--surface); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 .wl-empty__icon  { font-size: 48px; color: var(--text-3); line-height: 1; }
 .wl-empty__title { font-size: 18px; font-weight: 600; }
@@ -1706,6 +1811,7 @@ td { padding:7px 11px; vertical-align:middle; }
   background: transparent; border: 0.5px solid var(--border-md);
   border-radius: 999px; color: var(--text-3); cursor: pointer;
   transition: all .1s; white-space: nowrap;
+  height: 26px; box-sizing: border-box; display: inline-flex; align-items: center;
 }
 .ins-strength-pill:hover { color: var(--text-2); background: var(--surface-3); }
 .ins-strength-pill--active { font-weight: 600; }
@@ -1742,7 +1848,7 @@ td { padding:7px 11px; vertical-align:middle; }
   display: flex; align-items: stretch; justify-content: flex-end;
 }
 .drawer {
-  width: min(1100px, 92vw); height: 100%;
+  width: min(1360px, 96vw); height: 100%;
   background: var(--bg); display: flex; flex-direction: column;
   box-shadow: -8px 0 48px rgba(0,0,0,0.35);
   border-left: 0.5px solid var(--border-md);
@@ -1754,22 +1860,51 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 
 /* Drawer header */
-.drawer__hdr {
-  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
-  padding: 12px 16px; border-bottom: 0.5px solid var(--border-md);
-  background: var(--surface-2); flex-wrap: wrap;
+.drawer__hdr--stacked {
+  display: flex; flex-direction: column; gap: 0; flex-shrink: 0;
+  border-bottom: 0.5px solid var(--border-md); background: var(--surface-2);
+}
+.drawer__hdr-row1 {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 16px; border-bottom: 0.5px solid var(--border);
 }
 .drawer__title {
   font-size: 14px; font-weight: 700; letter-spacing: -0.2px; flex-shrink: 0;
 }
-.drawer__filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* Toolbar — one continuous row, real vertical dividers between groups so
+   each filter reads as clearly distinct, the way PowerBI/Tableau toolbars
+   separate filter sections rather than relying on gap spacing alone. */
+.drawer__toolbar {
+  padding: 11px 16px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+}
+.drawer__toolbar-divider {
+  width: 1px; align-self: stretch; background: var(--border); margin-bottom: 2px;
+}
+.drawer__toolbar-spacer { flex: 1; }
+.drawer__filter-group {
+  display: flex; flex-direction: column; gap: 5px;
+}
+.drawer__filter-group--search { min-width: 200px; }
+.drawer__filter-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+  text-transform: uppercase; color: var(--text-3);
+}
+.drawer__search-wrap {
+  position: relative; display: flex; align-items: center;
+}
+.drawer__search-icon {
+  position: absolute; left: 8px; width: 14px; height: 14px;
+  color: var(--text-3); pointer-events: none;
+}
 .drawer__search {
-  flex: 1; min-width: 160px; max-width: 240px; padding: 6px 10px;
+  width: 100%; padding: 6px 10px 6px 28px;
   background: var(--surface); border: 0.5px solid var(--border-md);
   border-radius: var(--radius-md); font-size: 12px; font-family: var(--font);
-  color: var(--text); outline: none; margin-left: auto;
+  color: var(--text); outline: none; height: 26px; box-sizing: border-box;
 }
 .drawer__search:focus { border-color: var(--accent); }
+.drawer__search-wrap:focus-within .drawer__search-icon { color: var(--accent); }
 
 /* Two-pane body */
 .drawer__body {
@@ -2323,10 +2458,14 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* Page container */
 .settings-page {
-  /* Fill entire content-area — no padding, no title, layout IS the page */
+  /* Fill entire content-area — no padding, no title, layout IS the page.
+     content-area's padding is 0 top / 24px sides / 32px bottom — cancel
+     only what's actually there. (Previously had a stray -22px top margin
+     that didn't match any real padding and a viewport-height calc that's
+     no longer needed now that content-area itself scrolls internally.) */
   padding: 0;
-  margin: -22px -24px -32px; /* cancel parent content-area padding */
-  height: calc(100vh - 44px); /* 44px = status bar */
+  margin: 0 -24px -32px;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2503,7 +2642,11 @@ td { padding:7px 11px; vertical-align:middle; }
   color: var(--amber-600);
   font-size: 12px;
   font-weight: 500;
+  background: none; border: none; padding: 0; margin: 0;
+  font-family: inherit; cursor: pointer; text-decoration: underline;
+  text-decoration-color: transparent; transition: text-decoration-color .12s;
 }
+.settings-section__lock:hover { text-decoration-color: var(--amber-600); }
 .settings-section__note {
   font-size: 12px;
   color: var(--text-3);
@@ -2797,6 +2940,89 @@ td { padding:7px 11px; vertical-align:middle; }
   text-align: center;
   position: relative;
   box-shadow: 0 24px 80px rgba(0,0,0,0.4);
+}
+.upgrade-modal--large {
+  max-width: 460px;
+  text-align: left;
+}
+.upgrade-modal--large .upgrade-modal__title,
+.upgrade-modal--large .upgrade-modal__subtitle {
+  text-align: center;
+}
+.upgrade-modal__logo {
+  margin: 0 auto 14px; width: 40px; height: 40px; font-size: 16px;
+}
+.upgrade-modal__subtitle {
+  font-size: 13px; color: var(--text-3); line-height: 1.5;
+  margin-bottom: 22px;
+}
+
+/* Free/Pro comparison table */
+.upgrade-modal__table {
+  border: 0.5px solid var(--border); border-radius: 10px;
+  overflow: hidden; margin-bottom: 20px;
+}
+.upgrade-modal__table-header,
+.upgrade-modal__table-row {
+  display: grid; grid-template-columns: 1fr 56px 56px;
+  align-items: center;
+}
+.upgrade-modal__table-header {
+  padding: 8px 14px; background: var(--surface-2);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+  color: var(--text-3); text-transform: uppercase;
+  text-align: center;
+}
+.upgrade-modal__table-header span:first-child { text-align: left; }
+.upgrade-modal__table-header--pro { color: var(--accent-strong); }
+.upgrade-modal__table-row {
+  padding: 10px 14px; border-top: 0.5px solid var(--border);
+  background: var(--surface);
+}
+.upgrade-modal__table-label { font-size: 12.5px; color: var(--text); }
+.upgrade-check { text-align: center; font-size: 14px; font-weight: 700; }
+.upgrade-check--yes { color: var(--accent-strong); }
+.upgrade-check--no { color: var(--text-3); opacity: 0.4; }
+
+/* Plan picker — two selectable cards */
+.upgrade-modal__plans {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin-bottom: 14px;
+}
+.upgrade-plan-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface);
+  cursor: pointer; text-align: left; transition: border-color .12s, background .12s;
+}
+.upgrade-plan-card--active {
+  border-color: var(--accent-strong);
+  background: var(--accent-50);
+}
+.upgrade-plan-card__radio {
+  width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+  border: 1.5px solid var(--border-md);
+}
+.upgrade-plan-card--active .upgrade-plan-card__radio {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+.upgrade-plan-card__title {
+  display: block; font-size: 13px; font-weight: 600; color: var(--text);
+}
+.upgrade-plan-card__price {
+  display: block; font-size: 11.5px; color: var(--text-3); margin-top: 1px;
+}
+.upgrade-plan-card__badge {
+  font-size: 9.5px; font-weight: 600; color: var(--accent-strong);
+  background: var(--accent-50); padding: 1px 5px; border-radius: 4px;
+  margin-left: 4px; vertical-align: middle;
+}
+
+.upgrade-modal__trust {
+  display: flex; justify-content: center; gap: 16px;
+  margin-top: 12px; font-size: 11px; color: var(--text-3);
 }
 .upgrade-modal__close {
   position: absolute; top: 14px; right: 14px;
@@ -3105,16 +3331,11 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 
 /* ── UserButton avatar — no grey ring, no background ────────────────────────── */
-.status-bar__avatar-btn { outline: none; }
-.status-bar__avatar-btn:focus { outline: none; box-shadow: none; }
-
-/* Clerk renders a <button> with inline background — override everything */
-.clerk-avatar-trigger { pointer-events: none; }
+/* (previously had pointer-events:none here + a wrapping button, from when we
+   intercepted clicks to navigate to Settings instead of Clerk's own dropdown —
+   both removed now that UserButton behaves natively) */
 
 /* Target by attribute pattern since Clerk uses hashed classnames */
-.status-bar__avatar-btn button,
-.status-bar__avatar-btn [class*="cl-"],
-.status-bar__avatar-btn span[class],
 [class*="cl-userButtonTrigger"],
 [class*="cl-userButtonTrigger"]:focus,
 [class*="cl-userButtonTrigger"]:hover,
