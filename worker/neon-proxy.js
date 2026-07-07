@@ -27,6 +27,9 @@
  */
 
 const ALLOWED_ORIGINS = new Set([
+  'https://seli.app',
+  'https://www.seli.app',
+  'https://seli-dgu.pages.dev',
   'https://disclo.co',
   'https://disclo-1wp.pages.dev',
   'https://beastly585.github.io',
