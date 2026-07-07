@@ -156,7 +156,7 @@ function UpgradeModal({ feature, onClose }) {
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
       <div className="upgrade-modal upgrade-modal--large">
-        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close">✕</button>
+        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
 
         <div className="logo-mark upgrade-modal__logo"><span style={{letterSpacing:'-1px',fontWeight:800}}>D</span></div>
         <div className="upgrade-modal__title">Upgrade to Pro</div>
@@ -171,8 +171,8 @@ function UpgradeModal({ feature, onClose }) {
           {COMPARISON.map(row=>(
             <div className="upgrade-modal__table-row" key={row.label}>
               <span className="upgrade-modal__table-label">{row.label}</span>
-              <span className={row.free?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.free?'✓':'–'}</span>
-              <span className={row.pro?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.pro?'✓':'–'}</span>
+              <span className={row.free?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.free?<IconCheck style={{width:12,height:12}}/>:'–'}</span>
+              <span className={row.pro?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.pro?<IconCheck style={{width:12,height:12}}/>:'–'}</span>
             </div>
           ))}
         </div>
@@ -199,8 +199,8 @@ function UpgradeModal({ feature, onClose }) {
         </button>
 
         <div className="upgrade-modal__trust">
-          <span>✓ Secure checkout via Stripe</span>
-          <span>✓ Cancel anytime</span>
+          <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe</span>
+          <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Cancel anytime</span>
         </div>
       </div>
     </div>
@@ -252,7 +252,7 @@ function CheckoutModal({ product, onClose, onSuccess }) {
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
       <div className="upgrade-modal checkout-modal">
-        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close">✕</button>
+        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
         <div className="upgrade-modal__title">{copy.title}</div>
         <div className="upgrade-modal__price">
           <span className="upgrade-modal__amount">{copy.price}</span>
@@ -603,6 +603,17 @@ function IconSettings(p)  { return <svg {...ICON_PROPS} {...p}><circle cx="12" c
 function IconSun(p)       { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>; }
 function IconMoon(p)      { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>; }
 function IconSignOut(p)   { return <svg {...ICON_PROPS} {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>; }
+function IconReversal(p)  { return <svg {...ICON_PROPS} {...p}><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>; }
+function IconClose(p)     { return <svg {...ICON_PROPS} {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>; }
+function IconCheck(p)      { return <svg {...ICON_PROPS} {...p}><polyline points="20 6 9 17 4 12"/></svg>; }
+function IconWarning(p)    { return <svg {...ICON_PROPS} {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }
+function IconBuyTri(p)     { return <svg viewBox="0 0 24 24" {...p}><polygon points="12 4 21 19 3 19" fill="currentColor"/></svg>; }
+function IconSellTri(p)    { return <svg viewBox="0 0 24 24" {...p}><polygon points="12 20 3 5 21 5" fill="currentColor"/></svg>; }
+function IconFollowCircle(p){ return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="9"/></svg>; }
+function IconEmpty(p)      { return <svg {...ICON_PROPS} {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>; }
+function IconMail(p)       { return <svg {...ICON_PROPS} {...p}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>; }
+function IconZap(p)        { return <svg {...ICON_PROPS} {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>; }
+function IconLink(p)       { return <svg {...ICON_PROPS} {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>; }
 
 const NAV = [
   {id:'dashboard', Icon:IconHome,      label:'Dashboard'},
@@ -911,7 +922,9 @@ function StarBtn({ ticker, watchlist }) {
       className={`star-btn${isWatched?' star-btn--active':''}${!isPro?' star-btn--locked':''}`}
       title={isPro ? (isWatched?'Remove from watchlist':'Add to watchlist') : 'Pro feature — upgrade to track tickers'}
       onClick={e=>{e.stopPropagation();watchlist.toggle(ticker);}}>
-      {isWatched ? '★' : isPro ? '☆' : '☆'}
+      <svg viewBox="0 0 24 24" fill={isWatched?'currentColor':'none'} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+      </svg>
     </button>
   );
 }
@@ -925,7 +938,8 @@ function FollowBtn({ name, watchlist }) {
       className={`follow-btn${isFollowing?' follow-btn--active':''}${!isPro?' follow-btn--locked':''}`}
       title={isPro ? (isFollowing?'Unfollow insider':'Follow insider — get alerts on their trades') : 'Pro feature — upgrade to follow insiders'}
       onClick={e=>{e.stopPropagation();watchlist.toggleInsider(name);}}>
-      {isFollowing ? '● Following' : '○ Follow'}
+      <svg viewBox="0 0 24 24" fill={isFollowing?'currentColor':'none'} stroke="currentColor" strokeWidth={2} width="10" height="10" style={{marginRight:4,verticalAlign:'-1px'}}><circle cx="12" cy="12" r="9"/></svg>
+      {isFollowing ? 'Following' : 'Follow'}
     </button>
   );
 }
@@ -1294,7 +1308,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     return (
       <div className={`dp-trade dp-trade--${tt}`}>
         <div className="dp-trade-row1">
-          <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?'▲ Buy':tt==='sell'?'▼ Sell':'◆'}</Badge>
+          <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
           <span className="dp-trade-shares">{r.shares?`${fmt.number(r.shares)} sh`:'—'}</span>
           <span className="dp-trade-val">{r.value?fmt.money(r.value):<span className="td-muted">—</span>}</span>
           <span className="dp-trade-date">{dateLabel}</span>
@@ -1307,7 +1321,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             <span className="dp-trade-row2__price">
               <span className="dp-trade-row2__mono">@{fmt.price(pr)}</span>
               {ret!=null&&<span className={ret>=0?'val-buy':'val-sell'}> →{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span>}
-              {isForeign&&<span style={{color:'var(--amber-600)'}}> ⚠</span>}
+              {isForeign&&<span style={{color:'var(--amber-600)'}}> <IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
             </span>
           ) : (
             <span className="dp-trade-row2__noprice">{codeLabel}</span>
@@ -1321,7 +1335,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   };
 
   const header=()=>{
-    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual">⚠ entity</span>}</div>{traderStats?.title&&<div className="td-muted" style={{fontSize:11}}>{traderStats.title}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.title&&<div className="td-muted" style={{fontSize:11}}>{traderStats.title}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
     if(d.type==='ticker')return(
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
@@ -1346,8 +1360,8 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
         {canGoBack&&<button className="btn btn--ghost btn--icon" onClick={onBack} title="Back">←</button>}
         <div style={{minWidth:0,flex:1}}>{header()}</div>
         {!inline&&<button className="btn btn--ghost btn--icon" onClick={()=>setExpanded(e=>!e)} title={expanded?'Collapse':'Expand'}>{expanded?'⤢':'⤡'}</button>}
-        {!inline&&<button className="btn btn--ghost btn--icon" onClick={onClose}>✕</button>}
-        {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:11}} onClick={onClose} title="Clear">✕</button>}
+        {!inline&&<button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>}
+        {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:11}} onClick={onClose} title="Clear"><IconClose style={{width:12,height:12}}/></button>}
       </div>
       <div className="detail-panel__body">
 
@@ -1425,7 +1439,8 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                   <div className="position-card__id">
                     <span className="ticker dp-clickable" style={{fontSize:14}} onClick={()=>nav('ticker',{ticker:s.ticker,company:s.company})}>{s.ticker}</span>
                     <span className={`holding-status ${s.stillHolding?'holding-status--yes':'holding-status--no'}`}>
-                      {s.stillHolding?'● Holding':'○ Closed'}
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="7" height="7" style={{marginRight:3,verticalAlign:'-0.5px'}}><circle cx="12" cy="12" r="10"/></svg>
+                      {s.stillHolding?'Holding':'Closed'}
                     </span>
                   </div>
                   <span className="td-muted" style={{fontSize:10}}>{s.tradeCount} txn{s.tradeCount!==1?'s':''}</span>
@@ -1462,7 +1477,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                   <span title="Average days held across closed round-trips">⏱ {s.avgHoldDays!=null?`${s.avgHoldDays}d avg hold`:'hold time n/a'}</span>
                   <span title="Average days between trade date and SEC filing acceptance">◷ {s.avgFilingLag!=null?`${s.avgFilingLag}d filing lag`:'lag n/a'}</span>
                   <span className="position-card__source">
-                    {s.positionFlagged&&<span className="position-flagged-badge" title="SEC-reported figure looked implausible, fell back to estimate">⚠ flagged</span>}
+                    {s.positionFlagged&&<span className="position-flagged-badge" title="SEC-reported figure looked implausible, fell back to estimate"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>flagged</span>}
                     {!s.positionFlagged&&s.stillHolding?(s.positionSource==='sec-reported'?'SEC-reported':'OM est.'):''}
                   </span>
                 </div>
@@ -1561,10 +1576,10 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
           const ret=(pr&&cur&&pr>0&&!isForeign)?((cur-pr)/pr*100):null;
           return(<>
             <div className="dp-summary">
-              <div className="dp-sum-item"><span className="dp-sum-label">Type</span><Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?'▲ Buy':tt==='sell'?'▼ Sell':'◆'}</Badge></div>
+              <div className="dp-sum-item"><span className="dp-sum-label">Type</span><Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Value</span><span className="dp-sum-val">{fmt.money(t.value)}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Shares</span><span className="dp-sum-val">{fmt.number(t.shares)}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:10}}> ⚠ verify (3x+ move)</span>}</span></div>
+              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:10}}> <IconWarning style={{width:9,height:9,display:'inline',verticalAlign:'-1px'}}/> verify (3x+ move)</span>}</span></div>
               {ret!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Now</span><span className={`dp-sum-val ${ret>=0?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span></div>}
               {(t.pctOwnedChange||t.pct_owned_change)!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Pos Δ</span><span className="dp-sum-val val-buy">+{(t.pctOwnedChange||t.pct_owned_change).toFixed(1)}%</span></div>}
             </div>
@@ -1908,7 +1923,7 @@ function PortfolioTickerNews({ tickers }) {
   },[tickerKey,hasKey]);
 
   if (!tickers.length) return null;
-  if (!hasKey) return <div className="port-block__empty">Add FINNHUB_API_KEY to config.js for live news.</div>;
+  if (!hasKey) return <div className="port-block__empty">News unavailable right now.</div>;
   if (loading) return <div style={{padding:'8px 0',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>;
   if (!news.length) return <div className="port-block__empty">No recent news for your holdings</div>;
   return (
@@ -1949,7 +1964,7 @@ function PortfolioSection({ filings, cutoff, onOpenDetail }) {
     return Object.values(byTicker).map(t=>({...t, insiderCount:t.insiders.size}));
   },[filings,cutoff,posSymbols.join(',')]);
 
-  if (err) return <div className="dp-placeholder" style={{padding:'1rem'}}><span style={{fontSize:18}}>⚠</span><p style={{fontSize:11}}>Could not load Alpaca — check Worker secrets and redeploy.</p></div>;
+  if (err) return <div className="dp-placeholder" style={{padding:'1rem'}}><IconWarning style={{width:18,height:18}}/><p style={{fontSize:11}}>Portfolio linking isn't available right now.</p></div>;
   if (!port) return <div style={{padding:'1.5rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>;
 
   const acct=port.account||{};
@@ -2080,7 +2095,7 @@ function MarketNews() {
       .then(a=>{ setNews((a||[]).filter(n=>n.headline&&n.url).slice(0,12)); setLoading(false); })
       .catch(()=>setLoading(false));
   },[hasKey]);
-  if (!hasKey) return <div className="dp-placeholder" style={{padding:'1rem'}}><p style={{fontSize:11}}>Add <code>FINNHUB_API_KEY</code> to config.js for live headlines.</p></div>;
+  if (!hasKey) return <div className="dp-placeholder" style={{padding:'1rem'}}><p style={{fontSize:11}}>No headlines available right now.</p></div>;
   if (loading) return <div style={{padding:'1.5rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>;
   if (!news.length) return <div style={{padding:'1rem',fontSize:12,color:'var(--text-3)'}}>No headlines available right now</div>;
   return (
@@ -2194,7 +2209,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail }) {
                         <div className="dash-sig-item__row1">
                           <span className="ticker" style={{fontSize:13,fontWeight:700}}>{s.ticker}</span>
                           {s.cSuiteBuys>0&&<span className="csuite-badge">{s.cSuiteBuys}×</span>}
-                          {hasReversal&&<span className="reversal-badge" title="An insider on this ticker recently changed direction — previously buying, now selling (or vice versa). May signal a shift in insider sentiment.">↺ reversal</span>}
+                          {hasReversal&&<span className="reversal-badge" title="An insider on this ticker recently changed direction — previously buying, now selling (or vice versa). May signal a shift in insider sentiment."><IconReversal className="reversal-badge__icon"/>reversal</span>}
                           <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                         </div>
                         <div className="dash-sig-item__row2">
@@ -2312,7 +2327,8 @@ function detectReversals(filings) {
 }
 
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
-function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail }) {
+function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow }) {
+  const pro = isPro(user);
   const watchlist = useWatchlist();
   const [days, setDays] = useState(7);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
@@ -2416,6 +2432,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 ))}
               </div>
             </div>
+            <div className="drawer__toolbar-divider"/>
             <div className="ins-filter-group">
               <span className="ins-filter-group__label">Strength</span>
               <div className="ins-strength-pills">
@@ -2428,6 +2445,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 ))}
               </div>
             </div>
+            <div className="drawer__toolbar-divider"/>
             <div className="ins-filter-group">
               <span className="ins-filter-group__label">Type</span>
               <select className="ins-filter-select" value={sourceF} onChange={e=>setSourceF(e.target.value)}>
@@ -2436,6 +2454,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 <option value="political">Congressional only</option>
               </select>
             </div>
+            <div className="drawer__toolbar-divider"/>
             <div className="ins-filter-group">
               <span className="ins-filter-group__label">Sector</span>
               <select className="ins-filter-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
@@ -2443,7 +2462,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 {sectors.map(s=><option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-            <span className="td-muted ins-filter-count">{signals.length} signals</span>
+            <span className="td-muted ins-filter-count">
+              {signals.length} signals
+              {!pro&&<span className="free-tier-inline"> · free plan: last 12mo only</span>}
+            </span>
             {!filtersAreDefault&&(
               <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
             )}
@@ -2481,7 +2503,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                       <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
                         <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
                         {s.isPolitical&&<span className="badge badge--src-congress">Congress</span>}
-                        {hasReversal&&<span className="reversal-badge" title="Insider recently changed direction — may signal shift in sentiment">↺</span>}
+                        {hasReversal&&<span className="reversal-badge" title="Insider recently changed direction — may signal shift in sentiment"><IconReversal className="reversal-badge__icon"/></span>}
                         <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                       </div>
                       <div className="ins-sig-row__co">{s.company}</div>
@@ -2539,6 +2561,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           initialDetail={modalInitial}
           onClose={()=>{setModal(null);setModalInitial(null);}}
           sigSort={sigSort} sigDir={sigDir} sigOnSort={sigOnSort}
+          ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading}
         />
       )}
       {portModal&&(
@@ -2559,7 +2582,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // Clicking any row in the left pane drives the right pane without closing.
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
-function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail }) {
+function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, ensureFilingsWindow, filingsLoading }) {
   const watchlist = useWatchlist();
 
   // ── left pane state ──────────────────────────────────────────────────────
@@ -2681,7 +2704,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
             <span className="drawer__title">
               {type==='signals' ? 'Insider Signals' : 'Top Insiders'}
             </span>
-            <button className="modal-close" onClick={onClose} title="Close (Esc)">✕</button>
+            <button className="modal-close" onClick={onClose} title="Close (Esc)"><IconClose style={{width:12,height:12}}/></button>
           </div>
 
           {/* Row 2 — one unified toolbar. Search is a filter like any other,
@@ -2720,7 +2743,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                 <div className="dash-tile-pills" style={{gap:2}}>
                   {[{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
                     <button key={o.l} className={`dash-tile-pill${daysBack===o.v?' dash-tile-pill--active':''}`}
-                      onClick={()=>setDaysBack(o.v)}>{o.l}</button>
+                      onClick={()=>{setDaysBack(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
                   ))}
                 </div>
               </div>
@@ -2796,7 +2819,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
             {type==='signals'&&(
               <>
                 <div className="drawer__list-hdr">
-                  <span>{filteredSignals.length} signals</span>
+                  <span>{filteredSignals.length} signals{filingsLoading&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>loading more…</span>}</span>
                   <div className="dash-sig-sort" style={{marginLeft:'auto',gap:2}}>
                     {[['conviction','Conv'],['netValue','Net $'],['cSuiteBuys','Exec'],['lastTradeDate','Recent']].map(([k,l])=>(
                       <button key={k} className={`dash-sort-btn${sigSort===k?' dash-sort-btn--active':''}`} onClick={()=>sigOnSort(k)}>
@@ -3059,7 +3082,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose }) {
             <div className="port-ds"><span className="port-ds__label">Buying power</span><span className="port-ds__val">{fmt.money(bp)}</span></div>
             <span className="td-muted" style={{fontSize:10,padding:'0 4px'}}>{cfg.ALPACA_LIVE?'Live':'Paper'}</span>
           </>}
-          <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}>✕</button>
+          <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
         </div>
 
         <div className="drawer__body">
@@ -3130,7 +3153,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose }) {
                         <div key={i} className="drawer__list-row"
                           onClick={()=>{ setSelected(ticker); setDetail({type:'ticker',ticker,company:''}); setDetailStack([]); setTab('positions'); }}>
                           <div className="drawer__list-row__main">
-                            <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?'▲':'▼'}</Badge>
+                            <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?<IconBuyTri style={{width:8,height:8}}/>:<IconSellTri style={{width:8,height:8}}/>}</Badge>
                             <span style={{fontSize:11,fontWeight:500,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName}</span>
                             <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</span>
                           </div>
@@ -3204,7 +3227,7 @@ function InsightsPortfolioPanel({ filings, cutoff, days, onOpenDetail }) {
   if (err) return (
     <div className="ins-sig-panel">
       <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Your portfolio</span></div>
-      <div className="ins-empty">⚠ Could not load Alpaca — check Worker secrets.</div>
+      <div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Portfolio linking isn't available right now.</div>
     </div>
   );
 
@@ -3276,7 +3299,7 @@ function InsightsPortfolioPanel({ filings, cutoff, days, onOpenDetail }) {
                       <div style={{fontSize:11,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName}</div>
                       <div className="td-muted" style={{fontSize:10}}>{f.title||f.relationship}</div>
                     </div>
-                    <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?'▲ Buy':'▼ Sell'}</Badge>
+                    <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>}</Badge>
                     <div style={{textAlign:'right',flexShrink:0}}>
                       <div className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</div>
                       <div className="td-muted" style={{fontSize:10}}>{fmt.dateShort(f.transactionDate||f.date)}</div>
@@ -3406,7 +3429,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
 
   return (
     <div className="ins-lb-list-wrap">
-      {error?<div className="ins-empty">⚠ {error}</div>
+      {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
       :rows===null?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
       :rows.length===0?<div className="ins-empty">Not enough data yet</div>
       :<div className="ins-lb-list">
@@ -3545,7 +3568,7 @@ function InsightsSectorChart({ filings, days }) {
               {(!sq.loaded)&&<div className="td-muted" style={{fontSize:10}}>…</div>}
               {view==='market'&&sq.secNet!=null&&(
                 <div className={`ins-sector-sq__sec ${sq.secNet>=0?'val-buy':'val-sell'}`} title="Insider net flow">
-                  {sq.secNet>=0?'▲':'▼'}{fmt.money(Math.abs(sq.secNet))} insiders
+                  {sq.secNet>=0?<IconBuyTri style={{width:9,height:9}}/>:<IconSellTri style={{width:9,height:9}}/>}{fmt.money(Math.abs(sq.secNet))} insiders
                 </div>
               )}
             </div>
@@ -3655,7 +3678,7 @@ function InsightsSnapshot({ filings, loading, onOpenDetail, onGoTo }) {
               <span style={{fontSize:12,flex:1}}>{s.sector}</span>
               <span className="td-muted" style={{fontSize:10,marginRight:8}}>{s.insider_count} insiders</span>
               <span className={`td-mono snapshot-sector-val ${s.net_value>=0?'val-buy':'val-sell'}`}>
-                {s.net_value>=0?'▲':'▼'} {fmt.money(Math.abs(s.net_value))}
+                {s.net_value>=0?<IconBuyTri style={{width:9,height:9}}/>:<IconSellTri style={{width:9,height:9}}/>} {fmt.money(Math.abs(s.net_value))}
               </span>
             </div>
           ))}
@@ -3786,56 +3809,65 @@ async function proxySQL(sql) {
 }
 
 function FilterPanel({
-  open, sectors,
+  sectors,
   openMkt, setOpenMkt, fromPortfolio, setFromPortfolio,
   sectorF, setSectorF, sourceF, setSourceF,
   relF, setRelF, typeF, setTypeF,
 }) {
-  if (!open) return null;
   return (
-    <div className="fp-panel fp-panel--floating">
-      <div className="fp-section">
-        <div className="fp-section-label">Quick Filters</div>
-        <label className="fp-check">
-          <input type="checkbox" checked={openMkt} onChange={e=>setOpenMkt(e.target.checked)}/>
-          Open market only
-        </label>
-        <label className="fp-check">
-          <input type="checkbox" checked={fromPortfolio} onChange={e=>setFromPortfolio(e.target.checked)}/>
-          From my portfolio
-        </label>
+    <div className="ins-filter-row">
+      <div className="ins-filter-group">
+        <span className="ins-filter-group__label">Quick</span>
+        <div style={{display:'flex',gap:12}}>
+          <label className="fp-check">
+            <input type="checkbox" checked={openMkt} onChange={e=>setOpenMkt(e.target.checked)}/>
+            Open market
+          </label>
+          <label className="fp-check">
+            <input type="checkbox" checked={fromPortfolio} onChange={e=>setFromPortfolio(e.target.checked)}/>
+            My portfolio
+          </label>
+        </div>
       </div>
 
-      <div className="fp-section">
-        <div className="fp-section-label">Source</div>
-        <div className="fp-pills">
+      <div className="drawer__toolbar-divider"/>
+
+      <div className="ins-filter-group">
+        <span className="ins-filter-group__label">Source</span>
+        <div className="dash-tile-pills">
           {[['','All'],['corporate','Corporate'],['political','Political']].map(([v,l])=>(
-            <button key={v} className={`fp-pill${sourceF===v?' fp-pill--active':''}`} onClick={()=>setSourceF(v)}>{l}</button>
+            <button key={v} className={`dash-tile-pill${sourceF===v?' dash-tile-pill--active':''}`} onClick={()=>setSourceF(v)}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div className="fp-section">
-        <div className="fp-section-label">Role</div>
-        <div className="fp-pills">
+      <div className="drawer__toolbar-divider"/>
+
+      <div className="ins-filter-group">
+        <span className="ins-filter-group__label">Role</span>
+        <div className="dash-tile-pills">
           {[['','All'],['strong','C-Suite'],['medium','Officer'],['weak','Director']].map(([v,l])=>(
-            <button key={v} className={`fp-pill${relF===v?' fp-pill--active':''}`} onClick={()=>setRelF(v)}>{l}</button>
+            <button key={v} className={`dash-tile-pill${relF===v?' dash-tile-pill--active':''}`} onClick={()=>setRelF(v)}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div className="fp-section">
-        <div className="fp-section-label">Transaction Type</div>
-        <div className="fp-pills">
+      <div className="drawer__toolbar-divider"/>
+
+      <div className="ins-filter-group">
+        <span className="ins-filter-group__label">Type</span>
+        <div className="dash-tile-pills">
           {[['','All'],['buy','Buy'],['sell','Sell'],['other','Other']].map(([v,l])=>(
-            <button key={v} className={`fp-pill${typeF===v?' fp-pill--active':''}`} onClick={()=>setTypeF(v)}>{l}</button>
+            <button key={v} className={`dash-tile-pill${typeF===v?' dash-tile-pill--active':''}`} onClick={()=>setTypeF(v)}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div className="fp-section">
-        <div className="fp-section-label">Sector</div>
-        <select value={sectorF} onChange={e=>setSectorF(e.target.value)} style={{width:'100%'}}>
+      <div className="drawer__toolbar-divider"/>
+
+      <div className="ins-filter-group">
+        <span className="ins-filter-group__label">Sector</span>
+        <select className="ins-filter-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
           <option value="">All sectors</option>
           {sectors.map(s=><option key={s} value={s}>{s}</option>)}
         </select>
@@ -3866,7 +3898,6 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   const [dateFrom,setDateFrom]= useState('');
   const [dateTo,  setDateTo]  = useState('');
 
-  const [filterOpen, setFilterOpen] = useState(false);
   const [sortKey, setSortKey] = useState('transaction_date');
   const [sortDir, setSortDir] = useState(-1);
 
@@ -3879,8 +3910,10 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   function where() {
     const c=[];
     const ef=dateFrom||(dPreset!=null?(()=>{const d=new Date();d.setDate(d.getDate()-dPreset);return d.toISOString().split('T')[0];})():null);
-    if (ef)     c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
-    if (dateTo) c.push(`COALESCE(transaction_date,filing_date)<='${dateTo}'`);
+    const et=dateTo||new Date().toISOString().split('T')[0]; // always clamp to today unless user picks a later date themselves
+    if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
+    c.push(`COALESCE(transaction_date,filing_date)>='2021-01-01'`); // hard floor regardless — matches edgar.js, covers the 'All' preset which otherwise has no lower bound at all
+    c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
     if (typeF)  c.push(`transaction_type='${typeF}'`);
     if (relF)   c.push(`relationship='${relF}'`);
     if (sectorF)c.push(`sector='${sectorF.replace(/'/g,"''")}'`);
@@ -3905,7 +3938,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   }
 
   async function fetchPg(p) {
-    if (!cfg.NEON_PROXY_URL){setError('NEON_PROXY_URL not set');return;}
+    if (!cfg.NEON_PROXY_URL){setError('Unable to connect right now — try refreshing the page.');return;}
     setLoading(true);setError(null);
     try {
       const w=where();
@@ -3964,7 +3997,10 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   return (
     <div className="page-content">
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,gap:12}}>
-        <p className="page-sub" style={{margin:0}}>{total!=null?`${total.toLocaleString()} filings matching filters · ${DATA_PAGE}/page`:'Loading…'}</p>
+        <p className="page-sub" style={{margin:0}}>
+          {total!=null?`${total.toLocaleString()} filings matching filters · ${DATA_PAGE}/page`:'Loading…'}
+          {!pro&&<span className="free-tier-inline"> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={onUpgrade}>upgrade</button> for full history</span>}
+        </p>
         <button className="btn btn--primary" onClick={pro ? doExport : onUpgrade} disabled={exporting}>
           {exporting
             ? (<><span className="spinner" style={{width:13,height:13,borderWidth:2,marginRight:6}}/>Exporting…</>)
@@ -3974,10 +4010,10 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
         </button>
       </div>
 
-      <div className="filter-row">
+      <div className="data-toolbar">
         <div className="filter-bar filter-bar--wrap">
           <div className="search-wrap">
-            <span className="search-icon">⌕</span>
+            <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="search" placeholder="Ticker, insider, company… (Enter)"
               value={searchInput} onChange={e=>setSearchInput(e.target.value)}
               onKeyDown={e=>e.key==='Enter'&&setSearch(searchInput)}/>
@@ -3985,6 +4021,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           <div className="date-pills">
             {DATA_DATE_PRESETS.map(p=>(
               <button key={p.l} className={`pill${dPreset===p.d&&!dateFrom?' pill--active':''}`}
+                title={p.l==='All'&&!pro?'Free plan is still capped at the last 12 months — Pro unlocks true full history':undefined}
                 onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>
                 {p.l}</button>
             ))}
@@ -3993,29 +4030,23 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           <span style={{color:'var(--text-3)',fontSize:12}}>→</span>
           <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
         </div>
-        <div className="fp-anchor">
-          <button className={`fp-toggle${activeFilterCount?' fp-toggle--active':''}`} onClick={()=>setFilterOpen(o=>!o)}>
-            <span>☰ Filters{activeFilterCount?` (${activeFilterCount})`:''}</span>
-            <span className="fp-toggle-icon">{filterOpen?'×':'›'}</span>
-          </button>
-          <FilterPanel
-            open={filterOpen}
-            sectors={sectors}
-            openMkt={openMkt} setOpenMkt={setOpenMkt}
-            fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
-            sectorF={sectorF} setSectorF={setSectorF}
-            sourceF={sourceF} setSourceF={setSourceF}
-            relF={relF} setRelF={setRelF}
-            typeF={typeF} setTypeF={setTypeF}
-          />
-        </div>
+
+      <FilterPanel
+        sectors={sectors}
+        openMkt={openMkt} setOpenMkt={setOpenMkt}
+        fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
+        sectorF={sectorF} setSectorF={setSectorF}
+        sourceF={sourceF} setSourceF={setSourceF}
+        relF={relF} setRelF={setRelF}
+        typeF={typeF} setTypeF={setTypeF}
+      />
       </div>
 
       <div className="data-layout">
         <div className="data-main">
-          {error?<div className="state-box state-box--error"><p>⚠ {error}</p></div>
+          {error?<div className="state-box state-box--error"><p><IconWarning style={{width:14,height:14,marginRight:4,verticalAlign:"-2px"}}/>{error}</p></div>
           :loading?<div className="state-box"><Spinner/><p>Loading…</p></div>
-          :rows.length===0?<div className="state-box"><div>◎</div><p>No filings match these filters.</p></div>
+          :rows.length===0?<div className="state-box"><IconEmpty style={{width:28,height:28,color:"var(--text-3)"}}/><p>No filings match these filters.</p></div>
           :<div className="table-wrap">
             <table>
               <thead><tr>
@@ -4062,7 +4093,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                       </td>
                       <td>
                         <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>
-                          {tt==='buy'?'▲ Buy':tt==='sell'?'▼ Sell':'◆ Other'}
+                          {tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆ Other'}
                         </Badge>
                         {r.transaction_code&&<div className="code-pill-sm" title={TX_CODE_TOOLTIPS[r.transaction_code]||r.transaction_code}>{r.transaction_code}</div>}
                       </td>
@@ -4106,7 +4137,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
 // ─── PORTFOLIO ────────────────────────────────────────────────────────────────
 function EquityCurve({ history }) {
   if (!history||!history.equity||!history.timestamp)
-    return <div className="state-box"><div>◎</div><p>No equity history available.</p></div>;
+    return <div className="state-box"><IconEmpty style={{width:28,height:28,color:"var(--text-3)"}}/><p>No equity history available.</p></div>;
   const equity=history.equity.filter(v=>v!=null);
   const ts=history.timestamp.slice(-equity.length);
   if (equity.length<2) return <div className="state-box"><p>Not enough data yet.</p></div>;
@@ -4202,7 +4233,7 @@ function PortfolioSuggestions({ filings, ownedTickers, onOpenDetail }) {
 // ─── WATCHLIST PAGE ───────────────────────────────────────────────────────────
 // Shows all recent insider activity for tickers the user has starred.
 // Entirely localStorage-backed — no auth needed.
-function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
+function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow }) {
   const [days, setDays] = useState(30);
   const [tab, setTab]   = useState('tickers');
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
@@ -4231,14 +4262,13 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
 
   return (
     <div className="page-content">
-      <div className="wl-header">
-        <div>
-          <h2 className="page-title">Watchlist</h2>
-          <p className="page-sub">
-            {watchedTickers.length} ticker{watchedTickers.length!==1?'s':''} · {watchedInsiders.length} insider{watchedInsiders.length!==1?'s':''} tracked
-          </p>
-        </div>
-        <div className="wl-header__right">
+      <div className="wl-toolbar">
+        <p className="page-sub" style={{margin:0}}>
+          {watchedTickers.length} ticker{watchedTickers.length!==1?'s':''} · {watchedInsiders.length} insider{watchedInsiders.length!==1?'s':''} tracked
+        </p>
+        <div className="drawer__toolbar-divider" style={{alignSelf:'stretch',margin:0}}/>
+        <div className="ins-filter-group">
+          <span className="ins-filter-group__label">View</span>
           <div className="settings-tabs">
             <button className={`settings-tab${tab==='tickers'?' settings-tab--active':''}`} onClick={()=>setTab('tickers')}>
               Tickers {watchedTickers.length>0&&<span className="wl-tab-count">{watchedTickers.length}</span>}
@@ -4247,9 +4277,13 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
               Insiders {watchedInsiders.length>0&&<span className="wl-tab-count">{watchedInsiders.length}</span>}
             </button>
           </div>
+        </div>
+        <div className="drawer__toolbar-divider" style={{alignSelf:'stretch',margin:0}}/>
+        <div className="ins-filter-group">
+          <span className="ins-filter-group__label">Window</span>
           <div className="dash-tile-pills">
             {[7,30,90].map(d=>(
-              <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>setDays(d)}>{d}d</button>
+              <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>{setDays(d);ensureFilingsWindow&&ensureFilingsWindow(d);}}>{d}d</button>
             ))}
           </div>
         </div>
@@ -4258,9 +4292,9 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
       {tab==='insiders' ? (
         watchedInsiders.length===0 ? (
           <div className="wl-empty">
-            <div className="wl-empty__icon">○</div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} width="40" height="40" style={{color:'var(--text-3)'}}><circle cx="12" cy="12" r="9"/></svg>
             <div className="wl-empty__title">No insiders followed yet</div>
-            <div className="wl-empty__sub">Click "○ Follow" on any insider in the leaderboard or trader profile to track their activity here.</div>
+            <div className="wl-empty__sub">Click "Follow" on any insider in the leaderboard or trader profile to track their activity here.</div>
           </div>
         ) : (
           <div className="wl-body">
@@ -4268,7 +4302,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
               {watchedInsiders.map(n=>(
                 <div key={n} className="wl-chip">
                   <span className="wl-chip__name" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:n,title:''})}>{n}</span>
-                  <button className="wl-chip__remove" onClick={()=>watchlist.toggleInsider(n)} title="Unfollow">✕</button>
+                  <button className="wl-chip__remove" onClick={()=>watchlist.toggleInsider(n)} title="Unfollow"><IconClose style={{width:12,height:12}}/></button>
                 </div>
               ))}
             </div>
@@ -4281,7 +4315,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
                   <div key={i} className="wl-trade-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:f.insiderName,title:f.title})}>
                     <span className="td-muted" style={{fontSize:11,minWidth:90}}>{f.insiderName?.split(' ').slice(-1)[0]}</span>
                     <span className="ticker" style={{fontSize:12}}>{f.ticker}</span>
-                    <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?'▲':'▼'}</Badge>
+                    <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?<IconBuyTri style={{width:8,height:8}}/>:<IconSellTri style={{width:8,height:8}}/>}</Badge>
                     <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</span>
                     <span className="td-muted" style={{fontSize:10}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
                   </div>
@@ -4291,7 +4325,11 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
         )
       ) : watchedTickers.length===0 ? (
         <div className="wl-empty">
-          <div className="wl-empty__icon">☆</div>
+          <div className="wl-empty__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" width="40" height="40">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
           <div className="wl-empty__title">No tickers watched yet</div>
           <div className="wl-empty__sub">Click the ☆ star on any ticker in Insights, the detail panel, or All Data to start tracking it here.</div>
         </div>
@@ -4302,7 +4340,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
             {watchedTickers.map(t=>(
               <div key={t} className="wl-chip">
                 <span className="ticker" style={{fontSize:13}} onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:t,company:''})}>{t}</span>
-                <button className="wl-chip__remove" onClick={()=>watchlist.toggle(t)} title="Remove">✕</button>
+                <button className="wl-chip__remove" onClick={()=>watchlist.toggle(t)} title="Remove"><IconClose style={{width:12,height:12}}/></button>
               </div>
             ))}
           </div>
@@ -4346,7 +4384,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist }) {
                 <div key={i} className="wl-trade-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company})}>
                   <span className="ticker" style={{fontSize:12}}>{f.ticker}</span>
                   <span className="td-muted" style={{flex:1,fontSize:11}}>{f.insiderName} <span className="td-muted" style={{fontSize:10}}>({f.relationship==='strong'?'C-Suite':f.relationship==='medium'?'Officer':'Dir'})</span></span>
-                  <Badge type={f.transactionType==='buy'?'buy':f.transactionType==='sell'?'sell':'other'}>{f.transactionType==='buy'?'▲':'▼'}</Badge>
+                  <Badge type={f.transactionType==='buy'?'buy':f.transactionType==='sell'?'sell':'other'}>{f.transactionType==='buy'?<IconBuyTri style={{width:8,height:8}}/>:<IconSellTri style={{width:8,height:8}}/>}</Badge>
                   <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</span>
                   <span className="td-muted" style={{fontSize:10}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
                 </div>
@@ -4370,7 +4408,7 @@ function PortfolioPage({ filings, onOpenDetail }) {
   const isPaper = !(cfg && cfg.ALPACA_LIVE);
 
   async function load() {
-    if (!cfg.NEON_PROXY_URL){setError('NEON_PROXY_URL not set');setLoading(false);return;}
+    if (!cfg.NEON_PROXY_URL){setError('Unable to connect right now — try refreshing the page.');setLoading(false);return;}
     setLoading(true);setError(null);
     try {
       const base=cfg.NEON_PROXY_URL;
@@ -4400,9 +4438,9 @@ function PortfolioPage({ filings, onOpenDetail }) {
     <div className="page-content">
       <div className="page-header"><h2 className="page-title">Portfolio</h2></div>
       <div className="state-box state-box--error">
-        <div>⚠</div><p>{error}</p>
+        <IconWarning style={{width:20,height:20}}/><p>{error}</p>
         <p style={{fontSize:12,opacity:.7,marginTop:6}}>
-          Check that ALPACA_KEY and ALPACA_SECRET are set as Cloudflare Worker secrets, then re-deploy.
+          Portfolio linking isn't available right now — we're working on it.
         </p>
         <button className="btn btn--primary" onClick={load} style={{marginTop:10}}>Retry</button>
       </div>
@@ -4457,7 +4495,7 @@ function PortfolioPage({ filings, onOpenDetail }) {
 
       {ptab==='positions'&&(
         pos.length===0?(
-          <div className="state-box"><div>◎</div><p>No open positions.{isPaper?' Paper trading account.':''}</p></div>
+          <div className="state-box"><IconEmpty style={{width:28,height:28,color:"var(--text-3)"}}/><p>No open positions.{isPaper?' Paper trading account.':''}</p></div>
         ):(
           <div className="table-wrap">
             <table>
@@ -4499,7 +4537,7 @@ function PortfolioPage({ filings, onOpenDetail }) {
       {ptab==='history'&&<EquityCurve history={history}/>}
       {ptab==='orders'&&(
         !orders||orders.length===0?(
-          <div className="state-box"><div>◎</div><p>No recent orders.</p></div>
+          <div className="state-box"><IconEmpty style={{width:28,height:28,color:"var(--text-3)"}}/><p>No recent orders.</p></div>
         ):(
           <div className="table-wrap">
             <table>
@@ -4512,7 +4550,7 @@ function PortfolioPage({ filings, onOpenDetail }) {
                 {orders.map((o,i)=>(
                   <tr key={i} className={o.side==='buy'?'row-buy':'row-sell'}>
                     <td><span className="ticker">{o.symbol}</span></td>
-                    <td><Badge type={o.side==='buy'?'buy':'sell'}>{o.side==='buy'?'▲ Buy':'▼ Sell'}</Badge></td>
+                    <td><Badge type={o.side==='buy'?'buy':'sell'}>{o.side==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>}</Badge></td>
                     <td className="td-muted">{o.type}</td>
                     <td className="td-right td-mono">{parseFloat(o.filled_qty||0)}/{parseFloat(o.qty||0)}</td>
                     <td className="td-right td-mono">{o.filled_avg_price?fmt.price(parseFloat(o.filled_avg_price)):'—'}</td>
@@ -4778,9 +4816,9 @@ function SettingsPage({ user, onUpgrade }) {
 
   const SECTIONS = [
     {id:'billing',  label:'Billing',        icon:'$'},
-    {id:'digests',  label:'Email digests',  icon:'✉'},
-    {id:'instant',  label:'Instant alerts', icon:'⚡'},
-    {id:'brokers',  label:'Connections',    icon:'⛓'},
+    {id:'digests',  label:'Email digests',  Icon:IconMail},
+    {id:'instant',  label:'Instant alerts', Icon:IconZap},
+    {id:'brokers',  label:'Connections',    Icon:IconLink},
   ];
 
   return (
@@ -4793,7 +4831,7 @@ function SettingsPage({ user, onUpgrade }) {
             <button key={s.id}
               className={`settings-sidenav__item${section===s.id?' settings-sidenav__item--active':''}`}
               onClick={()=>setSection(s.id)}>
-              <span className="settings-sidenav__icon">{s.icon}</span>
+              <span className="settings-sidenav__icon">{s.Icon ? <s.Icon style={{width:14,height:14}}/> : s.icon}</span>
               {s.label}
             </button>
           ))}
@@ -4905,8 +4943,8 @@ function SettingsPage({ user, onUpgrade }) {
                   <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
                     {saving?'Saving…':saved?'✓ Saved':'Save digest settings'}
                   </button>
-                  {saved&&<span className="settings-saved-msg">✓ Saved</span>}
-                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}>⚠ {error}</span>}
+                  {saved&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Saved</span>}
+                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
                   {!pro&&<button className="settings-section__lock" onClick={onUpgrade}>Upgrade to Pro to save</button>}
                 </div>
               </>)}
@@ -4967,8 +5005,8 @@ function SettingsPage({ user, onUpgrade }) {
                   <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
                     {saving?'Saving…':saved?'✓ Saved':'Save alert settings'}
                   </button>
-                  {saved&&<span className="settings-saved-msg">✓ Saved</span>}
-                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}>⚠ {error}</span>}
+                  {saved&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Saved</span>}
+                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
                   {!pro&&<button className="settings-section__lock" onClick={onUpgrade}>Upgrade to Pro to save</button>}
                 </div>
               </>)}
@@ -5055,7 +5093,7 @@ function LandingPage({ onEnter, dark, setDark }) {
         </div>
         <div className="lp-nav__actions">
           <button className="lp-btn-ghost" onClick={()=>setDark(d=>!d)} title="Toggle theme">
-            {dark?'○':'●'}
+            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
           </button>
           <SignedOut>
             <SignInButton mode="modal">
@@ -5190,7 +5228,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-price-card__desc">Start tracking insider moves today. No card required.</div>
             <ul className="lp-price-card__features">
               {['Dashboard & sector heatmap','7-day signal window','Top insiders leaderboard','Corporate + congressional trades','Form 4 data table'].map(f=>(
-                <li key={f}><span className="lp-check">✓</span>{f}</li>
+                <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
             <SignedOut>
@@ -5209,7 +5247,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-price-card__desc">For investors who need to act before the market catches up.</div>
             <ul className="lp-price-card__features">
               {['Everything in Free','Full historical data (2021→present)','Email alerts — instant or digest','Custom alert filters (conviction, sector)','Portfolio reversal notifications','Brokerage connection (Alpaca, more)','CSV export','Deep-dive explorer'].map(f=>(
-                <li key={f}><span className="lp-check">✓</span>{f}</li>
+                <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
             <SignedOut>
@@ -5315,18 +5353,36 @@ export default function App() {
   const [portfolioTickers, setPortfolioTickers] = useState([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
+  // How far back the currently-loaded `filings` array actually covers.
+  // null = as wide as this user's plan allows (server enforces the real
+  // ceiling — free capped at 1yr, Pro unbounded — client doesn't need to
+  // know which plan it is, it just asks and the server clamps correctly).
+  const [filingsWindowDays, setFilingsWindowDays] = useState(90);
+
   // enterApp now triggers Clerk sign-in via SignInButton — kept for
   // compatibility with LandingPage's onEnter prop
   function enterApp() {}
 
-  const load = useCallback(async()=>{
+  const load = useCallback(async(daysBack)=>{
     setLoading(true);setError(null);
-    try{const d=await loadFilings();setFilings(d);}
+    try{const d=await loadFilings(daysBack);setFilings(d);}
     catch(e){setError(e.message);}
     finally{setLoading(false);}
   },[]);
 
-  useEffect(()=>{load();},[load]);
+  useEffect(()=>{load(filingsWindowDays);},[]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Called by any component whose own time-range control lets a user pick
+  // something wider than what's currently loaded (e.g. Explore drawer's
+  // 90d/All, Watchlist's 90d). Only re-fetches if the request is actually
+  // wider than what's already in memory — narrower selections just filter
+  // the existing array client-side, same as before, no network call.
+  function ensureFilingsWindow(daysBack) {
+    const requestedWider = daysBack == null || (filingsWindowDays != null && daysBack > filingsWindowDays);
+    if (!requestedWider) return;
+    setFilingsWindowDays(daysBack);
+    load(daysBack);
+  }
 
   // Most recent filing date in the loaded dataset — shown in status bar so
   // users know immediately whether the data is fresh (especially on Monday mornings
@@ -5400,7 +5456,7 @@ export default function App() {
               return (
                 <span className={stale?'status-bar__stale':''} title={stale?`Data through ${lastFilingDate} — may be behind`:`Data current through ${lastFilingDate}`}>
                   <span className="status-bar__dot" style={stale?{background:'var(--amber-600)'}:{}}/>
-                  {stale?`⚠ Data through ${fmt.dateShort(lastFilingDate)}`:`Through ${fmt.dateShort(lastFilingDate)}`}
+                  {stale?<><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{`Data through ${fmt.dateShort(lastFilingDate)}`}</>:`Through ${fmt.dateShort(lastFilingDate)}`}
                 </span>
               );
             })()}
@@ -5431,10 +5487,11 @@ export default function App() {
           {page==='signals'  &&<InsightsPage   filings={filings} loading={loading}
             highlightTicker={hlTicker} setHighlightTicker={setHlTick}
             onSelectSignal={selectSignal} selectedSignal={selSignal}
-            onOpenDetail={openDetail} onCloseDetail={closeDetail}/>}
+            onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user}
+            ensureFilingsWindow={ensureFilingsWindow}/>}
           {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>}
           {page==='settings'  &&<SettingsPage user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>}
-          {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist}/>}
+          {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow}/>}
         </div>
         <footer className="footer">
           <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>

@@ -73,7 +73,20 @@ async function getAuthHeaders() {
 }
 
 // ── Main data fetch ───────────────────────────────────────────────────────────
-async function fetchFromNeon() {
+async function fetchFromNeon(daysBack = 90) {
+  // daysBack=null means "as wide as this user's plan allows" — the server
+  // already clamps free users to 1 year (see neon-proxy.js's handleQuery),
+  // so the client doesn't need to know the plan; it just asks for what the
+  // UI wants and the server enforces the real ceiling. The historical floor
+  // below (2021-01-01) is the absolute earliest data in the DB, not a plan
+  // limit — that's enforced server-side regardless of what's requested here.
+  let floorDate = '2021-01-01';
+  if (daysBack != null) {
+    const d = new Date();
+    d.setDate(d.getDate() - daysBack);
+    floorDate = d.toISOString().split('T')[0];
+  }
+
   const sql = `
     SELECT
       accession_number,
@@ -101,11 +114,12 @@ async function fetchFromNeon() {
       relationship,
       footnotes
     FROM public.filings
-    WHERE COALESCE(transaction_date, filing_date) >= '2021-01-01'
+    WHERE COALESCE(transaction_date, filing_date) >= '${floorDate}'
+      AND COALESCE(transaction_date, filing_date) <= CURRENT_DATE
       AND is_open_market = true
     ORDER BY COALESCE(transaction_date, filing_date) DESC,
              value DESC NULLS LAST
-    LIMIT 5000
+    LIMIT 50000
   `;
 
   // Normal fetch — no XHR needed since Babel is gone
@@ -183,10 +197,10 @@ export function computeSignals(filings) {
   })).sort((a,b) => b.conviction - a.conviction);
 }
 
-export async function loadFilings() {
+export async function loadFilings(daysBack = 90) {
   switch (cfg.DATA_SOURCE) {
     case 'neon':
-    case 'proxy': return fetchFromNeon();
+    case 'proxy': return fetchFromNeon(daysBack);
     default:      return [];
   }
 }
