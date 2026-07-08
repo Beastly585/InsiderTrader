@@ -374,8 +374,8 @@ function BillingSection({ user }) {
     try {
       const headers = await getAuthHeaders();
       const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/status`, { headers });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
       setStatus(data);
     } catch (e) {
       // Explicit error state — NOT silently treated as "free plan, no data".

@@ -817,6 +817,7 @@ async function handleBillingStatus(request, env, origin) {
     const [plan, status, current_period_end, cancel_at_period_end] = subRow;
     return corsResponse({ plan, status, current_period_end, cancel_at_period_end, hasDataExport }, 200, origin, env);
   } catch (e) {
+    console.error('[Worker] billing-status failed:', e.message);
     return corsResponse({ error: e.message }, 500, origin, env);
   }
 }
