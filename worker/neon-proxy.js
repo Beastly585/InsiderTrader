@@ -688,6 +688,10 @@ async function handleCreateSubscription(request, env, origin) {
       metadata: { clerk_user_id: clerkUserId },
     });
 
+    // TEMP DEBUG — remove once the client_secret issue is diagnosed
+    console.log('[Worker] DEBUG subscription.status:', subscription.status);
+    console.log('[Worker] DEBUG latest_invoice:', JSON.stringify(subscription.latest_invoice));
+
     const clientSecret = subscription.latest_invoice.payment_intent.client_secret;
     return corsResponse({ clientSecret, subscriptionId: subscription.id }, 200, origin, env);
   } catch (e) {
