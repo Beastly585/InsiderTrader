@@ -27,9 +27,6 @@
  */
 
 const ALLOWED_ORIGINS = new Set([
-  'https://seli.app',
-  'https://www.seli.app',
-  'https://seli-dgu.pages.dev',
   'https://disclo.co',
   'https://disclo-1wp.pages.dev',
   'https://beastly585.github.io',
@@ -111,6 +108,11 @@ export default {
     // ── Watchlist routes ───────────────────────────────────────────────────
     if (url.pathname === '/watchlist') {
       return handleWatchlist(request, env, origin);
+    }
+
+    // ── Notification preferences ─────────────────────────────────────────
+    if (url.pathname === '/prefs') {
+      return handlePrefs(request, env, origin);
     }
 
     if (url.pathname === '/portfolio' || url.pathname.startsWith('/portfolio')) {
@@ -230,7 +232,95 @@ async function handleQuery(request, env, origin) {
 }
 
 
-async function handleWatchlist(request, env, origin) {
+async function handlePrefs(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  // GET — load current prefs
+  if (request.method === 'GET') {
+    try {
+      const result = await neonFetch(env, `
+        SELECT daily_digest, weekly_digest,
+               digest_top_signals, digest_congressional, digest_corporate,
+               digest_watchlist_only, digest_min_conviction,
+               instant_watchlist_ticker, instant_followed_insider,
+               instant_high_conviction, instant_reversal
+        FROM public.user_preferences
+        WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+      `);
+      return corsResponse({ prefs: result.rows?.[0] || null }, 200, origin, env);
+    } catch (e) {
+      return corsResponse({ error: e.message }, 500, origin, env);
+    }
+  }
+
+  // POST — save prefs
+  if (request.method === 'POST') {
+    let body;
+    try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
+
+    const b = (v) => v ? 'TRUE' : 'FALSE';
+    const conviction = ['any','medium','high'].includes(body.digest_min_conviction) ? body.digest_min_conviction : 'any';
+
+    // Pull the email from Clerk directly rather than trusting the client —
+    // this is what alerts actually get sent to, so it shouldn't be spoofable
+    // and shouldn't silently go stale if the user's email changes elsewhere.
+    let email = null;
+    if (env.CLERK_SECRET_KEY) {
+      try {
+        const r = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
+          headers: { 'Authorization': `Bearer ${env.CLERK_SECRET_KEY}` },
+        });
+        const u = await r.json();
+        const primaryId = u.primary_email_address_id;
+        email = u.email_addresses?.find(e => e.id === primaryId)?.email_address
+             || u.email_addresses?.[0]?.email_address || null;
+      } catch (e) {
+        console.error('[Worker] Failed to fetch email from Clerk:', e.message);
+      }
+    }
+    if (!email) return corsResponse({ error: 'Could not verify your account email — try again' }, 500, origin, env);
+
+    try {
+      await neonFetch(env, `
+        INSERT INTO public.user_preferences
+          (clerk_user_id, email, daily_digest, weekly_digest,
+           digest_top_signals, digest_congressional, digest_corporate,
+           digest_watchlist_only, digest_min_conviction,
+           instant_watchlist_ticker, instant_followed_insider,
+           instant_high_conviction, instant_reversal, updated_at)
+        VALUES (
+          ${sqlVal(clerkUserId)}, ${sqlVal(email)}, ${b(body.daily_digest)}, ${b(body.weekly_digest)},
+          ${b(body.digest_top_signals)}, ${b(body.digest_congressional)}, ${b(body.digest_corporate)},
+          ${b(body.digest_watchlist_only)}, ${sqlVal(conviction)},
+          ${b(body.instant_watchlist_ticker)}, ${b(body.instant_followed_insider)},
+          ${b(body.instant_high_conviction)}, ${b(body.instant_reversal)}, now()
+        )
+        ON CONFLICT (clerk_user_id) DO UPDATE SET
+          email                     = EXCLUDED.email,
+          daily_digest              = EXCLUDED.daily_digest,
+          weekly_digest             = EXCLUDED.weekly_digest,
+          digest_top_signals        = EXCLUDED.digest_top_signals,
+          digest_congressional      = EXCLUDED.digest_congressional,
+          digest_corporate          = EXCLUDED.digest_corporate,
+          digest_watchlist_only     = EXCLUDED.digest_watchlist_only,
+          digest_min_conviction     = EXCLUDED.digest_min_conviction,
+          instant_watchlist_ticker  = EXCLUDED.instant_watchlist_ticker,
+          instant_followed_insider  = EXCLUDED.instant_followed_insider,
+          instant_high_conviction   = EXCLUDED.instant_high_conviction,
+          instant_reversal          = EXCLUDED.instant_reversal,
+          updated_at                = now()
+      `);
+      return corsResponse({ ok: true }, 200, origin, env);
+    } catch (e) {
+      return corsResponse({ error: e.message }, 500, origin, env);
+    }
+  }
+
+  return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
+}
+
+
   // Extract user ID from JWT (required — watchlist is always per-user)
   const authHeader = request.headers.get('Authorization') || '';
   if (!authHeader.startsWith('Bearer ')) {
@@ -412,6 +502,7 @@ async function handleStripeWebhook(request, env) {
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
     httpClient: Stripe.createFetchHttpClient(),
+    apiVersion: '2024-06-20',
   });
 
   const sig = request.headers.get('Stripe-Signature') || '';
@@ -520,7 +611,7 @@ async function handleStripeWebhook(request, env) {
         // clerk_user_id/amount back from Stripe rather than our own DB —
         // we no longer have a local record of it.
         const StripeD = (await import('stripe')).default;
-        const stripeD = new StripeD(env.STRIPE_SECRET_KEY, { httpClient: StripeD.createFetchHttpClient() });
+        const stripeD = new StripeD(env.STRIPE_SECRET_KEY, { httpClient: StripeD.createFetchHttpClient(), apiVersion: '2024-06-20' });
         try {
           const pi = await stripeD.paymentIntents.retrieve(paymentIntentId);
           const clerkUserId = pi.metadata?.clerk_user_id;
@@ -571,7 +662,7 @@ async function handleCreateSubscription(request, env, origin) {
   const priceId = env.STRIPE_PRICE_PRO;
 
   const Stripe = (await import('stripe')).default;
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
 
   try {
     // Reuse existing Stripe customer if we already have one on file.
@@ -614,7 +705,7 @@ async function handleCreateDataPurchase(request, env, origin) {
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
   const Stripe = (await import('stripe')).default;
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
 
   try {
     const existing = await neonFetch(env,
@@ -655,7 +746,7 @@ async function handleCancelSubscription(request, env, origin) {
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
   const Stripe = (await import('stripe')).default;
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
 
   try {
     const row = await neonFetch(env,
