@@ -323,7 +323,7 @@ async function handlePrefs(request, env, origin) {
   return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
 }
 
-
+async function handleWatchlist(request, env, origin) {
   // Extract user ID from JWT (required — watchlist is always per-user)
   const authHeader = request.headers.get('Authorization') || '';
   if (!authHeader.startsWith('Bearer ')) {
@@ -467,7 +467,17 @@ async function neonFetch(env, query) {
     body: JSON.stringify({ query }),
   });
   const text = await resp.text();
-  return JSON.parse(text);
+  let result;
+  try { result = JSON.parse(text); }
+  catch { throw new Error(`Neon returned non-JSON response: ${text.slice(0, 200)}`); }
+  // Neon's SQL-over-HTTP endpoint returns 200 even for a failed query, with
+  // the error described in the body — a silent failure here previously let
+  // a broken write (Neon) succeed alongside a correct one (Clerk metadata),
+  // with nothing to ever catch the split. Throwing here means the caller's
+  // try/catch surfaces it (webhook -> 500 -> Stripe retries; a route ->
+  // a real error response instead of quietly pretending nothing happened.
+  if (result.error) throw new Error(`Neon query failed: ${result.error}`);
+  return result;
 }
 
 // Mirrors billing state into Clerk publicMetadata so the frontend can read
@@ -529,6 +539,14 @@ async function handleStripeWebhook(request, env) {
       case 'customer.subscription.deleted': {
         const sub = event.data.object;
         const priceId = sub.items?.data?.[0]?.price?.id;
+        // current_period_end/start were removed from the top-level Subscription
+        // object in Stripe's Basil API version (2025-03-31) and moved to the
+        // subscription's line items. This account's webhook endpoint is on a
+        // version past that change, so sub.current_period_end is undefined —
+        // reading it directly here was producing `to_timestamp(undefined)`,
+        // invalid SQL that Neon rejected. neonFetch() now throws on that
+        // instead of swallowing it, but the real fix is reading the right field.
+        const periodEnd = sub.items?.data?.[0]?.current_period_end || null;
         // Only 'active'/'trialing' actually grants Pro. Every other status —
         // 'incomplete' (checkout started but never paid), 'past_due' (card
         // failing on renewal), 'unpaid', 'incomplete_expired', 'canceled' —
@@ -546,7 +564,7 @@ async function handleStripeWebhook(request, env) {
              current_period_end, cancel_at_period_end, updated_at)
           VALUES (${sqlVal(clerkUserId)}, ${sqlVal(sub.customer)}, ${sqlVal(sub.id)},
                   ${sqlVal(plan)}, ${sqlVal(sub.status)},
-                  to_timestamp(${sub.current_period_end}), ${sqlVal(sub.cancel_at_period_end)}, now())
+                  ${periodEnd ? `to_timestamp(${periodEnd})` : 'NULL'}, ${sqlVal(sub.cancel_at_period_end)}, now())
           ON CONFLICT (clerk_user_id) DO UPDATE SET
             stripe_customer_id     = EXCLUDED.stripe_customer_id,
             stripe_subscription_id = EXCLUDED.stripe_subscription_id,

@@ -219,8 +219,16 @@ function getStripePromise() {
 }
 
 const PRODUCT_COPY = {
-  pro:          { title: 'Upgrade to Pro',        price: '$11.99/month',  endpoint: '/billing/create-subscription' },
-  data_export:  { title: 'Buy full data export',  price: '$9.99 one-time', endpoint: '/billing/create-data-purchase' },
+  pro: {
+    title: 'Upgrade to Pro', price: '$11.99/month', endpoint: '/billing/create-subscription',
+    subtitle: 'Full insider data, real-time alerts, and your own portfolio — in one view.',
+    features: ['Full historical data', 'Portfolio linking', 'Instant alerts', 'CSV export'],
+  },
+  data_export: {
+    title: 'Buy full data export', price: '$9.99 one-time', endpoint: '/billing/create-data-purchase',
+    subtitle: 'A one-time pull of everything currently in the database.',
+    features: ['Every filing on record', 'Delivered as CSV', 'Re-purchase anytime for a fresh pull'],
+  },
 };
 
 function CheckoutModal({ product, onClose, onSuccess }) {
@@ -251,24 +259,38 @@ function CheckoutModal({ product, onClose, onSuccess }) {
 
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
-      <div className="upgrade-modal checkout-modal">
+      <div className="checkout-modal checkout-modal--landscape">
         <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
-        <div className="upgrade-modal__title">{copy.title}</div>
-        <div className="upgrade-modal__price">
-          <span className="upgrade-modal__amount">{copy.price}</span>
+
+        {/* Left — product info, stays constant regardless of payment state */}
+        <div className="checkout-modal__info">
+          <div className="checkout-modal__info-title">{copy.title}</div>
+          <div className="checkout-modal__info-price">{copy.price}</div>
+          <p className="checkout-modal__info-subtitle">{copy.subtitle}</p>
+          <ul className="checkout-modal__features">
+            {copy.features.map(f=>(
+              <li key={f}><IconCheck style={{width:12,height:12}}/>{f}</li>
+            ))}
+          </ul>
+          <div className="checkout-modal__trust">
+            <IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe
+          </div>
         </div>
 
-        {error && <div className="checkout-error">{error} — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
+        {/* Right — payment form */}
+        <div className="checkout-modal__pay">
+          {error && <div className="checkout-error">{error} — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
 
-        {!error && !clientSecret && (
-          <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
-        )}
+          {!error && !clientSecret && (
+            <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+          )}
 
-        {!error && clientSecret && (
-          <Elements stripe={getStripePromise()} options={{ clientSecret }}>
-            <CheckoutForm product={product} onSuccess={onSuccess} onClose={onClose} />
-          </Elements>
-        )}
+          {!error && clientSecret && (
+            <Elements stripe={getStripePromise()} options={{ clientSecret }}>
+              <CheckoutForm product={product} onSuccess={onSuccess} onClose={onClose} />
+            </Elements>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -4751,25 +4773,25 @@ function useNotificationPrefs(userId, pro) {
 
   useEffect(()=>{
     if (!userId) return;
-    // Try localStorage first for instant load
+    // Try localStorage first for instant load — avoids a blank flash while
+    // the real network request is in flight.
     const cached = localStorage.getItem(`disclo_prefs_${userId}`);
     if (cached) { try { setPrefs({...DEFAULT_PREFS,...JSON.parse(cached)}); } catch {} }
-    // Then sync from Neon
     if (!cfg.NEON_PROXY_URL || !pro) { setPrefs(p=>p||{...DEFAULT_PREFS}); return; }
-    queryNeon(`
-      SELECT daily_digest, weekly_digest,
-             digest_top_signals, digest_congressional, digest_corporate,
-             digest_watchlist_only, digest_min_conviction,
-             instant_watchlist_ticker, instant_followed_insider,
-             instant_high_conviction, instant_reversal
-      FROM public.user_preferences
-      WHERE clerk_user_id = '${userId.replace(/'/g,"''")}'
-      LIMIT 1
-    `).then(rows=>{
-      const p = rows.length ? {...DEFAULT_PREFS,...rows[0]} : {...DEFAULT_PREFS};
-      setPrefs(p);
-      localStorage.setItem(`disclo_prefs_${userId}`, JSON.stringify(p));
-    }).catch(()=>setPrefs(p=>p||{...DEFAULT_PREFS}));
+
+    (async () => {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`${cfg.NEON_PROXY_URL}/prefs`, { headers });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not load preferences');
+        const p = data.prefs ? {...DEFAULT_PREFS, ...data.prefs} : {...DEFAULT_PREFS};
+        setPrefs(p);
+        localStorage.setItem(`disclo_prefs_${userId}`, JSON.stringify(p));
+      } catch {
+        setPrefs(p=>p||{...DEFAULT_PREFS});
+      }
+    })();
   },[userId, pro]);
 
   async function save(updated) {
@@ -4777,11 +4799,16 @@ function useNotificationPrefs(userId, pro) {
     setSaving(true); setError(null);
     try {
       localStorage.setItem(`disclo_prefs_${userId}`, JSON.stringify(updated));
-      // Write to Neon when Worker prefs route is available (Phase 3 — email alerts)
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/prefs`, {
+        method: 'POST', headers, body: JSON.stringify(updated),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
       setPrefs(updated);
       setSaved(true);
       setTimeout(()=>setSaved(false), 2500);
-    } catch(e) { setError('Save failed — try again'); }
+    } catch(e) { setError(e.message || 'Save failed — try again'); }
     setSaving(false);
   }
 
