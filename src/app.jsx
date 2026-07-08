@@ -299,8 +299,10 @@ function CheckoutModal({ product, onClose, onSuccess }) {
 function CheckoutForm({ product, onSuccess, onClose }) {
   const stripe = useStripe();
   const elements = useElements();
+  const { user } = useUser();
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
   async function handleConfirm() {
     if (!stripe || !elements) return;
@@ -319,10 +321,22 @@ function CheckoutForm({ product, onSuccess, onClose }) {
       return;
     }
 
-    // Payment succeeded client-side — the webhook updates Neon/Clerk metadata
-    // async. isPro()/hasDataExport() reads from Clerk metadata, so there's a
-    // brief window where this device knows before the metadata catches up.
+    // Payment succeeded client-side, but the webhook that actually grants
+    // access runs async on Stripe's side — Clerk's metadata isn't updated
+    // yet at this exact moment. Poll for it instead of leaving the UI stale
+    // until the user manually reloads the page.
     setSubmitting(false);
+    setSyncing(true);
+    const wantsPro = product === 'pro';
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await new Promise(r => setTimeout(r, 1500));
+      const fresh = await user?.reload().catch(() => null);
+      const ok = wantsPro
+        ? fresh?.publicMetadata?.plan === 'pro'
+        : fresh?.publicMetadata?.hasDataExport === true;
+      if (ok) break;
+    }
+    setSyncing(false);
     onSuccess && onSuccess();
   }
 
@@ -332,11 +346,11 @@ function CheckoutForm({ product, onSuccess, onClose }) {
       {formError && <div className="checkout-error">{formError}</div>}
       <button
         className="upgrade-modal__cta"
-        disabled={!stripe || submitting}
+        disabled={!stripe || submitting || syncing}
         onClick={handleConfirm}
         style={{marginTop:16}}
       >
-        {submitting ? 'Processing…' : (product === 'pro' ? 'Subscribe' : 'Buy export')}
+        {submitting ? 'Processing…' : syncing ? 'Confirming…' : (product === 'pro' ? 'Subscribe' : 'Buy export')}
       </button>
       <div className="upgrade-modal__note">
         {product === 'pro'

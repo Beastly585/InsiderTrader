@@ -2813,7 +2813,8 @@ td { padding:7px 11px; vertical-align:middle; }
   border-top: 0.5px solid var(--border);
 }
 .checkout-modal__pay {
-  flex: 1; padding: 32px 28px; min-width: 0;
+  flex: 1; padding: 40px 28px 32px; min-width: 0;
+  max-height: 80vh; overflow-y: auto;
 }
 @media (max-width: 640px) {
   .checkout-modal--landscape { flex-direction: column; min-width: 0; max-height: 90vh; overflow-y: auto; }
@@ -3079,14 +3080,14 @@ td { padding:7px 11px; vertical-align:middle; }
   margin-top: 12px; font-size: 0.6875rem; color: var(--text-3);
 }
 .upgrade-modal__close {
-  position: absolute; top: 14px; right: 14px;
+  position: absolute; top: 12px; right: 12px; z-index: 2;
   background: none; border: none;
   color: var(--text-3); font-size: 1rem;
-  cursor: pointer; padding: 4px 8px;
+  cursor: pointer; padding: 6px;
   border-radius: 6px;
-  transition: color 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
-.upgrade-modal__close:hover { color: var(--text); }
+.upgrade-modal__close:hover { color: var(--text); background: var(--surface-3); }
 .upgrade-modal__icon {
   font-size: 1.75rem; margin-bottom: 12px;
   color: var(--accent-strong);

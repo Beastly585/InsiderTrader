@@ -704,7 +704,10 @@ async function handleCreateSubscription(request, env, origin) {
       customer: customerId,
       items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
-      payment_settings: { save_default_payment_method: 'on_subscription' },
+      payment_settings: {
+        save_default_payment_method: 'on_subscription',
+        payment_method_types: ['card'], // keeps the checkout form to just the card fields
+      },
       expand: ['latest_invoice.payment_intent'],
       metadata: { clerk_user_id: clerkUserId },
     });
@@ -753,6 +756,7 @@ async function handleCreateDataPurchase(request, env, origin) {
       amount: 999, // $9.99, in cents
       currency: 'usd',
       customer: customerId,
+      payment_method_types: ['card'],
       metadata: { clerk_user_id: clerkUserId, product: 'data_export' },
     });
 
