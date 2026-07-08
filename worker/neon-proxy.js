@@ -1,5 +1,5 @@
 /**
- * InsiderDesk — Cloudflare Worker  (neon-proxy.js)
+ * Seli — Cloudflare Worker  (neon-proxy.js)
  *
  * Uses the ORIGINAL Neon connection approach that was working before:
  *   POST https://{host}/sql
@@ -30,8 +30,6 @@ const ALLOWED_ORIGINS = new Set([
   'https://seli.app',
   'https://www.seli.app',
   'https://seli-dgu.pages.dev',
-  'https://disclo.co',
-  'https://disclo-1wp.pages.dev',
   'https://beastly585.github.io',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -173,7 +171,7 @@ async function handleQuery(request, env, origin) {
         const result = await neonFetch(env,
           `SELECT status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
         );
-        isPro = result.rows?.[0]?.[0] === 'active' || result.rows?.[0]?.[0] === 'trialing';
+        isPro = result.rows?.[0]?.status === 'active' || result.rows?.[0]?.status === 'trialing';
       } catch (e) {
         console.error('[Worker] Plan check failed, defaulting to free-tier restrictions:', e.message);
       }
@@ -607,7 +605,7 @@ async function handleStripeWebhook(request, env) {
           WHERE stripe_payment_intent_id = ${sqlVal(paymentIntentId)}
           RETURNING clerk_user_id
         `);
-        const clerkUserId = deleted.rows?.[0]?.[0];
+        const clerkUserId = deleted.rows?.[0]?.clerk_user_id;
         if (clerkUserId) {
           // Only clear the metadata flag if they have no OTHER purchases —
           // this is a repeatable product, so a refund on one purchase
@@ -615,7 +613,7 @@ async function handleStripeWebhook(request, env) {
           const remaining = await neonFetch(env,
             `SELECT EXISTS (SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)})`
           );
-          if (!remaining.rows?.[0]?.[0]) {
+          if (!remaining.rows?.[0]?.exists) {
             await syncClerkMetadata(env, clerkUserId, { hasDataExport: false });
           }
         }
@@ -690,7 +688,7 @@ async function handleCreateSubscription(request, env, origin) {
     const existing = await neonFetch(env,
       `SELECT stripe_customer_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
     );
-    let customerId = existing.rows?.[0]?.[0];
+    let customerId = existing.rows?.[0]?.stripe_customer_id;
 
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -739,7 +737,7 @@ async function handleCreateDataPurchase(request, env, origin) {
     const existing = await neonFetch(env,
       `SELECT stripe_customer_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
     );
-    let customerId = existing.rows?.[0]?.[0];
+    let customerId = existing.rows?.[0]?.stripe_customer_id;
 
     let body = {};
     try { body = await request.json(); } catch {}
@@ -781,7 +779,7 @@ async function handleCancelSubscription(request, env, origin) {
     const row = await neonFetch(env,
       `SELECT stripe_subscription_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
     );
-    const subId = row.rows?.[0]?.[0];
+    const subId = row.rows?.[0]?.stripe_subscription_id;
     if (!subId) return corsResponse({ error: 'No active subscription' }, 404, origin, env);
 
     await stripe.subscriptions.update(subId, { cancel_at_period_end: true });
@@ -809,12 +807,12 @@ async function handleBillingStatus(request, env, origin) {
          SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)}
        )`
     );
-    const hasDataExport = !!purchaseResult.rows?.[0]?.[0];
+    const hasDataExport = !!purchaseResult.rows?.[0]?.exists;
 
     if (!subRow) {
       return corsResponse({ plan: 'free', status: 'inactive', hasDataExport }, 200, origin, env);
     }
-    const [plan, status, current_period_end, cancel_at_period_end] = subRow;
+    const { plan, status, current_period_end, cancel_at_period_end } = subRow;
     return corsResponse({ plan, status, current_period_end, cancel_at_period_end, hasDataExport }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] billing-status failed:', e.message);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-// src/app.jsx — Disclo — insider trading intelligence platform
+// src/app.jsx — Seli — insider trading intelligence platform
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
 import { loadFilings, computeSignals, getSector, REL_LABELS } from './edgar.js';
@@ -66,7 +66,7 @@ async function fetchCompanyDescription(ticker, cik) {
     if (cik) {
       const padded = String(cik).replace(/^0+/,'').padStart(10,'0');
       const r = await fetch(`https://data.sec.gov/submissions/CIK${padded}.json`, {
-        headers: {'User-Agent': 'Disclo research@disclo.co'}
+        headers: {'User-Agent': 'Seli research@seli.app'}
       });
       if (r.ok) {
         const d = await r.json();
@@ -122,7 +122,7 @@ function hasDataExport(user) {
 // Comparison-table style, matching the reference layout's structure:
 // logo, title, Free/Pro feature comparison, a plan selector, one CTA.
 // Deliberately NOT including a fake testimonial/star-rating like the
-// reference had — Disclo doesn't have real customer reviews yet, and
+// reference had — Seli doesn't have real customer reviews yet, and
 // fabricating one would be dishonest. That visual slot is an honest
 // trust line instead.
 function UpgradeModal({ feature, onClose }) {
@@ -134,6 +134,7 @@ function UpgradeModal({ feature, onClose }) {
 
   const [checkoutProduct, setCheckoutProduct] = useState(null); // null | 'pro' | 'data_export'
   const [plan, setPlan] = useState('pro'); // which card is selected in the picker
+  const [statusModal, setStatusModal] = useState(null);
 
   const COMPARISON = [
     { label: 'Live dashboard & signals',  free: true,  pro: true },
@@ -143,12 +144,29 @@ function UpgradeModal({ feature, onClose }) {
     { label: 'CSV export',                free: false, pro: true },
   ];
 
+  if (statusModal) {
+    return (
+      <StatusModal
+        title={statusModal.title}
+        message={statusModal.message}
+        onClose={()=>{ setStatusModal(null); onClose(); }}
+      />
+    );
+  }
+
   if (checkoutProduct) {
     return (
       <CheckoutModal
         product={checkoutProduct}
         onClose={() => setCheckoutProduct(null)}
-        onSuccess={onClose}
+        onSuccess={()=>{
+          const wasPro = checkoutProduct === 'pro';
+          setCheckoutProduct(null);
+          setStatusModal(wasPro
+            ? { title: "You're a Pro member!", message: 'Full historical data, portfolio linking, instant alerts, and CSV export are all unlocked now.' }
+            : { title: 'Export unlocked', message: 'You can export the full database as CSV anytime from the Data page.' }
+          );
+        }}
       />
     );
   }
@@ -158,7 +176,7 @@ function UpgradeModal({ feature, onClose }) {
       <div className="upgrade-modal upgrade-modal--large">
         <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
 
-        <div className="logo-mark upgrade-modal__logo"><span style={{letterSpacing:'-1px',fontWeight:800}}>D</span></div>
+        <div className="logo-mark upgrade-modal__logo"><span style={{letterSpacing:'-1px',fontWeight:800}}>S</span></div>
         <div className="upgrade-modal__title">Upgrade to Pro</div>
         <div className="upgrade-modal__subtitle">Full insider data, real-time alerts, and your own portfolio — in one view.</div>
 
@@ -230,6 +248,38 @@ const PRODUCT_COPY = {
     features: ['Every filing on record', 'Delivered as CSV', 'Re-purchase anytime for a fresh pull'],
   },
 };
+
+// ─── Confirm dialog — reusable "are you sure?" pattern ────────────────────────
+function ConfirmModal({ title, message, confirmLabel='Confirm', cancelLabel='Never mind', danger=false, busy=false, onConfirm, onClose }) {
+  return (
+    <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay') && !busy)onClose();}}>
+      <div className="upgrade-modal" style={{maxWidth:340}}>
+        <div className="upgrade-modal__title">{title}</div>
+        <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 20px',textAlign:'left'}}>{message}</p>
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn btn--ghost" style={{flex:1}} onClick={onClose} disabled={busy}>{cancelLabel}</button>
+          <button className={danger?'settings-danger-btn':'upgrade-modal__cta'} style={{flex:1,margin:0}} onClick={onConfirm} disabled={busy}>
+            {busy ? 'Working…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Status modal — reusable success/confirmation pattern ─────────────────────
+function StatusModal({ title, message, onClose }) {
+  return (
+    <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
+      <div className="upgrade-modal" style={{maxWidth:340,textAlign:'center'}}>
+        <div className="status-modal__icon"><IconCheck style={{width:20,height:20}}/></div>
+        <div className="upgrade-modal__title" style={{marginTop:14}}>{title}</div>
+        <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 20px'}}>{message}</p>
+        <button className="upgrade-modal__cta" style={{margin:0}} onClick={onClose}>Done</button>
+      </div>
+    </div>
+  );
+}
 
 function CheckoutModal({ product, onClose, onSuccess }) {
   const { user } = useUser();
@@ -368,6 +418,8 @@ function BillingSection({ user }) {
   const [busy, setBusy]       = useState(false);
   const [actionErr, setActionErr] = useState(null);
   const [checkoutProduct, setCheckoutProduct] = useState(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [statusModal, setStatusModal] = useState(null); // null | {title, message}
 
   async function load() {
     setLoadErr(null);
@@ -377,11 +429,14 @@ function BillingSection({ user }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
       setStatus(data);
+      return data; // returned so callers (e.g. cancel) can use fresh data immediately,
+                    // rather than reading stale state from a closure right after setState
     } catch (e) {
       // Explicit error state — NOT silently treated as "free plan, no data".
       // This is exactly the gap flagged in the UX audit: failures were
       // previously indistinguishable from empty results.
       setLoadErr(e.message || 'Could not load billing status');
+      return null;
     }
   }
   useEffect(() => { load(); }, []);
@@ -393,7 +448,14 @@ function BillingSection({ user }) {
       const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/cancel`, { method: 'POST', headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Cancel failed');
-      await load();
+      const fresh = await load();
+      setConfirmCancel(false);
+      setStatusModal({
+        title: 'Subscription canceled',
+        message: fresh?.current_period_end
+          ? `You'll keep Pro access until ${new Date(fresh.current_period_end).toLocaleDateString()}, then move to Free automatically.`
+          : `You'll keep Pro access through the end of your current billing period, then move to Free automatically.`,
+      });
     } catch (e) {
       setActionErr(e.message);
     } finally {
@@ -432,8 +494,8 @@ function BillingSection({ user }) {
             <button className="btn btn--primary" onClick={()=>setCheckoutProduct('pro')}>Upgrade →</button>
           )}
           {isProPlan && !status.cancel_at_period_end && (
-            <button className="settings-danger-btn" disabled={busy} onClick={handleCancel}>
-              {busy ? 'Canceling…' : 'Cancel subscription'}
+            <button className="settings-danger-btn" disabled={busy} onClick={()=>setConfirmCancel(true)}>
+              Cancel subscription
             </button>
           )}
         </div>
@@ -456,11 +518,40 @@ function BillingSection({ user }) {
 
       {actionErr && <div className="checkout-error">{actionErr}</div>}
 
+      {confirmCancel && (
+        <ConfirmModal
+          title="Cancel your subscription?"
+          message="You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately."
+          confirmLabel="Cancel subscription"
+          cancelLabel="Never mind"
+          danger
+          busy={busy}
+          onConfirm={handleCancel}
+          onClose={()=>setConfirmCancel(false)}
+        />
+      )}
+
+      {statusModal && (
+        <StatusModal
+          title={statusModal.title}
+          message={statusModal.message}
+          onClose={()=>setStatusModal(null)}
+        />
+      )}
+
       {checkoutProduct && (
         <CheckoutModal
           product={checkoutProduct}
           onClose={()=>setCheckoutProduct(null)}
-          onSuccess={()=>{ setCheckoutProduct(null); load(); }}
+          onSuccess={()=>{
+            const wasPro = checkoutProduct === 'pro';
+            setCheckoutProduct(null);
+            load();
+            setStatusModal(wasPro
+              ? { title: "You're a Pro member!", message: 'Full historical data, portfolio linking, instant alerts, and CSV export are all unlocked now.' }
+              : { title: 'Export unlocked', message: 'You can export the full database as CSV anytime from the Data page.' }
+            );
+          }}
         />
       )}
     </>
@@ -472,8 +563,8 @@ function BillingSection({ user }) {
 // Storage: localStorage (instant) + Neon (persistent, Pro users only)
 // Free users: watchlist is NOT saved — clicking star shows upgrade modal
 
-const WL_KEY = 'disclo_watchlist_v1';
-const WL_INSIDER_KEY = 'disclo_insiders_v1';
+const WL_KEY = 'seli_watchlist_v1';
+const WL_INSIDER_KEY = 'seli_insiders_v1';
 
 function wlGet(key=WL_KEY) { try { return JSON.parse(localStorage.getItem(key)||'[]'); } catch { return []; } }
 function wlSet(items, key=WL_KEY) { try { localStorage.setItem(key, JSON.stringify(items)); } catch {} }
@@ -561,7 +652,7 @@ function useWatchlist(user) {
 function useTheme() {
   const [dark, setDark] = useState(() => {
     try { const s = localStorage.getItem('theme'); if (s) return s==='dark'; } catch(_){}
-    // Default new visitors to dark — Disclo's primary identity — unless
+    // Default new visitors to dark — Seli's primary identity — unless
     // their system explicitly prefers light.
     return !window.matchMedia('(prefers-color-scheme: light)').matches;
   });
@@ -662,9 +753,9 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
   return (
     <nav className="sidebar sidebar--compact">
       {/* Logo */}
-      <div className="sidebar__logo" title="Disclo">
+      <div className="sidebar__logo" title="Seli">
         <div className="logo-mark">
-          <span style={{letterSpacing:'-1px',fontWeight:800}}>D</span>
+          <span style={{letterSpacing:'-1px',fontWeight:800}}>S</span>
         </div>
       </div>
 
@@ -1653,7 +1744,7 @@ const DASH_SORT_OPTS = [
 // Replaces the raw 5-stat pulse strip with meaningful market context:
 //  • Fear & Greed score from feargreedchart.com (free, no key, CORS-enabled)
 //  • SPY / QQQ / VIX prices from the same endpoint
-//  • Disclo's own 30-day insider net-buy ratio computed from your filings
+//  • Seli's own 30-day insider net-buy ratio computed from your filings
 // All of this is stable enough over a day to not feel stale on normal usage.
 // ─── Market Pulse Tile ────────────────────────────────────────────────────────
 // Consolidated: F&G score + index prices + insider flow + sector heatmap.
@@ -4609,8 +4700,8 @@ function TermsPage() {
     <div className="legal-page" data-theme="dark">
       <nav className="lp-nav">
         <a className="lp-nav__logo" href="/">
-          <div className="lp-logo-mark">D</div>
-          <span className="lp-wordmark">Disclo</span>
+          <div className="lp-logo-mark">S</div>
+          <span className="lp-wordmark">Seli</span>
         </a>
       </nav>
       <div className="legal-content">
@@ -4618,13 +4709,13 @@ function TermsPage() {
         <p className="legal-date">Last updated: June 26, 2025</p>
 
         <h2>1. Acceptance of Terms</h2>
-        <p>By accessing or using Disclo ("the Service"), operated by Kevin Maresca ("we," "us," or "our"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
+        <p>By accessing or using Seli ("the Service"), operated by Kevin Maresca ("we," "us," or "our"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
 
         <h2>2. Description of Service</h2>
-        <p>Disclo is a financial intelligence platform that aggregates and displays publicly available SEC Form 4 insider trading disclosures, congressional trading disclosures filed under the STOCK Act, and related market data. All data displayed is sourced from public government databases including the SEC's EDGAR system.</p>
+        <p>Seli is a financial intelligence platform that aggregates and displays publicly available SEC Form 4 insider trading disclosures, congressional trading disclosures filed under the STOCK Act, and related market data. All data displayed is sourced from public government databases including the SEC's EDGAR system.</p>
 
         <h2>3. Not Financial Advice</h2>
-        <p>The information provided by Disclo is for informational and educational purposes only. Nothing on this Service constitutes financial, investment, legal, or tax advice. We are not a registered investment advisor, broker-dealer, or financial planner. You should consult a qualified financial professional before making any investment decisions. Past insider trading patterns are not indicative of future results.</p>
+        <p>The information provided by Seli is for informational and educational purposes only. Nothing on this Service constitutes financial, investment, legal, or tax advice. We are not a registered investment advisor, broker-dealer, or financial planner. You should consult a qualified financial professional before making any investment decisions. Past insider trading patterns are not indicative of future results.</p>
 
         <h2>4. Data Accuracy</h2>
         <p>We make reasonable efforts to display accurate data sourced from public filings. However, we make no representations or warranties about the completeness, accuracy, or timeliness of the data. SEC filings may contain errors, and there may be delays between filing dates and our display of data. You assume all risk associated with your use of this information.</p>
@@ -4661,8 +4752,8 @@ function TermsPage() {
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm">D</div>
-          <span className="lp-wordmark">Disclo</span>
+          <div className="lp-logo-mark lp-logo-mark--sm">S</div>
+          <span className="lp-wordmark">Seli</span>
         </div>
         <div className="lp-footer__links">
           <a href="/">Home</a>
@@ -4680,8 +4771,8 @@ function PrivacyPage() {
     <div className="legal-page" data-theme="dark">
       <nav className="lp-nav">
         <a className="lp-nav__logo" href="/">
-          <div className="lp-logo-mark">D</div>
-          <span className="lp-wordmark">Disclo</span>
+          <div className="lp-logo-mark">S</div>
+          <span className="lp-wordmark">Seli</span>
         </a>
       </nav>
       <div className="legal-content">
@@ -4689,7 +4780,7 @@ function PrivacyPage() {
         <p className="legal-date">Last updated: June 26, 2025</p>
 
         <h2>1. Overview</h2>
-        <p>Disclo, operated by Kevin Maresca, is committed to protecting your privacy. This policy explains what information we collect, how we use it, and your rights regarding your data.</p>
+        <p>Seli, operated by Kevin Maresca, is committed to protecting your privacy. This policy explains what information we collect, how we use it, and your rights regarding your data.</p>
 
         <h2>2. Information We Collect</h2>
         <h3>Account Information</h3>
@@ -4739,8 +4830,8 @@ function PrivacyPage() {
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm">D</div>
-          <span className="lp-wordmark">Disclo</span>
+          <div className="lp-logo-mark lp-logo-mark--sm">S</div>
+          <span className="lp-wordmark">Seli</span>
         </div>
         <div className="lp-footer__links">
           <a href="/">Home</a>
@@ -4787,7 +4878,7 @@ function useNotificationPrefs(userId, pro) {
     if (!userId) return;
     // Try localStorage first for instant load — avoids a blank flash while
     // the real network request is in flight.
-    const cached = localStorage.getItem(`disclo_prefs_${userId}`);
+    const cached = localStorage.getItem(`seli_prefs_${userId}`);
     if (cached) { try { setPrefs({...DEFAULT_PREFS,...JSON.parse(cached)}); } catch {} }
     if (!cfg.NEON_PROXY_URL || !pro) { setPrefs(p=>p||{...DEFAULT_PREFS}); return; }
 
@@ -4799,7 +4890,7 @@ function useNotificationPrefs(userId, pro) {
         if (!res.ok) throw new Error(data.error || 'Could not load preferences');
         const p = data.prefs ? {...DEFAULT_PREFS, ...data.prefs} : {...DEFAULT_PREFS};
         setPrefs(p);
-        localStorage.setItem(`disclo_prefs_${userId}`, JSON.stringify(p));
+        localStorage.setItem(`seli_prefs_${userId}`, JSON.stringify(p));
       } catch {
         setPrefs(p=>p||{...DEFAULT_PREFS});
       }
@@ -4810,7 +4901,7 @@ function useNotificationPrefs(userId, pro) {
     if (!userId) return;
     setSaving(true); setError(null);
     try {
-      localStorage.setItem(`disclo_prefs_${userId}`, JSON.stringify(updated));
+      localStorage.setItem(`seli_prefs_${userId}`, JSON.stringify(updated));
       const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
       const res = await fetch(`${cfg.NEON_PROXY_URL}/prefs`, {
         method: 'POST', headers, body: JSON.stringify(updated),
@@ -5123,7 +5214,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       <nav className="lp-nav">
         <div className="lp-nav__logo">
           <div className="lp-logo-mark">ID</div>
-          <span className="lp-wordmark">Disclo</span>
+          <span className="lp-wordmark">Seli</span>
         </div>
         <div className="lp-nav__links">
           <a href="#features" className="lp-nav__link">Features</a>
@@ -5158,14 +5249,14 @@ function LandingPage({ onEnter, dark, setDark }) {
           <span className="lp-hero__h1-accent">Before the market moves.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          Disclo ingests every SEC Form 4 within minutes of publication,
+          Seli ingests every SEC Form 4 within minutes of publication,
           scores each signal by conviction, and surfaces the ones worth acting on.
           Built for serious retail investors.
         </p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="lp-btn-primary lp-btn-primary--lg">Open Disclo</button>
+              <button className="lp-btn-primary lp-btn-primary--lg">Open Seli</button>
             </SignInButton>
           </SignedOut>
           <SignedIn>
@@ -5180,7 +5271,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-preview__dots">
               <span/><span/><span/>
             </div>
-            <span className="lp-preview__url">disclo.co · Dashboard</span>
+            <span className="lp-preview__url">seli.app · Dashboard</span>
           </div>
           <div className="lp-preview__screen">
             {/* Simulated dashboard UI */}
@@ -5331,8 +5422,8 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Footer */}
       <footer className="lp-footer">
         <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm">D</div>
-          <span className="lp-wordmark">Disclo</span>
+          <div className="lp-logo-mark lp-logo-mark--sm">S</div>
+          <span className="lp-wordmark">Seli</span>
         </div>
         <div className="lp-footer__links">
           <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
@@ -5485,7 +5576,7 @@ export default function App() {
         <div className="status-bar">
           {/* Page title — left */}
           <span className="status-bar__info">
-            {page==='settings'?'Settings':NAV.find(n=>n.id===page)?.label||'Disclo'}
+            {page==='settings'?'Settings':NAV.find(n=>n.id===page)?.label||'Seli'}
           </span>
           <div className="status-bar__meta">
             {/* Data freshness */}

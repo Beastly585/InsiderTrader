@@ -1,4 +1,4 @@
-/* InsiderDesk — style.css */
+/* Seli — style.css */
 
 /* ── Google Fonts import ──────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
@@ -21,7 +21,7 @@
   --text-2: #9295A6;
   --text-3: #5E6175;
 
-  /* Brand — deep indigo, Stripe-esque, unmistakably InsiderDesk */
+  /* Brand — deep indigo, Stripe-esque, unmistakably Seli */
   --accent:        #7C6FFF;
   --accent-50:     #151230;
   --accent-strong: #A099FF;
@@ -2966,7 +2966,7 @@ td { padding:7px 11px; vertical-align:middle; }
   box-shadow: none !important;
   padding: 0 !important;
 }
-/* Only override accent/primary color to match Disclo brand */
+/* Only override accent/primary color to match Seli brand */
 .clerk-profile-card [class*="cl-formButtonPrimary"] {
   background: var(--accent-strong) !important;
   border-color: var(--accent-strong) !important;
@@ -3091,6 +3091,12 @@ td { padding:7px 11px; vertical-align:middle; }
 .upgrade-modal__icon {
   font-size: 1.75rem; margin-bottom: 12px;
   color: var(--accent-strong);
+}
+.status-modal__icon {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--green-50, rgba(34,211,165,0.12)); color: var(--green-600);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto;
 }
 .upgrade-modal__title {
   font-size: 1.125rem; font-weight: 700;
