@@ -669,9 +669,7 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
 
       {/* Footer — utility items + plan status (visible from every page, not just Settings) */}
       <div className="sidebar__footer">
-        {pro ? (
-          <span className="sidebar__pro-badge" title="Pro plan">★</span>
-        ) : (
+        {!pro && (
           <button className="nav-item nav-item--icon-only nav-item--sm nav-item--upgrade"
             onClick={onUpgrade}
             title="Upgrade to Pro"
