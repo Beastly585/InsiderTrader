@@ -102,6 +102,9 @@ export default {
     if (url.pathname === '/billing/cancel') {
       return handleCancelSubscription(request, env, origin);
     }
+    if (url.pathname === '/billing/reactivate') {
+      return handleReactivateSubscription(request, env, origin);
+    }
     if (url.pathname === '/billing/status') {
       return handleBillingStatus(request, env, origin);
     }
@@ -322,44 +325,22 @@ async function handlePrefs(request, env, origin) {
 }
 
 async function handleWatchlist(request, env, origin) {
-  // Extract user ID from JWT (required — watchlist is always per-user)
-  const authHeader = request.headers.get('Authorization') || '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return corsResponse({ error: 'Authentication required' }, 401, origin, env);
-  }
-  let userId;
-  try {
-    const token  = authHeader.slice(7);
-    const parts  = token.split('.');
-    const b64    = s => atob(s.replace(/-/g,'+').replace(/_/g,'/'));
-    const payload = JSON.parse(b64(parts[1]));
-    userId = payload.sub;
-  } catch {
-    return corsResponse({ error: 'Invalid token' }, 401, origin, env);
-  }
-  if (!userId) return corsResponse({ error: 'Invalid token' }, 401, origin, env);
-
-  const connStr = env.NEON_CONNECTION_STRING;
-  const u = new URL(connStr);
-  const host = u.hostname;
-
-  const neonFetchLocal = async (query) => {
-    const resp = await fetch(`https://${host}/sql`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': connStr },
-      body: JSON.stringify({ query }),
-    });
-    const text = await resp.text();
-    return JSON.parse(text);
-  };
+  // Now uses the same verified-JWT check as billing/prefs — this previously
+  // used a plain unverified decode, flagged early on but never fixed until now.
+  const userId = await verifiedUserId(request, env);
+  if (!userId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
   // GET — load watchlist
   if (request.method === 'GET') {
-    const uid = userId.replace(/'/g, "''");
-    const result = await neonFetchLocal(
-      `SELECT item_type, item_value FROM public.user_watchlist WHERE clerk_user_id='${uid}' ORDER BY added_at DESC`
-    );
-    return corsResponse({ items: result.rows || [] }, 200, origin, env);
+    try {
+      const result = await neonFetch(env,
+        `SELECT item_type, item_value FROM public.user_watchlist WHERE clerk_user_id=${sqlVal(userId)} ORDER BY added_at DESC`
+      );
+      return corsResponse({ items: result.rows || [] }, 200, origin, env);
+    } catch (e) {
+      console.error('[Worker] watchlist GET failed:', e.message);
+      return corsResponse({ error: e.message }, 500, origin, env);
+    }
   }
 
   // POST — add or remove item
@@ -371,22 +352,26 @@ async function handleWatchlist(request, env, origin) {
     if (!['ticker','insider'].includes(item_type)) return corsResponse({ error: 'Invalid item_type' }, 400, origin, env);
     if (!item_value || typeof item_value !== 'string') return corsResponse({ error: 'Missing item_value' }, 400, origin, env);
 
-    const uid = userId.replace(/'/g, "''");
-    const val = item_value.slice(0,200).replace(/'/g, "''");
-    const typ = item_type.replace(/'/g, "''");
+    const val = item_value.slice(0,200);
 
-    if (action === 'add') {
-      await neonFetchLocal(
-        `INSERT INTO public.user_watchlist (clerk_user_id, item_type, item_value)
-         VALUES ('${uid}','${typ}','${val}')
-         ON CONFLICT (clerk_user_id, item_type, item_value) DO NOTHING`
-      );
-    } else {
-      await neonFetchLocal(
-        `DELETE FROM public.user_watchlist WHERE clerk_user_id='${uid}' AND item_type='${typ}' AND item_value='${val}'`
-      );
+    try {
+      if (action === 'add') {
+        await neonFetch(env, `
+          INSERT INTO public.user_watchlist (clerk_user_id, item_type, item_value)
+          VALUES (${sqlVal(userId)}, ${sqlVal(item_type)}, ${sqlVal(val)})
+          ON CONFLICT (clerk_user_id, item_type, item_value) DO NOTHING
+        `);
+      } else {
+        await neonFetch(env, `
+          DELETE FROM public.user_watchlist
+          WHERE clerk_user_id=${sqlVal(userId)} AND item_type=${sqlVal(item_type)} AND item_value=${sqlVal(val)}
+        `);
+      }
+      return corsResponse({ ok: true }, 200, origin, env);
+    } catch (e) {
+      console.error('[Worker] watchlist POST failed:', e.message);
+      return corsResponse({ error: e.message }, 500, origin, env);
     }
-    return corsResponse({ ok: true }, 200, origin, env);
   }
 
   return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
@@ -772,6 +757,9 @@ async function handleCancelSubscription(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
+  let body = {};
+  try { body = await request.json(); } catch {} // feedback is optional — missing/invalid body is fine
+
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
 
@@ -783,9 +771,50 @@ async function handleCancelSubscription(request, env, origin) {
     if (!subId) return corsResponse({ error: 'No active subscription' }, 404, origin, env);
 
     await stripe.subscriptions.update(subId, { cancel_at_period_end: true });
+
+    // Feedback is best-effort — never let a logging failure block the actual
+    // cancellation, which is the part the user is actually waiting on.
+    if (body.feedback && typeof body.feedback === 'string' && body.feedback.trim()) {
+      try {
+        await neonFetch(env, `
+          INSERT INTO public.cancellation_feedback (clerk_user_id, feedback)
+          VALUES (${sqlVal(clerkUserId)}, ${sqlVal(body.feedback.trim().slice(0, 2000))})
+        `);
+      } catch (e) {
+        console.error('[Worker] Failed to store cancellation feedback (non-fatal):', e.message);
+      }
+    }
+
     return corsResponse({ ok: true }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] cancel-subscription failed:', e.message);
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+// ── Reactivate a subscription that's set to cancel at period end ───────────
+// Only works before the period actually ends — Stripe just flips
+// cancel_at_period_end back off. The webhook's customer.subscription.updated
+// handler already updates Neon/Clerk from this same change, so no separate
+// write is needed here beyond the Stripe API call itself.
+async function handleReactivateSubscription(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
+
+  try {
+    const row = await neonFetch(env,
+      `SELECT stripe_subscription_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+    );
+    const subId = row.rows?.[0]?.stripe_subscription_id;
+    if (!subId) return corsResponse({ error: 'No subscription found' }, 404, origin, env);
+
+    await stripe.subscriptions.update(subId, { cancel_at_period_end: false });
+    return corsResponse({ ok: true }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] reactivate-subscription failed:', e.message);
     return corsResponse({ error: e.message }, 500, origin, env);
   }
 }
@@ -803,17 +832,19 @@ async function handleBillingStatus(request, env, origin) {
     const subRow = subResult.rows?.[0];
 
     const purchaseResult = await neonFetch(env,
-      `SELECT EXISTS (
-         SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)}
-       )`
+      `SELECT amount_cents, purchased_at
+       FROM public.data_purchases
+       WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+       ORDER BY purchased_at DESC`
     );
-    const hasDataExport = !!purchaseResult.rows?.[0]?.exists;
+    const dataExports = purchaseResult.rows || [];
+    const hasDataExport = dataExports.length > 0;
 
     if (!subRow) {
-      return corsResponse({ plan: 'free', status: 'inactive', hasDataExport }, 200, origin, env);
+      return corsResponse({ plan: 'free', status: 'inactive', hasDataExport, dataExports }, 200, origin, env);
     }
     const { plan, status, current_period_end, cancel_at_period_end } = subRow;
-    return corsResponse({ plan, status, current_period_end, cancel_at_period_end, hasDataExport }, 200, origin, env);
+    return corsResponse({ plan, status, current_period_end, cancel_at_period_end, hasDataExport, dataExports }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] billing-status failed:', e.message);
     return corsResponse({ error: e.message }, 500, origin, env);

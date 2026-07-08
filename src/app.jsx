@@ -411,6 +411,38 @@ function CheckoutForm({ product, onSuccess, onClose }) {
   );
 }
 
+// ─── Cancel-subscription modal — confirmation + optional feedback ─────────────
+function CancelModal({ busy, onConfirm, onClose }) {
+  const [feedback, setFeedback] = useState('');
+  return (
+    <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay') && !busy)onClose();}}>
+      <div className="upgrade-modal" style={{maxWidth:380}}>
+        <div className="upgrade-modal__title">Are you sure?</div>
+        <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 16px',textAlign:'left'}}>
+          You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately.
+        </p>
+        <label style={{display:'block',textAlign:'left',fontSize:11.5,fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
+          Want to leave feedback? (optional)
+        </label>
+        <textarea
+          className="cancel-feedback-input"
+          placeholder="What made you decide to cancel?"
+          value={feedback}
+          onChange={e=>setFeedback(e.target.value)}
+          disabled={busy}
+          rows={3}
+        />
+        <div style={{display:'flex',gap:10,marginTop:16}}>
+          <button className="btn btn--ghost" style={{flex:1}} onClick={onClose} disabled={busy}>Go back</button>
+          <button className="settings-danger-btn" style={{flex:1}} onClick={()=>onConfirm(feedback)} disabled={busy}>
+            {busy ? 'Working…' : 'Unsubscribe'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Billing section (Settings tab) ────────────────────────────────────────────
 function BillingSection({ user }) {
   const [status, setStatus]   = useState(null);
@@ -441,11 +473,14 @@ function BillingSection({ user }) {
   }
   useEffect(() => { load(); }, []);
 
-  async function handleCancel() {
+  async function handleCancel(feedback) {
     setBusy(true); setActionErr(null);
     try {
       const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-      const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/cancel`, { method: 'POST', headers });
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/cancel`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ feedback: feedback || undefined }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Cancel failed');
       const fresh = await load();
@@ -455,6 +490,27 @@ function BillingSection({ user }) {
         message: fresh?.current_period_end
           ? `You'll keep Pro access until ${new Date(fresh.current_period_end).toLocaleDateString()}, then move to Free automatically.`
           : `You'll keep Pro access through the end of your current billing period, then move to Free automatically.`,
+      });
+    } catch (e) {
+      setActionErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReactivate() {
+    setBusy(true); setActionErr(null);
+    try {
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/reactivate`, { method: 'POST', headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Reactivate failed');
+      const fresh = await load();
+      setStatusModal({
+        title: 'Subscription reactivated',
+        message: fresh?.current_period_end
+          ? `You're all set — renews automatically on ${new Date(fresh.current_period_end).toLocaleDateString()}.`
+          : `You're all set — your subscription will continue renewing automatically.`,
       });
     } catch (e) {
       setActionErr(e.message);
@@ -474,6 +530,7 @@ function BillingSection({ user }) {
   if (!status) return <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>;
 
   const isProPlan = status.plan === 'pro' && (status.status === 'active' || status.status === 'trialing');
+  const dataExports = status.dataExports || [];
 
   return (
     <>
@@ -482,13 +539,6 @@ function BillingSection({ user }) {
         <div className="settings-row settings-row--toggle">
           <div>
             <div className="settings-row__label">{isProPlan ? 'Pro — $11.99/month' : 'Free'}</div>
-            {isProPlan && status.current_period_end && (
-              <div className="settings-row__sub">
-                {status.cancel_at_period_end
-                  ? `Cancels on ${new Date(status.current_period_end).toLocaleDateString()}`
-                  : `Renews on ${new Date(status.current_period_end).toLocaleDateString()}`}
-              </div>
-            )}
           </div>
           {!isProPlan && (
             <button className="btn btn--primary" onClick={()=>setCheckoutProduct('pro')}>Upgrade →</button>
@@ -498,7 +548,32 @@ function BillingSection({ user }) {
               Cancel subscription
             </button>
           )}
+          {isProPlan && status.cancel_at_period_end && (
+            <button className="btn btn--primary" disabled={busy} onClick={handleReactivate}>
+              {busy ? 'Working…' : 'Reactivate'}
+            </button>
+          )}
         </div>
+
+        {/* Renewal/cancellation status — its own clearly separated subsection,
+            not just a small caption line, per the request for more robustness here. */}
+        {isProPlan && status.current_period_end && (
+          <div className="settings-subsection">
+            {status.cancel_at_period_end ? (
+              <>
+                <span className="settings-subsection__dot settings-subsection__dot--warn"/>
+                Canceled — Pro access stays active until{' '}
+                <strong>{new Date(status.current_period_end).toLocaleDateString()}</strong>.
+                Changed your mind? <button className="settings-inline-link" disabled={busy} onClick={handleReactivate}>Reactivate</button>
+              </>
+            ) : (
+              <>
+                <span className="settings-subsection__dot settings-subsection__dot--ok"/>
+                Renews automatically on <strong>{new Date(status.current_period_end).toLocaleDateString()}</strong>.
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="settings-group">
@@ -514,17 +589,25 @@ function BillingSection({ user }) {
             {status.hasDataExport ? 'Buy again' : 'Buy →'}
           </button>
         </div>
+
+        {/* Full purchase history, per the request — not just a yes/no flag. */}
+        {dataExports.length > 0 && (
+          <div className="settings-subsection settings-subsection--list">
+            <div className="settings-subsection__heading">Export history</div>
+            {dataExports.map((p, i) => (
+              <div key={i} className="settings-export-row">
+                <span>{new Date(p.purchased_at).toLocaleDateString(undefined, {year:'numeric',month:'short',day:'numeric'})}</span>
+                <span className="td-muted">${(p.amount_cents/100).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {actionErr && <div className="checkout-error">{actionErr}</div>}
 
       {confirmCancel && (
-        <ConfirmModal
-          title="Cancel your subscription?"
-          message="You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately."
-          confirmLabel="Cancel subscription"
-          cancelLabel="Never mind"
-          danger
+        <CancelModal
           busy={busy}
           onConfirm={handleCancel}
           onClose={()=>setConfirmCancel(false)}
@@ -574,12 +657,18 @@ async function neonWatchlistMutate(itemType, itemValue, action) {
   if (!cfg.NEON_PROXY_URL) return;
   try {
     const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-    await fetch(`${cfg.NEON_PROXY_URL}/watchlist`, {
+    const res = await fetch(`${cfg.NEON_PROXY_URL}/watchlist`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ action, item_type: itemType, item_value: itemValue }),
     });
-  } catch {}
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.error('[watchlist] mutate failed:', data.error || res.status);
+    }
+  } catch (e) {
+    console.error('[watchlist] mutate request failed:', e.message);
+  }
 }
 
 // Load watchlist from Neon on mount for Pro users
@@ -588,10 +677,13 @@ async function neonWatchlistLoad() {
   try {
     const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
     const res = await fetch(`${cfg.NEON_PROXY_URL}/watchlist`, { method: 'GET', headers });
-    if (!res.ok) return null;
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { console.error('[watchlist] load failed:', data.error || res.status); return null; }
     return data.items || null;
-  } catch { return null; }
+  } catch (e) {
+    console.error('[watchlist] load request failed:', e.message);
+    return null;
+  }
 }
 
 function useWatchlist(user) {
