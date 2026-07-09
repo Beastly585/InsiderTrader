@@ -118,6 +118,9 @@ export default {
     if (url.pathname === '/prefs') {
       return handlePrefs(request, env, origin);
     }
+    if (url.pathname === '/prefs/test-email') {
+      return handleTestEmail(request, env, origin);
+    }
 
     if (url.pathname === '/portfolio' || url.pathname.startsWith('/portfolio')) {
       return handlePortfolio(request, env, origin);
@@ -247,8 +250,10 @@ async function handlePrefs(request, env, origin) {
         SELECT daily_digest, weekly_digest,
                digest_top_signals, digest_congressional, digest_corporate,
                digest_watchlist_only, digest_min_conviction,
+               digest_max_signals, digest_min_value,
                instant_watchlist_ticker, instant_followed_insider,
-               instant_high_conviction, instant_reversal
+               instant_high_conviction, instant_reversal,
+               instant_min_value, instant_high_conviction_threshold
         FROM public.user_preferences
         WHERE clerk_user_id = ${sqlVal(clerkUserId)}
       `);
@@ -265,6 +270,12 @@ async function handlePrefs(request, env, origin) {
 
     const b = (v) => v ? 'TRUE' : 'FALSE';
     const conviction = ['any','medium','high'].includes(body.digest_min_conviction) ? body.digest_min_conviction : 'any';
+    // Numeric fields — clamp to sane non-negative values rather than trust the client outright.
+    const n = (v, fallback=0) => { const num = Number(v); return Number.isFinite(num) && num >= 0 ? num : fallback; };
+    const maxSignals   = n(body.digest_max_signals, 10);
+    const digestMinVal = n(body.digest_min_value, 0);
+    const instantMinVal = n(body.instant_min_value, 0);
+    const hcThreshold  = n(body.instant_high_conviction_threshold, 1000000);
 
     // Pull the email from Clerk directly rather than trusting the client —
     // this is what alerts actually get sent to, so it shouldn't be spoofable
@@ -290,30 +301,36 @@ async function handlePrefs(request, env, origin) {
         INSERT INTO public.user_preferences
           (clerk_user_id, email, daily_digest, weekly_digest,
            digest_top_signals, digest_congressional, digest_corporate,
-           digest_watchlist_only, digest_min_conviction,
+           digest_watchlist_only, digest_min_conviction, digest_max_signals, digest_min_value,
            instant_watchlist_ticker, instant_followed_insider,
-           instant_high_conviction, instant_reversal, updated_at)
+           instant_high_conviction, instant_reversal,
+           instant_min_value, instant_high_conviction_threshold, updated_at)
         VALUES (
           ${sqlVal(clerkUserId)}, ${sqlVal(email)}, ${b(body.daily_digest)}, ${b(body.weekly_digest)},
           ${b(body.digest_top_signals)}, ${b(body.digest_congressional)}, ${b(body.digest_corporate)},
-          ${b(body.digest_watchlist_only)}, ${sqlVal(conviction)},
+          ${b(body.digest_watchlist_only)}, ${sqlVal(conviction)}, ${maxSignals}, ${digestMinVal},
           ${b(body.instant_watchlist_ticker)}, ${b(body.instant_followed_insider)},
-          ${b(body.instant_high_conviction)}, ${b(body.instant_reversal)}, now()
+          ${b(body.instant_high_conviction)}, ${b(body.instant_reversal)},
+          ${instantMinVal}, ${hcThreshold}, now()
         )
         ON CONFLICT (clerk_user_id) DO UPDATE SET
-          email                     = EXCLUDED.email,
-          daily_digest              = EXCLUDED.daily_digest,
-          weekly_digest             = EXCLUDED.weekly_digest,
-          digest_top_signals        = EXCLUDED.digest_top_signals,
-          digest_congressional      = EXCLUDED.digest_congressional,
-          digest_corporate          = EXCLUDED.digest_corporate,
-          digest_watchlist_only     = EXCLUDED.digest_watchlist_only,
-          digest_min_conviction     = EXCLUDED.digest_min_conviction,
-          instant_watchlist_ticker  = EXCLUDED.instant_watchlist_ticker,
-          instant_followed_insider  = EXCLUDED.instant_followed_insider,
-          instant_high_conviction   = EXCLUDED.instant_high_conviction,
-          instant_reversal          = EXCLUDED.instant_reversal,
-          updated_at                = now()
+          email                              = EXCLUDED.email,
+          daily_digest                       = EXCLUDED.daily_digest,
+          weekly_digest                      = EXCLUDED.weekly_digest,
+          digest_top_signals                 = EXCLUDED.digest_top_signals,
+          digest_congressional               = EXCLUDED.digest_congressional,
+          digest_corporate                   = EXCLUDED.digest_corporate,
+          digest_watchlist_only              = EXCLUDED.digest_watchlist_only,
+          digest_min_conviction              = EXCLUDED.digest_min_conviction,
+          digest_max_signals                 = EXCLUDED.digest_max_signals,
+          digest_min_value                   = EXCLUDED.digest_min_value,
+          instant_watchlist_ticker           = EXCLUDED.instant_watchlist_ticker,
+          instant_followed_insider           = EXCLUDED.instant_followed_insider,
+          instant_high_conviction            = EXCLUDED.instant_high_conviction,
+          instant_reversal                   = EXCLUDED.instant_reversal,
+          instant_min_value                  = EXCLUDED.instant_min_value,
+          instant_high_conviction_threshold  = EXCLUDED.instant_high_conviction_threshold,
+          updated_at                         = now()
       `);
       return corsResponse({ ok: true }, 200, origin, env);
     } catch (e) {
@@ -322,6 +339,65 @@ async function handlePrefs(request, env, origin) {
   }
 
   return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
+}
+
+// ── Send a one-off test email — lets a user verify Resend delivery and their
+// email address are actually working, without waiting for a real trigger.
+// Pro-gated, same as the notification system itself.
+async function handleTestEmail(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  try {
+    const subResult = await neonFetch(env,
+      `SELECT status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+    );
+    const status = subResult.rows?.[0]?.status;
+    if (status !== 'active' && status !== 'trialing') {
+      return corsResponse({ error: 'Test emails are a Pro feature' }, 403, origin, env);
+    }
+
+    if (!env.RESEND_API_KEY) {
+      return corsResponse({ error: 'Email sending is not configured on this Worker yet' }, 500, origin, env);
+    }
+
+    let email = null;
+    if (env.CLERK_SECRET_KEY) {
+      const r = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
+        headers: { 'Authorization': `Bearer ${env.CLERK_SECRET_KEY}` },
+      });
+      const u = await r.json();
+      const primaryId = u.primary_email_address_id;
+      email = u.email_addresses?.find(e => e.id === primaryId)?.email_address
+           || u.email_addresses?.[0]?.email_address || null;
+    }
+    if (!email) return corsResponse({ error: 'Could not verify your account email' }, 500, origin, env);
+
+    const fromEmail = env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app';
+    const appUrl = env.APP_URL || 'https://seli.app';
+    const html = `
+      <div style="font-family:-apple-system,sans-serif;max-width:560px;margin:0 auto;color:#111827;">
+        <p style="font-size:14px;">This is a test email from Seli — if you're reading this, your notification delivery is working correctly.</p>
+        <p style="font-size:13px;color:#8B95A5;">Real digests and instant alerts will look similar to this, populated with actual insider activity matching your Settings.</p>
+        <p style="margin-top:20px;"><a href="${appUrl}" style="color:#7C6FFF;">Open Seli →</a></p>
+      </div>`;
+
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: fromEmail, to: [email], subject: 'Seli — test email', html }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      console.error('[Worker] Test email failed:', resp.status, errText.slice(0,200));
+      return corsResponse({ error: 'Resend rejected the send — check Worker secrets' }, 502, origin, env);
+    }
+
+    return corsResponse({ ok: true, sentTo: email }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] test-email failed:', e.message);
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
 }
 
 async function handleWatchlist(request, env, origin) {

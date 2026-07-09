@@ -1,0 +1,73 @@
+name: Send Email Digests
+
+on:
+  schedule:
+    # 8:00am ET (12:00 UTC, EDT) — a reasonable time for someone to actually
+    # read a morning digest, as opposed to piggybacking on the 4am ingestion
+    # safety-sweep just because it's already scheduled.
+    - cron: '0 12 * * *'
+
+  workflow_dispatch:
+    inputs:
+      digest_type:
+        description: 'daily or weekly'
+        required: false
+        default: 'daily'
+      dry_run:
+        description: 'Dry run — log what would send, without sending'
+        required: false
+        default: 'false'
+
+jobs:
+  daily-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11', cache: 'pip' }
+      - run: pip install --upgrade pip && pip install "psycopg[binary]" requests
+      - name: Send daily digest
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTS_FROM_EMAIL: ${{ secrets.ALERTS_FROM_EMAIL }}
+          APP_URL: ${{ secrets.APP_URL }}
+          DIGEST_TYPE: ${{ github.event.inputs.digest_type || 'daily' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          cd db
+          python send_digests.py
+
+  weekly-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check if Monday
+        id: dow
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.digest_type }}" = "weekly" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(date -u +%u)" = "1" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.dow.outputs.run == 'true'
+        with: { python-version: '3.11', cache: 'pip' }
+      - run: pip install --upgrade pip && pip install "psycopg[binary]" requests
+        if: steps.dow.outputs.run == 'true'
+      - name: Send weekly digest
+        if: steps.dow.outputs.run == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTS_FROM_EMAIL: ${{ secrets.ALERTS_FROM_EMAIL }}
+          APP_URL: ${{ secrets.APP_URL }}
+          DIGEST_TYPE: weekly
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          cd db
+          python send_digests.py

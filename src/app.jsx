@@ -4990,11 +4990,15 @@ const DEFAULT_PREFS = {
   digest_corporate:       true,
   digest_watchlist_only:  false,
   digest_min_conviction:  'any',
+  digest_max_signals:     10,   // 0 = unlimited
+  digest_min_value:       0,    // 0 = any amount
   // Instant alerts
   instant_watchlist_ticker: false,
   instant_followed_insider: false,
   instant_high_conviction:  false,
   instant_reversal:         false,
+  instant_min_value:                 0,        // 0 = any amount
+  instant_high_conviction_threshold: 1000000,   // was hardcoded server-side before
 };
 
 function useNotificationPrefs(userId, pro) {
@@ -5068,10 +5072,26 @@ function SettingsPage({ user, onUpgrade }) {
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
   const [section, setSection] = useState('billing');
   const [local,   setLocal]   = useState(null);
+  const [testState, setTestState] = useState(null); // null | 'sending' | 'sent' | error string
 
   useEffect(()=>{ if (prefs && !local) setLocal({...prefs}); },[prefs]);
 
   function upd(key, val) { setLocal(p=>({...p, [key]:val})); }
+
+  async function sendTestEmail() {
+    setTestState('sending');
+    try {
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/prefs/test-email`, { method: 'POST', headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Test email failed');
+      setTestState('sent');
+      setTimeout(()=>setTestState(null), 4000);
+    } catch (e) {
+      setTestState(e.message || 'Test email failed');
+      setTimeout(()=>setTestState(null), 5000);
+    }
+  }
 
   const SECTIONS = [
     {id:'billing',  label:'Billing',        icon:'$'},
@@ -5198,11 +5218,48 @@ function SettingsPage({ user, onUpgrade }) {
                   </div>
                 </div>
 
+                {/* Volume & sizing controls */}
+                <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
+                  <div className="settings-group__label">Digest size</div>
+                  <div className="settings-row">
+                    <div style={{flex:1}}>
+                      <div className="settings-row__label">Max tickers per digest</div>
+                      <div className="settings-row__sub">Caps how many tickers appear in one email, ranked by net flow</div>
+                    </div>
+                    <select className="settings-select" value={local.digest_max_signals} disabled={!pro}
+                      onChange={e=>upd('digest_max_signals', Number(e.target.value))}>
+                      {[5,10,20,50].map(n=><option key={n} value={n}>{n}</option>)}
+                      <option value={0}>Unlimited</option>
+                    </select>
+                  </div>
+                  <div className="settings-row">
+                    <div style={{flex:1}}>
+                      <div className="settings-row__label">Minimum trade value</div>
+                      <div className="settings-row__sub">Skip tickers where no single trade reaches this size</div>
+                    </div>
+                    <select className="settings-select" value={local.digest_min_value} disabled={!pro}
+                      onChange={e=>upd('digest_min_value', Number(e.target.value))}>
+                      <option value={0}>Any amount</option>
+                      <option value={10000}>$10K+</option>
+                      <option value={50000}>$50K+</option>
+                      <option value={250000}>$250K+</option>
+                      <option value={1000000}>$1M+</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="settings-save-row">
                   <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
                     {saving?'Saving…':saved?'✓ Saved':'Save digest settings'}
                   </button>
+                  {pro&&(
+                    <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>
+                      {testState==='sending'?'Sending…':'Send test email'}
+                    </button>
+                  )}
                   {saved&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Saved</span>}
+                  {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
+                  {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
                   {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
                   {!pro&&<button className="settings-section__lock" onClick={onUpgrade}>Upgrade to Pro to save</button>}
                 </div>
@@ -5240,17 +5297,44 @@ function SettingsPage({ user, onUpgrade }) {
                     onChange={e=>upd('instant_followed_insider', e.target.checked)}
                     pro={pro}
                   />
+                  <div className="settings-row">
+                    <div style={{flex:1}}>
+                      <div className="settings-row__label">Minimum trade value</div>
+                      <div className="settings-row__sub">Applies to both watchlist triggers above — skip anything smaller</div>
+                    </div>
+                    <select className="settings-select" value={local.instant_min_value} disabled={!pro}
+                      onChange={e=>upd('instant_min_value', Number(e.target.value))}>
+                      <option value={0}>Any amount</option>
+                      <option value={10000}>$10K+</option>
+                      <option value={50000}>$50K+</option>
+                      <option value={250000}>$250K+</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div className="settings-group">
                   <div className="settings-group__label">Signal triggers</div>
                   <SettingsToggle
                     label="High conviction signal"
-                    sub="C-suite cluster buy above $1M — regardless of watchlist"
+                    sub="C-suite buy at or above your threshold below — regardless of watchlist"
                     checked={local.instant_high_conviction}
                     onChange={e=>upd('instant_high_conviction', e.target.checked)}
                     pro={pro}
                   />
+                  <div className="settings-row">
+                    <div style={{flex:1}}>
+                      <div className="settings-row__label">High conviction threshold</div>
+                      <div className="settings-row__sub">Minimum single-trade size to count as high conviction</div>
+                    </div>
+                    <select className="settings-select" value={local.instant_high_conviction_threshold} disabled={!pro}
+                      onChange={e=>upd('instant_high_conviction_threshold', Number(e.target.value))}>
+                      <option value={250000}>$250K+</option>
+                      <option value={500000}>$500K+</option>
+                      <option value={1000000}>$1M+</option>
+                      <option value={2000000}>$2M+</option>
+                      <option value={5000000}>$5M+</option>
+                    </select>
+                  </div>
                   <SettingsToggle
                     label="Reversal detected"
                     sub="An insider on a watched ticker changes direction"
@@ -5264,7 +5348,14 @@ function SettingsPage({ user, onUpgrade }) {
                   <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
                     {saving?'Saving…':saved?'✓ Saved':'Save alert settings'}
                   </button>
+                  {pro&&(
+                    <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>
+                      {testState==='sending'?'Sending…':'Send test email'}
+                    </button>
+                  )}
                   {saved&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Saved</span>}
+                  {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
+                  {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
                   {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
                   {!pro&&<button className="settings-section__lock" onClick={onUpgrade}>Upgrade to Pro to save</button>}
                 </div>
