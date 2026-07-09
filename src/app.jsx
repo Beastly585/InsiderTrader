@@ -2358,10 +2358,9 @@ function InsiderSignalsTabs({ corp, pol, filings, cutoff, loading, onRowClick, o
   );
 }
 
-function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail }) {
+function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist }) {
   const [days, setDays] = useState(7);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
-  const watchlist = useWatchlist();
 
   const signals = useMemo(()=>{
     const base = filings.filter(f=>
@@ -2544,9 +2543,8 @@ function detectReversals(filings) {
 }
 
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
-function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow }) {
+function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow, watchlist }) {
   const pro = isPro(user);
-  const watchlist = useWatchlist();
   const [days, setDays] = useState(7);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
   const [sigSort, setSigSort] = useState('conviction');
@@ -2623,6 +2621,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         filings={filings} cutoff={cutoff} days={days}
         onOpenDetail={openInDrawer}
         onExpand={()=>{onCloseDetail&&onCloseDetail();setPortModal(true);}}
+        watchlist={watchlist}
       />
 
       {/* Two-column body — signals | insiders */}
@@ -2779,6 +2778,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           onClose={()=>{setModal(null);setModalInitial(null);}}
           sigSort={sigSort} sigDir={sigDir} sigOnSort={sigOnSort}
           ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading}
+          watchlist={watchlist}
         />
       )}
       {portModal&&(
@@ -2786,6 +2786,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           filings={filings} cutoff={cutoff} days={days}
           onOpenDetail={onOpenDetail}
           onClose={()=>setPortModal(false)}
+          watchlist={watchlist}
         />
       )}
     </div>
@@ -2799,8 +2800,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // Clicking any row in the left pane drives the right pane without closing.
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
-function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, ensureFilingsWindow, filingsLoading }) {
-  const watchlist = useWatchlist();
+function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, ensureFilingsWindow, filingsLoading, watchlist }) {
 
   // ── left pane state ──────────────────────────────────────────────────────
   const [search, setSearch]   = useState('');
@@ -3138,9 +3138,8 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 // Full-width horizontal bar above the signal/insider grid. Shows balance on the
 // left and clickable position chips on the right. Flagged if insider activity
 // exists on that ticker within the selected timespan.
-function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand }) {
+function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, watchlist }) {
   const { port, err } = usePortfolio();
-  const watchlist = useWatchlist();
 
   const posKey = (port?.positions||[]).map(p=>p.symbol).join(',');
   const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[posKey]);
@@ -3226,9 +3225,8 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand })
 // ─── PortfolioDrawer ──────────────────────────────────────────────────────────
 // Full portfolio deep-dive: left pane = positions + stats + insider activity tabs,
 // right pane = DetailPanel inline for selected ticker + news.
-function PortfolioDrawer({ filings, cutoff, days, onClose }) {
+function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
   const { port } = usePortfolio();
-  const watchlist = useWatchlist();
   const [selected, setSelected] = useState(null);
   const [detail, setDetail]     = useState(null);
   const [detailStack, setDetailStack] = useState([]);
@@ -3420,9 +3418,8 @@ function PortfolioDrawer({ filings, cutoff, days, onClose }) {
 
 // ─── InsightsPortfolioPanel ───────────────────────────────────────────────────
 // Kept for compatibility — no longer rendered in main Insights layout.
-function InsightsPortfolioPanel({ filings, cutoff, days, onOpenDetail }) {
+function InsightsPortfolioPanel({ filings, cutoff, days, onOpenDetail, watchlist }) {
   const { port, err } = usePortfolio();
-  const watchlist = useWatchlist();
 
   const posKey = (port?.positions||[]).map(p=>p.symbol).join(',');
   const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[posKey]);
@@ -4453,10 +4450,27 @@ function PortfolioSuggestions({ filings, ownedTickers, onOpenDetail }) {
 function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow }) {
   const [days, setDays] = useState(30);
   const [tab, setTab]   = useState('tickers');
+  const [sortKey, setSortKey] = useState('netValue');
+  const [sortDir, setSortDir] = useState(-1);
+  const [detail, setDetail] = useState(null);
+  const [detailStack, setDetailStack] = useState([]);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
 
   const watchedTickers  = watchlist.tickers;
   const watchedInsiders = watchlist.insiders || [];
+
+  function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
+  function goBack() { setDetailStack(s=>{ const next=[...s]; const prev=next.pop(); setDetail(prev||null); return next; }); }
+  function selectRow(d) { setDetailStack([]); setDetail(d); }
+
+  // Reset selection when switching tabs or when the currently-selected item
+  // gets unwatched out from under it (star/follow toggled off from within
+  // the open detail pane itself).
+  useEffect(()=>{ setDetail(null); setDetailStack([]); }, [tab]);
+  useEffect(()=>{
+    if (detail?.type==='ticker' && !watchedTickers.includes(detail.ticker)) { setDetail(null); setDetailStack([]); }
+    if (detail?.type==='trader' && !watchedInsiders.includes(detail.name)) { setDetail(null); setDetailStack([]); }
+  }, [watchedTickers, watchedInsiders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const signals = useMemo(()=>{
     if (!watchedTickers.length) return [];
@@ -4465,25 +4479,58 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
       if ((f.transactionDate||f.date||'') < cutoff) return false;
       return true;
     });
-    return buildSignals(base).sort((a,b)=>b.conviction-a.conviction);
+    const built = buildSignals(base);
+    // Tickers with zero qualifying signals in this window still belong on the
+    // list — they're watched regardless of recent activity — so backfill a
+    // bare placeholder row for any watched ticker buildSignals didn't produce.
+    const seen = new Set(built.map(s=>s.ticker));
+    watchedTickers.forEach(t=>{
+      if (!seen.has(t)) built.push({ ticker:t, company:'', conviction:0, netValue:0, cSuiteBuys:0, insiderCount:0, lastTradeDate:null });
+    });
+    return built;
   },[filings, watchedTickers, cutoff]);
 
-  // Recent raw trades for watched tickers — shown in a compact feed
-  const recentTrades = useMemo(()=>{
-    if (!watchedTickers.length) return [];
-    return filings
-      .filter(f=>watchedTickers.includes(f.ticker) && (f.transactionDate||f.date||'')>=cutoff)
-      .sort((a,b)=>((b.transactionDate||b.date||'') > (a.transactionDate||a.date||'')) ? 1 : -1)
-      .slice(0, 100);
-  },[filings, watchedTickers, cutoff]);
+  const insiderRows = useMemo(()=>{
+    if (!watchedInsiders.length) return [];
+    const byName = {};
+    filings
+      .filter(f=>watchedInsiders.includes(f.insiderName) && (f.transactionDate||f.date||'')>=cutoff)
+      .forEach(f=>{
+        if (!byName[f.insiderName]) byName[f.insiderName] = { name:f.insiderName, title:f.title||'', trades:0, netValue:0, lastDate:null };
+        byName[f.insiderName].trades++;
+        byName[f.insiderName].netValue += (f.transactionType==='buy'?1:-1) * (f.value||0);
+        const d = f.transactionDate||f.date;
+        if (!byName[f.insiderName].lastDate || d>byName[f.insiderName].lastDate) byName[f.insiderName].lastDate = d;
+      });
+    watchedInsiders.forEach(n=>{ if (!byName[n]) byName[n] = { name:n, title:'', trades:0, netValue:0, lastDate:null }; });
+    return Object.values(byName);
+  },[filings, watchedInsiders, cutoff]);
+
+  const sortedTickerRows = useMemo(()=>{
+    return [...signals].sort((a,b)=>{
+      const av=a[sortKey]??-Infinity, bv=b[sortKey]??-Infinity;
+      if (typeof av==='string') return sortDir>0 ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir>0 ? av-bv : bv-av;
+    });
+  },[signals, sortKey, sortDir]);
+
+  const sortedInsiderRows = useMemo(()=>{
+    const key = sortKey==='conviction' ? 'trades' : sortKey==='lastTradeDate' ? 'lastDate' : sortKey; // map shared sort keys to this tab's field names
+    return [...insiderRows].sort((a,b)=>{
+      const av=a[key]??-Infinity, bv=b[key]??-Infinity;
+      if (typeof av==='string') return sortDir>0 ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir>0 ? av-bv : bv-av;
+    });
+  },[insiderRows, sortKey, sortDir]);
+
+  function onSort(key) { if (sortKey===key) setSortDir(d=>-d); else { setSortKey(key); setSortDir(-1); } }
+
+  const rows = tab==='tickers' ? sortedTickerRows : sortedInsiderRows;
+  const emptyNow = tab==='tickers' ? watchedTickers.length===0 : watchedInsiders.length===0;
 
   return (
     <div className="page-content">
       <div className="wl-toolbar">
-        <p className="page-sub" style={{margin:0}}>
-          {watchedTickers.length} ticker{watchedTickers.length!==1?'s':''} · {watchedInsiders.length} insider{watchedInsiders.length!==1?'s':''} tracked
-        </p>
-        <div className="drawer__toolbar-divider" style={{alignSelf:'stretch',margin:0}}/>
         <div className="ins-filter-group">
           <span className="ins-filter-group__label">View</span>
           <div className="settings-tabs">
@@ -4504,109 +4551,99 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
             ))}
           </div>
         </div>
+        <p className="page-sub" style={{margin:'0 0 0 auto'}}>
+          {watchedTickers.length} ticker{watchedTickers.length!==1?'s':''} · {watchedInsiders.length} insider{watchedInsiders.length!==1?'s':''} tracked
+        </p>
       </div>
 
-      {tab==='insiders' ? (
-        watchedInsiders.length===0 ? (
-          <div className="wl-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} width="40" height="40" style={{color:'var(--text-3)'}}><circle cx="12" cy="12" r="9"/></svg>
-            <div className="wl-empty__title">No insiders followed yet</div>
-            <div className="wl-empty__sub">Click "Follow" on any insider in the leaderboard or trader profile to track their activity here.</div>
-          </div>
-        ) : (
-          <div className="wl-body">
-            <div className="wl-chip-row">
-              {watchedInsiders.map(n=>(
-                <div key={n} className="wl-chip">
-                  <span className="wl-chip__name" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:n,title:''})}>{n}</span>
-                  <button className="wl-chip__remove" onClick={()=>watchlist.toggleInsider(n)} title="Unfollow"><IconClose style={{width:12,height:12}}/></button>
-                </div>
-              ))}
-            </div>
-            <div className="wl-insider-feed">
-              {filings
-                .filter(f=>watchedInsiders.includes(f.insiderName) && (f.transactionDate||f.date||'')>=cutoff)
-                .sort((a,b)=>((b.transactionDate||b.date||'')>(a.transactionDate||a.date||''))?1:-1)
-                .slice(0,100)
-                .map((f,i)=>(
-                  <div key={i} className="wl-trade-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:f.insiderName,title:f.title})}>
-                    <span className="td-muted" style={{fontSize:11,minWidth:90}}>{f.insiderName?.split(' ').slice(-1)[0]}</span>
-                    <span className="ticker" style={{fontSize:12}}>{f.ticker}</span>
-                    <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?<IconBuyTri style={{width:8,height:8}}/>:<IconSellTri style={{width:8,height:8}}/>}</Badge>
-                    <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</span>
-                    <span className="td-muted" style={{fontSize:10}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )
-      ) : watchedTickers.length===0 ? (
+      {emptyNow ? (
         <div className="wl-empty">
-          <div className="wl-empty__icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" width="40" height="40">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
+          {tab==='tickers' ? (
+            <div className="wl-empty__icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" width="40" height="40">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </div>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} width="40" height="40" style={{color:'var(--text-3)'}}><circle cx="12" cy="12" r="9"/></svg>
+          )}
+          <div className="wl-empty__title">{tab==='tickers' ? 'No tickers watched yet' : 'No insiders followed yet'}</div>
+          <div className="wl-empty__sub">
+            {tab==='tickers'
+              ? 'Click the star on any ticker in Insights, the detail panel, or All Data to start tracking it here.'
+              : 'Click "Follow" on any insider in the leaderboard or trader profile to track their activity here.'}
           </div>
-          <div className="wl-empty__title">No tickers watched yet</div>
-          <div className="wl-empty__sub">Click the ☆ star on any ticker in Insights, the detail panel, or All Data to start tracking it here.</div>
         </div>
       ) : (
-        <div className="wl-body">
-          {/* Watched tickers strip — ticker tab only */}
-          <div className="wl-chip-row">
-            {watchedTickers.map(t=>(
-              <div key={t} className="wl-chip">
-                <span className="ticker" style={{fontSize:13}} onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:t,company:''})}>{t}</span>
-                <button className="wl-chip__remove" onClick={()=>watchlist.toggle(t)} title="Remove"><IconClose style={{width:12,height:12}}/></button>
+        <div className="drawer__body wl-drawer-body">
+          <div className="drawer__list">
+            <div className="drawer__list-hdr">
+              <span>{rows.length} {tab}</span>
+            </div>
+            {tab==='tickers' ? (
+              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 70px 100px 90px'}}>
+                <button className="ins-col-sort" onClick={()=>onSort('ticker')}>Ticker · Company{sortKey==='ticker'&&(sortDir<0?' ↓':' ↑')}</button>
+                <span/>
+                <button className="ins-col-sort" onClick={()=>onSort('conviction')}>Signal{sortKey==='conviction'&&(sortDir<0?' ↓':' ↑')}</button>
+                <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
               </div>
-            ))}
+            ) : (
+              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 70px 90px'}}>
+                <button className="ins-col-sort" onClick={()=>onSort('name')}>Insider{sortKey==='name'&&(sortDir<0?' ↓':' ↑')}</button>
+                <button className="ins-col-sort" onClick={()=>onSort('trades')}>Trades{sortKey==='trades'&&(sortDir<0?' ↓':' ↑')}</button>
+                <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
+              </div>
+            )}
+
+            <div className="drawer__list-scroll">
+              {tab==='tickers' ? sortedTickerRows.map(s=>{
+                const isSel = detail?.type==='ticker' && detail.ticker===s.ticker;
+                return (
+                  <div key={s.ticker} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={{gridTemplateColumns:'1fr 70px 100px 90px'}}
+                    onClick={()=>selectRow({type:'ticker', ticker:s.ticker, company:s.company})}>
+                    <div className="ins-sig-row__left">
+                      <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
+                      <div className="ins-sig-row__co">{s.company}</div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center'}}><StarBtn ticker={s.ticker} watchlist={watchlist}/></div>
+                    <ConvictionBar score={s.conviction}/>
+                    <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
+                  </div>
+                );
+              }) : sortedInsiderRows.map(r=>{
+                const isSel = detail?.type==='trader' && detail.name===r.name;
+                return (
+                  <div key={r.name} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={{gridTemplateColumns:'1fr 70px 90px'}}
+                    onClick={()=>selectRow({type:'trader', name:r.name, title:r.title})}>
+                    <div className="ins-sig-row__left">
+                      <span className="ins-sig-row__ticker" style={{fontSize:13}}>{r.name}</span>
+                      {r.title&&<div className="ins-sig-row__co">{r.title}</div>}
+                    </div>
+                    <div style={{display:'flex',alignItems:'center'}}><FollowBtn name={r.name} watchlist={watchlist}/></div>
+                    <span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="wl-grid">
-            {/* Left: signals for watched tickers */}
-            <div className="wl-signals">
-              <div className="wl-section-label">Signals</div>
-              {loading ? <div className="state-box"><Spinner/><p>Loading…</p></div>
-              : signals.length===0 ? <div className="ins-empty">No qualifying signals for watched tickers in the last {days}d</div>
-              : signals.map((s,i)=>(
-                <div key={s.ticker} className="ins-sig-row" style={{gridTemplateColumns:'180px 1fr auto'}}
-                  onClick={()=>onOpenDetail&&onOpenDetail({type:'signal',...s})}>
-                  <div className="ins-sig-row__left">
-                    <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
-                    <div className="ins-sig-row__co">{s.company}</div>
-                  </div>
-                  <div className="ins-sig-row__mid">
-                    {s.cSuiteBuys>0&&<span className="csuite-badge">{s.cSuiteBuys}× exec</span>}
-                    <span className="td-muted" style={{fontSize:11}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>
-                    <span className="td-muted" style={{fontSize:11}}>{fmt.ago(s.lastTradeDate)}</span>
-                  </div>
-                  <div className="ins-sig-row__right">
-                    <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
-                    {s.avgReturn!=null&&(
-                      <span className={`ins-spent-badge ${s.avgReturn>50?'ins-spent-badge--big':s.avgReturn>20?'ins-spent-badge--spent':'ins-spent-badge--fresh'}`}>
-                        {s.avgReturn>=0?'+':''}{s.avgReturn.toFixed(0)}%
-                      </span>
-                    )}
-                    <div style={{marginTop:3}}><ConvictionBar score={s.conviction}/></div>
-                  </div>
+          <div className="drawer__detail">
+            {!detail
+              ? <div className="drawer__detail-empty">
+                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
+                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {tab==='tickers'?'ticker':'insider'} to explore</div>
                 </div>
-              ))}
-            </div>
-
-            {/* Right: raw trade feed */}
-            <div className="wl-feed">
-              <div className="wl-section-label">Recent trades</div>
-              {recentTrades.length===0 ? <div className="ins-empty">No trades in this window</div>
-              : recentTrades.map((f,i)=>(
-                <div key={i} className="wl-trade-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company})}>
-                  <span className="ticker" style={{fontSize:12}}>{f.ticker}</span>
-                  <span className="td-muted" style={{flex:1,fontSize:11}}>{f.insiderName} <span className="td-muted" style={{fontSize:10}}>({f.relationship==='strong'?'C-Suite':f.relationship==='medium'?'Officer':'Dir'})</span></span>
-                  <Badge type={f.transactionType==='buy'?'buy':f.transactionType==='sell'?'sell':'other'}>{f.transactionType==='buy'?<IconBuyTri style={{width:8,height:8}}/>:<IconSellTri style={{width:8,height:8}}/>}</Badge>
-                  <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</span>
-                  <span className="td-muted" style={{fontSize:10}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
-                </div>
-              ))}
-            </div>
+              : <DetailPanel
+                  detail={detail}
+                  filings={filings}
+                  onClose={()=>{setDetail(null);setDetailStack([]);}}
+                  onNavigate={navigate}
+                  onBack={goBack}
+                  canGoBack={detailStack.length>0}
+                  watchlist={watchlist}
+                  inline={true}
+                />
+            }
           </div>
         </div>
       )}
@@ -5705,12 +5742,12 @@ export default function App() {
           </div>
         </div>
         <div className="content-area">
-          {page==='dashboard'&&<DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail}/>}
+          {page==='dashboard'&&<DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist}/>}
           {page==='signals'  &&<InsightsPage   filings={filings} loading={loading}
             highlightTicker={hlTicker} setHighlightTicker={setHlTick}
             onSelectSignal={selectSignal} selectedSignal={selSignal}
             onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user}
-            ensureFilingsWindow={ensureFilingsWindow}/>}
+            ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist}/>}
           {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>}
           {page==='settings'  &&<SettingsPage user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>}
           {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow}/>}

@@ -1953,6 +1953,11 @@ td { padding:7px 11px; vertical-align:middle; }
   flex-shrink: 0; flex-wrap: wrap;
 }
 .drawer__empty { padding: 20px 14px; font-size: 0.75rem; color: var(--text-3); }
+.drawer__list-scroll { display: flex; flex-direction: column; }
+.wl-drawer-body {
+  grid-template-columns: 340px 1fr;
+  height: calc(100vh - var(--ins-offset, 180px));
+}
 .drawer__list-row {
   padding: 8px 12px; border-bottom: 0.5px solid var(--border);
   cursor: pointer; transition: background .07s; flex-shrink: 0;
