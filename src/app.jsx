@@ -1161,7 +1161,7 @@ function FollowBtn({ name, watchlist }) {
   );
 }
 
-function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, watchlist, inline=false }) {
+function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, watchlist, inline=false, onExpand }) {
   // Note: this component is only ever mounted by the caller when `detail` is
   // truthy (see App's panelOpen guard), so `d` is always defined here. No
   // early-return guard before the hooks below — that pattern breaks React's
@@ -1576,7 +1576,8 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       <div className="detail-panel__header">
         {canGoBack&&<button className="btn btn--ghost btn--icon" onClick={onBack} title="Back">←</button>}
         <div style={{minWidth:0,flex:1}}>{header()}</div>
-        {!inline&&<button className="btn btn--ghost btn--icon" onClick={()=>setExpanded(e=>!e)} title={expanded?'Collapse':'Expand'}>{expanded?'⤢':'⤡'}</button>}
+        {!inline&&onExpand&&<button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
+        {!inline&&<button className="btn btn--ghost btn--icon" onClick={()=>setExpanded(e=>!e)} title={expanded?'Collapse':'Enlarge'}>{expanded?'▣':'▢'}</button>}
         {!inline&&<button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>}
         {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:11}} onClick={onClose} title="Clear"><IconClose style={{width:12,height:12}}/></button>}
       </div>
@@ -2643,7 +2644,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <div className="ins-filter-group">
               <span className="ins-filter-group__label">Window</span>
               <div className="dash-tile-pills">
-                {[1,3,7,30].map(d=>(
+                {[1,3,7,30,90].map(d=>(
                   <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>setDays(d)}>{d}d</button>
                 ))}
               </div>
@@ -2779,6 +2780,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           sigSort={sigSort} sigDir={sigDir} sigOnSort={sigOnSort}
           ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading}
           watchlist={watchlist}
+          initialFilters={{days, sourceF, sectorF, minStrength}}
         />
       )}
       {portModal&&(
@@ -2800,18 +2802,22 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // Clicking any row in the left pane drives the right pane without closing.
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
-function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, ensureFilingsWindow, filingsLoading, watchlist }) {
+function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, ensureFilingsWindow, filingsLoading, watchlist, initialFilters }) {
 
   // ── left pane state ──────────────────────────────────────────────────────
+  // Seeded from the tile's current selections when opened via "Explore full
+  // view" or a row click, so filtering work already done on the tile isn't
+  // silently discarded — falls back to these defaults when opened with no
+  // tile context (e.g. a deep-linked ticker/insider URL).
   const [search, setSearch]   = useState('');
   const [lbRows, setLbRows]   = useState(null);
   const [lbSort, setLbSort]   = useState('hit_rate');
   const [lbDir,  setLbDir]    = useState(-1);
-  const [srcF,   setSrcF]     = useState('');
-  const [secF,   setSecF]     = useState('');
-  const [minStr, setMinStr]   = useState(1);
-  const [daysBack, setDaysBack] = useState(30); // null = All time
-  const [minValue, setMinValue] = useState(0);  // $ net value floor
+  const [srcF,   setSrcF]     = useState(initialFilters?.sourceF ?? '');
+  const [secF,   setSecF]     = useState(initialFilters?.sectorF ?? '');
+  const [minStr, setMinStr]   = useState(initialFilters?.minStrength ?? 1);
+  const [daysBack, setDaysBack] = useState(initialFilters?.days ?? 30); // null = All time
+  const [minValue, setMinValue] = useState(0);  // $ net value floor — tile has no equivalent to seed from
 
   // ── right pane nav stack ─────────────────────────────────────────────────
   // Each entry is a {type, ...props} detail object — same shape as DetailPanel's `detail` prop
@@ -2907,6 +2913,26 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
     if (initialDetail) return; // already handled above
     if (type==='insiders' && sortedLb.length) setDetail({type:'trader',name:sortedLb[0].insider_name,title:sortedLb[0].insider_title});
   },[type, sortedLb.length > 0, initialDetail]);
+
+  // Scroll the left list to whatever's selected when the drawer first opens —
+  // without this, expanding from a quick-glance preview lands the user on a
+  // fully-scrolled, freshly-sorted list with the actual selection potentially
+  // way off-screen, making it hard to tell what's selected or how it relates
+  // to everything else in the list. Only fires once per open, not on every
+  // later click within the drawer — a row the user just clicked is already
+  // visible, so re-scrolling then would just be disorienting.
+  const listRef = useRef(null);
+  const scrolledOnOpenRef = useRef(false);
+  useEffect(()=>{
+    if (scrolledOnOpenRef.current || !detail) return;
+    const key = detail.type==='trader' ? detail.name : detail.ticker;
+    if (!key) return;
+    const el = listRef.current?.querySelector(`[data-row-key="${CSS.escape(key)}"]`);
+    if (el) {
+      el.scrollIntoView({ block: 'center' });
+      scrolledOnOpenRef.current = true;
+    }
+  },[detail, filteredSignals, sortedLb]);
 
   return (
     <div className="drawer-overlay" onClick={e=>{ if(e.target.classList.contains('drawer-overlay')) onClose(); }}>
@@ -3032,7 +3058,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
         <div className="drawer__body">
 
           {/* LEFT: list */}
-          <div className="drawer__list">
+          <div className="drawer__list" ref={listRef}>
             {type==='signals'&&(
               <>
                 <div className="drawer__list-hdr">
@@ -3053,6 +3079,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                     const tier     = convPct>66?'high':convPct>33?'medium':'low';
                     return (
                       <div key={s.ticker}
+                        data-row-key={s.ticker}
                         className={`drawer__list-row drawer__list-row--${tier}${isActive?' drawer__list-row--active':''}`}
                         onClick={()=>{ setDetail({type:'signal',...s}); setDetailStack([]); }}>
                         <div className="drawer__list-row__main">
@@ -3086,6 +3113,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                       const isActive = detail?.name===r.insider_name && detail?.type==='trader';
                       return (
                         <div key={i}
+                          data-row-key={r.insider_name}
                           className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
                           onClick={()=>{ setDetail({type:'trader',name:r.insider_name,title:r.insider_title}); setDetailStack([]); }}>
                           <div className="drawer__list-row__main">
@@ -4462,6 +4490,8 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
   function goBack() { setDetailStack(s=>{ const next=[...s]; const prev=next.pop(); setDetail(prev||null); return next; }); }
   function selectRow(d) { setDetailStack([]); setDetail(d); }
+  function jumpTo(i) { setDetail(detailStack[i]); setDetailStack(s=>s.slice(0,i)); }
+  const crumbLabel = (d) => d.type==='ticker' ? d.ticker : d.name;
 
   // Reset selection when switching tabs or when the currently-selected item
   // gets unwatched out from under it (star/follow toggled off from within
@@ -4581,9 +4611,8 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
               <span>{rows.length} {tab}</span>
             </div>
             {tab==='tickers' ? (
-              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 70px 100px 90px'}}>
+              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 100px 90px'}}>
                 <button className="ins-col-sort" onClick={()=>onSort('ticker')}>Ticker · Company{sortKey==='ticker'&&(sortDir<0?' ↓':' ↑')}</button>
-                <span/>
                 <button className="ins-col-sort" onClick={()=>onSort('conviction')}>Signal{sortKey==='conviction'&&(sortDir<0?' ↓':' ↑')}</button>
                 <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
               </div>
@@ -4599,13 +4628,12 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
               {tab==='tickers' ? sortedTickerRows.map(s=>{
                 const isSel = detail?.type==='ticker' && detail.ticker===s.ticker;
                 return (
-                  <div key={s.ticker} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={{gridTemplateColumns:'1fr 70px 100px 90px'}}
+                  <div key={s.ticker} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={{gridTemplateColumns:'1fr 100px 90px'}}
                     onClick={()=>selectRow({type:'ticker', ticker:s.ticker, company:s.company})}>
                     <div className="ins-sig-row__left">
                       <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
                       <div className="ins-sig-row__co">{s.company}</div>
                     </div>
-                    <div style={{display:'flex',alignItems:'center'}}><StarBtn ticker={s.ticker} watchlist={watchlist}/></div>
                     <ConvictionBar score={s.conviction}/>
                     <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
                   </div>
@@ -4619,7 +4647,6 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                       <span className="ins-sig-row__ticker" style={{fontSize:13}}>{r.name}</span>
                       {r.title&&<div className="ins-sig-row__co">{r.title}</div>}
                     </div>
-                    <div style={{display:'flex',alignItems:'center'}}><FollowBtn name={r.name} watchlist={watchlist}/></div>
                     <span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''}</span>
                   </div>
                 );
@@ -4633,16 +4660,29 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                   <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
                   <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {tab==='tickers'?'ticker':'insider'} to explore</div>
                 </div>
-              : <DetailPanel
-                  detail={detail}
-                  filings={filings}
-                  onClose={()=>{setDetail(null);setDetailStack([]);}}
-                  onNavigate={navigate}
-                  onBack={goBack}
-                  canGoBack={detailStack.length>0}
-                  watchlist={watchlist}
-                  inline={true}
-                />
+              : <>
+                  {detailStack.length>0 && (
+                    <div className="wl-breadcrumb">
+                      {detailStack.map((d,i)=>(
+                        <React.Fragment key={i}>
+                          <button className="wl-breadcrumb__item" onClick={()=>jumpTo(i)}>{crumbLabel(d)}</button>
+                          <span className="wl-breadcrumb__sep">›</span>
+                        </React.Fragment>
+                      ))}
+                      <span className="wl-breadcrumb__current">{crumbLabel(detail)}</span>
+                    </div>
+                  )}
+                  <DetailPanel
+                    detail={detail}
+                    filings={filings}
+                    onClose={()=>{setDetail(null);setDetailStack([]);}}
+                    onNavigate={navigate}
+                    onBack={goBack}
+                    canGoBack={detailStack.length>0}
+                    watchlist={watchlist}
+                    inline={true}
+                  />
+                </>
             }
           </div>
         </div>
@@ -5743,6 +5783,14 @@ export default function App() {
   const [selSignal,setSelSig] = useState(null);
   const [hlTicker,setHlTick]  = useState(null);
   const [detail,setDetail]    = useState(()=>appStateFromPath(window.location.pathname).detail);
+  // Deep-linked ticker/insider URLs open straight to the full drawer — no
+  // reason to make a shared link require an extra click to reach the content
+  // it's actually linking to. Organic clicks from Dashboard/Data (via
+  // openDetail) start as the small preview instead — see the plan discussion
+  // on why those two pages get a lighter-weight first step and Insights/
+  // Watchlist (which have their own separate, untouched drawer triggers)
+  // don't need this distinction at all.
+  const [detailFull,setDetailFull] = useState(()=>!!appStateFromPath(window.location.pathname).detail);
   const [portfolioTickers, setPortfolioTickers] = useState([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
@@ -5771,6 +5819,7 @@ export default function App() {
       const { page: p, detail: d } = appStateFromPath(window.location.pathname);
       setPage(p);
       setDetail(d);
+      setDetailFull(!!d);
     }
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -5832,11 +5881,12 @@ export default function App() {
     })();
   },[]);
 
-  function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setPage('signals');}
+  function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setDetailFull(true);setPage('signals');}
   function selectSignal(s){setSelSig(s);if(s)setHlTick(s.ticker);}
-  function openDetail(d){setDetail(d);}
-  function closeDetail(){setDetail(null);setSelSig(null);}
-  function navTo(p){setPage(p);setDetail(null);setSelSig(null);setHlTick(null);}
+  function openDetail(d){setDetail(d);setDetailFull(false);}
+  function expandDetail(){setDetailFull(true);}
+  function closeDetail(){setDetail(null);setDetailFull(false);setSelSig(null);}
+  function navTo(p){setPage(p);setDetail(null);setDetailFull(false);setSelSig(null);setHlTick(null);}
 
   // Sort state for the shared full-drawer explorer — independent from
   // InsightsPage's own internal sort state, since this instance is opened
@@ -5936,7 +5986,13 @@ export default function App() {
       {showUpgradeModal&&(
         <UpgradeModal feature="default" onClose={()=>setShowUpgradeModal(false)}/>
       )}
-      {panelOpen&&(
+      {panelOpen&&!detailFull&&(
+        <>
+          <div className="panel-overlay" onClick={closeDetail}/>
+          <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} watchlist={watchlist}/>
+        </>
+      )}
+      {panelOpen&&detailFull&&(
         <InsightsDrawer
           type={detail?.type==='trader' ? 'insiders' : 'signals'}
           filings={filings}
