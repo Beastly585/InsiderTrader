@@ -304,13 +304,8 @@ def _sanitize(text: str) -> str:
 
 def parse_form4_xml(xml_text: str, accession: str, cik: str,
                     fallback_filing_date=None, fallback_company=None) -> list[Transaction]:
-    # fallback_filing_date: real EDGAR acceptance date from form.idx (column "Date Filed")
-    # This is kept separate from periodOfReport — they mean different things:
-    #   filing_date    = when EDGAR accepted the form
-    #   transaction_date = when the trade actually happened (from XML, falls back to periodOfReport)
     xml_text = xml_text.strip().lstrip("\ufeff")
 
-    # Reject HTML error pages immediately
     t = xml_text[:200].lower()
     if "<!doctype html" in t or "<html" in t:
         log.debug(f"HTML error page for {accession}")
@@ -376,8 +371,6 @@ def parse_form4_xml(xml_text: str, accession: str, cik: str,
     in_title = pri.get("title","Unknown")
     isd_v    = pri.get("isd",False); iso_v=pri.get("iso",False); ist_v=pri.get("ist",False)
     period   = safe_date(xtxt(root,"periodOfReport") or xtxt(root,"period_of_report"))
-    # filing_date = real EDGAR acceptance date from form.idx, not periodOfReport.
-    # periodOfReport is used only as a fallback for transaction_date inference below.
     real_filing_date = safe_date(fallback_filing_date)
     rel      = get_rel(in_title, iso_v, isd_v, ist_v)
 
@@ -396,7 +389,7 @@ def parse_form4_xml(xml_text: str, accession: str, cik: str,
     if nd is not None:
         for tx in nd.findall("nonDerivativeTransaction"):
             sec = xtxt(tx,"securityTitle","value")
-            txd = safe_date(xtxt(tx,"transactionDate","value")) or period  # fall back to periodOfReport
+            txd = safe_date(xtxt(tx,"transactionDate","value")) or period
             ce  = tx.find("transactionCoding")
             tc  = xtxt(ce,"transactionCode") if ce is not None else None
             ad  = xtxt(tx,"transactionAmounts","transactionAcquiredDisposedCode","value")
@@ -424,7 +417,7 @@ def parse_form4_xml(xml_text: str, accession: str, cik: str,
     if dt is not None:
         for tx in dt.findall("derivativeTransaction"):
             sec = xtxt(tx,"securityTitle","value")
-            txd = safe_date(xtxt(tx,"transactionDate","value")) or period  # fall back to periodOfReport
+            txd = safe_date(xtxt(tx,"transactionDate","value")) or period
             ce  = tx.find("transactionCoding")
             tc  = xtxt(ce,"transactionCode") if ce is not None else None
             ad  = xtxt(tx,"transactionAmounts","transactionAcquiredDisposedCode","value")
@@ -461,7 +454,7 @@ def process_cik(cik_str: str, filings: list[dict]) -> list[Transaction]:
 
     for meta in filings:
         nodash     = meta["nodash"]
-        cik_padded = meta["cik_padded"]   # from URL path — authoritative
+        cik_padded = meta["cik_padded"]
         accession  = meta["accession"]
         base_path  = f"{EDGAR_BASE}/Archives/edgar/data/{cik_padded}/{nodash}"
 
@@ -471,7 +464,6 @@ def process_cik(cik_str: str, filings: list[dict]) -> list[Transaction]:
         if not doc_name:
             url = guess_xml_url(cik_padded, nodash)
         elif not doc_name.lower().endswith(".xml"):
-            # Old SGML .txt — fetch index page to find embedded XML link
             idx = sec_get(f"{base_path}/{accession}-index.htm", timeout=15)
             if idx:
                 for link in re.findall(r'href="(/Archives/edgar/data/[^"]+\.xml)"',
@@ -487,7 +479,6 @@ def process_cik(cik_str: str, filings: list[dict]) -> list[Transaction]:
 
         xml_resp = sec_get(url, timeout=25)
         if xml_resp is None:
-            # Try alternate CIK (path_cik vs cik_padded may differ for some filers)
             alt = meta.get("path_cik","").zfill(10)
             if alt and alt != cik_padded and doc_name:
                 alt_url = f"{EDGAR_BASE}/Archives/edgar/data/{alt}/{nodash}/{doc_name}"
@@ -505,11 +496,15 @@ def process_cik(cik_str: str, filings: list[dict]) -> list[Transaction]:
     return all_txns
 
 # ── DB ──────────────────────────────────────────────────────────────────────────
+# ON CONFLICT target must exactly match the expression-based unique index from
+# 006_filings_dedup_fix.sql — a plain-column target here would not match that
+# index, and inserts would fail outright with "no unique or exclusion
+# constraint matching the ON CONFLICT specification".
 
 UPSERT_SQL = f"""
 INSERT INTO public.filings ({", ".join(COLUMNS)})
 VALUES ({", ".join(["%s"]*len(COLUMNS))})
-ON CONFLICT (accession_number, transaction_date, shares, transaction_code)
+ON CONFLICT (accession_number, COALESCE(transaction_date, '1900-01-01'::date), COALESCE(shares, -1), transaction_code)
 DO UPDATE SET
     company_name=EXCLUDED.company_name, ticker=EXCLUDED.ticker,
     insider_name=EXCLUDED.insider_name, insider_title=EXCLUDED.insider_title,
@@ -533,11 +528,6 @@ def get_conn():
         import psycopg2; return psycopg2.connect(DATABASE_URL)
 
 def write_batch(txns: list[Transaction]) -> int:
-    """
-    Open a FRESH connection, write one batch, commit, close.
-    Never holds a connection open across the long parse step —
-    prevents SSL timeout errors from Neon dropping idle connections.
-    """
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -548,7 +538,6 @@ def write_batch(txns: list[Transaction]) -> int:
         conn.close()
 
 def get_existing() -> set[str]:
-    """Load all accession numbers already in Neon for --resume."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -597,7 +586,6 @@ def process_quarter(year: int, quarter: int, existing: set[str]) -> tuple[int,in
         log.info(json.dumps(asdict(all_txns[0]), default=str, indent=2))
         return total, 0
 
-    # Write in 500-row batches — fresh connection each time
     log.info(f"  Writing {len(all_txns):,} rows to Neon…")
     written = 0
     for i in range(0, len(all_txns), 500):

@@ -432,7 +432,7 @@ def process_one(meta: dict) -> tuple[str, list[Transaction]]:
 UPSERT_SQL = f"""
 INSERT INTO public.filings ({", ".join(COLUMNS)})
 VALUES ({", ".join(["%s"]*len(COLUMNS))})
-ON CONFLICT (accession_number, transaction_date, shares, transaction_code)
+ON CONFLICT (accession_number, COALESCE(transaction_date, '1900-01-01'::date), COALESCE(shares, -1), transaction_code)
 DO UPDATE SET
     company_name=EXCLUDED.company_name, ticker=EXCLUDED.ticker,
     insider_name=EXCLUDED.insider_name, insider_title=EXCLUDED.insider_title,
@@ -448,17 +448,15 @@ DO UPDATE SET
     sector=EXCLUDED.sector, relationship=EXCLUDED.relationship,
     footnotes=EXCLUDED.footnotes, updated_at=now()
 """
-# NOTE: The ON CONFLICT target (accession_number, transaction_date, shares, transaction_code)
-# requires a matching unique index in Postgres. If transaction_date can be NULL (it can),
-# Postgres treats NULLs as distinct and the conflict will never fire for NULL-dated rows.
-# To fix this properly in the DB, run this migration once:
-#
-#   CREATE UNIQUE INDEX IF NOT EXISTS filings_dedup_idx
-#   ON public.filings (accession_number, COALESCE(transaction_date, '1900-01-01'), shares, transaction_code);
-#
-#   DROP INDEX IF EXISTS <old_unique_index_name>;  -- drop whatever enforces the current constraint
-#
-# This coerces NULLs to a sentinel date so conflicts fire correctly for NULL-dated rows.
+# Fixed via db/migrations/006_filings_dedup_fix.sql — the ON CONFLICT target
+# above now matches an expression-based unique index that COALESCEs both
+# transaction_date and shares to sentinel values, since NULL in either column
+# previously made Postgres' conflict matching silently never fire (NULL != NULL
+# in a unique index). shares is always NULL for congressional trades from
+# fetch_political_trades.py, so that script needed this fix even more than
+# this one does — but all three writers to public.filings must stay in sync
+# on this exact ON CONFLICT target, or inserts fail outright with "no unique
+# or exclusion constraint matching the ON CONFLICT specification".
 
 
 def get_connection():

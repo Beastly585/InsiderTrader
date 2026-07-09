@@ -20,6 +20,14 @@ Usage:
 
 Requirements:
     pip install beautifulsoup4 pdfplumber --break-system-packages
+
+Note on dedup: shares is always NULL for congressional trades (not disclosed
+in PTRs) — this table's ON CONFLICT target now COALESCEs both shares and
+transaction_date to stable sentinel values (see 006_filings_dedup_fix.sql)
+specifically because a plain NULL in either column breaks Postgres unique-index
+matching. Also note: cik here is a synthetic string like "house-nancy-pelosi",
+not a real numeric SEC CIK — confirm public.filings.cik is TEXT-typed before
+a large run, or let --dry-run / a small --days test catch it first.
 ─────────────────────────────────────────────────────────────────────────────
 """
 from __future__ import annotations
@@ -55,8 +63,8 @@ log = logging.getLogger(__name__)
 # ── Config ─────────────────────────────────────────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 DRY_RUN      = os.environ.get("DRY_RUN", "0") == "1"
-HOUSE_SLEEP  = 1.0    # seconds between PDF downloads
-SENATE_SLEEP = 1.5    # seconds between PTR HTML fetches
+HOUSE_SLEEP  = 1.0
+SENATE_SLEEP = 1.5
 
 UA           = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 HOUSE_BASE   = "https://disclosures-clerk.house.gov"
@@ -160,10 +168,16 @@ class CongressTrade:
         return tuple(d[c] for c in COLUMNS)
 
 # ── DB ──────────────────────────────────────────────────────────────────────────
+# ON CONFLICT target must exactly match the expression-based unique index from
+# 006_filings_dedup_fix.sql. This matters MORE here than anywhere else — shares
+# is always NULL for every row this script ever writes, so without the
+# COALESCE matching the index expression, dedup would silently never fire for
+# ANY congressional trade, relying entirely on the in-memory `existing` check
+# in main() as the only safety net.
 UPSERT_SQL = f"""
 INSERT INTO public.filings ({", ".join(COLUMNS)})
 VALUES ({", ".join(["%s"]*len(COLUMNS))})
-ON CONFLICT (accession_number, transaction_date, shares, transaction_code)
+ON CONFLICT (accession_number, COALESCE(transaction_date, '1900-01-01'::date), COALESCE(shares, -1), transaction_code)
 DO UPDATE SET
     company_name           = EXCLUDED.company_name,
     ticker                 = EXCLUDED.ticker,
@@ -174,9 +188,9 @@ DO UPDATE SET
     is_open_market         = EXCLUDED.is_open_market,
     value                  = EXCLUDED.value,
     sector                 = EXCLUDED.sector,
-    relationship           = EXCLUDED.relationship,
-    footnotes              = EXCLUDED.footnotes,
-    updated_at             = now()
+    relationship            = EXCLUDED.relationship,
+    footnotes               = EXCLUDED.footnotes,
+    updated_at              = now()
 """
 
 def get_conn():
@@ -211,14 +225,12 @@ def get_existing_accessions() -> set[str]:
 # HOUSE — XML index + PDF text parsing
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Regex matching a transaction line in a House PTR PDF:
-# "Apple Inc. - Common Stock (AAPL) [ST]   S (partial)   03/16/2026   03/16/2026   $1,001 - $15,000"
 TX_RE = re.compile(
     r'^(.+?)\s+'
     r'((?:Purchase|Sale|P|S)(?:\s*\((?:partial|full|Partial|Full)\))?)'
-    r'\s+(\d{2}/\d{2}/\d{4})'      # transaction date
-    r'\s+(\d{2}/\d{2}/\d{4})'      # notification date
-    r'\s+(\$[\d,]+(?:\s*-\s*\$[\d,]+|\+)?)',  # amount
+    r'\s+(\d{2}/\d{2}/\d{4})'
+    r'\s+(\d{2}/\d{2}/\d{4})'
+    r'\s+(\$[\d,]+(?:\s*-\s*\$[\d,]+|\+)?)',
     re.IGNORECASE
 )
 TICKER_RE = re.compile(r'\(([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\)')
@@ -229,12 +241,6 @@ NOISE_RE  = re.compile(
 )
 
 def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
-    """
-    Parse a House PTR PDF using text extraction.
-    Strategy: scan every line for the transaction pattern (TX_RE).
-    When a match has no ticker, check the NEXT line for a continuation
-    like '(AMZN) [ST]' — this handles wrapped asset names.
-    """
     if not HAS_PDF:
         return []
 
@@ -245,7 +251,6 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
 
     try:
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            # Collect all lines across all pages
             all_lines = []
             for page in pdf.pages:
                 text = page.extract_text()
@@ -258,7 +263,6 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
     i = 0
     while i < len(all_lines):
         line = all_lines[i].strip()
-        # Clean null bytes that pdfplumber sometimes produces
         line = line.replace('\x00', '')
         i += 1
 
@@ -272,43 +276,33 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
         asset_raw = m.group(1).strip()
         tx_type   = m.group(2).strip()
         tx_date   = safe_date(m.group(3))
-        # m.group(4) is notification date — not stored
         amount    = m.group(5).strip()
         value     = parse_amount(amount)
 
         if not tx_date:
             continue
 
-        # Extract ticker from asset text
         ticker_m = TICKER_RE.search(asset_raw)
         ticker   = ticker_m.group(1) if ticker_m else None
 
-        # If no ticker, peek at next line — handles wrapped asset names:
-        # "PayPal Holdings, Inc. - Common   S (partial)   03/16/2026  ..."
-        # "Stock (PYPL) [ST]"
         if not ticker and i < len(all_lines):
             next_line = all_lines[i].strip().replace('\x00','')
             ticker_m2 = TICKER_RE.match(next_line)
             if ticker_m2:
                 ticker = ticker_m2.group(1)
-                # Append the continuation to asset name
                 asset_raw = asset_raw + " " + next_line
-                i += 1  # consume the continuation line
+                i += 1
 
-        # Clean up asset name
         asset = re.sub(r'\s*\([A-Z./]{1,7}\)\s*', ' ', asset_raw).strip()
         asset = re.sub(r'\s*\[(ST|OT|OP|DC)\]\s*$', '', asset).strip()
         asset = re.sub(r'\s+', ' ', asset).strip()
 
-        # Skip ETFs and non-stock assets if no ticker
-        # (keep if we have a ticker — could be an ETF we want to track)
         if not ticker:
             al = asset.lower()
             if any(w in al for w in ["etf","fund","index","bond","treasury",
                                       "municipal","note","reit trust"]):
                 continue
 
-        # Validate ticker
         if ticker and not re.match(r'^[A-Z]{1,5}(?:\.[A-Z])?$', ticker):
             ticker = None
 
@@ -368,8 +362,6 @@ def fetch_house_index(year: int) -> list[dict]:
         last   = (f.findtext("Last")  or "").strip()
         filed  = safe_date(f.findtext("FilingDate") or "")
 
-        # P = standard PTR → ptr-pdfs/
-        # X = amendment PTR → also ptr-pdfs/ (confirmed by testing)
         pdf_url = f"{HOUSE_BASE}/public_disc/ptr-pdfs/{year}/{doc_id}.pdf"
 
         filings.append({
@@ -416,7 +408,6 @@ def fetch_house(from_date: date, to_date: date,
                 continue
             r.raise_for_status()
             trades = parse_house_pdf_text(r.content, meta)
-            # Dedup against existing
             new = [t for t in trades if t.accession_number not in existing]
             all_trades.extend(new)
         except Exception as e:
@@ -532,11 +523,6 @@ def fetch_senate_index(s: requests.Session, token: str,
     return rows
 
 def parse_senate_html(html: str, meta: dict) -> list[CongressTrade]:
-    """
-    Parse a Senate electronic PTR HTML page.
-    Table columns: Notification Date | Transaction Date | Owner | Ticker |
-                   Asset Name | Asset Type | Type | Amount | Comment
-    """
     if not HAS_BS4: return []
 
     trades  = []
@@ -717,7 +703,6 @@ def main():
         log.info("\n── Senate ──")
         all_trades.extend(fetch_senate(from_date, today, existing))
 
-    # Dedup within this run
     seen:    set[str] = set()
     deduped: list[CongressTrade] = []
     for t in all_trades:
