@@ -5743,7 +5743,6 @@ export default function App() {
   const [selSignal,setSelSig] = useState(null);
   const [hlTicker,setHlTick]  = useState(null);
   const [detail,setDetail]    = useState(()=>appStateFromPath(window.location.pathname).detail);
-  const [detailHistory,setDetailHistory] = useState([]);
   const [portfolioTickers, setPortfolioTickers] = useState([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
@@ -5772,7 +5771,6 @@ export default function App() {
       const { page: p, detail: d } = appStateFromPath(window.location.pathname);
       setPage(p);
       setDetail(d);
-      if (!d) { setDetailHistory([]); } // landed on a plain page, not a detail deep-link
     }
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -5834,13 +5832,18 @@ export default function App() {
     })();
   },[]);
 
-  function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setDetailHistory([]);setPage('signals');}
+  function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setPage('signals');}
   function selectSignal(s){setSelSig(s);if(s)setHlTick(s.ticker);}
-  function openDetail(d){setDetail(d);setDetailHistory([]);} // fresh open from outside the panel resets history
-  function closeDetail(){setDetail(null);setDetailHistory([]);setSelSig(null);}
-  function panelNav(d){setDetail(prev=>{if(prev)setDetailHistory(h=>[...h,prev]);return d;});}
-  function panelBack(){setDetailHistory(h=>{if(!h.length)return h;const prev=h[h.length-1];setDetail(prev);return h.slice(0,-1);});}
-  function navTo(p){setPage(p);setDetail(null);setDetailHistory([]);setSelSig(null);setHlTick(null);}
+  function openDetail(d){setDetail(d);}
+  function closeDetail(){setDetail(null);setSelSig(null);}
+  function navTo(p){setPage(p);setDetail(null);setSelSig(null);setHlTick(null);}
+
+  // Sort state for the shared full-drawer explorer — independent from
+  // InsightsPage's own internal sort state, since this instance is opened
+  // from Dashboard/Data/anywhere-else and isn't nested inside InsightsPage.
+  const [expSort, setExpSort] = useState('conviction');
+  const [expDir,  setExpDir]  = useState(-1);
+  function expOnSort(col){ if(expSort===col) setExpDir(d=>-d); else { setExpSort(col); setExpDir(-1); } }
 
   const panelOpen = !!detail;
   const watchlist = useWatchlist(user);
@@ -5934,10 +5937,16 @@ export default function App() {
         <UpgradeModal feature="default" onClose={()=>setShowUpgradeModal(false)}/>
       )}
       {panelOpen&&(
-        <>
-          <div className="panel-overlay" onClick={closeDetail}/>
-          <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onNavigate={panelNav} onBack={panelBack} canGoBack={detailHistory.length>0} watchlist={watchlist}/>
-        </>
+        <InsightsDrawer
+          type={detail?.type==='trader' ? 'insiders' : 'signals'}
+          filings={filings}
+          onClose={closeDetail}
+          initialDetail={detail}
+          sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort}
+          ensureFilingsWindow={ensureFilingsWindow}
+          filingsLoading={loading}
+          watchlist={watchlist}
+        />
       )}
     </div>
   );
