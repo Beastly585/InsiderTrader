@@ -5671,6 +5671,50 @@ function LandingPage({ onEnter, dark, setDark }) {
 }
 
 
+// ── Routing — URL <-> app state ─────────────────────────────────────────────
+// External paths are deliberately friendlier than internal page ids
+// (page id 'signals' -> path 'insights') so shared/indexed URLs read well
+// without renaming the internal id everywhere it's already used.
+const PAGE_TO_PATH = { dashboard:'', signals:'insights', data:'data', watchlist:'watchlist', settings:'settings' };
+const PATH_TO_PAGE = { '':'dashboard', insights:'signals', data:'data', watchlist:'watchlist', settings:'settings' };
+
+function pathFromAppState(page, detail) {
+  // Detail deep-link takes priority — the panel overlays whatever page is
+  // behind it, so the URL should reflect the most specific thing on screen.
+  if (detail?.type === 'ticker' && detail.ticker) {
+    return `/ticker/${encodeURIComponent(detail.ticker)}`;
+  }
+  if (detail?.type === 'trader' && detail.name) {
+    return `/insider/${encodeURIComponent(detail.name)}`;
+  }
+  const seg = PAGE_TO_PATH[page] ?? '';
+  return seg ? `/${seg}` : '/';
+}
+
+function appStateFromPath(pathname) {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts[0] === 'ticker' && parts[1]) {
+    return { page: 'dashboard', detail: { type: 'ticker', ticker: decodeURIComponent(parts[1]).toUpperCase(), company: '' } };
+  }
+  if (parts[0] === 'insider' && parts[1]) {
+    return { page: 'dashboard', detail: { type: 'trader', name: decodeURIComponent(parts[1]), title: '' } };
+  }
+  const page = PATH_TO_PAGE[parts[0] || ''];
+  return { page: page || 'dashboard', detail: null };
+}
+
+const PAGE_TITLES = { dashboard:'Dashboard', signals:'Insights', data:'Data', watchlist:'Watchlist', settings:'Settings' };
+
+function titleFromAppState(page, detail) {
+  if (detail?.type === 'ticker' && detail.ticker) {
+    return `${detail.ticker}${detail.company ? ' — ' + detail.company : ''} — Insider Trading — Seli`;
+  }
+  if (detail?.type === 'trader' && detail.name) {
+    return `${detail.name} — Insider Trading Activity — Seli`;
+  }
+  return `${PAGE_TITLES[page] || 'Dashboard'} — Seli`;
+}
+
 export default function App() {
   const [dark,setDark] = useTheme();
   const { isSignedIn, isLoaded, getToken } = useAuth();
@@ -5692,16 +5736,47 @@ export default function App() {
   // Show landing page if: Clerk hasn't loaded yet OR user is not signed in
   const showLanding = !isLoaded || !isSignedIn;
 
-  const [page,setPage] = useState('dashboard');
+  const [page,setPage] = useState(()=>appStateFromPath(window.location.pathname).page);
   const [filings,setFilings]  = useState([]);
   const [loading,setLoading]  = useState(true);
   const [error,setError]      = useState(null);
   const [selSignal,setSelSig] = useState(null);
   const [hlTicker,setHlTick]  = useState(null);
-  const [detail,setDetail]    = useState(null);
+  const [detail,setDetail]    = useState(()=>appStateFromPath(window.location.pathname).detail);
   const [detailHistory,setDetailHistory] = useState([]);
   const [portfolioTickers, setPortfolioTickers] = useState([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  // ── Client-side routing ────────────────────────────────────────────────────
+  // Deliberately narrow scope: top-level pages + the global ticker/insider
+  // detail panel only. Nested drawer/watchlist-internal navigation stays pure
+  // component state — folding that in too would be scope creep for what this
+  // was actually asked to solve (shareable links + SEO entry points).
+  //
+  // Sync is effect-based rather than wrapping every setPage/openDetail call
+  // site — any code path that changes `page` or `detail` gets picked up
+  // automatically, so nothing elsewhere in the file needs to change.
+  useEffect(() => {
+    const path = pathFromAppState(page, detail);
+    if (window.location.pathname !== path) {
+      window.history.pushState({ page, detail }, '', path);
+    }
+    document.title = titleFromAppState(page, detail);
+  }, [page, detail]);
+
+  useEffect(() => {
+    function onPopState() {
+      // Browser already changed window.location for us (back/forward) —
+      // just read it and update state to match. The sync effect above will
+      // see the path already matches and won't push a redundant new entry.
+      const { page: p, detail: d } = appStateFromPath(window.location.pathname);
+      setPage(p);
+      setDetail(d);
+      if (!d) { setDetailHistory([]); } // landed on a plain page, not a detail deep-link
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   // How far back the currently-loaded `filings` array actually covers.
   // null = as wide as this user's plan allows (server enforces the real
