@@ -26,6 +26,8 @@
  * no Node-specific APIs needed.
  */
 
+import { sqlVal } from './lib/sql.js';
+
 const ALLOWED_ORIGINS = new Set([
   'https://seli.app',
   'https://www.seli.app',
@@ -510,12 +512,8 @@ async function verifiedUserId(request, env) {
   }
 }
 
-function sqlVal(v) {
-  if (v === null || v === undefined) return 'NULL';
-  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
-  if (typeof v === 'number') return String(v);
-  return `'${String(v).replace(/'/g, "''")}'`; // same escaping convention as handleWatchlist above
-}
+// (sqlVal now lives in worker/lib/sql.js — imported at the top of this file —
+// so the exact escaping logic under test is the exact logic actually running.)
 
 async function neonFetch(env, query) {
   const connStr = env.NEON_CONNECTION_STRING;

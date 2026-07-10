@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import logoSimple from './assets/logo-simple.png';
+import { isPro, hasDataExport, buildSignals, processLeaderboardRows, RISK_APPETITE_THRESHOLDS, RISK_APPETITE_LABELS, tierFromPct } from './lib/scoring.js';
 import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -108,14 +110,8 @@ function useCompanyProfile(ticker, cik) {
 // plan and hasDataExport are written into Clerk publicMetadata by the Stripe
 // webhook in neon-proxy.js — Neon is the real source of truth, this is just
 // a fast client-side read of what the webhook already confirmed server-side.
-function isPro(user) {
-  if (!user) return false;
-  return user.publicMetadata?.plan === 'pro';
-}
-function hasDataExport(user) {
-  if (!user) return false;
-  return user.publicMetadata?.hasDataExport === true;
-}
+// (isPro / hasDataExport now live in src/lib/scoring.js — imported above —
+// so the same logic under test is the same logic actually running.)
 
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
 // Shown when a free user tries to use a Pro feature.
@@ -176,7 +172,7 @@ function UpgradeModal({ feature, onClose }) {
       <div className="upgrade-modal upgrade-modal--large">
         <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
 
-        <div className="logo-mark upgrade-modal__logo"><span style={{letterSpacing:'-1px',fontWeight:800}}>S</span></div>
+        <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
         <div className="upgrade-modal__title">Upgrade to Pro</div>
         <div className="upgrade-modal__subtitle">Full insider data, real-time alerts, and your own portfolio — in one view.</div>
 
@@ -755,6 +751,37 @@ function useTheme() {
   return [dark, setDark];
 }
 
+// ── Risk appetite ────────────────────────────────────────────────────────────
+// A display-only threshold preference — how hard it should be for a signal to
+// read as "high"/green. Same localStorage-only pattern as theme: no server
+// sync needed, since nothing outside the browser (email digests, alerts)
+// needs to know this — it only changes how existing scores are LABELED, not
+// what data qualifies as a signal in the first place.
+//
+// Context (not prop-drilling) because ConvictionBar and the tier computation
+// it mirrors are used in dozens of places across Dashboard/Insights/Watchlist —
+// threading a new prop through every intermediate component between App and
+// each of those call sites would be a much larger, higher-risk change than
+// the feature itself warrants.
+const RiskAppetiteContext = React.createContext([3, ()=>{}]);
+
+// 1 = very conservative (hardest to earn green) … 5 = very aggressive (easiest).
+// 3 is neutral and matches today's existing thresholds exactly, so nobody's
+// current experience changes unless they actually touch the slider.
+// (RISK_APPETITE_THRESHOLDS / RISK_APPETITE_LABELS / tierFromPct now live in
+// src/lib/scoring.js — imported above.)
+
+function useRiskAppetite() {
+  const [appetite, setAppetite] = useState(() => {
+    try { const s = localStorage.getItem('risk_appetite'); if (s) return Number(s); } catch(_){}
+    return 3;
+  });
+  useEffect(() => {
+    try { localStorage.setItem('risk_appetite', String(appetite)); } catch(_){}
+  }, [appetite]);
+  return [appetite, setAppetite];
+}
+
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 function Badge({ type, children }) {
   return <span className={`badge badge--${type}`}>{children}</span>;
@@ -779,6 +806,18 @@ const TX_CODE_TOOLTIPS = {
   D:'Sale to issuer',        E:'Expiration of derivative',
 };
 
+// Short, self-explanatory labels for the Data table — replaces the bare
+// single-letter SEC code, which was only ever explained via a hover tooltip
+// (invisible on touch devices, no visual cue that a tooltip even exists).
+// Full explanation is still available on hover via TX_CODE_TOOLTIPS above.
+const TX_CODE_SHORT = {
+  P:'Buy (OM)',    S:'Sell (OM)',
+  A:'Award',       M:'Exercise',
+  J:'Transfer',    G:'Gift',
+  F:'Tax w/h',      C:'Conversion',
+  D:'To issuer',   E:'Expired',
+};
+
 function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
   const active = sortCol===colKey;
   return (
@@ -790,17 +829,20 @@ function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
   );
 }
 function ConvictionBar({ score, max=15, showLabel=false }) {
+  const [appetite] = React.useContext(RiskAppetiteContext);
   const pct = Math.min((score/max)*100, 100);
-  const label = pct>66?'High':pct>33?'Medium':'Low';
-  const color = pct>66?'var(--green-600)':pct>33?'var(--amber-600)':'var(--text-3)';
+  const tier = tierFromPct(pct, appetite);
+  const label = tier==='high'?'High':tier==='medium'?'Medium':'Low';
+  const color = tier==='high'?'var(--green-600)':tier==='medium'?'var(--amber-600)':'var(--text-3)';
+  const t = RISK_APPETITE_THRESHOLDS[appetite] || RISK_APPETITE_THRESHOLDS[3];
   // Only show label text when it's NOT High — color already communicates High,
   // but Low/Medium are warnings worth surfacing explicitly.
   const showText = showLabel && label !== 'High';
   return (
     <div className="conv-bar-wrap" title={`Conviction: ${label} (${score.toFixed(1)}/${max}) — combines exec participation, position size, and insider clustering`}>
       <div className="conv-bar-track">
-        <div className="conv-bar-tick" style={{left:'33%'}}/>
-        <div className="conv-bar-tick" style={{left:'66%'}}/>
+        <div className="conv-bar-tick" style={{left:`${t.medium}%`}}/>
+        <div className="conv-bar-tick" style={{left:`${t.high}%`}}/>
         <div className="conv-bar" style={{width:`${pct}%`,background:color}}/>
       </div>
       {showText&&<span className="conv-bar-label" style={{color}}>{label}</span>}
@@ -847,7 +889,7 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
       {/* Logo */}
       <div className="sidebar__logo" title="Seli">
         <div className="logo-mark">
-          <span style={{letterSpacing:'-1px',fontWeight:800}}>S</span>
+          <img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
         </div>
       </div>
 
@@ -904,34 +946,9 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
 }
 
 // ─── Signal aggregation ───────────────────────────────────────────────────────
-function buildSignals(filings) {
-  const map = {};
-  for (const f of filings) {
-    if (!f.ticker) continue;
-    const isPol = !!(f.transactionCode&&f.transactionCode.startsWith('CONGRESS'));
-    if (!map[f.ticker]) map[f.ticker] = {
-      ticker:f.ticker, company:f.company, sector:f.sector, isPolitical:isPol,
-      buys:0, sells:0, buyValue:0, sellValue:0, cSuiteBuys:0,
-      insiders:new Set(), lastTradeDate:'', trades:[],
-    };
-    const s = map[f.ticker];
-    s.insiders.add(f.insiderName);
-    const tx = f.transactionDate||f.date||'';
-    if (tx>s.lastTradeDate) s.lastTradeDate=tx;
-    s.trades.push(f);
-    if (f.transactionType==='buy') {
-      s.buys++; s.buyValue+=f.value||0;
-      if (f.isOpenMarket&&f.relationship==='strong') s.cSuiteBuys++;
-    } else if (f.transactionType==='sell') {
-      s.sells++; s.sellValue+=f.value||0;
-    }
-  }
-  return Object.values(map).map(s => ({
-    ...s, insiderCount:s.insiders.size,
-    netValue: s.buyValue-s.sellValue,
-    conviction: (s.cSuiteBuys*5)+(s.buys-s.sells)+Math.min(Math.log10(s.buyValue+1),5),
-  }));
-}
+// (buildSignals now lives in src/lib/scoring.js — imported above — so the
+// exact logic under test in the test suite is the exact logic actually
+// running here, not a parallel copy that can silently drift.)
 
 // ─── Detail panel ─── signal / trader / ticker / transaction ─────────────────
 // ── Auth header helper ────────────────────────────────────────────────────────
@@ -1627,7 +1644,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-sum-item"><span className="dp-sum-label">OM Sells</span><span className="val-sell dp-sum-val">{traderStats.omSells}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Bought $</span><span className="dp-sum-val">{fmt.money(traderStats.totalBuyVal)}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Sold $</span><span className="dp-sum-val">{fmt.money(traderStats.totalSellVal)}</span></div>
-              {traderStats.combinedHitRate!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate>=60?'val-buy':traderStats.combinedHitRate<40?'val-sell':''}`}>{traderStats.combinedHitRate}% <span style={{fontSize:9,opacity:.7}}>({traderStats.withReturn} events)</span></span></div>}
+              {traderStats.combinedHitRate!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate>=60?'val-buy':traderStats.combinedHitRate<40?'val-sell':''}`}>{traderStats.combinedHitRate}% <span style={{fontSize:11,opacity:.7}}>({traderStats.withReturn} events)</span></span></div>}
               {traderStats.avgRealizedReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgRealizedReturn>=0?'+':''}{traderStats.avgRealizedReturn}%</span></div>}
               {traderStats.avgReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgReturn>=0?'+':''}{traderStats.avgReturn}%</span></div>}
             </div>
@@ -1661,7 +1678,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                       {s.stillHolding?'Holding':'Closed'}
                     </span>
                   </div>
-                  <span className="td-muted" style={{fontSize:10}}>{s.tradeCount} txn{s.tradeCount!==1?'s':''}</span>
+                  <span className="td-muted" style={{fontSize:11}}>{s.tradeCount} txn{s.tradeCount!==1?'s':''}</span>
                 </div>
 
                 <div className="position-card__value-row">
@@ -1705,15 +1722,15 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                     <summary>{s.roundTrips.length} closed round-trip{s.roundTrips.length!==1?'s':''} (FIFO, open-market)</summary>
                     {s.roundTrips.slice(0,8).map((rt,j)=>(
                       <div key={j} className="roundtrip-row">
-                        <span className="td-muted" style={{fontSize:10}}>{fmt.dateShort(rt.buyDate)} → {fmt.dateShort(rt.sellDate)}</span>
-                        <span className="td-muted" style={{fontSize:10}}>{rt.holdDays}d held</span>
-                        <span style={{fontSize:10,fontFamily:'var(--font-mono)'}}>@{fmt.price(rt.buyPrice)}→{fmt.price(rt.sellPrice)}</span>
+                        <span className="td-muted" style={{fontSize:11}}>{fmt.dateShort(rt.buyDate)} → {fmt.dateShort(rt.sellDate)}</span>
+                        <span className="td-muted" style={{fontSize:11}}>{rt.holdDays}d held</span>
+                        <span style={{fontSize:11,fontFamily:'var(--font-mono)'}}>@{fmt.price(rt.buyPrice)}→{fmt.price(rt.sellPrice)}</span>
                         <span className={`roundtrip-pnl ${rt.pnl>=0?'val-buy':'val-sell'}`}>
                           {rt.pnl>=0?'+':''}{fmt.money(rt.pnl)} ({rt.pnlPct>=0?'+':''}{rt.pnlPct.toFixed(1)}%)
                         </span>
                       </div>
                     ))}
-                    {s.roundTrips.length>8&&<div className="td-muted" style={{fontSize:10,padding:'4px 0'}}>+{s.roundTrips.length-8} more</div>}
+                    {s.roundTrips.length>8&&<div className="td-muted" style={{fontSize:11,padding:'4px 0'}}>+{s.roundTrips.length-8} more</div>}
                   </details>
                 )}
 
@@ -1732,7 +1749,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             {relatedInsiders.map((ri,i)=>(
               <div key={i} className="related-insider-row" onClick={()=>nav('trader',{name:ri.insider_name,title:ri.insider_title})}>
                 <span className="dp-clickable" style={{fontWeight:500,fontSize:12}}>{ri.insider_name}</span>
-                <span className="td-muted" style={{fontSize:10,flex:1}}>{ri.insider_title}</span>
+                <span className="td-muted" style={{fontSize:11,flex:1}}>{ri.insider_title}</span>
                 {ri.sharedTickers?.length>0&&<span className="shared-ticker-badge">{ri.sharedTickers.length} shared</span>}
                 {ri.hitRate!=null&&<span className={`td-mono ${ri.hitRate>=60?'val-buy':ri.hitRate<40?'val-sell':''}`} style={{fontSize:11}}>{ri.hitRate}%</span>}
               </div>
@@ -1750,7 +1767,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             <div className="dp-sum-item"><span className="dp-sum-label">Exec</span><span className="dp-sum-val">{tickerStats.cSuite}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Insiders</span><span className="dp-sum-val">{tickerStats.insiders}</span></div>
           </div>
-          {tickerStats.insiderNames.length>0&&<div className="trader-meta-row"><span>Insiders</span><span style={{textAlign:'right'}}>{tickerStats.insiderNames.map((n,i)=><span key={n} className="dp-clickable" style={{fontSize:11,marginLeft:i>0?6:0}} onClick={()=>nav('trader',{name:n,title:''})}>{n.split(' ').pop()}</span>)}</span></div>}
           <div className="dp-section-label" style={{marginTop:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <span>All Insider Activity ({bundleOn?tickerRowsDisplay.length:tickerRows.length})</span>
             <label className="bundle-toggle">
@@ -1778,7 +1794,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-insider-header">
                 <RelBadge rel={ins.rel}/>
                 <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:ins.name,title:ins.title})}>{ins.name}</span>
-                <span className="td-muted" style={{fontSize:10,marginLeft:'auto'}}>{ins.title}</span>
+                <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{ins.title}</span>
               </div>
               {ins.trades.map((t,j)=><TRow key={j} r={{...t,transaction_type:t.transactionType,transaction_code:t.transactionCode,is_open_market:t.isOpenMarket,price:t.price,current_price:t.currentPrice,pct_owned_change:t.pctOwnedChange,transaction_date:t.transactionDate,is_foreign_price:t.isForeignPrice}} showTicker={false} showInsider={false}/>)}
             </div>
@@ -1797,7 +1813,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-sum-item"><span className="dp-sum-label">Type</span><Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Value</span><span className="dp-sum-val">{fmt.money(t.value)}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Shares</span><span className="dp-sum-val">{fmt.number(t.shares)}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:10}}> <IconWarning style={{width:9,height:9,display:'inline',verticalAlign:'-1px'}}/> verify (3x+ move)</span>}</span></div>
+              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:11}}> <IconWarning style={{width:9,height:9,display:'inline',verticalAlign:'-1px'}}/> verify (3x+ move)</span>}</span></div>
               {ret!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Now</span><span className={`dp-sum-val ${ret>=0?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span></div>}
               {(t.pctOwnedChange||t.pct_owned_change)!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Pos Δ</span><span className="dp-sum-val val-buy">+{(t.pctOwnedChange||t.pct_owned_change).toFixed(1)}%</span></div>}
             </div>
@@ -1806,7 +1822,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-insider-header">
                 <RelBadge rel={t.relationship||'weak'}/>
                 <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:t.insiderName||t.insider_name,title:t.title||t.insider_title})}>{t.insiderName||t.insider_name}</span>
-                <span className="td-muted" style={{fontSize:10,marginLeft:'auto'}}>{t.title||t.insider_title}</span>
+                <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{t.title||t.insider_title}</span>
               </div>
             </div>
             <div className="dp-section-label" style={{marginTop:12}}>Details</div>
@@ -2008,7 +2024,7 @@ function HeatmapOnly() {
         S&amp;P 500 sectors
         <span className="td-muted" style={{fontWeight:400,marginLeft:6}}>day return · by weight · ETF proxy</span>
         {Object.keys(sectors).length===0&&(
-          <span className="td-muted" style={{marginLeft:'auto',fontSize:10}}>
+          <span className="td-muted" style={{marginLeft:'auto',fontSize:11}}>
             {mkt?.err?'unavailable':'loading…'}
           </span>
         )}
@@ -2058,7 +2074,7 @@ function DashSigTable({ signals, loading, title, subtitle, onRowClick, onOpenDet
     <div className="dash-inner-section">
       <div className="dash-inner-hdr">
         <span className="dash-inner-label">{title}</span>
-        <span className="td-muted" style={{fontSize:10}}>{subtitle}</span>
+        <span className="td-muted" style={{fontSize:11}}>{subtitle}</span>
         <div className="dash-sig-sort">
           {DASH_SORT_OPTS.map(o=>(
             <button key={o.key} className={`dash-sort-btn${sortKey===o.key?' dash-sort-btn--active':''}`} onClick={()=>tog(o.key)}>
@@ -2080,12 +2096,12 @@ function DashSigTable({ signals, loading, title, subtitle, onRowClick, onOpenDet
               </td>
               <td className="dst-company">
                 <div className="td-overflow" style={{fontSize:12}}>{s.company}</div>
-                <div style={{fontSize:10,color:'var(--text-3)'}}>{s.sector!=='Other'?s.sector:''}</div>
+                <div style={{fontSize:11,color:'var(--text-3)'}}>{s.sector!=='Other'?s.sector:''}</div>
               </td>
               <td className="dst-meta">
                 {s.cSuiteBuys>0&&<span className="csuite-badge">{s.cSuiteBuys}×exec</span>}
-                <span className="td-muted" style={{fontSize:10}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>
-                <span className="td-muted" style={{fontSize:10}}>{fmt.ago(s.lastTradeDate)}</span>
+                <span className="td-muted" style={{fontSize:11}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>
+                <span className="td-muted" style={{fontSize:11}}>{fmt.ago(s.lastTradeDate)}</span>
               </td>
               <td className="dst-val">
                 <span className={`dst-net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
@@ -2149,8 +2165,8 @@ function PortfolioTickerNews({ tickers }) {
       {news.map((n,i)=>(
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
-            <span className="ticker" style={{fontSize:10}}>{n._ticker}</span>
-            <span className="td-muted" style={{fontSize:10}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            <span className="ticker" style={{fontSize:11}}>{n._ticker}</span>
+            <span className="td-muted" style={{fontSize:11}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
@@ -2321,7 +2337,7 @@ function MarketNews() {
       {news.map((n,i)=>(
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
-            <span className="td-muted" style={{fontSize:10}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            <span className="td-muted" style={{fontSize:11}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
@@ -2425,16 +2441,22 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                       <div className="dash-sig-item__left">
                         <div className="dash-sig-item__row1">
                           <span className="ticker" style={{fontSize:13,fontWeight:700}}>{s.ticker}</span>
-                          {s.cSuiteBuys>0&&<span className="csuite-badge">{s.cSuiteBuys}×</span>}
                           {hasReversal&&<span className="reversal-badge" title="An insider on this ticker recently changed direction — previously buying, now selling (or vice versa). May signal a shift in insider sentiment."><IconReversal className="reversal-badge__icon"/>reversal</span>}
                           <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                         </div>
                         <div className="dash-sig-item__row2">
                           <span style={{fontSize:11,color:'var(--text-2)'}}>{s.company}</span>
-                          <span className="td-muted" style={{fontSize:10}}>{s.insiderCount} ins · {fmt.ago(s.lastTradeDate)}</span>
+                        </div>
+                        <div className="dash-sig-item__row3">
+                          <span className="td-muted" style={{fontSize:11}}>
+                            {s.insiderCount} insider{s.insiderCount!==1?'s':''}
+                            {s.cSuiteBuys>0?` · ${s.cSuiteBuys} exec buy${s.cSuiteBuys!==1?'s':''}`:''}
+                          </span>
+                          <span className="td-muted" style={{fontSize:11}}>{fmt.ago(s.lastTradeDate)}</span>
                         </div>
                       </div>
                       <div className="dash-sig-item__right">
+                        <span className="dash-sig-item__net-label">Net flow</span>
                         <div className={`dash-sig-item__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</div>
                         {s.avgReturn!=null&&(
                           <span className={`ins-spent-badge ${big?'ins-spent-badge--big':spent?'ins-spent-badge--spent':'ins-spent-badge--fresh'}`}>
@@ -2546,6 +2568,7 @@ function detectReversals(filings) {
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
 function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow, watchlist }) {
   const pro = isPro(user);
+  const [appetite] = React.useContext(RiskAppetiteContext);
   const [days, setDays] = useState(7);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
   const [sigSort, setSigSort] = useState('conviction');
@@ -2711,7 +2734,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 const isCongress=s.isPolitical;
                 const typeLabel=isCongress?'Congressional':'Corporate';
                 const convPct=Math.min((s.conviction/15)*100,100);
-                const tier=convPct>66?'high':convPct>33?'medium':'low';
+                const tier=tierFromPct(convPct, appetite);
                 return (
                   <div key={s.ticker} ref={isHL?hlRef:null}
                     className={`ins-sig-row ins-sig-row--${tier}${isSel?' ins-sig-row--selected':''}`}
@@ -2724,7 +2747,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                         <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                       </div>
                       <div className="ins-sig-row__co">{s.company}</div>
-                      {s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:10}}>{s.sector}</div>}
+                      {s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:11}}>{s.sector}</div>}
                     </div>
                     <div className="ins-sig-row__type">
                       <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}`}>{typeLabel}</span>
@@ -2803,6 +2826,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
 function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, ensureFilingsWindow, filingsLoading, watchlist, initialFilters }) {
+  const [appetite] = React.useContext(RiskAppetiteContext);
 
   // ── left pane state ──────────────────────────────────────────────────────
   // Seeded from the tile's current selections when opened via "Explore full
@@ -3076,7 +3100,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   : filteredSignals.map(s=>{
                     const isActive = detail?.ticker===s.ticker && detail?.type==='signal';
                     const convPct  = Math.min((s.conviction/15)*100,100);
-                    const tier     = convPct>66?'high':convPct>33?'medium':'low';
+                    const tier     = tierFromPct(convPct, appetite);
                     return (
                       <div key={s.ticker}
                         data-row-key={s.ticker}
@@ -3084,14 +3108,14 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                         onClick={()=>{ setDetail({type:'signal',...s}); setDetailStack([]); }}>
                         <div className="drawer__list-row__main">
                           <span className="ticker" style={{fontSize:12,fontWeight:700}}>{s.ticker}</span>
-                          {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:9}}>{s.cSuiteBuys}×</span>}
-                          {s.isPolitical&&<span className="badge badge--src-congress" style={{fontSize:9}}>C</span>}
-                          <span className="td-muted" style={{fontSize:10,flex:1}}>{s.company}</span>
+                          {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:11}}>{s.cSuiteBuys}×</span>}
+                          {s.isPolitical&&<span className="badge badge--src-congress" style={{fontSize:11}}>C</span>}
+                          <span className="td-muted" style={{fontSize:11,flex:1}}>{s.company}</span>
                           <span className={`td-mono drawer__list-row__val ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
                         </div>
                         <div className="drawer__list-row__sub">
                           <ConvictionBar score={s.conviction}/>
-                          <span className="td-muted" style={{fontSize:9,marginLeft:'auto'}}>{fmt.ago(s.lastTradeDate)}</span>
+                          <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.ago(s.lastTradeDate)}</span>
                         </div>
                       </div>
                     );
@@ -3117,15 +3141,15 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                           className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
                           onClick={()=>{ setDetail({type:'trader',name:r.insider_name,title:r.insider_title}); setDetailStack([]); }}>
                           <div className="drawer__list-row__main">
-                            <span className="td-muted" style={{fontSize:10,width:18}}>{i+1}</span>
+                            <span className="td-muted" style={{fontSize:11,width:18}}>{i+1}</span>
                             <span style={{fontSize:12,fontWeight:500,flex:1}}>{r.insider_name}</span>
                             {r.hit_rate!=null&&(
                               <span className={`td-mono ${r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}`} style={{fontSize:13,fontWeight:700}}>{r.hit_rate}%</span>
                             )}
                           </div>
                           <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:10}}>{r.insider_title||'Unknown'}</span>
-                            <span className="td-muted" style={{fontSize:10,marginLeft:'auto'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
+                            <span className="td-muted" style={{fontSize:11}}>{r.insider_title||'Unknown'}</span>
+                            <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
                           </div>
                         </div>
                       );
@@ -3198,7 +3222,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, w
     <div className="ins-port-bar">
       {/* Left: balance */}
       <div className="ins-port-bar__balance">
-        <div className="ins-port-bar__label">Portfolio <span className="td-muted" style={{fontSize:10,fontWeight:400}}>{cfg.ALPACA_LIVE?'Live':'Paper'}</span></div>
+        <div className="ins-port-bar__label">Portfolio <span className="td-muted" style={{fontSize:11,fontWeight:400}}>{cfg.ALPACA_LIVE?'Live':'Paper'}</span></div>
         {!port
           ? <Spinner size={14}/>
           : <>
@@ -3237,7 +3261,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, w
             onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:t,company:''})}>
             <span className="ins-port-chip__ticker">{t}</span>
             {activeSignalTickers.has(t)&&<span className="ins-port-chip__dot">●</span>}
-            <span className="td-muted" style={{fontSize:10}}>★</span>
+            <span className="td-muted" style={{fontSize:11}}>★</span>
           </div>
         ))}
       </div>
@@ -3323,7 +3347,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
             <div className="port-ds"><span className="port-ds__label">Equity</span><span className="port-ds__val">{fmt.money(eq)}</span></div>
             <div className="port-ds"><span className="port-ds__label">Today</span><span className={`port-ds__val ${dpl>=0?'val-buy':'val-sell'}`}>{dpl>=0?'+':''}{fmt.money(dpl)} ({fmt.pct(dpct)})</span></div>
             <div className="port-ds"><span className="port-ds__label">Buying power</span><span className="port-ds__val">{fmt.money(bp)}</span></div>
-            <span className="td-muted" style={{fontSize:10,padding:'0 4px'}}>{cfg.ALPACA_LIVE?'Live':'Paper'}</span>
+            <span className="td-muted" style={{fontSize:11,padding:'0 4px'}}>{cfg.ALPACA_LIVE?'Live':'Paper'}</span>
           </>}
           <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
         </div>
@@ -3336,7 +3360,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
               {[['positions','Positions'],['activity','Insider activity'],['news','News']].map(([id,l])=>(
                 <button key={id}
                   className={`dash-tile-pill${tab===id?' dash-tile-pill--active':''}`}
-                  style={{fontSize:10}} onClick={()=>setTab(id)}>{l}</button>
+                  style={{fontSize:11}} onClick={()=>setTab(id)}>{l}</button>
               ))}
             </div>
 
@@ -3363,8 +3387,8 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
                           onClick={()=>{ setSelected(p.symbol); setDetail({type:'ticker',ticker:p.symbol,company:''}); setDetailStack([]); }}>
                           <div className="drawer__list-row__main">
                             <span className="ticker" style={{fontSize:13,fontWeight:700}}>{p.symbol}</span>
-                            {hasActivity&&<span className="reversal-badge" style={{fontSize:9}}>insider activity</span>}
-                            <span className="td-muted" style={{fontSize:10,flex:1}}>{qty%1?qty.toFixed(2):qty} sh · {fmt.money(mv)}</span>
+                            {hasActivity&&<span className="reversal-badge" style={{fontSize:11}}>insider activity</span>}
+                            <span className="td-muted" style={{fontSize:11,flex:1}}>{qty%1?qty.toFixed(2):qty} sh · {fmt.money(mv)}</span>
                             <span className={`td-mono ${upl>=0?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:700}}>{upl>=0?'+':''}{fmt.money(upl)}</span>
                           </div>
                           {/* P&L bar */}
@@ -3372,8 +3396,8 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
                             <div className="port-plbar-fill" style={{width:`${barW}%`,background:upl>=0?'var(--green-600)':'var(--red-600)'}}/>
                           </div>
                           <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:10}}>total unrealized</span>
-                            <span className={`td-mono ${tpl>=0?'val-buy':'val-sell'}`} style={{fontSize:10,marginLeft:'auto'}}>{tpl>=0?'+':''}{fmt.money(tpl)} today ({pct>=0?'+':''}{pct.toFixed(1)}%)</span>
+                            <span className="td-muted" style={{fontSize:11}}>total unrealized</span>
+                            <span className={`td-mono ${tpl>=0?'val-buy':'val-sell'}`} style={{fontSize:11,marginLeft:'auto'}}>{tpl>=0?'+':''}{fmt.money(tpl)} today ({pct>=0?'+':''}{pct.toFixed(1)}%)</span>
                           </div>
                         </div>
                       );
@@ -3390,7 +3414,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
                     <div key={ticker}>
                       <div className="port-activity-ticker-hdr">
                         <span className="ticker" style={{fontSize:12}}>{ticker}</span>
-                        <span className="td-muted" style={{fontSize:10,marginLeft:6}}>{trades.length} trade{trades.length!==1?'s':''}</span>
+                        <span className="td-muted" style={{fontSize:11,marginLeft:6}}>{trades.length} trade{trades.length!==1?'s':''}</span>
                       </div>
                       {trades.map((f,i)=>(
                         <div key={i} className="drawer__list-row"
@@ -3401,8 +3425,8 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
                             <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</span>
                           </div>
                           <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:10}}>{f.title||f.relationship||'Unknown'}</span>
-                            <span className="td-muted" style={{fontSize:10,marginLeft:'auto'}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                            <span className="td-muted" style={{fontSize:11}}>{f.title||f.relationship||'Unknown'}</span>
+                            <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
                           </div>
                         </div>
                       ))}
@@ -3486,7 +3510,7 @@ function InsightsPortfolioPanel({ filings, cutoff, days, onOpenDetail, watchlist
       <div className="ins-sig-panel">
         <div className="ins-sig-panel__hdr">
           <span className="ins-sig-panel__title">Portfolio</span>
-          <span className="td-muted" style={{fontSize:10,marginLeft:'auto'}}>{cfg.ALPACA_LIVE?'Live':'Paper'}</span>
+          <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{cfg.ALPACA_LIVE?'Live':'Paper'}</span>
         </div>
         {!port ? <div style={{padding:'12px 14px'}}><Spinner size={14}/></div>
         : <div>
@@ -3508,12 +3532,12 @@ function InsightsPortfolioPanel({ filings, cutoff, days, onOpenDetail, watchlist
                         onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:''})}>
                         <div className="port-pos-row__left">
                           <span className="ticker" style={{fontSize:12}}>{p.symbol}</span>
-                          {inFeed&&<span className="reversal-badge" style={{fontSize:9}}>insider activity</span>}
+                          {inFeed&&<span className="reversal-badge" style={{fontSize:11}}>insider activity</span>}
                         </div>
                         <div className="port-pos-row__right">
                           <span className="td-muted" style={{fontSize:11}}>{fmt.money(parseFloat(p.market_value||0))}</span>
                           <span className={`port-pos-row__pnl ${tpl>=0?'val-buy':'val-sell'}`}>{tpl>=0?'+':''}{fmt.money(tpl)}</span>
-                          <span className="td-muted" style={{fontSize:10}}>({pct>=0?'+':''}{pct.toFixed(1)}%)</span>
+                          <span className="td-muted" style={{fontSize:11}}>({pct>=0?'+':''}{pct.toFixed(1)}%)</span>
                         </div>
                       </div>
                     );
@@ -3526,7 +3550,7 @@ function InsightsPortfolioPanel({ filings, cutoff, days, onOpenDetail, watchlist
       <div className="ins-sig-panel">
         <div className="ins-sig-panel__hdr">
           <span className="ins-sig-panel__title">Insider trades on your tickers</span>
-          <span className="td-muted" style={{fontSize:10,marginLeft:'auto'}}>held + watchlist · last {days}d</span>
+          <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>held + watchlist · last {days}d</span>
         </div>
         {tickersOfInterest.length===0
           ? <div className="ins-empty">Add tickers to your watchlist (☆) or connect Alpaca to see relevant trades here.</div>
@@ -3539,12 +3563,12 @@ function InsightsPortfolioPanel({ filings, cutoff, days, onOpenDetail, watchlist
                     <span className="ticker" style={{fontSize:12}}>{f.ticker}</span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:11,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName}</div>
-                      <div className="td-muted" style={{fontSize:10}}>{f.title||f.relationship}</div>
+                      <div className="td-muted" style={{fontSize:11}}>{f.title||f.relationship}</div>
                     </div>
                     <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>}</Badge>
                     <div style={{textAlign:'right',flexShrink:0}}>
                       <div className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</div>
-                      <div className="td-muted" style={{fontSize:10}}>{fmt.dateShort(f.transactionDate||f.date)}</div>
+                      <div className="td-muted" style={{fontSize:11}}>{fmt.dateShort(f.transactionDate||f.date)}</div>
                     </div>
                   </div>
                 ))}
@@ -3680,10 +3704,10 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
             <div className="ins-lb-card__rank">{i+1}</div>
             <div className="ins-lb-card__body">
               <div style={{display:'flex',alignItems:'center',gap:6}}><div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>{watchlist&&<FollowBtn name={r.insider_name} watchlist={watchlist}/>}</div>
-              <div className="td-muted" style={{fontSize:10}}>{r.insider_title||'Unknown'}</div>
+              <div className="td-muted" style={{fontSize:11}}>{r.insider_title||'Unknown'}</div>
               <div className="ins-lb-card__meta">
                 <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
-                <span className="td-muted" style={{fontSize:10}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
+                <span className="td-muted" style={{fontSize:11}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
               </div>
             </div>
             <div className="ins-lb-card__score">
@@ -3801,13 +3825,13 @@ function InsightsSectorChart({ filings, days }) {
           return (
             <div key={i} className="ins-sector-sq" style={{background:bgColor}}>
               <div className="ins-sector-sq__label">{sq.label}</div>
-              {sq.sym&&<div className="td-muted" style={{fontSize:9}}>{sq.sym}</div>}
+              {sq.sym&&<div className="td-muted" style={{fontSize:11}}>{sq.sym}</div>}
               {mainVal!=null&&(
                 <div className={`ins-sector-sq__val ${mainVal>=0?'val-buy':'val-sell'}`}>
                   {view==='market'?`${mainVal>=0?'+':''}${mainVal.toFixed(1)}%`:`${mainVal>=0?'+':''}${fmt.money(mainVal)}`}
                 </div>
               )}
-              {(!sq.loaded)&&<div className="td-muted" style={{fontSize:10}}>…</div>}
+              {(!sq.loaded)&&<div className="td-muted" style={{fontSize:11}}>…</div>}
               {view==='market'&&sq.secNet!=null&&(
                 <div className={`ins-sector-sq__sec ${sq.secNet>=0?'val-buy':'val-sell'}`} title="Insider net flow">
                   {sq.secNet>=0?<IconBuyTri style={{width:9,height:9}}/>:<IconSellTri style={{width:9,height:9}}/>}{fmt.money(Math.abs(sq.secNet))} insiders
@@ -3874,7 +3898,7 @@ function InsightsSnapshot({ filings, loading, onOpenDetail, onGoTo }) {
               <div key={i} className="snapshot-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:r.insiderName,title:r.title})}>
                 <span className="ticker" style={{fontSize:11}}>{r.ticker}</span>
                 <span className="td-muted snapshot-row__sub">{r.priorType}→{r.recentType}</span>
-                <span className="td-muted" style={{fontSize:10,marginLeft:'auto'}}>{fmt.dateShort(r.recentDate)}</span>
+                <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.dateShort(r.recentDate)}</span>
               </div>
             ))}
           </div>
@@ -3895,11 +3919,11 @@ function InsightsSnapshot({ filings, loading, onOpenDetail, onGoTo }) {
               <span className="snapshot-rank">{i+1}</span>
               <div style={{flex:1,minWidth:0}}>
                 <div className="dp-clickable snapshot-row__name" style={{fontSize:12}}>{l.insider_name}</div>
-                <div className="td-muted" style={{fontSize:10}}>{l.insider_title||'Unknown'}</div>
+                <div className="td-muted" style={{fontSize:11}}>{l.insider_title||'Unknown'}</div>
               </div>
               <div style={{textAlign:'right',flexShrink:0}}>
                 {l.hit_rate!=null&&<div className={`td-mono ${l.hit_rate>=70?'val-buy':l.hit_rate>=50?'':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{l.hit_rate}%</div>}
-                <div className="td-muted" style={{fontSize:10}}>{l.om_buys} buys</div>
+                <div className="td-muted" style={{fontSize:11}}>{l.om_buys} buys</div>
               </div>
             </div>
           ))}
@@ -3918,7 +3942,7 @@ function InsightsSnapshot({ filings, loading, onOpenDetail, onGoTo }) {
           {sectorPreview.map((s,i)=>(
             <div key={i} className="snapshot-row">
               <span style={{fontSize:12,flex:1}}>{s.sector}</span>
-              <span className="td-muted" style={{fontSize:10,marginRight:8}}>{s.insider_count} insiders</span>
+              <span className="td-muted" style={{fontSize:11,marginRight:8}}>{s.insider_count} insiders</span>
               <span className={`td-mono snapshot-sector-val ${s.net_value>=0?'val-buy':'val-sell'}`}>
                 {s.net_value>=0?<IconBuyTri style={{width:9,height:9}}/>:<IconSellTri style={{width:9,height:9}}/>} {fmt.money(Math.abs(s.net_value))}
               </span>
@@ -3941,6 +3965,20 @@ function InsightsSnapshot({ filings, loading, onOpenDetail, onGoTo }) {
 // for "Related Insiders" on the trader profile.
 function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5) {
   const sectorClause = sectorFilter ? `AND f.sector = '${sectorFilter.replace(/'/g,"''")}'` : '';
+  // Win/loss now requires a MEANINGFUL margin (5%+) rather than the old
+  // razor-thin `close >= buy price`, where a stock up $0.01 counted as a
+  // full win identically to one up 400%. Trades that are roughly flat
+  // (within ±5%) are excluded from `priced` entirely rather than forced
+  // into a binary — a "push" shouldn't count as evidence of skill either way.
+  //
+  // Known limitation, not yet fixed here: this still compares against a
+  // snapshot of the CURRENT price, not the market's own move over the same
+  // window — so a rising market can inflate everyone's hit rate regardless
+  // of actual stock-picking skill. A true fix needs a benchmark (e.g. SPY)
+  // with full historical daily closes to compare each trade's date against,
+  // which public.prices_history doesn't have yet — it only maintains a
+  // rolling recent snapshot per ticker, not a multi-year series. That's a
+  // separate backfill task, not a query change alone.
   return `
     SELECT f.insider_name,
            -- Pick the most frequently-filed title for this name, not just
@@ -3963,14 +4001,25 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5) {
            COUNT(*) FILTER (
              WHERE f.transaction_type='buy' AND f.is_open_market
                AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
-               AND ph_buy.close>=f.price_per_share
+               AND ph_buy.close >= f.price_per_share * 1.05
                AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
            ) AS wins,
            COUNT(*) FILTER (
              WHERE f.transaction_type='buy' AND f.is_open_market
                AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
+               AND (ph_buy.close >= f.price_per_share * 1.05 OR ph_buy.close <= f.price_per_share * 0.95)
                AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
-           ) AS priced
+           ) AS priced,
+           -- Magnitude, not just frequency — a bare hit-rate can't tell
+           -- "wins often by a little" apart from "wins less often but by a
+           -- lot." Averaged over the same sanity-bounded, priced trade set.
+           AVG(
+             CASE WHEN f.transaction_type='buy' AND f.is_open_market
+                       AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
+                       AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
+                  THEN (ph_buy.close-f.price_per_share)/f.price_per_share*100
+             END
+           ) AS avg_return_pct
     FROM public.filings f
     LEFT JOIN LATERAL (
       SELECT close FROM public.prices_history
@@ -3985,20 +4034,7 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5) {
   `;
 }
 
-function processLeaderboardRows(rows) {
-  return rows.map(r=>{
-    const hitRate = r.priced>0 ? Math.round((r.wins/r.priced)*100) : null;
-    const omTotal = (r.om_buys||0)+(r.om_sells||0);
-    const omDiscipline = r.total_buys>0 ? (r.om_buys/r.total_buys) : 0;
-    // Same scoring shape as trustScore() but using query-computable proxies
-    let s=0;
-    if (hitRate!=null){if(hitRate>=70)s+=2;else if(hitRate>=50)s+=1;}else s+=0.5;
-    if (omTotal>=10)s+=1;else if(omTotal>=5)s+=0.5;
-    if (omDiscipline>=0.7)s+=0.5;
-    const proxyScore = Math.max(0,Math.min(Math.round(s*10)/10,4)); // capped lower than full score (no realized-return data here)
-    return {...r, hit_rate:hitRate, om_total:omTotal, proxy_score:proxyScore};
-  }).sort((a,b)=>(b.proxy_score-a.proxy_score)||(b.wins-a.wins));
-}
+// (processLeaderboardRows now lives in src/lib/scoring.js — imported above.)
 
 
 // ─── SECTOR MONEY FLOW environment ─────────────────────────────────────────────
@@ -4296,7 +4332,6 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                   <SortTh key={c.key} label={c.label} colKey={c.key} sortCol={sortKey} sortDir={sortDir} onSort={onSort}
                     right={c.type==='num'}/>
                 ))}
-                <th>OM</th>
               </tr></thead>
               <tbody>
                 {rows.map((r,i)=>{
@@ -4337,10 +4372,10 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                         <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>
                           {tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆ Other'}
                         </Badge>
-                        {r.transaction_code&&<div className="code-pill-sm" title={TX_CODE_TOOLTIPS[r.transaction_code]||r.transaction_code}>{r.transaction_code}</div>}
+                        {r.transaction_code&&<div className="code-pill-sm" title={TX_CODE_TOOLTIPS[r.transaction_code]||r.transaction_code}>{TX_CODE_SHORT[r.transaction_code]||r.transaction_code}</div>}
                       </td>
-                      <td className="td-right td-mono">{fmt.number(r.shares)}</td>
-                      <td className="td-right td-mono">{fmt.price(r.price_per_share)}</td>
+                      <td className="td-right td-mono td-secondary">{fmt.number(r.shares)}</td>
+                      <td className="td-right td-mono td-secondary">{fmt.price(r.price_per_share)}</td>
                       <td className="td-right td-mono">
                         <span className={tt==='buy'?'val-buy':tt==='sell'?'val-sell':''}>{fmt.money(r.value)}</span>
                       </td>
@@ -4348,7 +4383,6 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                         {r.pct_owned_change!=null?<span className="val-buy">+{parseFloat(r.pct_owned_change).toFixed(1)}%</span>:'—'}
                       </td>
                       <td><Badge type={`rel-${rel}`}>{rl}</Badge></td>
-                      <td style={{textAlign:'center'}}>{r.is_open_market&&<span className="om-dot">●</span>}</td>
                     </tr>
                   );
                 })}
@@ -4463,7 +4497,7 @@ function PortfolioSuggestions({ filings, ownedTickers, onOpenDetail }) {
           <div key={s.ticker} className="port-suggest__row" onClick={()=>onOpenDetail&&onOpenDetail({type:'signal',...s})}>
             <span className="ticker" style={{fontSize:13}}>{s.ticker}</span>
             <span className="td-muted" style={{fontSize:11,flex:1}}>{s.company}</span>
-            <span className="td-muted" style={{fontSize:10.5}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>
+            <span className="td-muted" style={{fontSize:11.5}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>
             <span className={`td-mono ${s.netValue>=0?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
           </div>
         ))}
@@ -4869,7 +4903,7 @@ function TermsPage() {
     <div className="legal-page" data-theme="dark">
       <nav className="lp-nav">
         <a className="lp-nav__logo" href="/">
-          <div className="lp-logo-mark">S</div>
+          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
         </a>
       </nav>
@@ -4921,7 +4955,7 @@ function TermsPage() {
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm">S</div>
+          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
         </div>
         <div className="lp-footer__links">
@@ -4940,7 +4974,7 @@ function PrivacyPage() {
     <div className="legal-page" data-theme="dark">
       <nav className="lp-nav">
         <a className="lp-nav__logo" href="/">
-          <div className="lp-logo-mark">S</div>
+          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
         </a>
       </nav>
@@ -4999,7 +5033,7 @@ function PrivacyPage() {
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm">S</div>
+          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
         </div>
         <div className="lp-footer__links">
@@ -5109,6 +5143,7 @@ function SettingsToggle({ label, sub, checked, onChange, pro, disabled }) {
 
 function SettingsPage({ user, onUpgrade }) {
   const pro   = isPro(user);
+  const [appetite, setAppetite] = React.useContext(RiskAppetiteContext);
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
   const [section, setSection] = useState('billing');
   const [local,   setLocal]   = useState(null);
@@ -5134,11 +5169,12 @@ function SettingsPage({ user, onUpgrade }) {
   }
 
   const SECTIONS = [
-    {id:'billing',  label:'Billing',        icon:'$'},
-    {id:'digests',  label:'Email digests',  Icon:IconMail},
-    {id:'instant',  label:'Instant alerts', Icon:IconZap},
-    {id:'brokers',  label:'Connections',    Icon:IconLink},
+    {id:'billing',       label:'Billing',          icon:'$'},
+    {id:'ranking',       label:'Risk Management',  Icon:IconInsights},
+    {id:'notifications', label:'Notifications',    Icon:IconMail},
+    {id:'brokers',       label:'Link Portfolio',   Icon:IconLink},
   ];
+  const [notifTab, setNotifTab] = useState('digests'); // sub-tab within Notifications
 
   return (
     <div className="settings-page">
@@ -5168,8 +5204,52 @@ function SettingsPage({ user, onUpgrade }) {
             </div>
           )}
 
+          {/* SIGNAL RANKING */}
+          {section==='ranking'&&(
+            <div className="settings-section">
+              <div className="settings-section__title">Signal ranking</div>
+              <div className="settings-section__desc">
+                Controls how hard it is for a signal to show as High conviction (green). This only shifts
+                where the color thresholds sit — it doesn't hide or filter any data, so the same signals
+                stay visible and browsable at every setting.
+              </div>
+
+              <div className="settings-group">
+                <div className="risk-slider-row">
+                  <input
+                    type="range" min="1" max="5" step="1" value={appetite}
+                    onChange={e=>setAppetite(Number(e.target.value))}
+                    className="risk-slider"
+                  />
+                  <div className="risk-slider-label">{RISK_APPETITE_LABELS[appetite]}</div>
+                </div>
+                <div className="risk-slider-ticks">
+                  <span>Very conservative</span>
+                  <span>Very aggressive</span>
+                </div>
+              </div>
+
+              <div className="settings-group">
+                <div className="settings-group__label">Preview</div>
+                <div className="settings-group__desc">
+                  A signal scoring 10/15 — same underlying score, shown at your current setting:
+                </div>
+                <div style={{marginTop:10,maxWidth:280}}>
+                  <ConvictionBar score={10} showLabel={true}/>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* NOTIFICATIONS — digests and instant alerts as sub-tabs */}
+          {section==='notifications'&&(<>
+            <div className="settings-tabs" style={{marginBottom:14}}>
+              <button className={`settings-tab${notifTab==='digests'?' settings-tab--active':''}`} onClick={()=>setNotifTab('digests')}>Email digests</button>
+              <button className={`settings-tab${notifTab==='instant'?' settings-tab--active':''}`} onClick={()=>setNotifTab('instant')}>Instant alerts</button>
+            </div>
+
           {/* EMAIL DIGESTS */}
-          {section==='digests'&&(
+          {notifTab==='digests'&&(
             <div className="settings-section">
               <div className="settings-section__title">
                 Email digests
@@ -5308,7 +5388,7 @@ function SettingsPage({ user, onUpgrade }) {
           )}
 
           {/* INSTANT ALERTS */}
-          {section==='instant'&&(
+          {notifTab==='instant'&&(
             <div className="settings-section">
               <div className="settings-section__title">
                 Instant alerts
@@ -5402,8 +5482,9 @@ function SettingsPage({ user, onUpgrade }) {
               </>)}
             </div>
           )}
+          </>)}
 
-          {/* CONNECTIONS */}
+          {/* LINK PORTFOLIO */}
           {section==='brokers'&&(
             <div className="settings-section">
               <div className="settings-section__title">
@@ -5473,7 +5554,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Nav */}
       <nav className="lp-nav">
         <div className="lp-nav__logo">
-          <div className="lp-logo-mark">ID</div>
+          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
         </div>
         <div className="lp-nav__links">
@@ -5682,7 +5763,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Footer */}
       <footer className="lp-footer">
         <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm">S</div>
+          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
         </div>
         <div className="lp-footer__links">
@@ -5757,6 +5838,7 @@ function titleFromAppState(page, detail) {
 
 export default function App() {
   const [dark,setDark] = useTheme();
+  const riskAppetite = useRiskAppetite();
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
 
@@ -5918,6 +6000,7 @@ export default function App() {
   if (showLanding) return <LandingPage onEnter={enterApp} dark={dark} setDark={setDark} isLoaded={isLoaded}/>;
 
   return (
+    <RiskAppetiteContext.Provider value={riskAppetite}>
     <div className={`app-shell${panelOpen?' app-shell--panel-open':''}`}>
       <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark} user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>
       <main className="main-area">
@@ -6005,6 +6088,7 @@ export default function App() {
         />
       )}
     </div>
+    </RiskAppetiteContext.Provider>
   );
 }
 
