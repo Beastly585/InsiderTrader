@@ -27,6 +27,8 @@
  */
 
 import { sqlVal } from './lib/sql.js';
+import { encryptSecret, decryptSecret } from './lib/crypto.js';
+import { computeSignature } from './lib/snaptrade-sign.js';
 
 const ALLOWED_ORIGINS = new Set([
   'https://seli.app',
@@ -126,6 +128,26 @@ export default {
 
     if (url.pathname === '/portfolio' || url.pathname.startsWith('/portfolio')) {
       return handlePortfolio(request, env, origin);
+    }
+
+    // ── SnapTrade — real per-user portfolio linking ──────────────────────
+    // Distinct from the /portfolio route above, which is the older
+    // single-shared-Alpaca-key implementation (same data for every user —
+    // not real per-user linking). Once this is live and wired into the
+    // frontend, /portfolio becomes dead code worth removing in a follow-up
+    // pass — not deleted here, since that's a frontend-coordinated change,
+    // not something to do silently as a side effect of adding this.
+    if (url.pathname === '/snaptrade/connect') {
+      return handleSnapTradeConnect(request, env, origin);
+    }
+    if (url.pathname === '/snaptrade/status') {
+      return handleSnapTradeStatus(request, env, origin);
+    }
+    if (url.pathname === '/snaptrade/disconnect') {
+      return handleSnapTradeDisconnect(request, env, origin);
+    }
+    if (url.pathname === '/snaptrade/positions') {
+      return handleSnapTradePositions(request, env, origin);
     }
 
     return handleQuery(request, env, origin);
@@ -478,7 +500,208 @@ async function handlePortfolio(request, env, origin) {
   }
 }
 
-// ── Shared helpers for billing routes ───────────────────────────────────────
+// ── SnapTrade — real per-user portfolio linking ─────────────────────────────
+//
+// Security model, read this before touching any of these functions:
+//
+//   getSnapTradeConnection() is the ONLY function in this entire file
+//   allowed to read secret_ciphertext/secret_iv and decrypt them. Every
+//   other function that needs to make an authenticated SnapTrade API call
+//   goes through it — never query those columns directly elsewhere, and
+//   never inline decryptSecret() calls anywhere else. One audited path.
+//
+//   Every other read (status, anything that could end up in a response sent
+//   to a browser) queries portfolio_connections_public — the view defined
+//   in 007_portfolio_connections.sql that structurally excludes the secret
+//   columns. This isn't just "remember not to SELECT that column" — the
+//   view doesn't have it, so there's nothing to accidentally select.
+//
+//   The decrypted plaintext secret must never be logged, never placed in
+//   any object returned via corsResponse, and should go out of scope
+//   immediately after the one SnapTrade API call that needs it.
+//
+//   SNAPTRADE_ENCRYPTION_KEY (Worker secret, base64, 32 bytes) must be
+//   distinct from every other secret in this Worker — CLERK_SECRET_KEY,
+//   STRIPE_SECRET_KEY, etc. — so a leak of any one of them doesn't also
+//   compromise this one.
+
+// The one authorized function that ever reads+decrypts a stored secret.
+async function getSnapTradeConnection(env, clerkUserId) {
+  const result = await neonFetch(env, `
+    SELECT snaptrade_user_id, secret_ciphertext, secret_iv
+    FROM public.portfolio_connections
+    WHERE clerk_user_id = ${sqlVal(clerkUserId)} AND status = 'active'
+  `);
+  const row = result.rows?.[0];
+  if (!row) return null;
+  const userSecret = await decryptSecret(env.SNAPTRADE_ENCRYPTION_KEY, row.secret_ciphertext, row.secret_iv);
+  return { snapTradeUserId: row.snaptrade_user_id, userSecret };
+}
+
+// (sortedStringify / the signature algorithm now live in
+// worker/lib/snaptrade-sign.js — imported above — verified against
+// SnapTrade's own documented test vector, see that file's test suite.)
+
+async function signSnapTradeRequest(env, method, path, { query = {}, body = null } = {}) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const queryParams = new URLSearchParams({ ...query, clientId: env.SNAPTRADE_CLIENT_ID, timestamp: String(timestamp) });
+  const queryString = queryParams.toString();
+
+  const signature = await computeSignature(env.SNAPTRADE_CONSUMER_KEY, body, path, queryString);
+
+  const url = `https://api.snaptrade.com${path}?${queryString}`;
+  const resp = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'Signature': signature },
+    body: body !== null ? JSON.stringify(body) : undefined,
+  });
+  const text = await resp.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  if (!resp.ok) {
+    throw new Error(`SnapTrade ${method} ${path} failed (${resp.status}): ${data.detail || data.raw || text}`);
+  }
+  return data;
+}
+
+async function handleSnapTradeConnect(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  if (!env.SNAPTRADE_ENCRYPTION_KEY) {
+    return corsResponse({ error: 'Portfolio linking is not configured on this Worker yet' }, 500, origin, env);
+  }
+
+  try {
+    // Reuse an existing SnapTrade registration if this user already has one
+    // (e.g. they disconnected and are reconnecting) — otherwise register a
+    // new SnapTrade user via signSnapTradeRequest(...) against the Register
+    // User endpoint, which returns a fresh userSecret. Encrypt it
+    // immediately — it should never be held in a variable longer than
+    // necessary before being encrypted and written to storage.
+    const existing = await neonFetch(env, `
+      SELECT snaptrade_user_id FROM public.portfolio_connections
+      WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+    `);
+
+    let snapTradeUserId, userSecret;
+    if (existing.rows?.[0]) {
+      snapTradeUserId = existing.rows[0].snaptrade_user_id;
+      // Existing user — re-fetch their secret via getSnapTradeConnection
+      // rather than re-registering, which would orphan the old connection.
+      const conn = await getSnapTradeConnection(env, clerkUserId);
+      userSecret = conn?.userSecret;
+    } else {
+      snapTradeUserId = clerkUserId; // reuse Clerk's own user id — not sensitive alone
+      const registerResp = await signSnapTradeRequest(env, 'POST', '/api/v1/snapTrade/registerUser', {
+        body: { userId: snapTradeUserId },
+      });
+      userSecret = registerResp.userSecret;
+    }
+
+    const { ciphertext, iv } = await encryptSecret(env.SNAPTRADE_ENCRYPTION_KEY, userSecret);
+
+    await neonFetch(env, `
+      INSERT INTO public.portfolio_connections
+        (clerk_user_id, snaptrade_user_id, secret_ciphertext, secret_iv, connection_type, status, updated_at)
+      VALUES (${sqlVal(clerkUserId)}, ${sqlVal(snapTradeUserId)}, ${sqlVal(ciphertext)}, ${sqlVal(iv)}, 'read', 'active', now())
+      ON CONFLICT (clerk_user_id) DO UPDATE SET
+        snaptrade_user_id = EXCLUDED.snaptrade_user_id,
+        secret_ciphertext = EXCLUDED.secret_ciphertext,
+        secret_iv         = EXCLUDED.secret_iv,
+        status             = 'active',
+        updated_at         = now()
+    `);
+
+    // connectionType defaults to read-only on SnapTrade's side even if
+    // omitted, per their docs — passed explicitly here anyway so the
+    // intent is visible in the code, not just relying on their default.
+    const portalResp = await signSnapTradeRequest(env, 'POST', '/api/v1/snapTrade/login', {
+      body: { userId: snapTradeUserId, userSecret, connectionType: 'read' },
+    });
+    return corsResponse({ redirectURI: portalResp.redirectURI }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] SnapTrade connect failed:', e.message); // never log userSecret itself
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+async function handleSnapTradeStatus(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  try {
+    // Queries the view — structurally cannot return the secret columns,
+    // since they don't exist in what it's selecting from.
+    const result = await neonFetch(env, `
+      SELECT connection_type, status, broker, connected_at, last_synced_at
+      FROM public.portfolio_connections_public
+      WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+    `);
+    return corsResponse({ connection: result.rows?.[0] || null }, 200, origin, env);
+  } catch (e) {
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+async function handleSnapTradeDisconnect(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  try {
+    // Full deletion, not a soft "disconnected" status flag — minimizing how
+    // long a no-longer-wanted secret sits in storage at all, not just how
+    // it's marked.
+    await neonFetch(env, `
+      DELETE FROM public.portfolio_connections WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+    `);
+    return corsResponse({ ok: true }, 200, origin, env);
+  } catch (e) {
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+async function handleSnapTradePositions(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  try {
+    const conn = await getSnapTradeConnection(env, clerkUserId);
+    if (!conn) return corsResponse({ error: 'No active connection' }, 404, origin, env);
+
+    // Endpoint paths below are reconstructed from SnapTrade's documentation
+    // prose, not verified against a known test vector the way the signing
+    // algorithm above was — worth a real test call against your own test
+    // account before trusting this in front of a user, since a wrong path
+    // here just 404s rather than silently doing the wrong thing, but it
+    // hasn't been proven correct the way the signature math has.
+    const accounts = await signSnapTradeRequest(env, 'GET', '/api/v1/accounts', {
+      query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
+    });
+
+    const holdingsByAccount = await Promise.all(
+      (accounts || []).map(acct =>
+        signSnapTradeRequest(env, 'GET', `/api/v1/accounts/${acct.id}/holdings`, {
+          query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
+        }).then(holdings => ({ account: acct.name || acct.id, holdings }))
+      )
+    );
+
+    await neonFetch(env, `
+      UPDATE public.portfolio_connections SET last_synced_at = now()
+      WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+    `);
+
+    return corsResponse({ accounts: holdingsByAccount }, 200, origin, env);
+    // Note: conn.userSecret goes out of scope here regardless of outcome —
+    // never stored, logged, or returned beyond this function.
+  } catch (e) {
+    console.error('[Worker] SnapTrade positions fetch failed:', e.message); // never logs conn.userSecret
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+
 
 function getUserIdFromAuthHeader(request) {
   const authHeader = request.headers.get('Authorization') || '';
