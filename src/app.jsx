@@ -2138,37 +2138,59 @@ function usePortfolio() {
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
     (async()=>{
-      const headers = await getAuthHeaders();
-      // First check whether a brokerage is actually connected at all —
-      // distinct from "connected but zero positions" or "not connected yet".
-      const statusRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/status`, { headers }).then(r=>r.json()).catch(()=>null);
-      if (!statusRes?.connection) { setConnected(false); return; }
-      setConnected(true);
+      try {
+        const headers = await getAuthHeaders();
+        // First check whether a brokerage is actually connected at all —
+        // distinct from "connected but zero positions" or "not connected yet".
+        const statusRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/status`, { headers }).then(r=>r.json()).catch(()=>null);
+        if (!statusRes?.connection) { setConnected(false); return; }
+        setConnected(true);
 
-      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/positions`, { headers });
-      const data = await res.json();
-      if (data.error) { setErr(true); return; }
-      // Normalize SnapTrade's per-account { positions, balances } shape into
-      // one flat list — the tile shows a portfolio, not per-account breakdowns.
-      const flatPositions = [];
-      let totalValue = 0, totalDayChange = 0;
-      for (const acct of (data.accounts || [])) {
-        for (const p of (acct.positions?.positions || acct.positions || [])) {
-          const marketValue = (p.units || p.fractional_units || 0) * (p.price || p.symbol?.price || 0);
-          flatPositions.push({
-            symbol: p.symbol?.symbol || p.symbol?.raw_symbol || p.symbol,
-            quantity: p.units || p.fractional_units || 0,
-            price: p.price || p.symbol?.price || 0,
-            marketValue,
-            openPnl: p.open_pnl ?? null,
-          });
-          totalValue += marketValue;
+        const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/positions`, { headers });
+        const data = await res.json();
+        if (data.error) { setErr(true); return; }
+
+        // Normalize SnapTrade's per-account shape into one flat list — the
+        // tile shows a portfolio, not per-account breakdowns. Defensive on
+        // purpose: SnapTrade's "unified" positions endpoint may return
+        // positions grouped by asset class (equities/options/etc) rather
+        // than a flat array — genuinely not confirmed with certainty, so
+        // this checks Array.isArray() explicitly rather than trusting a
+        // truthy fallback chain, which previously crashed the whole page
+        // when it landed on a non-array object and tried to iterate it.
+        function extractPositionsArray(positions) {
+          if (Array.isArray(positions)) return positions;
+          if (positions && typeof positions === 'object') {
+            // Grouped-by-asset-class shape — flatten every array-valued
+            // property found, whatever SnapTrade actually calls them.
+            return Object.values(positions).filter(Array.isArray).flat();
+          }
+          return [];
         }
-        for (const b of (acct.balances || [])) {
-          totalValue += b.cash || 0;
+
+        const flatPositions = [];
+        let totalValue = 0, totalDayChange = 0;
+        for (const acct of (Array.isArray(data.accounts) ? data.accounts : [])) {
+          for (const p of extractPositionsArray(acct.positions)) {
+            const marketValue = (p.units || p.fractional_units || 0) * (p.price || p.symbol?.price || 0);
+            flatPositions.push({
+              symbol: p.symbol?.symbol || p.symbol?.raw_symbol || p.symbol,
+              quantity: p.units || p.fractional_units || 0,
+              price: p.price || p.symbol?.price || 0,
+              marketValue,
+              openPnl: p.open_pnl ?? null,
+            });
+            totalValue += marketValue;
+          }
+          for (const b of (Array.isArray(acct.balances) ? acct.balances : [])) {
+            totalValue += b.cash || 0;
+          }
         }
+        setPort({ positions: flatPositions, totalValue, totalDayChange });
+      } catch (e) {
+        console.error('[usePortfolio] failed:', e.message);
+        setErr(true);
       }
-      setPort({ positions: flatPositions, totalValue, totalDayChange });
     })();
   },[]);
   return { port, err, connected };
@@ -3249,7 +3271,17 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand })
     return new Set(relevant.map(f=>f.ticker));
   },[filings,cutoff,posSymbols.join(',')]);
 
-  if (err || !cfg.NEON_PROXY_URL) return null;
+  if (!cfg.NEON_PROXY_URL) return null;
+  if (err) {
+    return (
+      <div className="ins-port-bar">
+        <div className="ins-port-bar__balance">
+          <div className="ins-port-bar__label">Portfolio</div>
+          <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions right now</span>
+        </div>
+      </div>
+    );
+  }
 
   if (connected===false) {
     return (
@@ -5650,7 +5682,7 @@ function SettingsPage({ user, onUpgrade }) {
                       <div className="settings-broker-card__left">
                         <div className="settings-broker-card__name">{snaptrade.status.connection.broker || 'Brokerage connected'}</div>
                         <div className="settings-broker-card__sub">
-                          Read-only · Connected {fmt.dateShort ? fmt.dateShort(snaptrade.status.connection.connected_at) : new Date(snaptrade.status.connection.connected_at).toLocaleDateString()}
+                          Read-only · Connected {new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})}
                         </div>
                       </div>
                       <div className="settings-broker-card__right">
@@ -5676,7 +5708,7 @@ function SettingsPage({ user, onUpgrade }) {
                           <div key={i} style={{marginTop:12}}>
                             <div style={{fontSize:12,fontWeight:600,marginBottom:4}}>{acct.account}</div>
                             <pre style={{fontSize:11,background:'var(--surface-2)',padding:10,borderRadius:6,overflow:'auto',maxHeight:200}}>
-                              {JSON.stringify(acct.holdings, null, 2)}
+                              {JSON.stringify({ positions: acct.positions, balances: acct.balances }, null, 2)}
                             </pre>
                           </div>
                         ))
