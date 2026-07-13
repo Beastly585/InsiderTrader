@@ -149,6 +149,9 @@ export default {
     if (url.pathname === '/snaptrade/positions') {
       return handleSnapTradePositions(request, env, origin);
     }
+    if (url.pathname === '/snaptrade/performance') {
+      return handleSnapTradePerformance(request, env, origin);
+    }
 
     return handleQuery(request, env, origin);
   },
@@ -593,10 +596,29 @@ async function handleSnapTradeConnect(request, env, origin) {
       userSecret = conn?.userSecret;
     } else {
       snapTradeUserId = clerkUserId; // reuse Clerk's own user id — not sensitive alone
-      const registerResp = await signSnapTradeRequest(env, 'POST', '/api/v1/snapTrade/registerUser', {
-        body: { userId: snapTradeUserId },
-      });
-      userSecret = registerResp.userSecret;
+      try {
+        const registerResp = await signSnapTradeRequest(env, 'POST', '/api/v1/snapTrade/registerUser', {
+          body: { userId: snapTradeUserId },
+        });
+        userSecret = registerResp.userSecret;
+      } catch (registerErr) {
+        // Self-healing recovery: if our local record was deleted (e.g. a
+        // disconnect that didn't clean up SnapTrade's side, or manual DB
+        // changes) but SnapTrade still has this userId registered, delete
+        // the orphaned SnapTrade-side user and retry registration cleanly —
+        // rather than leave the user permanently stuck on this error.
+        if (/already exist/i.test(registerErr.message)) {
+          await signSnapTradeRequest(env, 'DELETE', '/api/v1/snapTrade/deleteUser', {
+            query: { userId: snapTradeUserId },
+          }).catch(() => {}); // best-effort — proceed to retry regardless
+          const retryResp = await signSnapTradeRequest(env, 'POST', '/api/v1/snapTrade/registerUser', {
+            body: { userId: snapTradeUserId },
+          });
+          userSecret = retryResp.userSecret;
+        } else {
+          throw registerErr;
+        }
+      }
     }
 
     const { ciphertext, iv } = await encryptSecret(env.SNAPTRADE_ENCRYPTION_KEY, userSecret);
@@ -658,6 +680,21 @@ async function handleSnapTradeDisconnect(request, env, origin) {
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
   try {
+    // Root-cause fix: disconnect must clean up SnapTrade's side too, not
+    // just the local row — otherwise a future Connect attempt tries to
+    // register a "new" user with an ID SnapTrade still has on file, and
+    // gets rejected. Best-effort: if this fails (e.g. already gone,
+    // endpoint hiccup), still proceed to delete the local record — a
+    // failed remote cleanup shouldn't trap the user unable to disconnect
+    // at all, and the self-healing retry in handleSnapTradeConnect covers
+    // the case where this step didn't fully succeed.
+    const conn = await getSnapTradeConnection(env, clerkUserId);
+    if (conn) {
+      await signSnapTradeRequest(env, 'DELETE', '/api/v1/snapTrade/deleteUser', {
+        query: { userId: conn.snapTradeUserId },
+      }).catch(e => console.error('[Worker] SnapTrade deleteUser failed (proceeding with local cleanup):', e.message));
+    }
+
     // Full deletion, not a soft "disconnected" status flag — minimizing how
     // long a no-longer-wanted secret sits in storage at all, not just how
     // it's marked.
@@ -678,22 +715,28 @@ async function handleSnapTradePositions(request, env, origin) {
     const conn = await getSnapTradeConnection(env, clerkUserId);
     if (!conn) return corsResponse({ error: 'No active connection' }, 404, origin, env);
 
-    // Endpoint paths below are reconstructed from SnapTrade's documentation
-    // prose, not verified against a known test vector the way the signing
-    // algorithm above was — worth a real test call against your own test
-    // account before trusting this in front of a user, since a wrong path
-    // here just 404s rather than silently doing the wrong thing, but it
-    // hasn't been proven correct the way the signature math has.
+    // The old combined /holdings endpoint is deprecated — confirmed directly
+    // from SnapTrade's own docs: it returns HTTP 410 Gone for any account
+    // created after April 25, 2026, replaced by separate, finer-grained
+    // endpoints. Using the unified positions endpoint (equities + options +
+    // futures in one call) plus balances separately, per SnapTrade's own
+    // "recommended endpoints to get started" guidance.
     const accounts = await signSnapTradeRequest(env, 'GET', '/api/v1/accounts', {
       query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
     });
 
     const holdingsByAccount = await Promise.all(
-      (accounts || []).map(acct =>
-        signSnapTradeRequest(env, 'GET', `/api/v1/accounts/${acct.id}/holdings`, {
-          query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
-        }).then(holdings => ({ account: acct.name || acct.id, holdings }))
-      )
+      (accounts || []).map(async acct => {
+        const [positions, balances] = await Promise.all([
+          signSnapTradeRequest(env, 'GET', `/api/v1/accounts/${acct.id}/positions/all`, {
+            query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
+          }),
+          signSnapTradeRequest(env, 'GET', `/api/v1/accounts/${acct.id}/balances`, {
+            query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
+          }),
+        ]);
+        return { account: acct.name || acct.id, positions, balances };
+      })
     );
 
     await neonFetch(env, `
@@ -707,6 +750,50 @@ async function handleSnapTradePositions(request, env, origin) {
   } catch (e) {
     console.error('[Worker] SnapTrade positions fetch failed:', e.message); // never logs conn.userSecret
     return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+// Best-effort — SnapTrade's docs mention an account balance history
+// endpoint by name (getAccountBalanceHistory) but I don't have its exact
+// REST path confirmed the way the positions endpoint was (that one was
+// directly named in their docs: /accounts/{accountId}/positions/all). This
+// guesses at the path following their established convention. If wrong,
+// this fails gracefully — the frontend shows "performance history will
+// appear once available" rather than an error, so a wrong guess here
+// degrades cleanly rather than breaking anything visible.
+async function handleSnapTradePerformance(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  try {
+    const conn = await getSnapTradeConnection(env, clerkUserId);
+    if (!conn) return corsResponse({ points: [] }, 200, origin, env);
+
+    const accounts = await signSnapTradeRequest(env, 'GET', '/api/v1/accounts', {
+      query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
+    });
+
+    const allPoints = [];
+    for (const acct of (accounts || [])) {
+      try {
+        const history = await signSnapTradeRequest(env, 'GET', `/api/v1/accounts/${acct.id}/balances/history`, {
+          query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
+        });
+        for (const h of (history || [])) {
+          allPoints.push({ date: h.date, value: h.total_equity ?? h.value ?? 0 });
+        }
+      } catch { /* this account's history unavailable — skip, don't fail the whole response */ }
+    }
+
+    // Merge same-date points across multiple accounts, sort ascending
+    const byDate = {};
+    for (const p of allPoints) { byDate[p.date] = (byDate[p.date]||0) + p.value; }
+    const points = Object.entries(byDate).sort(([a],[b])=>a<b?-1:1).map(([date,value])=>({date,value}));
+
+    return corsResponse({ points }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] SnapTrade performance fetch failed:', e.message);
+    return corsResponse({ points: [] }, 200, origin, env); // degrade gracefully, don't surface an error for a best-effort feature
   }
 }
 

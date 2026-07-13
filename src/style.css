@@ -2077,6 +2077,7 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* Account stat chips in drawer header */
 .port-ds { display:flex; flex-direction:column; gap:1px; padding:0 12px; border-right:0.5px solid var(--border); }
+.port-perf-chart { border-bottom: 0.5px solid var(--border); background: var(--surface-2); }
 .port-ds__label { font-size: 0.5625rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); }
 .port-ds__val   { font-size: 0.875rem; font-weight:700; font-family:var(--font-mono); letter-spacing:-0.3px; }
 

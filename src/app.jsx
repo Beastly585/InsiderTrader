@@ -2134,16 +2134,44 @@ function DashSigTable({ signals, loading, title, subtitle, onRowClick, onOpenDet
 function usePortfolio() {
   const [port, setPort] = useState(null);
   const [err,  setErr]  = useState(false);
+  const [connected, setConnected] = useState(null); // null=checking, true/false once known
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
     (async()=>{
-      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-      fetch(`${cfg.NEON_PROXY_URL}/portfolio`, {
-        method: 'POST', headers, body: JSON.stringify({}),
-      }).then(r=>r.json()).then(d=>{if(!d.error)setPort(d);else setErr(true);}).catch(()=>setErr(true));
+      const headers = await getAuthHeaders();
+      // First check whether a brokerage is actually connected at all —
+      // distinct from "connected but zero positions" or "not connected yet".
+      const statusRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/status`, { headers }).then(r=>r.json()).catch(()=>null);
+      if (!statusRes?.connection) { setConnected(false); return; }
+      setConnected(true);
+
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/positions`, { headers });
+      const data = await res.json();
+      if (data.error) { setErr(true); return; }
+      // Normalize SnapTrade's per-account { positions, balances } shape into
+      // one flat list — the tile shows a portfolio, not per-account breakdowns.
+      const flatPositions = [];
+      let totalValue = 0, totalDayChange = 0;
+      for (const acct of (data.accounts || [])) {
+        for (const p of (acct.positions?.positions || acct.positions || [])) {
+          const marketValue = (p.units || p.fractional_units || 0) * (p.price || p.symbol?.price || 0);
+          flatPositions.push({
+            symbol: p.symbol?.symbol || p.symbol?.raw_symbol || p.symbol,
+            quantity: p.units || p.fractional_units || 0,
+            price: p.price || p.symbol?.price || 0,
+            marketValue,
+            openPnl: p.open_pnl ?? null,
+          });
+          totalValue += marketValue;
+        }
+        for (const b of (acct.balances || [])) {
+          totalValue += b.cash || 0;
+        }
+      }
+      setPort({ positions: flatPositions, totalValue, totalDayChange });
     })();
   },[]);
-  return { port, err };
+  return { port, err, connected };
 }
 
 // News scoped specifically to the tickers actually held in the portfolio —
@@ -3204,80 +3232,69 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 // Full-width horizontal bar above the signal/insider grid. Shows balance on the
 // left and clickable position chips on the right. Flagged if insider activity
 // exists on that ticker within the selected timespan.
-function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, watchlist }) {
-  const { port, err } = usePortfolio();
+function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand }) {
+  const { port, err, connected } = usePortfolio();
 
-  const posKey = (port?.positions||[]).map(p=>p.symbol).join(',');
-  const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[posKey]);
+  const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[port]);
 
-  const tickersOfInterest = useMemo(()=>{
-    const all = new Set([...posSymbols,...watchlist.tickers]);
-    return [...all];
-  },[posKey,watchlist.tickers.join(',')]);
-
+  // Real positions only — no longer merged with watchlist tickers. What you
+  // hold and what you're watching are different questions; conflating them
+  // here made it impossible to tell which was which.
   const activeSignalTickers = useMemo(()=>{
     const relevant = filings.filter(f=>
-      tickersOfInterest.includes(f.ticker) &&
+      posSymbols.includes(f.ticker) &&
       (f.transactionDate||f.date||'')>=cutoff &&
       f.isOpenMarket
     );
     return new Set(relevant.map(f=>f.ticker));
-  },[filings,cutoff,tickersOfInterest.join(',')]);
+  },[filings,cutoff,posSymbols.join(',')]);
 
   if (err || !cfg.NEON_PROXY_URL) return null;
 
-  const acct = port?.account||{};
-  const pos  = port?.positions||[];
-  const eq   = parseFloat(acct.equity||0);
-  const leq  = parseFloat(acct.last_equity||0);
-  const dpl  = eq-leq, dpct = leq>0?(dpl/leq)*100:0;
+  if (connected===false) {
+    return (
+      <div className="ins-port-bar">
+        <div className="ins-port-bar__balance">
+          <div className="ins-port-bar__label">Portfolio</div>
+          <span className="td-muted" style={{fontSize:11}}>No brokerage connected — link one in Settings to see your real holdings here</span>
+        </div>
+      </div>
+    );
+  }
+
+  const pos = port?.positions||[];
 
   return (
     <div className="ins-port-bar">
-      {/* Left: balance */}
+      {/* Left: total value */}
       <div className="ins-port-bar__balance">
-        <div className="ins-port-bar__label">Portfolio <span className="td-muted" style={{fontSize:11,fontWeight:400}}>{cfg.ALPACA_LIVE?'Live':'Paper'}</span></div>
+        <div className="ins-port-bar__label">Portfolio</div>
         {!port
           ? <Spinner size={14}/>
-          : <>
-              <span className="ins-port-bar__val">{fmt.money(eq)}</span>
-              <span className={`ins-port-bar__chg ${dpl>=0?'val-buy':'val-sell'}`}>{dpl>=0?'+':''}{fmt.money(dpl)} ({fmt.pct(dpct)})</span>
-            </>
+          : <span className="ins-port-bar__val">{fmt.money(port.totalValue)}</span>
         }
       </div>
       <div className="ins-port-bar__divider"/>
 
-      {/* Right: position chips — each is clickable */}
+      {/* Right: position chips — real holdings only, each clickable */}
       <div className="ins-port-bar__chips">
         {!port
           ? <span className="td-muted" style={{fontSize:11}}>Loading positions…</span>
           : pos.length===0
-            ? <span className="td-muted" style={{fontSize:11}}>No open positions — connect Alpaca to track holdings</span>
-            : pos.sort((a,b)=>Math.abs(parseFloat(b.market_value||0))-Math.abs(parseFloat(a.market_value||0))).map((p,i)=>{
-                const tpl=parseFloat(p.unrealized_intraday_pl||0);
-                const pct=parseFloat(p.unrealized_plpc||0)*100;
+            ? <span className="td-muted" style={{fontSize:11}}>No open positions in your connected account</span>
+            : pos.sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>{
                 const hasActivity=activeSignalTickers.has(p.symbol);
                 return (
                   <div key={i} className={`ins-port-chip${hasActivity?' ins-port-chip--active':''}`}
-                    title={`${p.symbol} · ${fmt.money(parseFloat(p.market_value||0))} · ${pct>=0?'+':''}${pct.toFixed(1)}% today${hasActivity?' · Insider activity in this window':''}`}
+                    title={`${p.symbol} · ${fmt.money(p.marketValue)}${hasActivity?' · Insider activity in this window':''}`}
                     onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:''})}>
                     <span className="ins-port-chip__ticker">{p.symbol}</span>
                     {hasActivity&&<span className="ins-port-chip__dot" title="Insider activity">●</span>}
-                    <span className={`ins-port-chip__pnl ${tpl>=0?'val-buy':'val-sell'}`}>{tpl>=0?'+':''}{fmt.money(tpl)}</span>
+                    <span className="ins-port-chip__pnl td-muted">{fmt.money(p.marketValue)}</span>
                   </div>
                 );
               })
         }
-        {/* Watchlist tickers not in positions */}
-        {watchlist.tickers.filter(t=>!posSymbols.includes(t)).map(t=>(
-          <div key={t} className="ins-port-chip ins-port-chip--watch"
-            title={`${t} · Watchlist${activeSignalTickers.has(t)?' · Insider activity in this window':''}`}
-            onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:t,company:''})}>
-            <span className="ins-port-chip__ticker">{t}</span>
-            {activeSignalTickers.has(t)&&<span className="ins-port-chip__dot">●</span>}
-            <span className="td-muted" style={{fontSize:11}}>★</span>
-          </div>
-        ))}
       </div>
       {onExpand&&(
         <button className="ins-expand-btn" onClick={onExpand} style={{margin:'0 14px',flexShrink:0}}>
@@ -3291,20 +3308,47 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, w
 // ─── PortfolioDrawer ──────────────────────────────────────────────────────────
 // Full portfolio deep-dive: left pane = positions + stats + insider activity tabs,
 // right pane = DetailPanel inline for selected ticker + news.
-function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
+// Simple SVG line chart — no charting library dependency, matching the
+// existing hand-rolled-SVG convention already used elsewhere in this file
+// (see InsightsSectorChart). points: [{date, value}, ...] sorted ascending.
+function PortfolioPerformanceChart({ points }) {
+  const W = 600, H = 120, PAD = 8;
+  const values = points.map(p=>p.value);
+  const min = Math.min(...values), max = Math.max(...values);
+  const range = (max-min) || 1;
+  const stepX = (W-PAD*2) / (points.length-1);
+  const coords = points.map((p,i)=>({
+    x: PAD + i*stepX,
+    y: PAD + (H-PAD*2) * (1 - (p.value-min)/range),
+  }));
+  const path = coords.map((c,i)=>`${i===0?'M':'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+  const isUp = values[values.length-1] >= values[0];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{display:'block'}}>
+      <path d={path} fill="none" stroke={isUp?'var(--green-600)':'var(--red-600)'} strokeWidth="2"/>
+    </svg>
+  );
+}
+
+function PortfolioDrawer({ filings, cutoff, days, onClose }) {
   const { port } = usePortfolio();
   const [selected, setSelected] = useState(null);
   const [detail, setDetail]     = useState(null);
   const [detailStack, setDetailStack] = useState([]);
   const [tab, setTab] = useState('positions'); // 'positions' | 'activity' | 'news'
+  const [perf, setPerf] = useState(undefined); // undefined=not fetched, null=fetched but unavailable, [] or [...points]
 
-  const pos  = port?.positions || [];
-  const acct = port?.account   || {};
-  const eq   = parseFloat(acct.equity       || 0);
-  const leq  = parseFloat(acct.last_equity  || 0);
-  const bp   = parseFloat(acct.buying_power || 0);
-  const dpl  = eq - leq;
-  const dpct = leq > 0 ? (dpl / leq) * 100 : 0;
+  const pos = port?.positions || [];
+
+  useEffect(()=>{
+    if (!cfg.NEON_PROXY_URL) return;
+    (async()=>{
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/performance`, { headers });
+      const data = await res.json().catch(()=>null);
+      setPerf(data?.points?.length ? data.points : null);
+    })();
+  },[]);
 
   const posSymbols = useMemo(()=>pos.map(p=>p.symbol), [pos.length]);
 
@@ -3347,23 +3391,32 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
 
   // P&L bar scale
   const maxAbs = useMemo(()=>
-    Math.max(1, ...pos.map(p=>Math.abs(parseFloat(p.unrealized_pl||0))))
+    Math.max(1, ...pos.map(p=>Math.abs(p.openPnl||0)))
   , [pos]);
 
   return (
     <div className="drawer-overlay" onClick={e=>{if(e.target.classList.contains('drawer-overlay'))onClose();}}>
       <div className="drawer drawer--wide">
 
-        {/* Header — account stats inline */}
+        {/* Header — total value */}
         <div className="drawer__hdr">
           <span className="drawer__title">Portfolio</span>
-          {port && <>
-            <div className="port-ds"><span className="port-ds__label">Equity</span><span className="port-ds__val">{fmt.money(eq)}</span></div>
-            <div className="port-ds"><span className="port-ds__label">Today</span><span className={`port-ds__val ${dpl>=0?'val-buy':'val-sell'}`}>{dpl>=0?'+':''}{fmt.money(dpl)} ({fmt.pct(dpct)})</span></div>
-            <div className="port-ds"><span className="port-ds__label">Buying power</span><span className="port-ds__val">{fmt.money(bp)}</span></div>
-            <span className="td-muted" style={{fontSize:11,padding:'0 4px'}}>{cfg.ALPACA_LIVE?'Live':'Paper'}</span>
-          </>}
+          {port && <div className="port-ds"><span className="port-ds__label">Total value</span><span className="port-ds__val">{fmt.money(port.totalValue)}</span></div>}
           <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
+        </div>
+
+        {/* Recent performance chart — gracefully degrades if history isn't
+            available yet rather than show anything fabricated */}
+        <div className="port-perf-chart">
+          {perf===undefined ? (
+            <div style={{padding:'1rem',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>
+          ) : perf===null || perf.length<2 ? (
+            <p className="td-muted" style={{fontSize:11,padding:'0.75rem 1rem'}}>
+              Performance history will appear here once enough data has been collected.
+            </p>
+          ) : (
+            <PortfolioPerformanceChart points={perf}/>
+          )}
         </div>
 
         <div className="drawer__body">
@@ -3385,14 +3438,12 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
                 : pos.length===0
                   ? <div className="drawer__empty">No open positions.<br/>Connect Alpaca to track your holdings here.</div>
                   : [...pos]
-                    .sort((a,b)=>Math.abs(parseFloat(b.market_value||0))-Math.abs(parseFloat(a.market_value||0)))
+                    .sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0))
                     .map((p,i)=>{
-                      const upl = parseFloat(p.unrealized_pl||0);
-                      const tpl = parseFloat(p.unrealized_intraday_pl||0);
-                      const mv  = parseFloat(p.market_value||0);
-                      const qty = parseFloat(p.qty||p.shares||0);
-                      const pct = parseFloat(p.unrealized_plpc||0)*100;
-                      const barW = Math.min(Math.abs(upl)/maxAbs*100, 100);
+                      const upl = p.openPnl;
+                      const mv  = p.marketValue;
+                      const qty = p.quantity;
+                      const barW = upl!=null ? Math.min(Math.abs(upl)/maxAbs*100, 100) : 0;
                       const hasActivity = !!(activityByTicker[p.symbol]?.length);
                       const isActive = selected===p.symbol;
                       return (
@@ -3403,16 +3454,13 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
                             <span className="ticker" style={{fontSize:13,fontWeight:700}}>{p.symbol}</span>
                             {hasActivity&&<span className="reversal-badge" style={{fontSize:11}}>insider activity</span>}
                             <span className="td-muted" style={{fontSize:11,flex:1}}>{qty%1?qty.toFixed(2):qty} sh · {fmt.money(mv)}</span>
-                            <span className={`td-mono ${upl>=0?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:700}}>{upl>=0?'+':''}{fmt.money(upl)}</span>
+                            {upl!=null && <span className={`td-mono ${upl>=0?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:700}}>{upl>=0?'+':''}{fmt.money(upl)}</span>}
                           </div>
-                          {/* P&L bar */}
-                          <div className="port-plbar-track">
-                            <div className="port-plbar-fill" style={{width:`${barW}%`,background:upl>=0?'var(--green-600)':'var(--red-600)'}}/>
-                          </div>
-                          <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:11}}>total unrealized</span>
-                            <span className={`td-mono ${tpl>=0?'val-buy':'val-sell'}`} style={{fontSize:11,marginLeft:'auto'}}>{tpl>=0?'+':''}{fmt.money(tpl)} today ({pct>=0?'+':''}{pct.toFixed(1)}%)</span>
-                          </div>
+                          {upl!=null && (
+                            <div className="port-plbar-track">
+                              <div className="port-plbar-fill" style={{width:`${barW}%`,background:upl>=0?'var(--green-600)':'var(--red-600)'}}/>
+                            </div>
+                          )}
                         </div>
                       );
                     })
