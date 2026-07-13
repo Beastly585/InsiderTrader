@@ -616,8 +616,17 @@ async function handleSnapTradeConnect(request, env, origin) {
     // connectionType defaults to read-only on SnapTrade's side even if
     // omitted, per their docs — passed explicitly here anyway so the
     // intent is visible in the code, not just relying on their default.
+    // customRedirect brings the user back to Settings afterward instead of
+    // leaving them on SnapTrade's own generic confirmation page — built
+    // from the request's own origin so this works correctly in both local
+    // dev and production without hardcoding a domain.
     const portalResp = await signSnapTradeRequest(env, 'POST', '/api/v1/snapTrade/login', {
-      body: { userId: snapTradeUserId, userSecret, connectionType: 'read' },
+      body: {
+        userId: snapTradeUserId,
+        userSecret,
+        connectionType: 'read',
+        customRedirect: `${origin}/settings?snaptrade=connected`,
+      },
     });
     return corsResponse({ redirectURI: portalResp.redirectURI }, 200, origin, env);
   } catch (e) {

@@ -5141,11 +5141,82 @@ function SettingsToggle({ label, sub, checked, onChange, pro, disabled }) {
   );
 }
 
+function useSnapTrade(pro) {
+  const [status, setStatus] = useState(null);       // null=loading, {connection:null|{...}}
+  const [connecting, setConnecting] = useState(false);
+  const [positions, setPositions] = useState(null);  // null=not fetched, [] = fetched empty
+  const [loadingPositions, setLoadingPositions] = useState(false);
+  const [error, setError] = useState(null);
+
+  const refreshStatus = useCallback(async () => {
+    if (!pro || !cfg.NEON_PROXY_URL) return;
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/status`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load connection status');
+      setStatus(data);
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [pro]);
+
+  useEffect(() => { refreshStatus(); }, [refreshStatus]);
+
+  async function connect() {
+    setConnecting(true); setError(null);
+    try {
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/connect`, { method: 'POST', headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Connect failed');
+      window.location.href = data.redirectURI; // hand off to SnapTrade's hosted portal
+    } catch (e) {
+      setError(e.message);
+      setConnecting(false);
+    }
+  }
+
+  async function disconnect() {
+    setError(null);
+    try {
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/disconnect`, { method: 'POST', headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Disconnect failed');
+      setPositions(null);
+      await refreshStatus();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function loadPositions() {
+    setLoadingPositions(true); setError(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/positions`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load positions');
+      setPositions(data.accounts || []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoadingPositions(false);
+    }
+  }
+
+  return { status, connecting, positions, loadingPositions, error, connect, disconnect, loadPositions };
+}
+
 function SettingsPage({ user, onUpgrade }) {
   const pro   = isPro(user);
   const [appetite, setAppetite] = React.useContext(RiskAppetiteContext);
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
-  const [section, setSection] = useState('billing');
+  const snaptrade = useSnapTrade(pro);
+  const [section, setSection] = useState(() =>
+    new URLSearchParams(window.location.search).get('snaptrade') ? 'brokers' : 'billing'
+  );
   const [local,   setLocal]   = useState(null);
   const [testState, setTestState] = useState(null); // null | 'sending' | 'sent' | error string
 
@@ -5488,33 +5559,76 @@ function SettingsPage({ user, onUpgrade }) {
           {section==='brokers'&&(
             <div className="settings-section">
               <div className="settings-section__title">
-                Brokerage connections
+                Link Portfolio
                 {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
               </div>
               <div className="settings-section__desc">
-                Connect your brokerage to see insider activity on your holdings. Read-only — we never trade on your behalf.
+                Connect your brokerage via SnapTrade to see insider activity on your holdings. Read-only — Seli never trades on your behalf, and your login credentials go directly to your brokerage, never to Seli.
                 {!pro&&<button className="settings-section__lock" onClick={onUpgrade}> Upgrade to Pro to connect a brokerage.</button>}
               </div>
 
-              {[
-                {name:'Alpaca',               sub:'Commission-free trading · Paper + live accounts', note:'Pending OAuth approval'},
-                {name:'Tradier',              sub:'Commission-free trading · Options support',        note:'Coming soon'},
-                {name:'Interactive Brokers',  sub:'Professional-grade platform',                      note:'Coming soon'},
-              ].map(b=>(
-                <div key={b.name} className="settings-broker-card">
-                  <div className="settings-broker-card__left">
-                    <div className="settings-broker-card__name">{b.name}</div>
-                    <div className="settings-broker-card__sub">{b.sub}</div>
-                  </div>
-                  <div className="settings-broker-card__right">
-                    <span className="settings-broker-status settings-broker-status--disconnected">Not connected</span>
-                    <button className="btn btn--ghost btn--sm" disabled title={b.note}>Connect</button>
+              {pro && (
+                <div className="settings-group">
+                  {snaptrade.status===null ? (
+                    <div className="settings-broker-card"><span className="td-muted">Checking connection status…</span></div>
+                  ) : !snaptrade.status.connection ? (
+                    <div className="settings-broker-card">
+                      <div className="settings-broker-card__left">
+                        <div className="settings-broker-card__name">No brokerage connected</div>
+                        <div className="settings-broker-card__sub">Fidelity, Alpaca, and 400M+ other accounts supported via SnapTrade</div>
+                      </div>
+                      <div className="settings-broker-card__right">
+                        <button className="btn btn--primary btn--sm" onClick={snaptrade.connect} disabled={snaptrade.connecting}>
+                          {snaptrade.connecting?'Redirecting…':'Connect'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="settings-broker-card">
+                      <div className="settings-broker-card__left">
+                        <div className="settings-broker-card__name">{snaptrade.status.connection.broker || 'Brokerage connected'}</div>
+                        <div className="settings-broker-card__sub">
+                          Read-only · Connected {fmt.dateShort ? fmt.dateShort(snaptrade.status.connection.connected_at) : new Date(snaptrade.status.connection.connected_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="settings-broker-card__right">
+                        <span className="settings-broker-status settings-broker-status--connected">Connected</span>
+                        <button className="btn btn--ghost btn--sm" onClick={snaptrade.disconnect}>Disconnect</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {pro && snaptrade.status?.connection && (
+                <div className="settings-group">
+                  <div className="settings-group__label">Positions</div>
+                  <div style={{padding:'12px 14px'}}>
+                    <button className="btn btn--ghost btn--sm" onClick={snaptrade.loadPositions} disabled={snaptrade.loadingPositions}>
+                      {snaptrade.loadingPositions?'Loading…':'Load positions'}
+                    </button>
+                    {snaptrade.positions!==null && (
+                      snaptrade.positions.length===0
+                        ? <p className="td-muted" style={{marginTop:10,fontSize:12}}>No positions found in this account.</p>
+                        : snaptrade.positions.map((acct,i)=>(
+                          <div key={i} style={{marginTop:12}}>
+                            <div style={{fontSize:12,fontWeight:600,marginBottom:4}}>{acct.account}</div>
+                            <pre style={{fontSize:11,background:'var(--surface-2)',padding:10,borderRadius:6,overflow:'auto',maxHeight:200}}>
+                              {JSON.stringify(acct.holdings, null, 2)}
+                            </pre>
+                          </div>
+                        ))
+                    )}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {snaptrade.error && (
+                <p className="settings-section__note" style={{color:'var(--red-600)'}}>{snaptrade.error}</p>
+              )}
 
               <p className="settings-section__note">
-                OAuth approval from each brokerage is required before connections go live.
+                Fidelity and Alpaca live-account access is pending broker approval — testing now via Alpaca Paper (no real account needed).
                 Connections are read-only — positions and balances only, no trading access.
               </p>
             </div>
