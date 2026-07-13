@@ -956,6 +956,15 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
 // Phase 2: replace this function body with Clerk's getToken() call
 // Everything else in the codebase calls this — nothing else needs to change
 // when you upgrade from API key to JWT.
+// Navigate to an in-app path without a full page reload — dispatches a
+// popstate event so the router's existing onPopState handler (built for
+// real back/forward navigation) picks it up and updates page state the
+// same way it already does, rather than needing a separate mechanism.
+function navigateTo(path) {
+  window.history.pushState({}, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 async function getAuthHeaders() {
   // On a fresh page load, components can mount and fire their own
   // data-fetching effects before App's own effect (which registers
@@ -2131,7 +2140,7 @@ function DashSigTable({ signals, loading, title, subtitle, onRowClick, onOpenDet
 // Single shared fetch for the Alpaca portfolio, used by the unified
 // PortfolioSection below (summary + filing cross-reference + scoped news all
 // need the same position list, so we fetch once and pass it down).
-function usePortfolio() {
+function usePortfolio(pro) {
   const [port, setPort] = useState(null);
   const [err,  setErr]  = useState(false);
   const [connected, setConnected] = useState(null); // null=checking, true/false once known
@@ -2141,6 +2150,7 @@ function usePortfolio() {
 
   const load = useCallback(async (isManualRefresh=false) => {
     if (!cfg.NEON_PROXY_URL) return;
+    if (!pro) return; // avoid a call we already know the Worker will 403 — this is a Pro feature
     if (isManualRefresh) setRefreshing(true);
     try {
       const headers = await getAuthHeaders();
@@ -2215,7 +2225,7 @@ function usePortfolio() {
     } finally {
       if (isManualRefresh) setRefreshing(false);
     }
-  }, []);
+  }, [pro]);
 
   useEffect(() => {
     load();
@@ -2874,6 +2884,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             filings={filings} cutoff={cutoff} days={days}
             onOpenDetail={openInDrawer}
             onExpand={()=>{onCloseDetail&&onCloseDetail();setPortModal(true);}}
+            pro={pro}
           />
         <div className="ins-lb-panel-wrap" style={{flex:1,minHeight:0}}>
           <div className="ins-sig-panel__hdr ins-sig-panel__hdr--explorable">
@@ -2909,6 +2920,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           onOpenDetail={onOpenDetail}
           onClose={()=>setPortModal(false)}
           watchlist={watchlist}
+          pro={pro}
         />
       )}
     </div>
@@ -3287,8 +3299,8 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 // Full-width horizontal bar above the signal/insider grid. Shows balance on the
 // left and clickable position chips on the right. Flagged if insider activity
 // exists on that ticker within the selected timespan.
-function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand }) {
-  const { port, err, connected, refresh, refreshing, lastRefreshed, perf } = usePortfolio();
+function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, pro }) {
+  const { port, err, connected, refresh, refreshing, lastRefreshed, perf } = usePortfolio(pro);
 
   const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[port]);
 
@@ -3320,6 +3332,19 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand })
     </div>
   );
 
+  if (!pro) {
+    return (
+      <div className="port-mini-tile">
+        {header}
+        <div className="port-mini-tile__body" style={{padding:14}}>
+          <span className="td-muted" style={{fontSize:11}}>
+            Portfolio linking is a Pro feature — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=billing')}>upgrade</button> to see insider activity on your real holdings.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   if (err) {
     return (
       <div className="port-mini-tile">
@@ -3337,7 +3362,9 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand })
       <div className="port-mini-tile">
         {header}
         <div className="port-mini-tile__body" style={{padding:14}}>
-          <span className="td-muted" style={{fontSize:11}}>No brokerage connected — link one in Settings to see your real holdings here.</span>
+          <span className="td-muted" style={{fontSize:11}}>
+            No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>link one in Settings</button> to see your real holdings here.
+          </span>
         </div>
       </div>
     );
@@ -3439,8 +3466,8 @@ function PortfolioPerformanceChart({ points }) {
   );
 }
 
-function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
-  const { port, perf } = usePortfolio();
+function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
+  const { port, perf } = usePortfolio(pro);
   const [selected, setSelected] = useState(null);
   const [detail, setDetail]     = useState(null);
   const [detailStack, setDetailStack] = useState([]);
@@ -3496,25 +3523,29 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
     <div className="drawer-overlay" onClick={e=>{if(e.target.classList.contains('drawer-overlay'))onClose();}}>
       <div className="drawer drawer--wide">
 
-        {/* Header — total value */}
-        <div className="drawer__hdr">
-          <span className="drawer__title">Portfolio</span>
-          {port && <div className="port-ds"><span className="port-ds__label">Total value</span><span className="port-ds__val">{fmt.money(port.totalValue)}</span></div>}
-          <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
-        </div>
+        {/* Header — matches the same stacked pattern every other drawer
+            uses (InsightsDrawer, WatchlistPage) instead of the bare
+            .drawer__hdr class, which has no base styling of its own */}
+        <div className="drawer__hdr--stacked">
+          <div className="drawer__hdr-row1">
+            <span className="drawer__title">Portfolio</span>
+            {port && <span className="port-hdr-val">{fmt.money(port.totalValue)}</span>}
+            <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
+          </div>
 
-        {/* Recent performance chart — gracefully degrades if history isn't
-            available yet rather than show anything fabricated */}
-        <div className="port-perf-chart">
-          {perf===undefined ? (
-            <div style={{padding:'1rem',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>
-          ) : perf===null || perf.length<2 ? (
-            <p className="td-muted" style={{fontSize:11,padding:'0.75rem 1rem'}}>
-              Performance history will appear here once enough data has been collected.
-            </p>
-          ) : (
-            <PortfolioPerformanceChart points={perf}/>
-          )}
+          {/* Recent performance chart — gracefully degrades if history
+              isn't available yet rather than show anything fabricated */}
+          <div className="port-perf-chart">
+            {perf===undefined ? (
+              <div style={{padding:'0.75rem',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>
+            ) : perf===null || perf.length<2 ? (
+              <p className="td-muted" style={{fontSize:11,padding:'0.6rem 1rem'}}>
+                Performance history will appear here once enough data has been collected.
+              </p>
+            ) : (
+              <PortfolioPerformanceChart points={perf}/>
+            )}
+          </div>
         </div>
 
         <div className="drawer__body">
@@ -5357,9 +5388,10 @@ function SettingsPage({ user, onUpgrade }) {
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
   const snaptrade = useSnapTrade(pro);
   const portfolio = usePortfolio();
-  const [section, setSection] = useState(() =>
-    new URLSearchParams(window.location.search).get('snaptrade') ? 'brokers' : 'billing'
-  );
+  const [section, setSection] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('section') || (params.get('snaptrade') ? 'brokers' : 'billing');
+  });
   const [local,   setLocal]   = useState(null);
   const [testState, setTestState] = useState(null); // null | 'sending' | 'sent' | error string
 

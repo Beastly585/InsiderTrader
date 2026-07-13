@@ -292,6 +292,9 @@ async function handlePrefs(request, env, origin) {
 
   // POST — save prefs
   if (request.method === 'POST') {
+    if (!(await isProServerSide(env, clerkUserId))) {
+      return corsResponse({ error: 'Notification settings are a Pro feature' }, 403, origin, env);
+    }
     let body;
     try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
 
@@ -371,16 +374,24 @@ async function handlePrefs(request, env, origin) {
 // ── Send a one-off test email — lets a user verify Resend delivery and their
 // email address are actually working, without waiting for a real trigger.
 // Pro-gated, same as the notification system itself.
+// Reusable server-side Pro check — the actual enforcement boundary, not
+// just the client-side UI hiding a button. Any authenticated user can call
+// a Worker route directly regardless of what the frontend shows them, so
+// gating has to happen here too, not only in app.jsx.
+async function isProServerSide(env, clerkUserId) {
+  const subResult = await neonFetch(env,
+    `SELECT status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+  );
+  const status = subResult.rows?.[0]?.status;
+  return status === 'active' || status === 'trialing';
+}
+
 async function handleTestEmail(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
   try {
-    const subResult = await neonFetch(env,
-      `SELECT status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
-    );
-    const status = subResult.rows?.[0]?.status;
-    if (status !== 'active' && status !== 'trialing') {
+    if (!(await isProServerSide(env, clerkUserId))) {
       return corsResponse({ error: 'Test emails are a Pro feature' }, 403, origin, env);
     }
 
@@ -570,6 +581,9 @@ async function signSnapTradeRequest(env, method, path, { query = {}, body = null
 async function handleSnapTradeConnect(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+  if (!(await isProServerSide(env, clerkUserId))) {
+    return corsResponse({ error: 'Portfolio linking is a Pro feature' }, 403, origin, env);
+  }
 
   if (!env.SNAPTRADE_ENCRYPTION_KEY) {
     return corsResponse({ error: 'Portfolio linking is not configured on this Worker yet' }, 500, origin, env);
@@ -660,6 +674,9 @@ async function handleSnapTradeConnect(request, env, origin) {
 async function handleSnapTradeStatus(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+  if (!(await isProServerSide(env, clerkUserId))) {
+    return corsResponse({ error: 'Portfolio linking is a Pro feature' }, 403, origin, env);
+  }
 
   try {
     // Queries the view — structurally cannot return the secret columns,
@@ -710,6 +727,9 @@ async function handleSnapTradeDisconnect(request, env, origin) {
 async function handleSnapTradePositions(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+  if (!(await isProServerSide(env, clerkUserId))) {
+    return corsResponse({ error: 'Portfolio linking is a Pro feature' }, 403, origin, env);
+  }
 
   try {
     const conn = await getSnapTradeConnection(env, clerkUserId);
@@ -764,6 +784,9 @@ async function handleSnapTradePositions(request, env, origin) {
 async function handleSnapTradePerformance(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+  if (!(await isProServerSide(env, clerkUserId))) {
+    return corsResponse({ error: 'Portfolio linking is a Pro feature' }, 403, origin, env);
+  }
 
   try {
     const conn = await getSnapTradeConnection(env, clerkUserId);
