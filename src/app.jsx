@@ -2137,6 +2137,7 @@ function usePortfolio() {
   const [connected, setConnected] = useState(null); // null=checking, true/false once known
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [perf, setPerf] = useState(undefined); // undefined=not fetched, null=unavailable, [...points] once loaded
 
   const load = useCallback(async (isManualRefresh=false) => {
     if (!cfg.NEON_PROXY_URL) return;
@@ -2203,6 +2204,9 @@ function usePortfolio() {
         }
       }
       setPort({ positions: flatPositions, totalValue });
+
+      const perfRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/performance`, { headers }).then(r=>r.json()).catch(()=>null);
+      setPerf(perfRes?.points?.length ? perfRes.points : null);
       setLastRefreshed(new Date());
       setErr(false);
     } catch (e) {
@@ -2222,7 +2226,7 @@ function usePortfolio() {
     const interval = setInterval(() => load(false), 3 * 60 * 1000);
     return () => clearInterval(interval);
   }, [load]);
-  return { port, err, connected, refresh: () => load(true), refreshing, lastRefreshed };
+  return { port, err, connected, refresh: () => load(true), refreshing, lastRefreshed, perf };
 }
 
 // News scoped specifically to the tickers actually held in the portfolio —
@@ -2734,13 +2738,6 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   return (
     <div className="page-content">
       {/* Portfolio bar — above everything, full width */}
-      <InsightsPortfolioBar
-        filings={filings} cutoff={cutoff} days={days}
-        onOpenDetail={openInDrawer}
-        onExpand={()=>{onCloseDetail&&onCloseDetail();setPortModal(true);}}
-        watchlist={watchlist}
-      />
-
       {/* Two-column body — signals | insiders */}
       <div className="ins-3col" ref={colRef}>
 
@@ -2871,8 +2868,14 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           </div>
         </div>
 
-        {/* MIDDLE: Top insiders leaderboard */}
-        <div className="ins-lb-panel-wrap ins-3col__insiders">
+        {/* MIDDLE: Portfolio (compact, stacked above Top insiders) + Top insiders leaderboard */}
+        <div className="ins-3col__insiders" style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
+          <InsightsPortfolioBar
+            filings={filings} cutoff={cutoff} days={days}
+            onOpenDetail={openInDrawer}
+            onExpand={()=>{onCloseDetail&&onCloseDetail();setPortModal(true);}}
+          />
+        <div className="ins-lb-panel-wrap" style={{flex:1,minHeight:0}}>
           <div className="ins-sig-panel__hdr ins-sig-panel__hdr--explorable">
             <button className="ins-panel-title-link" title="Open full Explore view" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('insiders');}}>
               Top insiders
@@ -2883,6 +2886,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           <div className="ins-lb-panel__body">
             <InsiderLeaderboardSidebar onOpenDetail={openInDrawer} watchlist={watchlist}/>
           </div>
+        </div>
         </div>
 
       </div>
@@ -3284,7 +3288,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 // left and clickable position chips on the right. Flagged if insider activity
 // exists on that ticker within the selected timespan.
 function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand }) {
-  const { port, err, connected, refresh, refreshing, lastRefreshed } = usePortfolio();
+  const { port, err, connected, refresh, refreshing, lastRefreshed, perf } = usePortfolio();
 
   const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[port]);
 
@@ -3301,82 +3305,109 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand })
   },[filings,cutoff,posSymbols.join(',')]);
 
   if (!cfg.NEON_PROXY_URL) return null;
+
+  const header = (
+    <div className="ins-sig-panel__hdr" style={{flexShrink:0}}>
+      <span>Portfolio</span>
+      {port && (
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
+          {lastRefreshed && <span className="td-muted" style={{fontWeight:400,fontSize:10}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
+          <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} title="Refresh positions" style={{width:22,height:22}}>
+            <span style={{display:'inline-block',fontSize:12,animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   if (err) {
     return (
-      <div className="ins-port-bar">
-        <div className="ins-port-bar__balance">
-          <div className="ins-port-bar__label">Portfolio</div>
-          <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions right now</span>
+      <div className="port-mini-tile">
+        {header}
+        <div className="port-mini-tile__body" style={{padding:14}}>
+          <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions right now.</span>
+          <button className="btn btn--ghost btn--sm" style={{marginTop:8}} onClick={refresh} disabled={refreshing}>{refreshing?'Retrying…':'Retry'}</button>
         </div>
-        <button className="btn btn--ghost btn--sm" style={{marginLeft:'auto',marginRight:14}} onClick={refresh} disabled={refreshing}>
-          {refreshing?'Retrying…':'Retry'}
-        </button>
       </div>
     );
   }
 
   if (connected===false) {
     return (
-      <div className="ins-port-bar">
-        <div className="ins-port-bar__balance">
-          <div className="ins-port-bar__label">Portfolio</div>
-          <span className="td-muted" style={{fontSize:11}}>No brokerage connected — link one in Settings to see your real holdings here</span>
+      <div className="port-mini-tile">
+        {header}
+        <div className="port-mini-tile__body" style={{padding:14}}>
+          <span className="td-muted" style={{fontSize:11}}>No brokerage connected — link one in Settings to see your real holdings here.</span>
         </div>
       </div>
     );
   }
 
   const pos = port?.positions||[];
+  const totalPnl = pos.reduce((sum,p)=>sum+(p.openPnl||0),0);
+  const totalCost = pos.reduce((sum,p)=>sum+((p.marketValue||0)-(p.openPnl||0)),0);
+  const totalPnlPct = totalCost>0 ? (totalPnl/totalCost)*100 : null;
+  const hasGrowth = pos.some(p=>p.openPnl!=null);
 
   return (
-    <div className="ins-port-bar">
-      {/* Left: total value */}
-      <div className="ins-port-bar__balance">
-        <div className="ins-port-bar__label">Portfolio</div>
-        {!port
-          ? <Spinner size={14}/>
-          : <span className="ins-port-bar__val">{fmt.money(port.totalValue)}</span>
-        }
-      </div>
-      <div className="ins-port-bar__divider"/>
+    <div className="port-mini-tile">
+      {header}
 
-      {/* Right: position chips — gain/loss leads, insider activity is a
-          visually loud badge rather than a tiny afterthought dot */}
-      <div className="ins-port-bar__chips">
-        {!port
-          ? <span className="td-muted" style={{fontSize:11}}>Loading positions…</span>
-          : pos.length===0
-            ? <span className="td-muted" style={{fontSize:11}}>No open positions in your connected account</span>
-            : pos.sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>{
-                const hasActivity=activeSignalTickers.has(p.symbol);
-                const hasPnl = p.openPnl!=null;
-                return (
-                  <div key={i} className={`ins-port-chip${hasActivity?' ins-port-chip--active':''}`}
-                    title={`${p.symbol} · ${fmt.money(p.marketValue)}${hasPnl?` · ${p.openPnl>=0?'+':''}${fmt.money(p.openPnl)} (${p.openPnlPct>=0?'+':''}${p.openPnlPct.toFixed(1)}%)`:''}${hasActivity?' · Insider activity in this window':''}`}
-                    onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:p.company})}>
-                    {hasActivity&&<span className="ins-port-chip__signal-badge" title="Insider activity in this window">insider activity</span>}
-                    <span className="ins-port-chip__ticker">{p.symbol}</span>
-                    {hasPnl
-                      ? <span className={`ins-port-chip__pnl ${p.openPnl>=0?'val-buy':'val-sell'}`}>{p.openPnl>=0?'+':''}{fmt.money(p.openPnl)} ({p.openPnlPct>=0?'+':''}{p.openPnlPct.toFixed(1)}%)</span>
-                      : <span className="ins-port-chip__pnl td-muted">{fmt.money(p.marketValue)}</span>
-                    }
-                  </div>
-                );
-              })
-        }
-      </div>
+      {!port ? (
+        <div className="port-mini-tile__body" style={{display:'flex',justifyContent:'center',padding:'1.5rem'}}><Spinner size={16}/></div>
+      ) : (
+        <div className="port-mini-tile__body">
+          {/* Position size + growth */}
+          <div className="port-mini-tile__stats">
+            <span className="port-mini-tile__val">{fmt.money(port.totalValue)}</span>
+            {hasGrowth && (
+              <span className={`port-mini-tile__growth ${totalPnl>=0?'val-buy':'val-sell'}`}>
+                {totalPnl>=0?'+':''}{fmt.money(totalPnl)}{totalPnlPct!=null?` (${totalPnlPct>=0?'+':''}${totalPnlPct.toFixed(1)}%)`:''}
+              </span>
+            )}
+          </div>
 
-      {port && (
-        <div className="ins-port-bar__refresh">
-          {lastRefreshed && <span className="td-muted" style={{fontSize:10}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
-          <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} title="Refresh positions">
-            <span style={{display:'inline-block',animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
-          </button>
+          {/* Performance chart — gracefully degrades if history isn't
+              available yet, rather than show anything fabricated */}
+          <div className="port-mini-tile__chart">
+            {perf===undefined ? (
+              <div style={{display:'flex',justifyContent:'center',padding:'0.5rem'}}><Spinner size={12}/></div>
+            ) : perf===null || perf.length<2 ? (
+              <p className="td-muted" style={{fontSize:10,textAlign:'center',padding:'0.4rem 0'}}>Performance history will appear here once available.</p>
+            ) : (
+              <PortfolioPerformanceChart points={perf}/>
+            )}
+          </div>
+
+          {/* Ticker list — height-capped, scrolls internally rather than
+              pushing Top insiders (below) out of view */}
+          <div className="port-mini-tile__list">
+            {pos.length===0
+              ? <p className="td-muted" style={{fontSize:11,padding:'8px 0'}}>No open positions in your connected account.</p>
+              : [...pos].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>{
+                  const hasActivity=activeSignalTickers.has(p.symbol);
+                  const hasPnl = p.openPnl!=null;
+                  return (
+                    <div key={i} className="port-mini-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:p.company})}>
+                      <span className="ticker" style={{fontSize:12,minWidth:50}}>{p.symbol}</span>
+                      {hasActivity&&<span className="ins-port-chip__signal-badge" style={{fontSize:'0.5rem'}}>activity</span>}
+                      <span className="td-muted" style={{fontSize:10,flex:1,textAlign:'right'}}>{fmt.money(p.marketValue)}</span>
+                      {hasPnl && (
+                        <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:10,fontFamily:'var(--font-mono)',minWidth:70,textAlign:'right'}}>
+                          {p.openPnl>=0?'+':''}{p.openPnlPct.toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+            }
+          </div>
         </div>
       )}
-      {onExpand&&(
-        <button className="ins-expand-btn" onClick={onExpand} style={{margin:'0 14px',flexShrink:0}}>
-          ⤢ Explore
+
+      {onExpand&&port&&(
+        <button className="ins-panel-title-link" onClick={onExpand} style={{padding:'8px 14px',borderTop:'0.5px solid var(--border)',justifyContent:'center'}}>
+          Explore <span className="ins-explore-hint" aria-hidden="true">⤢</span>
         </button>
       )}
     </div>
@@ -3408,25 +3439,14 @@ function PortfolioPerformanceChart({ points }) {
   );
 }
 
-function PortfolioDrawer({ filings, cutoff, days, onClose }) {
-  const { port } = usePortfolio();
+function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist }) {
+  const { port, perf } = usePortfolio();
   const [selected, setSelected] = useState(null);
   const [detail, setDetail]     = useState(null);
   const [detailStack, setDetailStack] = useState([]);
   const [tab, setTab] = useState('positions'); // 'positions' | 'activity' | 'news'
-  const [perf, setPerf] = useState(undefined); // undefined=not fetched, null=fetched but unavailable, [] or [...points]
 
   const pos = port?.positions || [];
-
-  useEffect(()=>{
-    if (!cfg.NEON_PROXY_URL) return;
-    (async()=>{
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/performance`, { headers });
-      const data = await res.json().catch(()=>null);
-      setPerf(data?.points?.length ? data.points : null);
-    })();
-  },[]);
 
   const posSymbols = useMemo(()=>pos.map(p=>p.symbol), [pos.length]);
 

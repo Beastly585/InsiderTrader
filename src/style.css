@@ -1382,6 +1382,37 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-sig-panel__hdr--explorable:hover .ins-explore-hint { opacity: 1; transform: translateX(0); }
 .ins-empty { padding: 20px 16px; font-size: 0.7812rem; color: var(--text-2); }
 
+/* Portfolio mini tile — compact, stacked above Top insiders in the right
+   column. Constrained height on purpose: this sits above another panel
+   that needs its own room, so the ticker list scrolls internally instead
+   of pushing Top insiders out of view. */
+.port-mini-tile {
+  background: var(--surface); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg); overflow: hidden;
+  display: flex; flex-direction: column; flex-shrink: 0;
+  max-height: 360px;
+}
+.port-mini-tile__body {
+  padding: 10px 14px 8px; display: flex; flex-direction: column; gap: 6px;
+  overflow: hidden; min-height: 0;
+}
+.port-mini-tile__stats { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.port-mini-tile__val { font-size: 1.125rem; font-weight: 700; font-family: var(--font-mono); }
+.port-mini-tile__growth { font-size: 0.75rem; font-weight: 600; font-family: var(--font-mono); }
+.port-mini-tile__chart { flex-shrink: 0; margin: 2px 0; }
+.port-mini-tile__list {
+  overflow-y: auto; max-height: 130px; min-height: 0;
+  scrollbar-width: thin; scrollbar-color: var(--border-md) transparent;
+  border-top: 0.5px solid var(--border); padding-top: 4px;
+}
+.port-mini-tile__list::-webkit-scrollbar { width: 3px; }
+.port-mini-tile__list::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 3px; }
+.port-mini-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 2px; cursor: pointer; border-radius: 4px;
+}
+.port-mini-row:hover { background: var(--surface-2); }
+
 /* Signal rows */
 /* Signal table column headers */
 .ins-sig-col-hdrs {
