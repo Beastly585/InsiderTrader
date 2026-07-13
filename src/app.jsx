@@ -957,6 +957,20 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
 // Everything else in the codebase calls this — nothing else needs to change
 // when you upgrade from API key to JWT.
 async function getAuthHeaders() {
+  // On a fresh page load, components can mount and fire their own
+  // data-fetching effects before App's own effect (which registers
+  // window.__clerkGetToken once Clerk finishes loading) has run — a real
+  // race condition, not cosmetic. Without this wait, that fetch gets an
+  // empty/wrong auth header, 401s, and nothing ever retries once the real
+  // token becomes available a moment later — only a full remount
+  // (navigating away and back) would trigger a fresh attempt. Poll briefly
+  // for the token getter to appear rather than give up immediately; Clerk
+  // typically finishes loading well within this window.
+  if (!window.__clerkGetToken) {
+    for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
+      await new Promise(r => setTimeout(r, 50)); // up to ~2s total
+    }
+  }
   // Phase 2: Clerk JWT — registered by App once Clerk loads
   if (window.__clerkGetToken) {
     try {
