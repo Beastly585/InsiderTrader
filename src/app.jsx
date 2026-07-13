@@ -2135,65 +2135,94 @@ function usePortfolio() {
   const [port, setPort] = useState(null);
   const [err,  setErr]  = useState(false);
   const [connected, setConnected] = useState(null); // null=checking, true/false once known
-  useEffect(()=>{
+  const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async (isManualRefresh=false) => {
     if (!cfg.NEON_PROXY_URL) return;
-    (async()=>{
-      try {
-        const headers = await getAuthHeaders();
-        // First check whether a brokerage is actually connected at all —
-        // distinct from "connected but zero positions" or "not connected yet".
-        const statusRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/status`, { headers }).then(r=>r.json()).catch(()=>null);
-        if (!statusRes?.connection) { setConnected(false); return; }
-        setConnected(true);
+    if (isManualRefresh) setRefreshing(true);
+    try {
+      const headers = await getAuthHeaders();
+      // First check whether a brokerage is actually connected at all —
+      // distinct from "connected but zero positions" or "not connected yet".
+      const statusRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/status`, { headers }).then(r=>r.json()).catch(()=>null);
+      if (!statusRes?.connection) { setConnected(false); return; }
+      setConnected(true);
 
-        const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/positions`, { headers });
-        const data = await res.json();
-        if (data.error) { setErr(true); return; }
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/positions`, { headers });
+      const data = await res.json();
+      if (data.error) { setErr(true); return; }
 
-        // Normalize SnapTrade's per-account shape into one flat list — the
-        // tile shows a portfolio, not per-account breakdowns. Defensive on
-        // purpose: SnapTrade's "unified" positions endpoint may return
-        // positions grouped by asset class (equities/options/etc) rather
-        // than a flat array — genuinely not confirmed with certainty, so
-        // this checks Array.isArray() explicitly rather than trusting a
-        // truthy fallback chain, which previously crashed the whole page
-        // when it landed on a non-array object and tried to iterate it.
-        function extractPositionsArray(positions) {
-          if (Array.isArray(positions)) return positions;
-          if (positions && typeof positions === 'object') {
-            // Grouped-by-asset-class shape — flatten every array-valued
-            // property found, whatever SnapTrade actually calls them.
-            return Object.values(positions).filter(Array.isArray).flat();
-          }
-          return [];
+      // Confirmed real shape (from an actual live response, not doc guessing):
+      //   acct.positions = { results: [ { instrument: {symbol, raw_symbol,
+      //     description}, units: "6.627678571", price: "42.385",
+      //     cost_basis: "45.263209" } ], data_freshness: {...} }
+      //   acct.balances = [ { currency: {...}, cash, buying_power } ]
+      // Two things this fixes that the previous version got wrong: (1)
+      // symbol lives under `instrument`, not directly on the position or
+      // under a `.symbol` key; (2) units/price/cost_basis are STRINGS, not
+      // numbers — this is exactly what caused the .toFixed() crash, since a
+      // string silently flowed all the way to a render call expecting a
+      // number.
+      function extractPositionsArray(positions) {
+        if (Array.isArray(positions)) return positions;
+        if (positions && typeof positions === 'object') {
+          if (Array.isArray(positions.results)) return positions.results;
+          return Object.values(positions).filter(Array.isArray).flat();
         }
-
-        const flatPositions = [];
-        let totalValue = 0, totalDayChange = 0;
-        for (const acct of (Array.isArray(data.accounts) ? data.accounts : [])) {
-          for (const p of extractPositionsArray(acct.positions)) {
-            const marketValue = (p.units || p.fractional_units || 0) * (p.price || p.symbol?.price || 0);
-            flatPositions.push({
-              symbol: p.symbol?.symbol || p.symbol?.raw_symbol || p.symbol,
-              quantity: p.units || p.fractional_units || 0,
-              price: p.price || p.symbol?.price || 0,
-              marketValue,
-              openPnl: p.open_pnl ?? null,
-            });
-            totalValue += marketValue;
-          }
-          for (const b of (Array.isArray(acct.balances) ? acct.balances : [])) {
-            totalValue += b.cash || 0;
-          }
-        }
-        setPort({ positions: flatPositions, totalValue, totalDayChange });
-      } catch (e) {
-        console.error('[usePortfolio] failed:', e.message);
-        setErr(true);
+        return [];
       }
-    })();
-  },[]);
-  return { port, err, connected };
+
+      const flatPositions = [];
+      let totalValue = 0;
+      for (const acct of (Array.isArray(data.accounts) ? data.accounts : [])) {
+        for (const p of extractPositionsArray(acct.positions)) {
+          const units = parseFloat(p.units) || 0;
+          const price = parseFloat(p.price) || 0;
+          const costBasis = p.cost_basis!=null ? parseFloat(p.cost_basis) : null;
+          const marketValue = units * price;
+          // Approximate unrealized gain/loss — real average cost per share
+          // vs current price, times shares held. Not a substitute for the
+          // brokerage's own official P/L (fees, partial-lot cost basis
+          // nuances aren't captured here), but a solid real approximation.
+          const openPnl = costBasis!=null ? (price - costBasis) * units : null;
+          const openPnlPct = costBasis!=null && costBasis>0 ? ((price - costBasis) / costBasis) * 100 : null;
+          flatPositions.push({
+            symbol: p.instrument?.symbol || p.instrument?.raw_symbol || '—',
+            company: p.instrument?.description || '',
+            quantity: units,
+            price,
+            marketValue,
+            openPnl,
+            openPnlPct,
+          });
+          totalValue += marketValue;
+        }
+        for (const b of (Array.isArray(acct.balances) ? acct.balances : [])) {
+          totalValue += b.cash || 0;
+        }
+      }
+      setPort({ positions: flatPositions, totalValue });
+      setLastRefreshed(new Date());
+      setErr(false);
+    } catch (e) {
+      console.error('[usePortfolio] failed:', e.message);
+      setErr(true);
+    } finally {
+      if (isManualRefresh) setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    // Periodic auto-refresh — positions were previously a one-time snapshot
+    // from whenever the page loaded, silently going stale the longer you
+    // stayed on the page. Every 3 minutes strikes a reasonable balance
+    // against hammering SnapTrade's API unnecessarily.
+    const interval = setInterval(() => load(false), 3 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [load]);
+  return { port, err, connected, refresh: () => load(true), refreshing, lastRefreshed };
 }
 
 // News scoped specifically to the tickers actually held in the portfolio —
@@ -3255,7 +3284,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 // left and clickable position chips on the right. Flagged if insider activity
 // exists on that ticker within the selected timespan.
 function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand }) {
-  const { port, err, connected } = usePortfolio();
+  const { port, err, connected, refresh, refreshing, lastRefreshed } = usePortfolio();
 
   const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[port]);
 
@@ -3279,6 +3308,9 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand })
           <div className="ins-port-bar__label">Portfolio</div>
           <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions right now</span>
         </div>
+        <button className="btn btn--ghost btn--sm" style={{marginLeft:'auto',marginRight:14}} onClick={refresh} disabled={refreshing}>
+          {refreshing?'Retrying…':'Retry'}
+        </button>
       </div>
     );
   }
@@ -3308,7 +3340,8 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand })
       </div>
       <div className="ins-port-bar__divider"/>
 
-      {/* Right: position chips — real holdings only, each clickable */}
+      {/* Right: position chips — gain/loss leads, insider activity is a
+          visually loud badge rather than a tiny afterthought dot */}
       <div className="ins-port-bar__chips">
         {!port
           ? <span className="td-muted" style={{fontSize:11}}>Loading positions…</span>
@@ -3316,18 +3349,31 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand })
             ? <span className="td-muted" style={{fontSize:11}}>No open positions in your connected account</span>
             : pos.sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>{
                 const hasActivity=activeSignalTickers.has(p.symbol);
+                const hasPnl = p.openPnl!=null;
                 return (
                   <div key={i} className={`ins-port-chip${hasActivity?' ins-port-chip--active':''}`}
-                    title={`${p.symbol} · ${fmt.money(p.marketValue)}${hasActivity?' · Insider activity in this window':''}`}
-                    onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:''})}>
+                    title={`${p.symbol} · ${fmt.money(p.marketValue)}${hasPnl?` · ${p.openPnl>=0?'+':''}${fmt.money(p.openPnl)} (${p.openPnlPct>=0?'+':''}${p.openPnlPct.toFixed(1)}%)`:''}${hasActivity?' · Insider activity in this window':''}`}
+                    onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:p.company})}>
+                    {hasActivity&&<span className="ins-port-chip__signal-badge" title="Insider activity in this window">insider activity</span>}
                     <span className="ins-port-chip__ticker">{p.symbol}</span>
-                    {hasActivity&&<span className="ins-port-chip__dot" title="Insider activity">●</span>}
-                    <span className="ins-port-chip__pnl td-muted">{fmt.money(p.marketValue)}</span>
+                    {hasPnl
+                      ? <span className={`ins-port-chip__pnl ${p.openPnl>=0?'val-buy':'val-sell'}`}>{p.openPnl>=0?'+':''}{fmt.money(p.openPnl)} ({p.openPnlPct>=0?'+':''}{p.openPnlPct.toFixed(1)}%)</span>
+                      : <span className="ins-port-chip__pnl td-muted">{fmt.money(p.marketValue)}</span>
+                    }
                   </div>
                 );
               })
         }
       </div>
+
+      {port && (
+        <div className="ins-port-bar__refresh">
+          {lastRefreshed && <span className="td-muted" style={{fontSize:10}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
+          <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} title="Refresh positions">
+            <span style={{display:'inline-block',animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
+          </button>
+        </div>
+      )}
       {onExpand&&(
         <button className="ins-expand-btn" onClick={onExpand} style={{margin:'0 14px',flexShrink:0}}>
           ⤢ Explore
@@ -5238,8 +5284,6 @@ function SettingsToggle({ label, sub, checked, onChange, pro, disabled }) {
 function useSnapTrade(pro) {
   const [status, setStatus] = useState(null);       // null=loading, {connection:null|{...}}
   const [connecting, setConnecting] = useState(false);
-  const [positions, setPositions] = useState(null);  // null=not fetched, [] = fetched empty
-  const [loadingPositions, setLoadingPositions] = useState(false);
   const [error, setError] = useState(null);
 
   const refreshStatus = useCallback(async () => {
@@ -5278,29 +5322,13 @@ function useSnapTrade(pro) {
       const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/disconnect`, { method: 'POST', headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Disconnect failed');
-      setPositions(null);
       await refreshStatus();
     } catch (e) {
       setError(e.message);
     }
   }
 
-  async function loadPositions() {
-    setLoadingPositions(true); setError(null);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/positions`, { headers });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load positions');
-      setPositions(data.accounts || []);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoadingPositions(false);
-    }
-  }
-
-  return { status, connecting, positions, loadingPositions, error, connect, disconnect, loadPositions };
+  return { status, connecting, error, connect, disconnect };
 }
 
 function SettingsPage({ user, onUpgrade }) {
@@ -5308,6 +5336,7 @@ function SettingsPage({ user, onUpgrade }) {
   const [appetite, setAppetite] = React.useContext(RiskAppetiteContext);
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
   const snaptrade = useSnapTrade(pro);
+  const portfolio = usePortfolio();
   const [section, setSection] = useState(() =>
     new URLSearchParams(window.location.search).get('snaptrade') ? 'brokers' : 'billing'
   );
@@ -5696,23 +5725,39 @@ function SettingsPage({ user, onUpgrade }) {
 
               {pro && snaptrade.status?.connection && (
                 <div className="settings-group">
-                  <div className="settings-group__label">Positions</div>
+                  <div className="settings-group__label" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <span>Positions</span>
+                    {portfolio.lastRefreshed && <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,fontSize:11}}>Updated {fmt.ago(portfolio.lastRefreshed.toISOString())}</span>}
+                  </div>
                   <div style={{padding:'12px 14px'}}>
-                    <button className="btn btn--ghost btn--sm" onClick={snaptrade.loadPositions} disabled={snaptrade.loadingPositions}>
-                      {snaptrade.loadingPositions?'Loading…':'Load positions'}
-                    </button>
-                    {snaptrade.positions!==null && (
-                      snaptrade.positions.length===0
-                        ? <p className="td-muted" style={{marginTop:10,fontSize:12}}>No positions found in this account.</p>
-                        : snaptrade.positions.map((acct,i)=>(
-                          <div key={i} style={{marginTop:12}}>
-                            <div style={{fontSize:12,fontWeight:600,marginBottom:4}}>{acct.account}</div>
-                            <pre style={{fontSize:11,background:'var(--surface-2)',padding:10,borderRadius:6,overflow:'auto',maxHeight:200}}>
-                              {JSON.stringify({ positions: acct.positions, balances: acct.balances }, null, 2)}
-                            </pre>
+                    {!portfolio.port ? (
+                      <div style={{display:'flex',alignItems:'center',gap:8}}><Spinner size={14}/><span className="td-muted" style={{fontSize:12}}>Loading positions…</span></div>
+                    ) : portfolio.err ? (
+                      <p className="td-muted" style={{fontSize:12,color:'var(--red-600)'}}>Couldn't load your positions right now.</p>
+                    ) : portfolio.port.positions.length===0 ? (
+                      <p className="td-muted" style={{fontSize:12}}>No positions found in this account.</p>
+                    ) : (
+                      <>
+                        <p style={{fontSize:13,marginBottom:10}}>
+                          <strong>{portfolio.port.positions.length}</strong> position{portfolio.port.positions.length!==1?'s':''} · <strong>{fmt.money(portfolio.port.totalValue)}</strong> total value
+                        </p>
+                        {[...portfolio.port.positions].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>(
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:i>0?'0.5px solid var(--border)':'none'}}>
+                            <span className="ticker" style={{fontSize:12,minWidth:56}}>{p.symbol}</span>
+                            <span className="td-muted" style={{fontSize:11,flex:1}}>{p.company}</span>
+                            <span style={{fontSize:12,fontFamily:'var(--font-mono)'}}>{fmt.money(p.marketValue)}</span>
+                            {p.openPnl!=null && (
+                              <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:11,fontFamily:'var(--font-mono)',minWidth:90,textAlign:'right'}}>
+                                {p.openPnl>=0?'+':''}{fmt.money(p.openPnl)} ({p.openPnlPct>=0?'+':''}{p.openPnlPct.toFixed(1)}%)
+                              </span>
+                            )}
                           </div>
-                        ))
+                        ))}
+                      </>
                     )}
+                    <button className="btn btn--ghost btn--sm" style={{marginTop:12}} onClick={portfolio.refresh} disabled={portfolio.refreshing}>
+                      {portfolio.refreshing?'Refreshing…':'Refresh'}
+                    </button>
                   </div>
                 </div>
               )}

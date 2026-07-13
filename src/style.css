@@ -2060,6 +2060,16 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-port-chip__ticker { font-size: 0.75rem; font-weight: 700; }
 .ins-port-chip__dot    { font-size: 0.5rem; color: var(--accent); }
 .ins-port-chip__pnl    { font-size: 0.6875rem; font-weight: 600; font-family: var(--font-mono); }
+.ins-port-chip__signal-badge {
+  font-size: 0.5625rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .03em; color: #fff; background: var(--accent-strong);
+  padding: 2px 5px; border-radius: 4px; white-space: nowrap;
+}
+.ins-port-bar__refresh {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 10px; flex-shrink: 0;
+}
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* Expand button — more prominent than the old icon-only tile-expand-btn */
 .ins-expand-btn {
