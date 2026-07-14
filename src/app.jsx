@@ -5891,7 +5891,8 @@ function InfoTrustPage({ onBack, onEnter }) {
       <div className="lp-info__inner">
         <a href="/" onClick={onBack} className="lp-info__back">← Back</a>
 
-        <div className="lp-info__eyebrow">Why insider data</div>
+        {/* ── Title + brief intro ──────────────────────────────────────── */}
+        <div className="lp-info__eyebrow">About Seli</div>
         <h1 className="lp-info__h1">Why insider trades are worth tracking</h1>
         <p className="lp-info__lede">
           Every year, corporate insiders and members of Congress disclose thousands of stock trades —
@@ -5900,51 +5901,9 @@ function InfoTrustPage({ onBack, onEnter }) {
           actually doing with their own money.
         </p>
 
-        {/* ── Regulatory timeline ────────────────────────────────────────── */}
+        {/* ── How insiders beat the market ─────────────────────────────── */}
         <section className="lp-info__section">
-          <h2>How this disclosure came to exist</h2>
-          <div className="lp-timeline">
-            {[
-              { year:'1934', label:'Securities Exchange Act', desc:'Establishes the requirement that corporate insiders disclose their own trades to the public.' },
-              { year:'2002', label:'Sarbanes-Oxley Act', desc:'Shortens the filing deadline from 10 days down to 2 business days — the modern Form 4 window.' },
-              { year:'2012', label:'STOCK Act', desc:'Extends mandatory trade disclosure to members of Congress.' },
-              { year:'Today', label:'Seli', desc:'Ingests every new filing — corporate and congressional — within minutes of publication.' },
-            ].map((t,i)=>(
-              <div key={i} className="lp-timeline__item">
-                <div className="lp-timeline__year">{t.year}</div>
-                <div className="lp-timeline__dot"/>
-                <div className="lp-timeline__label">{t.label}</div>
-                <div className="lp-timeline__desc">{t.desc}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ── Plain stat tiles ────────────────────────────────────────────── */}
-        <section className="lp-info__section">
-          <div className="lp-stat-tiles">
-            <div className="lp-stat-tile">
-              <div className="lp-stat-tile__val">2 days</div>
-              <div className="lp-stat-tile__label">Maximum legal disclosure window for a corporate insider trade — down from 10 days pre-2002.</div>
-            </div>
-            <div className="lp-stat-tile">
-              <div className="lp-stat-tile__val val-buy">+4.3%</div>
-              <div className="lp-stat-tile__label">Abnormal return over 300 days for firms with more insider buying than selling — Seyhun (1986).</div>
-            </div>
-            <div className="lp-stat-tile">
-              <div className="lp-stat-tile__val val-sell">-2.2%</div>
-              <div className="lp-stat-tile__label">The reverse — abnormal return for firms with more insider selling than buying, same study.</div>
-            </div>
-          </div>
-          <p className="lp-info__citation-note">
-            These are historical academic findings across broad samples of insider trades, not a guarantee
-            about any individual trade, insider, or what Seli's own scored signals will return going forward.
-          </p>
-        </section>
-
-        {/* ── The academic case ──────────────────────────────────────────── */}
-        <section className="lp-info__section">
-          <h2>The research isn't new, and it isn't ours</h2>
+          <h2>How insiders beat the market</h2>
           <p>
             The idea that insider trading activity contains real predictive information goes back decades in
             financial economics, not just to fintech products built on top of it. Jaffe's early-1970s work
@@ -5981,13 +5940,13 @@ function InfoTrustPage({ onBack, onEnter }) {
           </p>
         </section>
 
-        {/* ── Data pipeline graphic ───────────────────────────────────────── */}
+        {/* ── How Seli gets and scores the data ────────────────────────── */}
         <section className="lp-info__section">
-          <h2>Where the data actually comes from</h2>
+          <h2>How Seli gets and scores the data</h2>
           <div className="lp-pipeline">
             {[
               { label:'SEC EDGAR + Congress', desc:'Form 4 filings and STOCK Act disclosures, straight from the source.' },
-              { label:'Ingested & parsed', desc:'New filings pulled and structured within minutes of publication.' },
+              { label:'Ingested & parsed', desc:'New filings pulled and structured automatically, typically within minutes of publication.' },
               { label:'Scored', desc:'Weighted by who\u2019s trading, how much relative to what they hold, and whether others are too.' },
               { label:'Surfaced', desc:'Ranked and shown as a signal — not buried in a raw filing.' },
             ].map((step,i,arr)=>(
@@ -6001,11 +5960,13 @@ function InfoTrustPage({ onBack, onEnter }) {
               </React.Fragment>
             ))}
           </div>
-        </section>
-
-        {/* ── How Seli actually scores signals ───────────────────────────── */}
-        <section className="lp-info__section">
-          <h2>How Seli actually scores a signal</h2>
+          <p>
+            You're never limited to just the ranked view. Every account can see the underlying raw filing
+            data — ticker, insider, shares, price, transaction type, date — the same information Seli's own
+            scoring is built from, not a black box on top of it. The scored, ranked signal view sits alongside
+            it for when you want the fast read instead of the raw feed. Both update automatically as new
+            filings arrive.
+          </p>
           <p>
             Seli's conviction score is built directly around the same principles the research above
             established, not invented from scratch:
@@ -6030,9 +5991,47 @@ function InfoTrustPage({ onBack, onEnter }) {
           </p>
         </section>
 
-        {/* ── Honest limitations ─────────────────────────────────────────── */}
+        {/* ── Historical analysis ──────────────────────────────────────── */}
+        <section className="lp-info__section">
+          <h2>Historical analysis</h2>
+          <div className="lp-timeline">
+            {[
+              { year:'1934', label:'Securities Exchange Act', desc:'Establishes the requirement that corporate insiders disclose their own trades to the public.' },
+              { year:'2002', label:'Sarbanes-Oxley Act', desc:'Shortens the filing deadline from 10 days down to 2 business days — the modern Form 4 window.' },
+              { year:'2012', label:'STOCK Act', desc:'Extends mandatory trade disclosure to members of Congress.' },
+              { year:'Today', label:'Seli', desc:'Ingests every new filing — corporate and congressional — within minutes of publication.' },
+            ].map((t,i)=>(
+              <div key={i} className="lp-timeline__item">
+                <div className="lp-timeline__year">{t.year}</div>
+                <div className="lp-timeline__dot"/>
+                <div className="lp-timeline__label">{t.label}</div>
+                <div className="lp-timeline__desc">{t.desc}</div>
+              </div>
+            ))}
+          </div>
+          <div className="lp-stat-tiles">
+            <div className="lp-stat-tile">
+              <div className="lp-stat-tile__val">2 days</div>
+              <div className="lp-stat-tile__label">Maximum legal disclosure window for a corporate insider trade — down from 10 days pre-2002.</div>
+            </div>
+            <div className="lp-stat-tile">
+              <div className="lp-stat-tile__val val-buy">+4.3%</div>
+              <div className="lp-stat-tile__label">Abnormal return over 300 days for firms with more insider buying than selling — Seyhun (1986).</div>
+            </div>
+            <div className="lp-stat-tile">
+              <div className="lp-stat-tile__val val-sell">-2.2%</div>
+              <div className="lp-stat-tile__label">The reverse — abnormal return for firms with more insider selling than buying, same study.</div>
+            </div>
+          </div>
+          <p className="lp-info__citation-note">
+            These are historical academic findings across broad samples of insider trades, not a guarantee
+            about any individual trade, insider, or what Seli's own scored signals will return going forward.
+          </p>
+        </section>
+
+        {/* ── Disclosures ───────────────────────────────────────────────── */}
         <section className="lp-info__section lp-info__section--limits">
-          <h2>What this isn't, said plainly</h2>
+          <h2>Disclosures</h2>
           <p>
             <strong>This is not a day-trading tool.</strong> Form 4 filings carry a mandatory disclosure
             window — insiders can have up to two business days to report a trade after it happens. That's
@@ -6052,6 +6051,11 @@ function InfoTrustPage({ onBack, onEnter }) {
             any single trade, any single insider, or what happens next. Insiders are informed about their own
             companies; they aren't infallible, and markets can move against even a well-timed, well-informed
             trade.
+          </p>
+          <p>
+            <strong>Nothing on this page or in Seli is financial advice.</strong> Seli surfaces public
+            disclosure data and a scoring methodology built on published research — it does not recommend
+            any specific trade, and past patterns, academic or otherwise, don't guarantee future results.
           </p>
         </section>
 
@@ -6081,8 +6085,21 @@ function LandingPage({ onEnter, dark, setDark }) {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
-  function goToAbout(e) { e.preventDefault(); navigateTo('/about'); setView('about'); }
+  function goToAbout(e) { e.preventDefault(); navigateTo('/about'); setView('about'); window.scrollTo(0,0); }
   function goHome(e) { if (e) e.preventDefault(); navigateTo('/'); setView('home'); window.scrollTo(0,0); }
+  // Section links (Features/Pricing) need to work from the About view too —
+  // a plain anchor tag does nothing there, since those sections don't exist
+  // in the DOM while view==='about'. Navigate home first, then scroll once
+  // the home view has actually rendered.
+  function goToSection(e, hash) {
+    e.preventDefault();
+    if (view === 'about') {
+      navigateTo('/'); setView('home');
+      setTimeout(() => document.querySelector(hash)?.scrollIntoView({behavior:'smooth'}), 60);
+    } else {
+      document.querySelector(hash)?.scrollIntoView({behavior:'smooth'});
+    }
+  }
 
   // Scroll-reveal: observe .reveal elements and add .reveal--visible when in
   // viewport. Re-runs on every view change (not just once on mount) — home
@@ -6104,14 +6121,15 @@ function LandingPage({ onEnter, dark, setDark }) {
 
       {/* Nav */}
       <nav className="lp-nav">
-        <div className="lp-nav__logo">
+        <div className="lp-nav__frame">
+        <a href="/" onClick={goHome} className="lp-nav__logo">
           <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
-        </div>
+        </a>
         <div className="lp-nav__links">
-          <a href="#features" className="lp-nav__link">Features</a>
-          <a href="#pricing"  className="lp-nav__link">Pricing</a>
-          <a href="/about" onClick={goToAbout} className="lp-nav__link">Why insider data</a>
+          <a href="#features" onClick={(e)=>goToSection(e,'#features')} className="lp-nav__link">Features</a>
+          <a href="#pricing"  onClick={(e)=>goToSection(e,'#pricing')} className="lp-nav__link">Pricing</a>
+          <a href="/about" onClick={goToAbout} className="lp-nav__link">About</a>
         </div>
         <div className="lp-nav__actions">
           <button className="lp-btn-ghost" onClick={()=>setDark(d=>!d)} title="Toggle theme">
@@ -6129,6 +6147,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <button className="lp-btn-primary" onClick={onEnter}>Go to app →</button>
           </SignedIn>
         </div>
+        </div>
       </nav>
 
       {view==='about' ? (
@@ -6136,6 +6155,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       ) : (<>
       {/* Hero */}
       <section className="lp-hero">
+        <div className="lp-hero-bg" aria-hidden="true"/>
         <div className="lp-hero__eyebrow reveal reveal--delay-0">
           <span className="lp-badge">Form 4 · STOCK Act · Real-time</span>
         </div>
@@ -6320,6 +6340,25 @@ function LandingPage({ onEnter, dark, setDark }) {
             </SignedIn>
           </div>
         </div>
+      </section>
+
+      {/* About teaser — a real taste of the trust content, not just a link.
+          Fades out into a clear "read the rest" CTA rather than being
+          truncated abruptly. */}
+      <section className="lp-about-teaser reveal reveal--delay-1" id="about-teaser">
+        <h2 className="lp-section-h2">Why insider data actually works</h2>
+        <p className="lp-about-teaser__text">
+          The idea that insider trading contains real predictive information isn't new marketing — it goes back
+          decades in financial economics. Nejat Seyhun's research found firms with more insider buying than
+          selling saw <strong className="val-buy">+4.3%</strong> abnormal returns over the following 300 days,
+          while the reverse pattern lost <strong className="val-sell">-2.2%</strong>. Federal law requires
+          insiders to disclose their trades within 2 business days — Seli ingests every one of them the moment
+          it's published, scores it, and shows you exactly how.
+        </p>
+        <div className="lp-about-teaser__fade"/>
+        <a href="/about" onClick={goToAbout} className="lp-about-teaser__link">
+          Read the full research, methodology, and disclosures <span className="lp-explore-hint" aria-hidden="true">→</span>
+        </a>
       </section>
 
       {/* Footer */}

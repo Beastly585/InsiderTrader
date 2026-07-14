@@ -2161,12 +2161,17 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* Nav */
 .lp-nav {
-  display: flex; align-items: center; gap: 32px;
-  padding: 0 48px; height: 60px;
+  display: flex; align-items: center;
+  height: 60px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   position: sticky; top: 0; z-index: 100;
   backdrop-filter: blur(12px);
+}
+.lp-nav__frame {
+  display: flex; align-items: center; gap: 32px;
+  max-width: 1120px; margin: 0 auto; width: 100%;
+  padding: 0 48px; box-sizing: border-box;
 }
 .lp-nav__logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
 .lp-logo-mark {
@@ -2215,13 +2220,28 @@ td { padding:7px 11px; vertical-align:middle; }
   padding: 80px 48px 60px;
   text-align: center;
   position: relative;
+}
+/* Full-bleed breakout — spans the true viewport width regardless of
+   .lp-hero's own 960px max-width, using viewport-relative units rather
+   than a percentage (which would only resolve relative to this constrained
+   parent, not the actual browser width). This wrapper is a real element,
+   not a pseudo-element, specifically so the spiral shape inside it can be
+   centered relative to the true full-bleed box rather than fighting with
+   dual-purpose positioning math on a single pseudo-element. */
+.lp-hero-bg {
+  position: absolute;
+  top: 0; left: 50%; right: 50%;
+  margin-left: -50vw; margin-right: -50vw;
+  width: 100vw; height: 100%;
   overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
 }
 /* Rotating conic-gradient spiral. Uses the strong/saturated accent colors
    directly (not the -50 "5% tint" variants, which combined with blur+low
    opacity were nearly invisible against the background in both themes —
    that's why it wasn't showing at all before, not a rendering failure). */
-.lp-hero::before {
+.lp-hero-bg::before {
   content: '';
   position: absolute;
   top: 50%; left: 50%;
@@ -2238,19 +2258,17 @@ td { padding:7px 11px; vertical-align:middle; }
     transparent 360deg
   );
   filter: blur(28px);
-  opacity: 0.35;
+  opacity: 0.4;
   border-radius: 50%;
   animation: hero-spiral-rotate 26s linear infinite;
-  z-index: 0;
-  pointer-events: none;
 }
-.lp-hero > * { position: relative; z-index: 1; }
+.lp-hero > *:not(.lp-hero-bg) { position: relative; z-index: 1; }
 @keyframes hero-spiral-rotate {
   from { transform: translate(-50%, -50%) rotate(0deg); }
   to   { transform: translate(-50%, -50%) rotate(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lp-hero::before { animation: none; }
+  .lp-hero-bg::before { animation: none; }
 }
 
 .lp-marquee {
@@ -2374,6 +2392,27 @@ td { padding:7px 11px; vertical-align:middle; }
   max-width: 960px; margin: 0 auto;
   padding: 100px 48px;
 }
+.lp-about-teaser {
+  max-width: 720px; margin: 0 auto;
+  padding: 20px 48px 80px;
+  position: relative;
+}
+.lp-about-teaser__text {
+  font-size: 1rem; line-height: 1.75; color: var(--text-2);
+  max-height: 5.25em; overflow: hidden; position: relative;
+}
+.lp-about-teaser__fade {
+  position: absolute; left: 48px; right: 48px; bottom: 56px; height: 60px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+}
+.lp-about-teaser__link {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 20px;
+  font-size: 0.9375rem; font-weight: 600; color: var(--accent-strong);
+  text-decoration: none;
+}
+.lp-about-teaser__link:hover .lp-explore-hint { opacity: 1; transform: translateX(2px); }
+.lp-explore-hint { display: inline-block; transition: transform 0.15s ease; }
 .lp-section-label {
   font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .1em; color: var(--accent-strong); margin-bottom: 16px;
