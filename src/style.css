@@ -2207,6 +2207,33 @@ td { padding:7px 11px; vertical-align:middle; }
   max-width: 960px; margin: 0 auto;
   padding: 80px 48px 60px;
   text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+/* Subtle animated gradient mesh — Stripe's signature soft-blob treatment.
+   Slow (18s) and low-opacity on purpose: this should read as "quiet
+   ambient movement," not an attention-grabbing animation competing with
+   the actual headline. */
+.lp-hero::before {
+  content: '';
+  position: absolute;
+  top: -20%; left: -10%; right: -10%; height: 140%;
+  background:
+    radial-gradient(circle at 20% 30%, var(--accent-50) 0%, transparent 45%),
+    radial-gradient(circle at 80% 20%, rgba(139,232,207,0.12) 0%, transparent 40%),
+    radial-gradient(circle at 50% 80%, rgba(196,184,255,0.10) 0%, transparent 45%);
+  animation: hero-mesh-drift 18s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+.lp-hero > * { position: relative; z-index: 1; }
+@keyframes hero-mesh-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(-3%, 2%) scale(1.05); }
+  66%      { transform: translate(2%, -3%) scale(1.02); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-hero::before { animation: none; }
 }
 .lp-hero__eyebrow { margin-bottom: 24px; }
 .lp-badge {
@@ -2344,6 +2371,18 @@ td { padding:7px 11px; vertical-align:middle; }
   padding: 32px; background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   display: flex; flex-direction: column; gap: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.lp-price-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.08);
+}
+.lp-price-card--featured:hover {
+  box-shadow: 0 12px 32px rgba(0,0,0,0.12), 0 0 0 1px var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-price-card { transition: none; }
+  .lp-price-card:hover { transform: none; }
 }
 .lp-price-card--featured {
   border-color: var(--accent); background: var(--accent-50);
@@ -2357,11 +2396,55 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-price-card__price { font-size: 2.5rem; font-weight: 800; letter-spacing: -2px; line-height: 1; }
 .lp-price-card__price span { font-size: 1rem; font-weight: 400; color: var(--text-3); letter-spacing: 0; }
 .lp-price-card__desc  { font-size: 0.8438rem; color: var(--text-2); line-height: 1.55; }
+.lp-price-card__note  { font-size: 0.75rem; color: var(--text-3); text-align: center; margin-top: 10px; }
 .lp-price-card__features { list-style: none; display: flex; flex-direction: column; gap: 10px; flex: 1; }
 .lp-price-card__features li { display: flex; align-items: flex-start; gap: 8px; font-size: 0.8438rem; color: var(--text-2); }
 .lp-check { color: var(--green-600); font-weight: 700; flex-shrink: 0; }
 
 /* Footer */
+/* ── Info / Trust page (/about) ──────────────────────────────────────────── */
+.lp-info { padding: 0 24px 80px; }
+.lp-info__inner { max-width: 680px; margin: 0 auto; }
+.lp-info__back {
+  display: inline-block; margin: 32px 0 24px; font-size: 0.8125rem;
+  color: var(--text-2); text-decoration: none;
+}
+.lp-info__back:hover { color: var(--text); }
+.lp-info__eyebrow {
+  font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--accent-strong); margin-bottom: 12px;
+}
+.lp-info__h1 {
+  font-size: clamp(28px, 4.5vw, 42px); font-weight: 800;
+  letter-spacing: -1.5px; line-height: 1.1; color: var(--text); margin-bottom: 20px;
+}
+.lp-info__lede { font-size: 1.0625rem; line-height: 1.65; color: var(--text-2); margin-bottom: 48px; }
+.lp-info__section { margin-bottom: 44px; }
+.lp-info__section h2 {
+  font-size: 1.375rem; font-weight: 700; letter-spacing: -0.5px;
+  color: var(--text); margin-bottom: 16px;
+}
+.lp-info__section p { font-size: 0.9375rem; line-height: 1.7; color: var(--text-2); margin-bottom: 16px; }
+.lp-info__section strong { color: var(--text); font-weight: 600; }
+.lp-info__citation-note {
+  font-size: 0.75rem; line-height: 1.6; color: var(--text-3);
+  border-left: 2px solid var(--border-md); padding-left: 14px; margin-top: 20px;
+}
+.lp-info__principles { margin: 0 0 16px; padding: 0; list-style: none; }
+.lp-info__principles li {
+  font-size: 0.9375rem; line-height: 1.65; color: var(--text-2);
+  padding: 10px 0 10px 22px; border-bottom: 0.5px solid var(--border); position: relative;
+}
+.lp-info__principles li:last-child { border-bottom: none; }
+.lp-info__principles li::before {
+  content: '→'; position: absolute; left: 0; color: var(--accent-strong); font-weight: 700;
+}
+.lp-info__section--limits {
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg); padding: 28px 32px; margin-bottom: 48px;
+}
+.lp-info__cta { text-align: center; padding-top: 12px; }
+
 .lp-footer {
   display: flex; align-items: center; gap: 16px;
   padding: 20px 48px; border-top: 1px solid var(--border);

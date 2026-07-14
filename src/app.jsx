@@ -132,6 +132,21 @@ function UpgradeModal({ feature, onClose }) {
   const [plan, setPlan] = useState('pro'); // which card is selected in the picker
   const [statusModal, setStatusModal] = useState(null);
 
+  // Personalized per the specific action that triggered this modal — a
+  // generic "Upgrade to Pro" doesn't tell someone what they were actually
+  // trying to do when they hit the wall, which is what actually motivates
+  // the upgrade in the moment.
+  const FEATURE_MESSAGES = {
+    watchlist_ticker:  'Upgrade to Pro to track unlimited tickers and get notified the moment insiders trade them.',
+    watchlist_insider: 'Upgrade to Pro to follow specific insiders and get notified on their trades.',
+    notifications:      'Upgrade to Pro for email digests and instant alerts on the activity you care about.',
+    portfolio:           'Upgrade to Pro to connect your brokerage and see insider activity on your real holdings.',
+    data_export:         'Upgrade to Pro to export the full historical dataset as CSV.',
+    full_history:        'Upgrade to Pro for full historical data — the free plan shows the last 12 months.',
+    default:             'Full insider data, real-time alerts, and your own portfolio — in one view.',
+  };
+  const subtitle = FEATURE_MESSAGES[feature] || FEATURE_MESSAGES.default;
+
   const COMPARISON = [
     { label: 'Live dashboard & signals',  free: true,  pro: true },
     { label: 'Full historical data',      free: false, pro: true },
@@ -174,7 +189,7 @@ function UpgradeModal({ feature, onClose }) {
 
         <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
         <div className="upgrade-modal__title">Upgrade to Pro</div>
-        <div className="upgrade-modal__subtitle">Full insider data, real-time alerts, and your own portfolio — in one view.</div>
+        <div className="upgrade-modal__subtitle">{subtitle}</div>
 
         <div className="upgrade-modal__table">
           <div className="upgrade-modal__table-header">
@@ -479,7 +494,19 @@ function BillingSection({ user }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Cancel failed');
-      const fresh = await load();
+
+      // The Worker only calls Stripe here — it relies entirely on Stripe's
+      // async webhook to actually update Neon afterward (same as the
+      // checkout flow's user.reload() race, just never fixed here too).
+      // A single immediate re-fetch can easily land before the webhook has,
+      // showing stale "still active" status. Poll briefly instead.
+      let fresh = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        fresh = await load();
+        if (fresh?.cancel_at_period_end) break;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+
       setConfirmCancel(false);
       setStatusModal({
         title: 'Subscription canceled',
@@ -501,7 +528,16 @@ function BillingSection({ user }) {
       const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/reactivate`, { method: 'POST', headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Reactivate failed');
-      const fresh = await load();
+
+      // Same webhook race as cancel above — poll until cancel_at_period_end
+      // actually flips back to false, rather than trust one immediate fetch.
+      let fresh = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        fresh = await load();
+        if (fresh && !fresh.cancel_at_period_end) break;
+        await new Promise(r => setTimeout(r, 1500));
+      }
+
       setStatusModal({
         title: 'Subscription reactivated',
         message: fresh?.current_period_end
@@ -686,7 +722,7 @@ function useWatchlist(user) {
   const pro = isPro(user);
   const [tickers,  setTickers]  = useState(()=> pro ? wlGet(WL_KEY)        : []);
   const [insiders, setInsiders] = useState(()=> pro ? wlGet(WL_INSIDER_KEY) : []);
-  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(null); // null | 'watchlist_ticker' | 'watchlist_insider'
 
   // Load from Neon on mount for Pro users
   useEffect(()=>{
@@ -702,7 +738,7 @@ function useWatchlist(user) {
 
   // Toggle ticker
   const toggleTicker = useCallback((ticker) => {
-    if (!pro) { setShowUpgrade(true); return; }
+    if (!pro) { setShowUpgrade('watchlist_ticker'); return; }
     setTickers(prev => {
       const next = prev.includes(ticker) ? prev.filter(t=>t!==ticker) : [...prev, ticker];
       wlSet(next, WL_KEY);
@@ -713,7 +749,7 @@ function useWatchlist(user) {
 
   // Toggle insider
   const toggleInsider = useCallback((name) => {
-    if (!pro) { setShowUpgrade(true); return; }
+    if (!pro) { setShowUpgrade('watchlist_insider'); return; }
     setInsiders(prev => {
       const next = prev.includes(name) ? prev.filter(n=>n!==name) : [...prev, name];
       wlSet(next, WL_INSIDER_KEY);
@@ -4468,9 +4504,9 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,gap:12}}>
         <p className="page-sub" style={{margin:0}}>
           {total!=null?`${total.toLocaleString()} filings matching filters · ${DATA_PAGE}/page`:'Loading…'}
-          {!pro&&<span className="free-tier-inline"> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={onUpgrade}>upgrade</button> for full history</span>}
+          {!pro&&<span className="free-tier-inline"> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
         </p>
-        <button className="btn btn--primary" onClick={pro ? doExport : onUpgrade} disabled={exporting}>
+        <button className="btn btn--primary" onClick={pro ? doExport : ()=>onUpgrade('data_export')} disabled={exporting}>
           {exporting
             ? (<><span className="spinner" style={{width:13,height:13,borderWidth:2,marginRight:6}}/>Exporting…</>)
             : pro
@@ -5503,7 +5539,7 @@ function SettingsPage({ user, onUpgrade }) {
               </div>
               <div className="settings-section__desc">
                 Scheduled summaries delivered to your inbox. Choose your frequency and what to include.
-                {!pro&&<button className="settings-section__lock" onClick={onUpgrade}> Upgrade to Pro to enable email digests.</button>}
+                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}> Upgrade to Pro to enable email digests.</button>}
               </div>
 
               {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
@@ -5627,7 +5663,7 @@ function SettingsPage({ user, onUpgrade }) {
                   {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
                   {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
                   {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
-                  {!pro&&<button className="settings-section__lock" onClick={onUpgrade}>Upgrade to Pro to save</button>}
+                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}>Upgrade to Pro to save</button>}
                 </div>
               </>)}
             </div>
@@ -5642,7 +5678,7 @@ function SettingsPage({ user, onUpgrade }) {
               </div>
               <div className="settings-section__desc">
                 Real-time emails fired within minutes of a filing. Each trigger is independent.
-                {!pro&&<button className="settings-section__lock" onClick={onUpgrade}> Upgrade to Pro to enable instant alerts.</button>}
+                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}> Upgrade to Pro to enable instant alerts.</button>}
               </div>
 
               {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
@@ -5723,7 +5759,7 @@ function SettingsPage({ user, onUpgrade }) {
                   {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
                   {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
                   {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
-                  {!pro&&<button className="settings-section__lock" onClick={onUpgrade}>Upgrade to Pro to save</button>}
+                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}>Upgrade to Pro to save</button>}
                 </div>
               </>)}
             </div>
@@ -5739,7 +5775,7 @@ function SettingsPage({ user, onUpgrade }) {
               </div>
               <div className="settings-section__desc">
                 Connect your brokerage via SnapTrade to see insider activity on your holdings. Read-only — Seli never trades on your behalf, and your login credentials go directly to your brokerage, never to Seli.
-                {!pro&&<button className="settings-section__lock" onClick={onUpgrade}> Upgrade to Pro to connect a brokerage.</button>}
+                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('portfolio')}> Upgrade to Pro to connect a brokerage.</button>}
               </div>
 
               {pro && (
@@ -5841,7 +5877,137 @@ const FEATURES = [
   {icon:'04', title:'Corporate + congressional', body:'Track Form 4 filings from company insiders alongside STOCK Act disclosures from senators and representatives — in the same dashboard.'},
 ];
 
+// ─── INFO / TRUST PAGE ──────────────────────────────────────────────────────
+// Real URL (/about), separate from onboarding — built to answer "is this
+// actually worth trusting" with real citations and honest limitations,
+// not just marketing copy.
+function InfoTrustPage({ onBack, onEnter }) {
+  return (
+    <div className="lp-info">
+      <div className="lp-info__inner">
+        <a href="/" onClick={onBack} className="lp-info__back">← Back</a>
+
+        <div className="lp-info__eyebrow reveal reveal--delay-0">Why insider data</div>
+        <h1 className="lp-info__h1 reveal reveal--delay-1">Why insider trades are worth tracking</h1>
+        <p className="lp-info__lede reveal reveal--delay-2">
+          Every year, corporate insiders and members of Congress disclose thousands of stock trades —
+          not because they want to, but because federal law requires it. That disclosure creates a genuinely
+          rare thing in public markets: a legally mandated look at what the people closest to a company are
+          actually doing with their own money.
+        </p>
+
+        {/* ── The academic case ──────────────────────────────────────────── */}
+        <section className="lp-info__section reveal reveal--delay-3">
+          <h2>The research isn't new, and it isn't ours</h2>
+          <p>
+            The idea that insider trading activity contains real predictive information goes back decades in
+            financial economics, not just to fintech products built on top of it. Jaffe's early-1970s work
+            first established that insiders earn abnormal returns on their own trades. Nejat Seyhun's research
+            through the 1980s and 90s — still among the most-cited in the field — found that insider purchases
+            are considerably more informative than sales, for a straightforward reason: insiders face real
+            legal exposure for selling on negative non-public information, which discourages informed selling
+            far more than it discourages informed buying.
+          </p>
+          <p>
+            Later work sharpened the picture further. Lakonishok and Lee found the signal strengthens
+            meaningfully when multiple insiders buy the same stock around the same time, rather than a single
+            person acting alone — the same clustering principle behind how Seli weighs a signal. Cohen, Malloy,
+            and Pomorski drew an important distinction between routine, calendar-driven insider trades (which
+            carry little predictive value) and opportunistic, irregularly-timed ones, finding that predictive
+            power concentrates almost entirely in the latter. And Seyhun's own aggregate-level research found
+            that insider buying and selling across the whole market correlates with where the broader market
+            heads over the following months — insiders aren't just informed about their own companies, in
+            aggregate they've historically leaned early on broader turns too.
+          </p>
+          <p className="lp-info__citation-note">
+            Sources: Jaffe (1974); Seyhun, "Insiders' Profits, Costs of Trading, and Market Efficiency,"
+            Journal of Financial Economics (1986); Seyhun, "The Information Content of Aggregate Insider
+            Trading," Journal of Business (1988); Lakonishok & Lee, "Are Insider Trades Informative?" (2001);
+            Cohen, Malloy & Pomorski, "Decoding Inside Information" (2012).
+          </p>
+        </section>
+
+        {/* ── How Seli actually scores signals ───────────────────────────── */}
+        <section className="lp-info__section reveal reveal--delay-4">
+          <h2>How Seli actually scores a signal</h2>
+          <p>
+            Seli's conviction score is built directly around the same principles the research above
+            established, not invented from scratch:
+          </p>
+          <ul className="lp-info__principles">
+            <li><strong>Who's buying matters.</strong> A purchase from a C-suite executive — someone with the
+              broadest view into the company — carries more weight than one from a director with narrower
+              visibility.</li>
+            <li><strong>Size relative to what they already own matters more than raw dollars.</strong> A
+              $500K purchase from someone materially growing their existing stake is a stronger signal than
+              the same dollar amount as a routine top-up on a much larger position.</li>
+            <li><strong>Multiple insiders acting together matters.</strong> Directly following Lakonishok and
+              Lee's finding — several insiders buying independently around the same time is treated as a
+              stronger signal than one person acting alone.</li>
+            <li><strong>Only real, personal-funds market transactions count at all.</strong> Stock grants,
+              option exercises, and other compensation-related transfers are structurally excluded before a
+              signal is ever scored — they don't reflect a personal bet the way an open-market purchase does.</li>
+          </ul>
+          <p>
+            We don't publish the exact formula or weights — that's the specific part of this that's ours —
+            but the underlying principles above are the actual mechanism, not a marketing simplification of it.
+          </p>
+        </section>
+
+        {/* ── Honest limitations ─────────────────────────────────────────── */}
+        <section className="lp-info__section lp-info__section--limits reveal reveal--delay-5">
+          <h2>What this isn't, said plainly</h2>
+          <p>
+            <strong>This is not a day-trading tool.</strong> Form 4 filings carry a mandatory disclosure
+            window — insiders can have up to two business days to report a trade after it happens. That's
+            actually faster than it used to be: Sarbanes-Oxley tightened the requirement from ten days down to
+            two specifically to make this data more useful. But two days is still real lag, and for someone
+            making decisions on minute-to-minute price action, this data is structurally too old to act on
+            that way. We'd rather tell you that directly than let you find out the hard way.
+          </p>
+          <p>
+            <strong>Scoring accuracy improves as more history is captured</strong>, not just as a matter of
+            more data being generally better — an insider's track record can only be evaluated against the
+            trades Seli has actually ingested. A newly backfilled period naturally starts thinner than one
+            with years of accumulated history behind it.
+          </p>
+          <p>
+            <strong>Academic findings describe average, historical tendencies</strong> — not a guarantee about
+            any single trade, any single insider, or what happens next. Insiders are informed about their own
+            companies; they aren't infallible, and markets can move against even a well-timed, well-informed
+            trade.
+          </p>
+        </section>
+
+        <div className="lp-info__cta reveal reveal--delay-6">
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="lp-btn-primary lp-btn-primary--lg">Open Seli →</button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Go to app →</button>
+          </SignedIn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LandingPage({ onEnter, dark, setDark }) {
+  // Real URL for the About/Trust page (shareable, indexable) rather than an
+  // anchor scroll — reuses the same navigateTo/popstate pattern already
+  // built for the authenticated app's router, so this needed no changes to
+  // App-level routing logic at all.
+  const [view, setView] = useState(() => window.location.pathname === '/about' ? 'about' : 'home');
+  useEffect(() => {
+    function onPop() { setView(window.location.pathname === '/about' ? 'about' : 'home'); }
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  function goToAbout(e) { e.preventDefault(); navigateTo('/about'); setView('about'); }
+  function goHome(e) { if (e) e.preventDefault(); navigateTo('/'); setView('home'); window.scrollTo(0,0); }
+
   // Scroll-reveal: observe .reveal elements and add .reveal--visible when in viewport
   useEffect(()=>{
     const obs = new IntersectionObserver((entries)=>{
@@ -5865,7 +6031,7 @@ function LandingPage({ onEnter, dark, setDark }) {
         <div className="lp-nav__links">
           <a href="#features" className="lp-nav__link">Features</a>
           <a href="#pricing"  className="lp-nav__link">Pricing</a>
-          <a href="#about"    className="lp-nav__link">About</a>
+          <a href="/about" onClick={goToAbout} className="lp-nav__link">Why insider data</a>
         </div>
         <div className="lp-nav__actions">
           <button className="lp-btn-ghost" onClick={()=>setDark(d=>!d)} title="Toggle theme">
@@ -5885,6 +6051,9 @@ function LandingPage({ onEnter, dark, setDark }) {
         </div>
       </nav>
 
+      {view==='about' ? (
+        <InfoTrustPage onBack={goHome} onEnter={onEnter}/>
+      ) : (<>
       {/* Hero */}
       <section className="lp-hero">
         <div className="lp-hero__eyebrow reveal reveal--delay-0">
@@ -5997,7 +6166,7 @@ function LandingPage({ onEnter, dark, setDark }) {
         <h2 className="lp-section-h2 reveal reveal--delay-1">Simple, transparent pricing.</h2>
 
         {/* Main plans — two vertical cards */}
-        <div className="lp-pricing-grid">
+        <div className="lp-pricing-grid lp-pricing-grid--3col">
           <div className="lp-price-card reveal reveal--delay-1">
             <div className="lp-price-card__name">Free</div>
             <div className="lp-price-card__price">$0<span>/mo</span></div>
@@ -6017,50 +6186,42 @@ function LandingPage({ onEnter, dark, setDark }) {
             </SignedIn>
           </div>
           <div className="lp-price-card lp-price-card--featured reveal reveal--delay-2">
-            <div className="lp-price-card__badge">Coming soon</div>
+            <div className="lp-price-card__badge">Most popular</div>
             <div className="lp-price-card__name">Pro</div>
-            <div className="lp-price-card__price">$8<span>/mo</span></div>
+            <div className="lp-price-card__price">$11.99<span>/mo</span></div>
             <div className="lp-price-card__desc">For investors who need to act before the market catches up.</div>
             <ul className="lp-price-card__features">
-              {['Everything in Free','Full historical data (2021→present)','Email alerts — instant or digest','Custom alert filters (conviction, sector)','Portfolio reversal notifications','Brokerage connection (Alpaca, more)','CSV export','Deep-dive explorer'].map(f=>(
+              {['Everything in Free','Full historical data (2021→present)','Email alerts — instant or digest','Custom alert filters (conviction, sector)','Position-relative signal weighting','Connect your brokerage (SnapTrade)','CSV export','Deep-dive explorer'].map(f=>(
                 <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
             <SignedOut>
               <SignInButton mode="modal">
-                <button className="lp-btn-primary lp-btn-primary--full">Join waitlist →</button>
+                <button className="lp-btn-primary lp-btn-primary--full">Upgrade to Pro →</button>
               </SignInButton>
             </SignedOut>
             <SignedIn>
-              <button className="lp-btn-primary lp-btn-primary--full" onClick={onEnter}>Join waitlist →</button>
+              <button className="lp-btn-primary lp-btn-primary--full" onClick={onEnter}>Upgrade to Pro →</button>
             </SignedIn>
+            <div className="lp-price-card__note">Cancel anytime — access continues through the billing period you've already paid for.</div>
           </div>
-        </div>
-
-        {/* Data export — horizontal card, opt-out framing */}
-        <div className="lp-data-export-card reveal reveal--delay-3">
-          <div className="lp-data-export-card__left">
-            <div className="lp-data-export-card__eyebrow">Don't need a subscription?</div>
-            <div className="lp-data-export-card__title">Just download the data</div>
-            <div className="lp-data-export-card__desc">
-              The complete Form 4 dataset — every open-market insider trade from 2021 to present.
-              Tickers, insiders, values, dates, roles, congressional trades. CSV, instant download.
-            </div>
-          </div>
-          <div className="lp-data-export-card__right">
-            <div className="lp-data-export-card__price">
-              <span className="lp-data-export-card__amount">$9.99</span>
-              <span className="lp-data-export-card__period">one-time</span>
-            </div>
+          <div className="lp-price-card reveal reveal--delay-3">
+            <div className="lp-price-card__name">Data export</div>
+            <div className="lp-price-card__price">$9.99<span>/one-time</span></div>
+            <div className="lp-price-card__desc">Just need the dataset? No subscription — download and own it.</div>
+            <ul className="lp-price-card__features">
+              {['The complete Form 4 dataset','Every open-market trade, 2021→present','Tickers, insiders, values, dates, roles','Congressional trades included','CSV, instant download'].map(f=>(
+                <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
+              ))}
+            </ul>
             <SignedOut>
               <SignInButton mode="modal">
-                <button className="lp-data-export-card__btn">Download dataset →</button>
+                <button className="lp-btn-ghost lp-btn-ghost--full">Download dataset →</button>
               </SignInButton>
             </SignedOut>
             <SignedIn>
-              <button className="lp-data-export-card__btn" onClick={onEnter}>Download dataset →</button>
+              <button className="lp-btn-ghost lp-btn-ghost--full" onClick={onEnter}>Download dataset →</button>
             </SignedIn>
-            <div className="lp-data-export-card__note">No subscription · Instant download</div>
           </div>
         </div>
       </section>
@@ -6091,6 +6252,7 @@ function LandingPage({ onEnter, dark, setDark }) {
           </SignedIn>
         </div>
       </footer>
+      </>)}
 
     </div>
   );
@@ -6179,7 +6341,7 @@ export default function App() {
   // don't need this distinction at all.
   const [detailFull,setDetailFull] = useState(()=>!!appStateFromPath(window.location.pathname).detail);
   const [portfolioTickers, setPortfolioTickers] = useState([]);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(null); // null | 'default' | 'data_export' | 'portfolio' | 'notifications' | 'risk_management'
 
   // ── Client-side routing ────────────────────────────────────────────────────
   // Deliberately narrow scope: top-level pages + the global ticker/insider
@@ -6307,7 +6469,7 @@ export default function App() {
   return (
     <RiskAppetiteContext.Provider value={riskAppetite}>
     <div className={`app-shell${panelOpen?' app-shell--panel-open':''}`}>
-      <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark} user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>
+      <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>
       <main className="main-area">
         <div className="status-bar">
           {/* Page title — left */}
@@ -6355,8 +6517,8 @@ export default function App() {
             onSelectSignal={selectSignal} selectedSignal={selSignal}
             onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user}
             ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist}/>}
-          {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>}
-          {page==='settings'  &&<SettingsPage user={user} onUpgrade={()=>setShowUpgradeModal(true)}/>}
+          {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'data_export')}/>}
+          {page==='settings'  &&<SettingsPage user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
           {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow}/>}
         </div>
         <footer className="footer">
@@ -6369,10 +6531,10 @@ export default function App() {
         </footer>
       </main>
       {watchlist.showUpgrade&&(
-        <UpgradeModal feature="watchlist" onClose={()=>watchlist.setShowUpgrade(false)}/>
+        <UpgradeModal feature={watchlist.showUpgrade} onClose={()=>watchlist.setShowUpgrade(null)}/>
       )}
       {showUpgradeModal&&(
-        <UpgradeModal feature="default" onClose={()=>setShowUpgradeModal(false)}/>
+        <UpgradeModal feature={showUpgradeModal} onClose={()=>setShowUpgradeModal(null)}/>
       )}
       {panelOpen&&!detailFull&&(
         <>
