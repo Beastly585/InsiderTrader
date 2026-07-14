@@ -897,6 +897,7 @@ function IconInsights(p)  { return <svg {...ICON_PROPS} {...p}><polyline points=
 function IconData(p)      { return <svg {...ICON_PROPS} {...p}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>; }
 function IconFavorites(p) { return <svg {...ICON_PROPS} {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>; }
 function IconSettings(p)  { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>; }
+function IconHelp(p)      { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }
 function IconSun(p)       { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>; }
 function IconMoon(p)      { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>; }
 function IconSignOut(p)   { return <svg {...ICON_PROPS} {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>; }
@@ -960,15 +961,6 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
           title="Settings"
           aria-label="Settings">
           <IconSettings className="nav-icon nav-icon--svg"/>
-        </button>
-        {/* Dark mode toggle */}
-        <button className="nav-item nav-item--icon-only nav-item--sm"
-          onClick={()=>setDark(d=>!d)}
-          title={dark?'Switch to light mode':'Switch to dark mode'}
-          aria-label={dark?'Switch to light mode':'Switch to dark mode'}>
-          {dark
-            ? <IconSun className="nav-icon nav-icon--svg sidebar__theme-icon"/>
-            : <IconMoon className="nav-icon nav-icon--svg sidebar__theme-icon"/>}
         </button>
         <button className="nav-item nav-item--icon-only nav-item--sm nav-item--signout"
           onClick={()=>{ window.__clerkSignOut && window.__clerkSignOut(); }}
@@ -5887,9 +5879,9 @@ function InfoTrustPage({ onBack, onEnter }) {
       <div className="lp-info__inner">
         <a href="/" onClick={onBack} className="lp-info__back">← Back</a>
 
-        <div className="lp-info__eyebrow reveal reveal--delay-0">Why insider data</div>
-        <h1 className="lp-info__h1 reveal reveal--delay-1">Why insider trades are worth tracking</h1>
-        <p className="lp-info__lede reveal reveal--delay-2">
+        <div className="lp-info__eyebrow">Why insider data</div>
+        <h1 className="lp-info__h1">Why insider trades are worth tracking</h1>
+        <p className="lp-info__lede">
           Every year, corporate insiders and members of Congress disclose thousands of stock trades —
           not because they want to, but because federal law requires it. That disclosure creates a genuinely
           rare thing in public markets: a legally mandated look at what the people closest to a company are
@@ -5897,7 +5889,7 @@ function InfoTrustPage({ onBack, onEnter }) {
         </p>
 
         {/* ── The academic case ──────────────────────────────────────────── */}
-        <section className="lp-info__section reveal reveal--delay-3">
+        <section className="lp-info__section">
           <h2>The research isn't new, and it isn't ours</h2>
           <p>
             The idea that insider trading activity contains real predictive information goes back decades in
@@ -5928,7 +5920,7 @@ function InfoTrustPage({ onBack, onEnter }) {
         </section>
 
         {/* ── How Seli actually scores signals ───────────────────────────── */}
-        <section className="lp-info__section reveal reveal--delay-4">
+        <section className="lp-info__section">
           <h2>How Seli actually scores a signal</h2>
           <p>
             Seli's conviction score is built directly around the same principles the research above
@@ -5955,7 +5947,7 @@ function InfoTrustPage({ onBack, onEnter }) {
         </section>
 
         {/* ── Honest limitations ─────────────────────────────────────────── */}
-        <section className="lp-info__section lp-info__section--limits reveal reveal--delay-5">
+        <section className="lp-info__section lp-info__section--limits">
           <h2>What this isn't, said plainly</h2>
           <p>
             <strong>This is not a day-trading tool.</strong> Form 4 filings carry a mandatory disclosure
@@ -5979,7 +5971,7 @@ function InfoTrustPage({ onBack, onEnter }) {
           </p>
         </section>
 
-        <div className="lp-info__cta reveal reveal--delay-6">
+        <div className="lp-info__cta">
           <SignedOut>
             <SignInButton mode="modal">
               <button className="lp-btn-primary lp-btn-primary--lg">Open Seli →</button>
@@ -6489,6 +6481,18 @@ export default function App() {
               );
             })()}
             {!lastFilingDate&&<span><span className="status-bar__dot"/>{loading?'Syncing…':'Ready'}</span>}
+            {/* Why insider data — opens in a new tab rather than navigating
+                away from whatever the user is doing in the app */}
+            <a href="/about" target="_blank" rel="noopener noreferrer"
+               className="status-bar__icon-btn" title="Why insider data">
+              <IconHelp style={{width:16,height:16}}/>
+            </a>
+            {/* Theme toggle — moved here from the sidebar */}
+            <button className="status-bar__icon-btn" onClick={()=>setDark(d=>!d)}
+              title={dark?'Switch to light mode':'Switch to dark mode'}
+              aria-label={dark?'Switch to light mode':'Switch to dark mode'}>
+              {dark ? <IconSun style={{width:16,height:16}}/> : <IconMoon style={{width:16,height:16}}/>}
+            </button>
             {/* Avatar — Clerk's own dropdown (manage account, sign out, etc).
                 Settings/billing are reachable via the gear icon in the sidebar. */}
             <SignedIn>

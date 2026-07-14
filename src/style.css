@@ -223,6 +223,13 @@ pre {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--green-600); display: inline-block; margin-right: 4px;
 }
+.status-bar__icon-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px;
+  background: none; border: none; color: var(--text-3); cursor: pointer;
+  text-decoration: none;
+}
+.status-bar__icon-btn:hover { background: var(--surface-2); color: var(--text); }
 
 .content-area { flex: 1; padding: 0 24px 32px; overflow-y: auto; }
 .page-content  { padding-top: 22px; }
@@ -2210,27 +2217,37 @@ td { padding:7px 11px; vertical-align:middle; }
   position: relative;
   overflow: hidden;
 }
-/* Subtle animated gradient mesh — Stripe's signature soft-blob treatment.
-   Slow (18s) and low-opacity on purpose: this should read as "quiet
-   ambient movement," not an attention-grabbing animation competing with
-   the actual headline. */
+/* Rotating conic-gradient spiral — a real spiral, not a compromise. Slow
+   (24s, linear so it never feels like it's "settling") and blurred+low-
+   opacity so it reads as ambient background movement, not a distraction
+   competing with the headline. */
 .lp-hero::before {
   content: '';
   position: absolute;
-  top: -20%; left: -10%; right: -10%; height: 140%;
-  background:
-    radial-gradient(circle at 20% 30%, var(--accent-50) 0%, transparent 45%),
-    radial-gradient(circle at 80% 20%, rgba(139,232,207,0.12) 0%, transparent 40%),
-    radial-gradient(circle at 50% 80%, rgba(196,184,255,0.10) 0%, transparent 45%);
-  animation: hero-mesh-drift 18s ease-in-out infinite;
+  top: 50%; left: 50%;
+  width: 130vmin; height: 130vmin;
+  transform: translate(-50%, -50%);
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    var(--accent-50) 50deg,
+    transparent 130deg,
+    rgba(139,232,207,0.18) 200deg,
+    transparent 270deg,
+    rgba(196,184,255,0.16) 330deg,
+    transparent 360deg
+  );
+  filter: blur(50px);
+  opacity: 0.65;
+  border-radius: 50%;
+  animation: hero-spiral-rotate 26s linear infinite;
   z-index: 0;
   pointer-events: none;
 }
 .lp-hero > * { position: relative; z-index: 1; }
-@keyframes hero-mesh-drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33%      { transform: translate(-3%, 2%) scale(1.05); }
-  66%      { transform: translate(2%, -3%) scale(1.02); }
+@keyframes hero-spiral-rotate {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
   .lp-hero::before { animation: none; }
