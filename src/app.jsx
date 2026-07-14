@@ -5873,6 +5873,18 @@ const FEATURES = [
 // Real URL (/about), separate from onboarding — built to answer "is this
 // actually worth trusting" with real citations and honest limitations,
 // not just marketing copy.
+// Illustrative sample data for the landing page marquee — not live data.
+const MARQUEE_TICKERS = [
+  { symbol:'NVDA', buy:true,  delta:'12.4%' },
+  { symbol:'AAPL', buy:true,  delta:'3.1%'  },
+  { symbol:'TSLA', buy:false, delta:'8.7%'  },
+  { symbol:'MSFT', buy:true,  delta:'2.9%'  },
+  { symbol:'META', buy:true,  delta:'5.6%'  },
+  { symbol:'JPM',  buy:false, delta:'1.8%'  },
+  { symbol:'AMZN', buy:true,  delta:'4.2%'  },
+  { symbol:'GOOGL',buy:true,  delta:'6.3%'  },
+];
+
 function InfoTrustPage({ onBack, onEnter }) {
   return (
     <div className="lp-info">
@@ -5887,6 +5899,48 @@ function InfoTrustPage({ onBack, onEnter }) {
           rare thing in public markets: a legally mandated look at what the people closest to a company are
           actually doing with their own money.
         </p>
+
+        {/* ── Regulatory timeline ────────────────────────────────────────── */}
+        <section className="lp-info__section">
+          <h2>How this disclosure came to exist</h2>
+          <div className="lp-timeline">
+            {[
+              { year:'1934', label:'Securities Exchange Act', desc:'Establishes the requirement that corporate insiders disclose their own trades to the public.' },
+              { year:'2002', label:'Sarbanes-Oxley Act', desc:'Shortens the filing deadline from 10 days down to 2 business days — the modern Form 4 window.' },
+              { year:'2012', label:'STOCK Act', desc:'Extends mandatory trade disclosure to members of Congress.' },
+              { year:'Today', label:'Seli', desc:'Ingests every new filing — corporate and congressional — within minutes of publication.' },
+            ].map((t,i)=>(
+              <div key={i} className="lp-timeline__item">
+                <div className="lp-timeline__year">{t.year}</div>
+                <div className="lp-timeline__dot"/>
+                <div className="lp-timeline__label">{t.label}</div>
+                <div className="lp-timeline__desc">{t.desc}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Plain stat tiles ────────────────────────────────────────────── */}
+        <section className="lp-info__section">
+          <div className="lp-stat-tiles">
+            <div className="lp-stat-tile">
+              <div className="lp-stat-tile__val">2 days</div>
+              <div className="lp-stat-tile__label">Maximum legal disclosure window for a corporate insider trade — down from 10 days pre-2002.</div>
+            </div>
+            <div className="lp-stat-tile">
+              <div className="lp-stat-tile__val val-buy">+4.3%</div>
+              <div className="lp-stat-tile__label">Abnormal return over 300 days for firms with more insider buying than selling — Seyhun (1986).</div>
+            </div>
+            <div className="lp-stat-tile">
+              <div className="lp-stat-tile__val val-sell">-2.2%</div>
+              <div className="lp-stat-tile__label">The reverse — abnormal return for firms with more insider selling than buying, same study.</div>
+            </div>
+          </div>
+          <p className="lp-info__citation-note">
+            These are historical academic findings across broad samples of insider trades, not a guarantee
+            about any individual trade, insider, or what Seli's own scored signals will return going forward.
+          </p>
+        </section>
 
         {/* ── The academic case ──────────────────────────────────────────── */}
         <section className="lp-info__section">
@@ -5911,12 +5965,42 @@ function InfoTrustPage({ onBack, onEnter }) {
             heads over the following months — insiders aren't just informed about their own companies, in
             aggregate they've historically leaned early on broader turns too.
           </p>
+          <p>
+            This is still an active area of research, not a settled question from the 1980s. Recent work has
+            examined how the reporting rules themselves shape the data — for instance, research on pre-scheduled
+            10b5-1 trading plans found that a 2023 SEC rule change measurably shifted when and how insiders
+            structure their disclosed sales, without changing the overall level of informed trading. The
+            mechanics of this data keep evolving, and the research keeps tracking it.
+          </p>
           <p className="lp-info__citation-note">
             Sources: Jaffe (1974); Seyhun, "Insiders' Profits, Costs of Trading, and Market Efficiency,"
             Journal of Financial Economics (1986); Seyhun, "The Information Content of Aggregate Insider
             Trading," Journal of Business (1988); Lakonishok & Lee, "Are Insider Trades Informative?" (2001);
-            Cohen, Malloy & Pomorski, "Decoding Inside Information" (2012).
+            Cohen, Malloy & Pomorski, "Decoding Inside Information" (2012); Avci, Schipani, Seyhun & Verstein,
+            "Insider Trading by Other Means," Harvard Business Law Review (2025).
           </p>
+        </section>
+
+        {/* ── Data pipeline graphic ───────────────────────────────────────── */}
+        <section className="lp-info__section">
+          <h2>Where the data actually comes from</h2>
+          <div className="lp-pipeline">
+            {[
+              { label:'SEC EDGAR + Congress', desc:'Form 4 filings and STOCK Act disclosures, straight from the source.' },
+              { label:'Ingested & parsed', desc:'New filings pulled and structured within minutes of publication.' },
+              { label:'Scored', desc:'Weighted by who\u2019s trading, how much relative to what they hold, and whether others are too.' },
+              { label:'Surfaced', desc:'Ranked and shown as a signal — not buried in a raw filing.' },
+            ].map((step,i,arr)=>(
+              <React.Fragment key={i}>
+                <div className="lp-pipeline__step">
+                  <div className="lp-pipeline__num">{i+1}</div>
+                  <div className="lp-pipeline__label">{step.label}</div>
+                  <div className="lp-pipeline__desc">{step.desc}</div>
+                </div>
+                {i<arr.length-1 && <div className="lp-pipeline__arrow">→</div>}
+              </React.Fragment>
+            ))}
+          </div>
         </section>
 
         {/* ── How Seli actually scores signals ───────────────────────────── */}
@@ -6000,7 +6084,11 @@ function LandingPage({ onEnter, dark, setDark }) {
   function goToAbout(e) { e.preventDefault(); navigateTo('/about'); setView('about'); }
   function goHome(e) { if (e) e.preventDefault(); navigateTo('/'); setView('home'); window.scrollTo(0,0); }
 
-  // Scroll-reveal: observe .reveal elements and add .reveal--visible when in viewport
+  // Scroll-reveal: observe .reveal elements and add .reveal--visible when in
+  // viewport. Re-runs on every view change (not just once on mount) — home
+  // and /about are conditionally rendered, so switching between them
+  // unmounts and remounts a whole tree of .reveal elements that need to be
+  // freshly observed each time, not just the ones present at first load.
   useEffect(()=>{
     const obs = new IntersectionObserver((entries)=>{
       entries.forEach(e=>{
@@ -6009,7 +6097,7 @@ function LandingPage({ onEnter, dark, setDark }) {
     },{ threshold:0.12, rootMargin:'0px 0px -40px 0px' });
     document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
     return ()=>obs.disconnect();
-  },[]);
+  },[view]);
 
   return (
     <div className="lp" data-theme={dark?'dark':'light'}>
@@ -6136,6 +6224,22 @@ function LandingPage({ onEnter, dark, setDark }) {
           </div>
         </div>
       </section>
+
+      {/* Scrolling ticker marquee — sample data, illustrative only.
+          Duplicated content + translateX(-50%) for a seamless infinite
+          loop. Deliberately different technique from the hero spiral, so
+          the page has real animation even if one approach doesn't render
+          well in a given environment. */}
+      <div className="lp-marquee">
+        <div className="lp-marquee__track">
+          {[...MARQUEE_TICKERS, ...MARQUEE_TICKERS].map((t,i)=>(
+            <div key={i} className="lp-marquee__chip">
+              <span className="lp-marquee__ticker">{t.symbol}</span>
+              <span className={`lp-marquee__delta ${t.buy?'val-buy':'val-sell'}`}>{t.buy?'▲':'▼'} {t.delta}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Features */}
       <section className="lp-features" id="features">

@@ -2217,28 +2217,28 @@ td { padding:7px 11px; vertical-align:middle; }
   position: relative;
   overflow: hidden;
 }
-/* Rotating conic-gradient spiral — a real spiral, not a compromise. Slow
-   (24s, linear so it never feels like it's "settling") and blurred+low-
-   opacity so it reads as ambient background movement, not a distraction
-   competing with the headline. */
+/* Rotating conic-gradient spiral. Uses the strong/saturated accent colors
+   directly (not the -50 "5% tint" variants, which combined with blur+low
+   opacity were nearly invisible against the background in both themes —
+   that's why it wasn't showing at all before, not a rendering failure). */
 .lp-hero::before {
   content: '';
   position: absolute;
   top: 50%; left: 50%;
-  width: 130vmin; height: 130vmin;
+  width: 90vmin; height: 90vmin;
   transform: translate(-50%, -50%);
   background: conic-gradient(
     from 0deg,
     transparent 0deg,
-    var(--accent-50) 50deg,
-    transparent 130deg,
-    rgba(139,232,207,0.18) 200deg,
-    transparent 270deg,
-    rgba(196,184,255,0.16) 330deg,
+    var(--accent) 45deg,
+    transparent 110deg,
+    #8BE8CF 190deg,
+    transparent 250deg,
+    var(--accent-strong) 310deg,
     transparent 360deg
   );
-  filter: blur(50px);
-  opacity: 0.65;
+  filter: blur(28px);
+  opacity: 0.35;
   border-radius: 50%;
   animation: hero-spiral-rotate 26s linear infinite;
   z-index: 0;
@@ -2251,6 +2251,29 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lp-hero::before { animation: none; }
+}
+
+.lp-marquee {
+  overflow: hidden;
+  border-top: 0.5px solid var(--border); border-bottom: 0.5px solid var(--border);
+  padding: 18px 0; background: var(--surface-2);
+}
+.lp-marquee__track {
+  display: flex; gap: 28px; width: max-content;
+  animation: lp-marquee-scroll 32s linear infinite;
+}
+.lp-marquee__chip {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 0.8125rem; white-space: nowrap;
+}
+.lp-marquee__ticker { font-weight: 700; color: var(--text); }
+.lp-marquee__delta { font-weight: 600; }
+@keyframes lp-marquee-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-marquee__track { animation: none; }
 }
 .lp-hero__eyebrow { margin-bottom: 24px; }
 .lp-badge {
@@ -2461,6 +2484,72 @@ td { padding:7px 11px; vertical-align:middle; }
   border-radius: var(--radius-lg); padding: 28px 32px; margin-bottom: 48px;
 }
 .lp-info__cta { text-align: center; padding-top: 12px; }
+
+/* Regulatory timeline */
+.lp-timeline { display: flex; flex-direction: column; margin-top: 8px; }
+.lp-timeline__item {
+  display: grid; grid-template-columns: 56px 16px 1fr; gap: 4px 16px;
+  padding: 14px 0; border-bottom: 0.5px solid var(--border);
+  align-items: start;
+}
+.lp-timeline__item:last-child { border-bottom: none; }
+.lp-timeline__year {
+  font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 700;
+  color: var(--accent-strong); padding-top: 2px;
+}
+.lp-timeline__dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent-strong);
+  margin-top: 6px; justify-self: center;
+}
+.lp-timeline__label { grid-column: 3; font-size: 0.9375rem; font-weight: 700; color: var(--text); }
+.lp-timeline__desc {
+  grid-column: 3; font-size: 0.8438rem; line-height: 1.55; color: var(--text-2);
+  margin-top: 3px;
+}
+
+/* Plain stat tiles */
+.lp-stat-tiles {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+  margin-top: 8px;
+}
+@media (max-width: 640px) { .lp-stat-tiles { grid-template-columns: 1fr; } }
+.lp-stat-tile {
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px;
+}
+.lp-stat-tile__val {
+  font-size: 1.75rem; font-weight: 800; letter-spacing: -1px;
+  font-family: var(--font-mono); color: var(--text); margin-bottom: 8px;
+}
+.lp-stat-tile__label { font-size: 0.8125rem; line-height: 1.5; color: var(--text-2); }
+
+/* Data pipeline diagram */
+.lp-pipeline {
+  display: flex; align-items: stretch; gap: 12px; margin-top: 8px;
+  flex-wrap: wrap;
+}
+.lp-pipeline__step {
+  flex: 1; min-width: 130px;
+  background: var(--surface); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg); padding: 16px;
+}
+.lp-pipeline__num {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent-strong); color: #fff;
+  font-size: 0.6875rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 10px;
+}
+.lp-pipeline__label { font-size: 0.8438rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.lp-pipeline__desc { font-size: 0.75rem; line-height: 1.5; color: var(--text-2); }
+.lp-pipeline__arrow {
+  display: flex; align-items: center; color: var(--text-3); font-size: 1.125rem;
+  flex-shrink: 0;
+}
+@media (max-width: 640px) {
+  .lp-pipeline { flex-direction: column; }
+  .lp-pipeline__arrow { transform: rotate(90deg); align-self: center; }
+}
 
 .lp-footer {
   display: flex; align-items: center; gap: 16px;
