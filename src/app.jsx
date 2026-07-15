@@ -2991,6 +2991,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const [lbRows, setLbRows]   = useState(null);
   const [lbSort, setLbSort]   = useState('hit_rate');
   const [lbYearsBack, setLbYearsBack] = useState(2); // null = all-time
+  const [lbSource, setLbSource] = useState(null); // null='all' | 'corporate' | 'congress'
   const [lbDir,  setLbDir]    = useState(-1);
   const [srcF,   setSrcF]     = useState(initialFilters?.sourceF ?? '');
   const [secF,   setSecF]     = useState(initialFilters?.sectorF ?? '');
@@ -3056,10 +3057,10 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // Insiders
   useEffect(()=>{
     if (type!=='insiders') return;
-    queryNeon(LEADERBOARD_QUERY(200, null, 2, lbYearsBack))
+    queryNeon(LEADERBOARD_QUERY(200, null, 2, lbYearsBack, lbSource))
       .then(r=>setLbRows(processLeaderboardRows(r)))
       .catch(()=>setLbRows([]));
-  },[type,lbYearsBack]);
+  },[type,lbYearsBack,lbSource]);
 
   const sortedLb = useMemo(()=>{
     if (!lbRows) return [];
@@ -3220,6 +3221,16 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input className="drawer__search" placeholder="Insider name…"
                     value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
+                </div>
+              </div>
+              <div className="drawer__toolbar-divider"/>
+              <div className="drawer__filter-group">
+                <span className="drawer__filter-label">Source</span>
+                <div className="dash-tile-pills" style={{gap:2}}>
+                  {[[null,'All'],['corporate','Corporate'],['congress','Congress']].map(([v,l])=>(
+                    <button key={l} className={`dash-tile-pill${lbSource===v?' dash-tile-pill--active':''}`}
+                      onClick={()=>setLbSource(v)}>{l}</button>
+                  ))}
                 </div>
               </div>
               <div className="drawer__toolbar-divider"/>
@@ -4010,14 +4021,15 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [yearsBack, setYearsBack] = useState(null); // null = all-time, matches the previous fixed default
+  const [source, setSource] = useState(null); // null='all' | 'corporate' | 'congress'
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
     setRows(null);
-    queryNeon(LEADERBOARD_QUERY(20, null, 5, yearsBack))
+    queryNeon(LEADERBOARD_QUERY(20, null, 5, yearsBack, source))
       .then(r=>setRows(processLeaderboardRows(r)))
       .catch(e=>setError(e.message));
-  },[yearsBack]);
+  },[yearsBack,source]);
 
   return (
     <div className="ins-lb-list-wrap">
@@ -4028,6 +4040,11 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
           <option value="2">2yr</option>
           <option value="5">5yr</option>
           <option value="all">all-time</option>
+        </select>
+        <select className="ins-lb-window-select" value={source==null?'all':source} onChange={e=>setSource(e.target.value==='all'?null:e.target.value)}>
+          <option value="all">All</option>
+          <option value="corporate">Corporate</option>
+          <option value="congress">Congress</option>
         </select>
       </div>
       {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
@@ -4298,7 +4315,7 @@ function InsightsSnapshot({ filings, loading, onOpenDetail, onGoTo }) {
 // the full per-insider trustScore() pipeline for every insider in the DB isn't
 // practical in one query. This is consistent with the same approximation used
 // for "Related Insiders" on the trader profile.
-function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2) {
+function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2, sourceFilter=null) {
   const sectorClause = sectorFilter ? `AND f.sector = '${sectorFilter.replace(/'/g,"''")}'` : '';
   // Date window is now a real parameter rather than hardcoded — yearsBack=null
   // means no date filter at all (true all-time), used by the unsortable
@@ -4307,6 +4324,11 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
   const dateClause = yearsBack != null
     ? `AND COALESCE(f.transaction_date, f.filing_date) >= (CURRENT_DATE - INTERVAL '${Number(yearsBack)} years')`
     : '';
+  // Corporate vs congressional — congressional trades are the only ones
+  // whose transaction_code starts with 'CONGRESS' (set at ingestion).
+  const sourceClause = sourceFilter === 'congress' ? `AND f.transaction_code LIKE 'CONGRESS%'`
+                      : sourceFilter === 'corporate' ? `AND (f.transaction_code IS NULL OR f.transaction_code NOT LIKE 'CONGRESS%')`
+                      : '';
   // Win/loss now requires a MEANINGFUL margin (5%+) rather than the old
   // razor-thin `close >= buy price`, where a stock up $0.01 counted as a
   // full win identically to one up 400%. Trades that are roughly flat
@@ -4322,56 +4344,89 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
   // rolling recent snapshot per ticker, not a multi-year series. That's a
   // separate backfill task, not a query change alone.
   return `
-    SELECT f.insider_name,
-           -- Pick the most frequently-filed title for this name, not just
-           -- whatever GROUP BY happened to land on — avoids one person
-           -- splitting into multiple rows because their title varied
-           -- across filings (e.g. "President" vs "President and CEO").
-           MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
-           MODE() WITHIN GROUP (ORDER BY f.relationship)  AS relationship,
-           COUNT(*) FILTER (WHERE f.transaction_type='buy' AND f.is_open_market) AS om_buys,
-           COUNT(*) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market) AS om_sells,
-           COUNT(*) FILTER (WHERE f.transaction_type='buy') AS total_buys,
-           -- Sanity-bound the dollar sums: exclude any single transaction's
-           -- value if it's wildly disproportionate (>$50B on one Form 4 line
-           -- is essentially always a data/unit error, not a real trade) so
-           -- one bad row can't blow up an insider's aggregate to nonsense.
-           SUM(f.value) FILTER (WHERE f.transaction_type='buy'  AND f.is_open_market AND f.value < 50000000000) AS bought_value,
-           SUM(f.value) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market AND f.value < 50000000000) AS sold_value,
-           ARRAY_AGG(DISTINCT f.ticker) FILTER (WHERE f.ticker IS NOT NULL) AS tickers,
-           ARRAY_AGG(DISTINCT f.sector) FILTER (WHERE f.sector IS NOT NULL AND f.sector != 'Other') AS sectors,
-           COUNT(*) FILTER (
-             WHERE f.transaction_type='buy' AND f.is_open_market
-               AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
-               AND ph_buy.close >= f.price_per_share * 1.05
-               AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
-           ) AS wins,
-           COUNT(*) FILTER (
-             WHERE f.transaction_type='buy' AND f.is_open_market
-               AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
-               AND (ph_buy.close >= f.price_per_share * 1.05 OR ph_buy.close <= f.price_per_share * 0.95)
-               AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
-           ) AS priced,
-           -- Magnitude, not just frequency — a bare hit-rate can't tell
-           -- "wins often by a little" apart from "wins less often but by a
-           -- lot." Averaged over the same sanity-bounded, priced trade set.
-           AVG(
-             CASE WHEN f.transaction_type='buy' AND f.is_open_market
-                       AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
-                       AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
-                  THEN (ph_buy.close-f.price_per_share)/f.price_per_share*100
-             END
-           ) AS avg_return_pct
-    FROM public.filings f
-    LEFT JOIN LATERAL (
-      SELECT close FROM public.prices_history
-      WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
-    ) ph_buy ON true
-    WHERE f.insider_name IS NOT NULL
-      ${dateClause}
-      ${sectorClause}
-    GROUP BY f.insider_name
-    HAVING COUNT(*) FILTER (WHERE f.transaction_type IN ('buy','sell') AND f.is_open_market) >= ${minTrades}
+    WITH agg AS (
+      SELECT f.insider_name,
+             -- Pick the most frequently-filed title for this name, not just
+             -- whatever GROUP BY happened to land on — avoids one person
+             -- splitting into multiple rows because their title varied
+             -- across filings (e.g. "President" vs "President and CEO").
+             MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
+             MODE() WITHIN GROUP (ORDER BY f.relationship)  AS relationship,
+             COUNT(*) FILTER (WHERE f.transaction_type='buy' AND f.is_open_market) AS om_buys,
+             COUNT(*) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market) AS om_sells,
+             COUNT(*) FILTER (WHERE f.transaction_type='buy') AS total_buys,
+             -- Sanity-bound the dollar sums: exclude any single transaction's
+             -- value if it's wildly disproportionate (>$50B on one Form 4 line
+             -- is essentially always a data/unit error, not a real trade) so
+             -- one bad row can't blow up an insider's aggregate to nonsense.
+             SUM(f.value) FILTER (WHERE f.transaction_type='buy'  AND f.is_open_market AND f.value < 50000000000) AS bought_value,
+             SUM(f.value) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market AND f.value < 50000000000) AS sold_value,
+             ARRAY_AGG(DISTINCT f.ticker) FILTER (WHERE f.ticker IS NOT NULL) AS tickers,
+             ARRAY_AGG(DISTINCT f.sector) FILTER (WHERE f.sector IS NOT NULL AND f.sector != 'Other') AS sectors,
+             COUNT(*) FILTER (
+               WHERE f.transaction_type='buy' AND f.is_open_market
+                 AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
+                 AND ph_buy.close >= f.price_per_share * 1.05
+                 AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
+             ) AS wins,
+             COUNT(*) FILTER (
+               WHERE f.transaction_type='buy' AND f.is_open_market
+                 AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
+                 AND (ph_buy.close >= f.price_per_share * 1.05 OR ph_buy.close <= f.price_per_share * 0.95)
+                 AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
+             ) AS priced,
+             -- Magnitude, not just frequency — a bare hit-rate can't tell
+             -- "wins often by a little" apart from "wins less often but by a
+             -- lot." Averaged over the same sanity-bounded, priced trade set.
+             AVG(
+               CASE WHEN f.transaction_type='buy' AND f.is_open_market
+                         AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
+                         AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
+                    THEN (ph_buy.close-f.price_per_share)/f.price_per_share*100
+               END
+             ) AS avg_return_pct
+      FROM public.filings f
+      LEFT JOIN LATERAL (
+        SELECT close FROM public.prices_history
+        WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
+      ) ph_buy ON true
+      WHERE f.insider_name IS NOT NULL
+        ${dateClause}
+        ${sectorClause}
+        ${sourceClause}
+      GROUP BY f.insider_name
+      HAVING COUNT(*) FILTER (WHERE f.transaction_type IN ('buy','sell') AND f.is_open_market) >= ${minTrades}
+    )
+    SELECT *,
+      -- Proxy rank, mirroring processLeaderboardRows' own weights (hit rate,
+      -- return magnitude, relationship tier, trade volume) — used ONLY to
+      -- order rows before LIMIT is applied. This is the actual fix: without
+      -- this, the query had no ORDER BY at all, so LIMIT cut off whatever
+      -- arbitrary subset Postgres happened to return first (which read as
+      -- roughly alphabetical) — the true top performers by any real
+      -- criterion could easily have been excluded before ever reaching the
+      -- frontend's own scoring. The frontend still computes its own
+      -- authoritative proxy_score for display; this is purely to make sure
+      -- the right rows survive the LIMIT in the first place.
+      (
+        CASE WHEN priced>=5 AND wins::float/NULLIF(priced,0)>=0.7 THEN 2
+             WHEN priced>=5 AND wins::float/NULLIF(priced,0)>=0.5 THEN 1
+             ELSE 0 END
+        + CASE WHEN avg_return_pct>=30 THEN 1.5
+               WHEN avg_return_pct>=15 THEN 1
+               WHEN avg_return_pct>=5  THEN 0.5
+               WHEN avg_return_pct<0   THEN -0.5
+               ELSE 0 END
+        + CASE WHEN relationship='strong' THEN 1.5
+               WHEN relationship='medium' THEN 0.75
+               ELSE 0 END
+        + CASE WHEN (om_buys+om_sells)>=10 THEN 1
+               WHEN (om_buys+om_sells)>=5  THEN 0.5
+               ELSE 0 END
+        + CASE WHEN total_buys>0 AND om_buys::float/total_buys>=0.7 THEN 0.5 ELSE 0 END
+      ) AS proxy_rank
+    FROM agg
+    ORDER BY proxy_rank DESC NULLS LAST
     LIMIT ${limit}
   `;
 }
