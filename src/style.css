@@ -2149,6 +2149,19 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .port-inline-link:hover { color: var(--accent); }
 .port-perf-chart { border-bottom: 0.5px solid var(--border); background: var(--surface-2); }
+
+.port-chart-ranges {
+  display: flex; gap: 4px; padding: 6px 12px 0;
+}
+.port-chart-ranges--compact { padding: 4px 8px 0; gap: 2px; }
+.port-chart-range-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 0.6875rem; font-weight: 600; color: var(--text-3);
+  padding: 3px 8px; border-radius: 5px;
+}
+.port-chart-ranges--compact .port-chart-range-btn { font-size: 0.5938rem; padding: 2px 6px; }
+.port-chart-range-btn:hover { background: var(--surface-3); color: var(--text-2); }
+.port-chart-range-btn--active { background: var(--accent-50); color: var(--accent-strong); }
 .port-ds__label { font-size: 0.5625rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); }
 .port-ds__val   { font-size: 0.875rem; font-weight:700; font-family:var(--font-mono); letter-spacing:-0.3px; }
 

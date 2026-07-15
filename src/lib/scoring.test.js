@@ -218,6 +218,18 @@ describe('processLeaderboardRows', () => {
     expect(r.hit_rate).toBeNull();
   });
 
+  it('hit_rate is null with too few priced trades, even a perfect or 50/50 record — a 1-2 trade sample is noise, not a track record', () => {
+    const onePriced = processLeaderboardRows([{ insider_name:'A', wins:1, priced:1, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:20 }])[0];
+    const twoPriced = processLeaderboardRows([{ insider_name:'B', wins:1, priced:2, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:0 }])[0];
+    expect(onePriced.hit_rate).toBeNull();
+    expect(twoPriced.hit_rate).toBeNull();
+  });
+
+  it('hit_rate is shown once there are enough priced trades to mean something', () => {
+    const r = processLeaderboardRows([{ insider_name:'A', wins:4, priced:5, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:10 }])[0];
+    expect(r.hit_rate).toBe(80);
+  });
+
   it('a strongly negative average return costs points rather than just failing to help', () => {
     const good = processLeaderboardRows([{ insider_name:'A', wins:5, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:0 }])[0];
     const bad  = processLeaderboardRows([{ insider_name:'B', wins:5, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:-15 }])[0];

@@ -3442,7 +3442,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
             ) : perf===null || perf.length<2 ? (
               <p className="td-muted" style={{fontSize:10,textAlign:'center',padding:'0.4rem 0'}}>Performance history will appear here once available.</p>
             ) : (
-              <PortfolioPerformanceChart points={perf}/>
+              <PortfolioChartWithRanges points={perf} compact/>
             )}
           </div>
 
@@ -3503,6 +3503,51 @@ function PortfolioPerformanceChart({ points }) {
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{display:'block'}}>
       <path d={path} fill="none" stroke={isUp?'var(--green-600)':'var(--red-600)'} strokeWidth="2"/>
     </svg>
+  );
+}
+
+// Time-range tabs, Yahoo/Google Finance style — no "1D" option, since
+// prices_history stores daily closes, not intraday ticks, so that range
+// could never show anything but a single flat point regardless of how
+// much historical depth exists otherwise. Filters the already-fetched
+// points client-side rather than re-fetching per range — same pattern as
+// Insights' own day-window selector.
+const PORTFOLIO_CHART_RANGES = [
+  { key:'1w',  label:'1W',  days:7 },
+  { key:'1m',  label:'1M',  days:30 },
+  { key:'3m',  label:'3M',  days:90 },
+  { key:'1y',  label:'1Y',  days:365 },
+  { key:'all', label:'All', days:null },
+];
+function PortfolioChartWithRanges({ points, compact=false }) {
+  const [range, setRange] = useState('1m');
+  const filtered = useMemo(() => {
+    const r = PORTFOLIO_CHART_RANGES.find(r=>r.key===range);
+    if (!r || r.days==null) return points;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-r.days);
+    const iso = cutoff.toISOString().split('T')[0];
+    return points.filter(p=>p.date>=iso);
+  }, [points, range]);
+
+  return (
+    <div>
+      <div className={`port-chart-ranges${compact?' port-chart-ranges--compact':''}`}>
+        {PORTFOLIO_CHART_RANGES.map(r=>(
+          <button key={r.key}
+            className={`port-chart-range-btn${range===r.key?' port-chart-range-btn--active':''}`}
+            onClick={()=>setRange(r.key)}>
+            {r.label}
+          </button>
+        ))}
+      </div>
+      {filtered.length<2 ? (
+        <p className="td-muted" style={{fontSize:compact?10:11,textAlign:'center',padding:compact?'0.5rem 0':'1rem 0'}}>
+          Not enough data for this range yet.
+        </p>
+      ) : (
+        <PortfolioPerformanceChart points={filtered}/>
+      )}
+    </div>
   );
 }
 
@@ -3583,7 +3628,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
                 Performance history will appear here once enough data has been collected.
               </p>
             ) : (
-              <PortfolioPerformanceChart points={perf}/>
+              <PortfolioChartWithRanges points={perf}/>
             )}
           </div>
         </div>

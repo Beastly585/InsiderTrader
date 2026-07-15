@@ -792,30 +792,71 @@ async function handleSnapTradePerformance(request, env, origin) {
     const conn = await getSnapTradeConnection(env, clerkUserId);
     if (!conn) return corsResponse({ points: [] }, 200, origin, env);
 
+    // Built on prices_history (real historical daily closes, already used
+    // reliably elsewhere in the app) rather than SnapTrade's balance-history
+    // endpoint, whose exact depth and reliability were never confirmed —
+    // this fixed uncertain data with a solid foundation instead of adding
+    // more range options on top of it. Trade-off, stated plainly: this
+    // shows "if you'd held today's exact position the whole time," not a
+    // true reconstruction of value changes as you actually bought/sold —
+    // a reasonable, honest approximation, not a hidden simplification.
     const accounts = await signSnapTradeRequest(env, 'GET', '/api/v1/accounts', {
       query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
     });
 
-    const allPoints = [];
+    const holdings = {}; // ticker -> total units held across all accounts
     for (const acct of (accounts || [])) {
       try {
-        const history = await signSnapTradeRequest(env, 'GET', `/api/v1/accounts/${acct.id}/balances/history`, {
+        const positions = await signSnapTradeRequest(env, 'GET', `/api/v1/accounts/${acct.id}/positions/all`, {
           query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
         });
-        for (const h of (history || [])) {
-          allPoints.push({ date: h.date, value: h.total_equity ?? h.value ?? 0 });
+        const list = Array.isArray(positions) ? positions
+          : (positions && typeof positions === 'object')
+            ? (Array.isArray(positions.results) ? positions.results : Object.values(positions).filter(Array.isArray).flat())
+            : [];
+        for (const p of list) {
+          const ticker = p.instrument?.symbol || p.instrument?.raw_symbol;
+          const units = parseFloat(p.units) || 0;
+          if (!ticker || units === 0) continue;
+          holdings[ticker] = (holdings[ticker] || 0) + units;
         }
-      } catch { /* this account's history unavailable — skip, don't fail the whole response */ }
+      } catch { /* this account's positions unavailable — skip, don't fail the whole response */ }
     }
 
-    // Merge same-date points across multiple accounts, sort ascending
-    const byDate = {};
-    for (const p of allPoints) { byDate[p.date] = (byDate[p.date]||0) + p.value; }
-    const points = Object.entries(byDate).sort(([a],[b])=>a<b?-1:1).map(([date,value])=>({date,value}));
+    const tickers = Object.keys(holdings);
+    if (tickers.length === 0) return corsResponse({ points: [] }, 200, origin, env);
+
+    const priceRows = await neonFetch(env, `
+      SELECT ticker, date, close FROM public.prices_history
+      WHERE ticker = ANY(ARRAY[${tickers.map(t => sqlVal(t)).join(',')}])
+      ORDER BY ticker, date ASC
+    `);
+
+    // Assemble one combined portfolio-value series across all held tickers.
+    // Tickers don't always have prices on identical dates, so each ticker
+    // forward-fills its own last known price rather than requiring every
+    // ticker to have data on every date — otherwise one gap anywhere would
+    // silently drop that entire date from the whole portfolio series.
+    const byTicker = {};
+    for (const row of (priceRows.rows || [])) {
+      (byTicker[row.ticker] ||= []).push({ date: row.date, close: parseFloat(row.close) });
+    }
+    const allDates = [...new Set((priceRows.rows || []).map(r => r.date))].sort();
+    const lastKnown = {};
+    const points = allDates.map(date => {
+      let total = 0;
+      for (const ticker of tickers) {
+        const rows = byTicker[ticker] || [];
+        const match = rows.find(r => r.date === date);
+        if (match) lastKnown[ticker] = match.close;
+        if (lastKnown[ticker] != null) total += lastKnown[ticker] * holdings[ticker];
+      }
+      return { date, value: Math.round(total * 100) / 100 };
+    });
 
     return corsResponse({ points }, 200, origin, env);
   } catch (e) {
-    console.error('[Worker] SnapTrade performance fetch failed:', e.message);
+    console.error('[Worker] Portfolio performance fetch failed:', e.message);
     return corsResponse({ points: [] }, 200, origin, env); // degrade gracefully, don't surface an error for a best-effort feature
   }
 }

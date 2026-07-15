@@ -93,7 +93,13 @@ export function buildSignals(filings) {
 // ─── Leaderboard row processing ───────────────────────────────────────────────
 export function processLeaderboardRows(rows) {
   return rows.map(r=>{
-    const hitRate = r.priced>0 ? Math.round((r.wins/r.priced)*100) : null;
+    // Require a real sample before showing a hit rate at all — with only 1-2
+    // priced trades, a single win or loss swings the percentage by 50-100
+    // points. That's not a meaningful track record, it's noise dressed up as
+    // a precise-looking number. An entity can still appear on the
+    // leaderboard based on overall trade volume; it just won't show a hit
+    // rate until there's actually enough priced data to trust one.
+    const hitRate = r.priced>=5 ? Math.round((r.wins/r.priced)*100) : null;
     const avgReturn = r.avg_return_pct!=null ? Math.round(r.avg_return_pct*10)/10 : null;
     const omTotal = (r.om_buys||0)+(r.om_sells||0);
     const omDiscipline = r.total_buys>0 ? (r.om_buys/r.total_buys) : 0;
