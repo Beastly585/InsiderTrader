@@ -26,7 +26,16 @@ const fmt = {
   dateShort: d => d ? new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '—',
   ago:       d => {
     if (!d) return '—';
-    const days = Math.floor((Date.now()-new Date(d+'T00:00:00'))/86400000);
+    // Accepts both a bare date ("2026-07-13") and a full ISO timestamp
+    // ("2026-07-13T14:23:01.234Z") — appending 'T00:00:00' onto a string
+    // that already has a time component produces an unparseable date,
+    // which silently propagates NaN through every comparison below and
+    // renders as "NaNy ago". Only append the time when the input doesn't
+    // already have one, instead of assuming every caller passes a bare date.
+    const hasTime = /T\d{2}:\d{2}/.test(d);
+    const parsed = new Date(hasTime ? d : d+'T00:00:00');
+    const days = Math.floor((Date.now()-parsed)/86400000);
+    if (!Number.isFinite(days)) return '—';
     if (days===0) return 'today'; if (days===1) return 'yesterday';
     if (days<30) return `${days}d ago`;
     if (days<365) return `${Math.floor(days/30)}mo ago`;
@@ -2613,7 +2622,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--top-insiders">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Top insiders</span>
-              <span className="dash-tile__sub">by hit rate · 2yr</span>
+              <span className="dash-tile__sub">by hit rate · all-time</span>
             </div>
             <div className="dash-tile__body">
               <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
@@ -2816,11 +2825,11 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <div className="drawer__toolbar-divider"/>
             <div className="ins-filter-group">
               <span className="ins-filter-group__label">Type</span>
-              <select className="ins-filter-select" value={sourceF} onChange={e=>setSourceF(e.target.value)}>
-                <option value="">All types</option>
-                <option value="corporate">Corporate only</option>
-                <option value="political">Congressional only</option>
-              </select>
+              <div className="dash-tile-pills">
+                {[['','All'],['corporate','Corporate'],['political','Congressional']].map(([v,l])=>(
+                  <button key={v} className={`dash-tile-pill${sourceF===v?' dash-tile-pill--active':''}`} onClick={()=>setSourceF(v)}>{l}</button>
+                ))}
+              </div>
             </div>
             <div className="drawer__toolbar-divider"/>
             <div className="ins-filter-group">
@@ -2920,7 +2929,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               Top insiders
               <span className="ins-explore-hint" aria-hidden="true">⤢</span>
             </button>
-            <span className="td-muted" style={{fontWeight:400,fontSize:11}}>· hit rate · 2yr</span>
+            <span className="td-muted" style={{fontWeight:400,fontSize:11}}>· hit rate · all-time</span>
           </div>
           <div className="ins-lb-panel__body">
             <InsiderLeaderboardSidebar onOpenDetail={openInDrawer} watchlist={watchlist}/>
@@ -3910,7 +3919,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
-    queryNeon(LEADERBOARD_QUERY(20, null, 5))
+    queryNeon(LEADERBOARD_QUERY(20, null, 5, null))
       .then(r=>setRows(processLeaderboardRows(r)))
       .catch(e=>setError(e.message));
   },[]);
@@ -4185,8 +4194,15 @@ function InsightsSnapshot({ filings, loading, onOpenDetail, onGoTo }) {
 // the full per-insider trustScore() pipeline for every insider in the DB isn't
 // practical in one query. This is consistent with the same approximation used
 // for "Related Insiders" on the trader profile.
-function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5) {
+function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2) {
   const sectorClause = sectorFilter ? `AND f.sector = '${sectorFilter.replace(/'/g,"''")}'` : '';
+  // Date window is now a real parameter rather than hardcoded — yearsBack=null
+  // means no date filter at all (true all-time), used by the unsortable
+  // preview tiles (Dashboard, Insights side panel) where "all-time" is the
+  // more honest ranking than an arbitrary 2-year cutoff nobody chose.
+  const dateClause = yearsBack != null
+    ? `AND COALESCE(f.transaction_date, f.filing_date) >= (CURRENT_DATE - INTERVAL '${Number(yearsBack)} years')`
+    : '';
   // Win/loss now requires a MEANINGFUL margin (5%+) rather than the old
   // razor-thin `close >= buy price`, where a stock up $0.01 counted as a
   // full win identically to one up 400%. Trades that are roughly flat
@@ -4248,7 +4264,7 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5) {
       WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
     ) ph_buy ON true
     WHERE f.insider_name IS NOT NULL
-      AND COALESCE(f.transaction_date, f.filing_date) >= (CURRENT_DATE - INTERVAL '2 years')
+      ${dateClause}
       ${sectorClause}
     GROUP BY f.insider_name
     HAVING COUNT(*) FILTER (WHERE f.transaction_type IN ('buy','sell') AND f.is_open_market) >= ${minTrades}
@@ -6233,7 +6249,7 @@ function LandingPage({ onEnter, dark, setDark }) {
                 ))}
               </div>
               <div className="lp-screen-right">
-                <div className="lp-screen-hdr">TOP INSIDERS <span style={{opacity:.4,fontWeight:400}}>· hit rate · 2yr</span></div>
+                <div className="lp-screen-hdr">TOP INSIDERS <span style={{opacity:.4,fontWeight:400}}>· hit rate · all-time</span></div>
                 {[
                   {n:'A.L. Sarroff Fund', r:'94%', buys:'48 buys'},
                   {n:'Adelman Jason T',   r:'100%',buys:'3 buys'},

@@ -112,10 +112,21 @@ def member_slug(name: str) -> str:
 
 def classify_tx(tx_raw: str) -> tuple[str, str, str]:
     t = (tx_raw or "").lower()
-    if re.match(r'p\b|purchase', t):
+    # re.search (not re.match) — catches the keyword anywhere in the string,
+    # not just at position 0. Real disclosure text varies ("P", "Purchase",
+    # "Stock Purchase", "Partial Sale", etc.); the previous start-anchored
+    # match was silently dropping anything not phrased exactly as expected
+    # into "other" — losing real buy/sell activity from scoring entirely,
+    # not just mislabeling it (a trade classified as "other" contributes
+    # zero to buys/sells/buyValue in the scoring pipeline).
+    if re.search(r'\bp\b|purchase|\bbought\b|\bbuy\b|\bacquir', t):
         return "buy",  "CONGRESS_P", "Congressional Purchase"
-    if re.match(r's\b|sale|sold|sell|exchange', t):
+    if re.search(r'\bs\b|sale|\bsold\b|\bsell\b|exchange|dispos', t):
         return "sell", "CONGRESS_S", "Congressional Sale"
+    # Still unclassified — log the actual raw value so real gaps are
+    # visible and fixable, instead of silently vanishing into "other" with
+    # no trace of what the original disclosure text actually said.
+    log.warning(f"classify_tx: unrecognized transaction type {tx_raw!r} — classified as 'other'")
     return "other", "CONGRESS_O", "Congressional Transaction"
 
 # ── Data model — exact match to public.filings ─────────────────────────────────
