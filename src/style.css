@@ -215,7 +215,7 @@ pre {
   pointer-events: none;
   z-index: 0;
 }
-.main-area > * { position: relative; z-index: 1; }
+.main-area > * { position: relative; }
 
 /* Status bar — app topbar, owns the page identity */
 .status-bar {
