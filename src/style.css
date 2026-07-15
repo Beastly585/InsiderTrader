@@ -2157,6 +2157,43 @@ td { padding:7px 11px; vertical-align:middle; }
   color: var(--text);
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+/* Ambient edge gradients — fill the side whitespace outside the constrained
+   content column with a hint of color throughout scrolling, not just in
+   the hero. Deliberately a different feel from the hero's rotating spiral:
+   these are anchored to the viewport edges (fixed, so they stay in place
+   while the page scrolls beneath them) and drift/breathe slowly rather
+   than rotate, so it reads as a distinct, quieter ambient presence rather
+   than a repeated motif. */
+.lp::before, .lp::after {
+  content: '';
+  position: fixed;
+  top: 0; height: 100vh; width: 480px;
+  filter: blur(90px);
+  opacity: 0.28;
+  z-index: 0;
+  pointer-events: none;
+  animation: lp-edge-drift 15s ease-in-out infinite;
+}
+.lp::before {
+  left: -200px;
+  background: radial-gradient(circle, #8BE8CF 0%, transparent 68%);
+}
+.lp::after {
+  right: -200px;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 68%);
+  animation-delay: -11s;
+}
+@keyframes lp-edge-drift {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-50px) scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp::before, .lp::after { animation: none; }
+}
+@media (max-width: 900px) {
+  .lp::before, .lp::after { display: none; }
 }
 
 /* Nav */
@@ -2216,10 +2253,11 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* Hero */
 .lp-hero {
-  max-width: 960px; margin: 0 auto;
+  max-width: 1120px; margin: 0 auto;
   padding: 80px 48px 60px;
   text-align: center;
   position: relative;
+  z-index: 1;
 }
 /* Full-bleed breakout — spans the true viewport width regardless of
    .lp-hero's own 960px max-width, using viewport-relative units rather
@@ -2240,13 +2278,16 @@ td { padding:7px 11px; vertical-align:middle; }
 /* Rotating conic-gradient spiral. Uses the strong/saturated accent colors
    directly (not the -50 "5% tint" variants, which combined with blur+low
    opacity were nearly invisible against the background in both themes —
-   that's why it wasn't showing at all before, not a rendering failure). */
+   that's why it wasn't showing at all before, not a rendering failure).
+   Masked into a ring — fully transparent in the center — so the gradient
+   never sits directly behind the hero headline regardless of viewport
+   size, rather than relying on opacity/blur alone to stay out of the way. */
 .lp-hero-bg::before {
   content: '';
   position: absolute;
   top: 50%; left: 50%;
-  width: 90vmin; height: 90vmin;
-  transform: translate(-50%, -50%);
+  width: 150vmin; height: 150vmin;
+  transform: translate(-50%, -50%) rotate(0deg) scale(1);
   background: conic-gradient(
     from 0deg,
     transparent 0deg,
@@ -2257,24 +2298,33 @@ td { padding:7px 11px; vertical-align:middle; }
     var(--accent-strong) 310deg,
     transparent 360deg
   );
+  -webkit-mask-image: radial-gradient(circle at center, transparent 0%, transparent 32%, black 52%, black 100%);
+  mask-image: radial-gradient(circle at center, transparent 0%, transparent 32%, black 52%, black 100%);
   filter: blur(28px);
-  opacity: 0.4;
+  opacity: 0.5;
   border-radius: 50%;
-  animation: hero-spiral-rotate 26s linear infinite;
+  animation: hero-spiral-rotate 22s linear infinite;
+  transform-origin: center center;
 }
 .lp-hero > *:not(.lp-hero-bg) { position: relative; z-index: 1; }
 @keyframes hero-spiral-rotate {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to   { transform: translate(-50%, -50%) rotate(360deg); }
+  0%   { transform: translate(-50%, -50%) rotate(0deg)   scale(1); }
+  50%  { transform: translate(-50%, -50%) rotate(180deg) scale(1.12); }
+  100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
   .lp-hero-bg::before { animation: none; }
 }
 
 .lp-marquee {
+  position: relative; z-index: 1;
   overflow: hidden;
   border-top: 0.5px solid var(--border); border-bottom: 0.5px solid var(--border);
   padding: 18px 0; background: var(--surface-2);
+}
+.lp-marquee__frame {
+  max-width: 1120px; margin: 0 auto; padding: 0 48px;
+  overflow: hidden;
 }
 .lp-marquee__track {
   display: flex; gap: 28px; width: max-content;
@@ -2389,25 +2439,41 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* Features section */
 .lp-features {
-  max-width: 960px; margin: 0 auto;
+  max-width: 1120px; margin: 0 auto;
   padding: 100px 48px;
+  position: relative; z-index: 1;
 }
 .lp-about-teaser {
-  max-width: 720px; margin: 0 auto;
-  padding: 20px 48px 80px;
+  max-width: 1120px; margin: 0 auto;
+  padding: 40px 48px 80px;
   position: relative;
+  z-index: 1;
 }
-.lp-about-teaser__text {
-  font-size: 1rem; line-height: 1.75; color: var(--text-2);
-  max-height: 5.25em; overflow: hidden; position: relative;
+.lp-about-teaser__grid {
+  display: grid; grid-template-columns: 1fr 1.2fr; gap: 56px;
+  text-align: left;
 }
-.lp-about-teaser__fade {
-  position: absolute; left: 48px; right: 48px; bottom: 56px; height: 60px;
-  background: linear-gradient(to bottom, transparent, var(--bg));
-  pointer-events: none;
+@media (max-width: 860px) { .lp-about-teaser__grid { grid-template-columns: 1fr; gap: 32px; } }
+.lp-about-teaser__lead .lp-section-h2 { text-align: left; margin-bottom: 20px; }
+.lp-about-teaser__intro {
+  font-size: 1rem; line-height: 1.7; color: var(--text-2);
 }
+.lp-about-teaser__advantages {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+@media (max-width: 520px) { .lp-about-teaser__advantages { grid-template-columns: 1fr; } }
+.lp-advantage {
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg); padding: 18px;
+}
+.lp-advantage__stat {
+  font-size: 1.375rem; font-weight: 800; letter-spacing: -0.5px;
+  font-family: var(--font-mono); color: var(--text); margin-bottom: 6px;
+}
+.lp-advantage__label { font-size: 0.7813rem; line-height: 1.5; color: var(--text-2); margin-bottom: 8px; }
+.lp-advantage__source { font-size: 0.6875rem; color: var(--text-3); font-weight: 600; }
 .lp-about-teaser__link {
-  display: inline-flex; align-items: center; gap: 6px; margin-top: 20px;
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 28px;
   font-size: 0.9375rem; font-weight: 600; color: var(--accent-strong);
   text-decoration: none;
 }
@@ -2420,7 +2486,7 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-section-h2 {
   font-size: clamp(24px, 4vw, 40px); font-weight: 700;
   letter-spacing: -1px; line-height: 1.15; color: var(--text);
-  max-width: 600px; margin-bottom: 56px;
+  margin-bottom: 56px;
 }
 .lp-features-grid {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
@@ -2438,18 +2504,18 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* Pricing section */
 .lp-pricing {
-  max-width: 960px; margin: 0 auto;
+  max-width: 1120px; margin: 0 auto;
   padding: 60px 48px 100px;
 }
-.lp-pricing-grid {
+.lp-pricing-top {
   display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
-  max-width: 720px; margin-top: 48px;
+  margin-top: 48px;
 }
-@media (max-width: 640px) { .lp-pricing-grid { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .lp-pricing-top { grid-template-columns: 1fr; } }
 .lp-price-card {
-  padding: 32px; background: var(--surface);
+  padding: 40px; background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--radius-lg);
-  display: flex; flex-direction: column; gap: 16px;
+  display: flex; flex-direction: column; gap: 18px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 .lp-price-card:hover {
@@ -2475,15 +2541,37 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-price-card__price { font-size: 2.5rem; font-weight: 800; letter-spacing: -2px; line-height: 1; }
 .lp-price-card__price span { font-size: 1rem; font-weight: 400; color: var(--text-3); letter-spacing: 0; }
 .lp-price-card__desc  { font-size: 0.8438rem; color: var(--text-2); line-height: 1.55; }
-.lp-price-card__note  { font-size: 0.75rem; color: var(--text-3); text-align: center; margin-top: 10px; }
-.lp-price-card__features { list-style: none; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.lp-price-card__spacer { flex: 1; }
+.lp-price-card__features { list-style: none; display: flex; flex-direction: column; gap: 10px; }
 .lp-price-card__features li { display: flex; align-items: flex-start; gap: 8px; font-size: 0.8438rem; color: var(--text-2); }
 .lp-check { color: var(--green-600); font-weight: 700; flex-shrink: 0; }
 
+/* Data export — landscape card below the Free/Pro row, not a third
+   squeezed-in column. Info on the left, price+CTA pinned to the right. */
+.lp-price-card--landscape {
+  flex-direction: row; align-items: center; gap: 32px;
+  margin-top: 20px; padding: 28px 32px;
+}
+.lp-price-card--landscape__info { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.lp-price-card--landscape__action {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+  flex-shrink: 0; min-width: 200px;
+}
+.lp-price-card--landscape__action .lp-price-card__price { text-align: right; }
+.lp-price-card--landscape__action .lp-btn-ghost--full { width: 100%; }
+.lp-price-card__features--inline {
+  flex-direction: row; flex-wrap: wrap; gap: 8px 20px;
+}
+@media (max-width: 720px) {
+  .lp-price-card--landscape { flex-direction: column; align-items: stretch; }
+  .lp-price-card--landscape__action { align-items: stretch; }
+  .lp-price-card--landscape__action .lp-price-card__price { text-align: left; }
+}
+
 /* Footer */
 /* ── Info / Trust page (/about) ──────────────────────────────────────────── */
-.lp-info { padding: 0 24px 80px; }
-.lp-info__inner { max-width: 680px; margin: 0 auto; }
+.lp-info { padding: 0 24px 80px; position: relative; z-index: 1; }
+.lp-info__inner { max-width: 980px; margin: 0 auto; }
 .lp-info__back {
   display: inline-block; margin: 32px 0 24px; font-size: 0.8125rem;
   color: var(--text-2); text-decoration: none;
@@ -2564,7 +2652,7 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* Data pipeline diagram */
 .lp-pipeline {
-  display: flex; align-items: stretch; gap: 12px; margin-top: 8px;
+  display: flex; align-items: stretch; gap: 12px; margin: 16px 0px;
   flex-wrap: wrap;
 }
 .lp-pipeline__step {
@@ -2591,8 +2679,13 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 
 .lp-footer {
+  border-top: 1px solid var(--border);
+  position: relative; z-index: 1;
+}
+.lp-footer__frame {
   display: flex; align-items: center; gap: 16px;
-  padding: 20px 48px; border-top: 1px solid var(--border);
+  max-width: 1120px; margin: 0 auto;
+  padding: 20px 48px;
   flex-wrap: wrap;
 }
 .lp-footer__logo { display: flex; align-items: center; gap: 8px; }
@@ -2749,15 +2842,6 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 @media (max-width: 640px) {
   .lp-features-grid--2col { grid-template-columns: 1fr; }
-}
-
-/* 3-col pricing grid */
-.lp-pricing-grid--3col {
-  grid-template-columns: repeat(3, 1fr);
-  max-width: 960px;
-}
-@media (max-width: 900px) {
-  .lp-pricing-grid--3col { grid-template-columns: 1fr; max-width: 480px; }
 }
 
 /* Data export price styling */

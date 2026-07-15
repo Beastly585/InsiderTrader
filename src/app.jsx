@@ -5883,6 +5883,14 @@ const MARQUEE_TICKERS = [
   { symbol:'JPM',  buy:false, delta:'1.8%'  },
   { symbol:'AMZN', buy:true,  delta:'4.2%'  },
   { symbol:'GOOGL',buy:true,  delta:'6.3%'  },
+  { symbol:'AVGO', buy:true,  delta:'7.1%'  },
+  { symbol:'XOM',  buy:false, delta:'2.4%'  },
+  { symbol:'UNH',  buy:true,  delta:'3.8%'  },
+  { symbol:'V',    buy:false, delta:'1.2%'  },
+  { symbol:'CRM',  buy:true,  delta:'5.9%'  },
+  { symbol:'DIS',  buy:false, delta:'2.7%'  },
+  { symbol:'ADBE', buy:true,  delta:'4.5%'  },
+  { symbol:'PFE',  buy:false, delta:'1.6%'  },
 ];
 
 function InfoTrustPage({ onBack, onEnter }) {
@@ -6156,9 +6164,6 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Hero */}
       <section className="lp-hero">
         <div className="lp-hero-bg" aria-hidden="true"/>
-        <div className="lp-hero__eyebrow reveal reveal--delay-0">
-          <span className="lp-badge">Form 4 · STOCK Act · Real-time</span>
-        </div>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
           Insider trading signals.<br/>
           <span className="lp-hero__h1-accent">Before the market moves.</span>
@@ -6177,7 +6182,7 @@ function LandingPage({ onEnter, dark, setDark }) {
           <SignedIn>
             <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Go to app →</button>
           </SignedIn>
-          <span className="lp-hero__cta-note">Free during beta · No credit card</span>
+          {/* <span className="lp-hero__cta-note">Free during beta · No credit card</span> */}
         </div>
 
         {/* Product preview strip */}
@@ -6251,6 +6256,7 @@ function LandingPage({ onEnter, dark, setDark }) {
           the page has real animation even if one approach doesn't render
           well in a given environment. */}
       <div className="lp-marquee">
+        <div className="lp-marquee__frame">
         <div className="lp-marquee__track">
           {[...MARQUEE_TICKERS, ...MARQUEE_TICKERS].map((t,i)=>(
             <div key={i} className="lp-marquee__chip">
@@ -6258,6 +6264,7 @@ function LandingPage({ onEnter, dark, setDark }) {
               <span className={`lp-marquee__delta ${t.buy?'val-buy':'val-sell'}`}>{t.buy?'▲':'▼'} {t.delta}</span>
             </div>
           ))}
+        </div>
         </div>
       </div>
 
@@ -6282,7 +6289,7 @@ function LandingPage({ onEnter, dark, setDark }) {
         <h2 className="lp-section-h2 reveal reveal--delay-1">Simple, transparent pricing.</h2>
 
         {/* Main plans — two vertical cards */}
-        <div className="lp-pricing-grid lp-pricing-grid--3col">
+        <div className="lp-pricing-top">
           <div className="lp-price-card reveal reveal--delay-1">
             <div className="lp-price-card__name">Free</div>
             <div className="lp-price-card__price">$0<span>/mo</span></div>
@@ -6292,6 +6299,7 @@ function LandingPage({ onEnter, dark, setDark }) {
                 <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
+            <div className="lp-price-card__spacer"/>
             <SignedOut>
               <SignInButton mode="modal">
                 <button className="lp-btn-ghost lp-btn-ghost--full">Get started free →</button>
@@ -6311,6 +6319,7 @@ function LandingPage({ onEnter, dark, setDark }) {
                 <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
+            <div className="lp-price-card__spacer"/>
             <SignedOut>
               <SignInButton mode="modal">
                 <button className="lp-btn-primary lp-btn-primary--full">Upgrade to Pro →</button>
@@ -6319,17 +6328,21 @@ function LandingPage({ onEnter, dark, setDark }) {
             <SignedIn>
               <button className="lp-btn-primary lp-btn-primary--full" onClick={onEnter}>Upgrade to Pro →</button>
             </SignedIn>
-            <div className="lp-price-card__note">Cancel anytime — access continues through the billing period you've already paid for.</div>
           </div>
-          <div className="lp-price-card reveal reveal--delay-3">
+        </div>
+
+        <div className="lp-price-card lp-price-card--landscape reveal reveal--delay-3">
+          <div className="lp-price-card--landscape__info">
             <div className="lp-price-card__name">Data export</div>
-            <div className="lp-price-card__price">$9.99<span>/one-time</span></div>
             <div className="lp-price-card__desc">Just need the dataset? No subscription — download and own it.</div>
-            <ul className="lp-price-card__features">
-              {['The complete Form 4 dataset','Every open-market trade, 2021→present','Tickers, insiders, values, dates, roles','Congressional trades included','CSV, instant download'].map(f=>(
+            <ul className="lp-price-card__features lp-price-card__features--inline">
+              {['Complete Form 4 dataset','2021→present','Congressional trades included','CSV, instant download'].map(f=>(
                 <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
+          </div>
+          <div className="lp-price-card--landscape__action">
+            <div className="lp-price-card__price">$9.99<span>/one-time</span></div>
             <SignedOut>
               <SignInButton mode="modal">
                 <button className="lp-btn-ghost lp-btn-ghost--full">Download dataset →</button>
@@ -6342,20 +6355,42 @@ function LandingPage({ onEnter, dark, setDark }) {
         </div>
       </section>
 
-      {/* About teaser — a real taste of the trust content, not just a link.
+      {/* About teaser — left-aligned, real substance, not a centered blurb.
           Fades out into a clear "read the rest" CTA rather than being
           truncated abruptly. */}
       <section className="lp-about-teaser reveal reveal--delay-1" id="about-teaser">
-        <h2 className="lp-section-h2">Why insider data actually works</h2>
-        <p className="lp-about-teaser__text">
-          The idea that insider trading contains real predictive information isn't new marketing — it goes back
-          decades in financial economics. Nejat Seyhun's research found firms with more insider buying than
-          selling saw <strong className="val-buy">+4.3%</strong> abnormal returns over the following 300 days,
-          while the reverse pattern lost <strong className="val-sell">-2.2%</strong>. Federal law requires
-          insiders to disclose their trades within 2 business days — Seli ingests every one of them the moment
-          it's published, scores it, and shows you exactly how.
-        </p>
-        <div className="lp-about-teaser__fade"/>
+        <div className="lp-about-teaser__grid">
+          <div className="lp-about-teaser__lead">
+            <h2 className="lp-section-h2">Insiders have a real, studied edge. Now you can see it too.</h2>
+            <p className="lp-about-teaser__intro">
+              This isn't a hunch or a marketing angle — it's decades of financial economics research,
+              hiding behind filings almost nobody reads. Federal law forces every insider to disclose their
+              trades. Seli reads every single one, the moment it lands, so you don't have to.
+            </p>
+          </div>
+          <div className="lp-about-teaser__advantages">
+            <div className="lp-advantage">
+              <div className="lp-advantage__stat val-buy">+4.3%</div>
+              <div className="lp-advantage__label">Abnormal return over 300 days for firms with more insider buying than selling.</div>
+              <div className="lp-advantage__source">Seyhun (1986)</div>
+            </div>
+            <div className="lp-advantage">
+              <div className="lp-advantage__stat">2 days</div>
+              <div className="lp-advantage__label">The legal maximum an insider can wait before disclosing a trade — and Seli ingests it within minutes.</div>
+              <div className="lp-advantage__source">Sarbanes-Oxley, 2002</div>
+            </div>
+            <div className="lp-advantage">
+              <div className="lp-advantage__stat val-buy">4.8%</div>
+              <div className="lp-advantage__label">Spread between strong-buy and strong-sell insider portfolios in the year after the trade.</div>
+              <div className="lp-advantage__source">Lakonishok & Lee (2001)</div>
+            </div>
+            <div className="lp-advantage">
+              <div className="lp-advantage__stat">↑ stronger</div>
+              <div className="lp-advantage__label">Signal strengthens measurably when multiple insiders buy the same stock independently.</div>
+              <div className="lp-advantage__source">Lakonishok & Lee (2001)</div>
+            </div>
+          </div>
+        </div>
         <a href="/about" onClick={goToAbout} className="lp-about-teaser__link">
           Read the full research, methodology, and disclosures <span className="lp-explore-hint" aria-hidden="true">→</span>
         </a>
@@ -6363,6 +6398,7 @@ function LandingPage({ onEnter, dark, setDark }) {
 
       {/* Footer */}
       <footer className="lp-footer">
+        <div className="lp-footer__frame">
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
@@ -6385,6 +6421,7 @@ function LandingPage({ onEnter, dark, setDark }) {
           <SignedIn>
             <button className="lp-btn-ghost" onClick={onEnter}>Open app →</button>
           </SignedIn>
+        </div>
         </div>
       </footer>
       </>)}
