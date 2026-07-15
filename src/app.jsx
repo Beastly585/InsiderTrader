@@ -1261,7 +1261,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   const [busy,       setBusy]       = useState(false);
   const [bundleOn,   setBundleOn]   = useState(true);
   const [expanded,   setExpanded]   = useState(false);
-  const [omOnly,     setOmOnly]     = useState(false);
+  const [omOnly,     setOmOnly]     = useState(true);
   const nav = (type,data) => onNavigate&&onNavigate({type,...data});
 
   useEffect(()=>{
@@ -2632,7 +2632,6 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--top-insiders">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Top insiders</span>
-              <span className="dash-tile__sub">by hit rate · all-time</span>
             </div>
             <div className="dash-tile__body">
               <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
@@ -2939,7 +2938,6 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               Top insiders
               <span className="ins-explore-hint" aria-hidden="true">⤢</span>
             </button>
-            <span className="td-muted" style={{fontWeight:400,fontSize:11}}>· hit rate · all-time</span>
           </div>
           <div className="ins-lb-panel__body">
             <InsiderLeaderboardSidebar onOpenDetail={openInDrawer} watchlist={watchlist}/>
@@ -2992,6 +2990,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const [search, setSearch]   = useState('');
   const [lbRows, setLbRows]   = useState(null);
   const [lbSort, setLbSort]   = useState('hit_rate');
+  const [lbYearsBack, setLbYearsBack] = useState(2); // null = all-time
   const [lbDir,  setLbDir]    = useState(-1);
   const [srcF,   setSrcF]     = useState(initialFilters?.sourceF ?? '');
   const [secF,   setSecF]     = useState(initialFilters?.sectorF ?? '');
@@ -3057,10 +3056,10 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // Insiders
   useEffect(()=>{
     if (type!=='insiders') return;
-    queryNeon(LEADERBOARD_QUERY(200, null, 2))
+    queryNeon(LEADERBOARD_QUERY(200, null, 2, lbYearsBack))
       .then(r=>setLbRows(processLeaderboardRows(r)))
       .catch(()=>setLbRows([]));
-  },[type]);
+  },[type,lbYearsBack]);
 
   const sortedLb = useMemo(()=>{
     if (!lbRows) return [];
@@ -3221,6 +3220,16 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   <input className="drawer__search" placeholder="Insider name…"
                     value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
+                </div>
+              </div>
+              <div className="drawer__toolbar-divider"/>
+              <div className="drawer__filter-group">
+                <span className="drawer__filter-label">Window</span>
+                <div className="dash-tile-pills" style={{gap:2}}>
+                  {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>(
+                    <button key={l} className={`dash-tile-pill${lbYearsBack===v?' dash-tile-pill--active':''}`}
+                      onClick={()=>setLbYearsBack(v)}>{l}</button>
+                  ))}
                 </div>
               </div>
               <div className="drawer__toolbar-divider"/>
@@ -4000,16 +4009,27 @@ function ActiveInsidersPanel({ filings, days, onOpenDetail }) {
 function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
+  const [yearsBack, setYearsBack] = useState(null); // null = all-time, matches the previous fixed default
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
-    queryNeon(LEADERBOARD_QUERY(20, null, 5, null))
+    setRows(null);
+    queryNeon(LEADERBOARD_QUERY(20, null, 5, yearsBack))
       .then(r=>setRows(processLeaderboardRows(r)))
       .catch(e=>setError(e.message));
-  },[]);
+  },[yearsBack]);
 
   return (
     <div className="ins-lb-list-wrap">
+      <div className="ins-lb-window-picker">
+        <span className="td-muted" style={{fontSize:11}}>by hit rate ·</span>
+        <select className="ins-lb-window-select" value={yearsBack==null?'all':yearsBack} onChange={e=>setYearsBack(e.target.value==='all'?null:Number(e.target.value))}>
+          <option value="1">1yr</option>
+          <option value="2">2yr</option>
+          <option value="5">5yr</option>
+          <option value="all">all-time</option>
+        </select>
+      </div>
       {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
       :rows===null?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
       :rows.length===0?<div className="ins-empty">Not enough data yet</div>

@@ -1535,6 +1535,14 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--surface-2);
 }
 .ins-lb-list-wrap { height: 100%; overflow-y: auto; }
+.ins-lb-window-picker {
+  display: flex; align-items: center; gap: 4px;
+  padding: 8px 12px 4px;
+}
+.ins-lb-window-select {
+  font-size: 0.6875rem; font-weight: 600; color: var(--accent-strong);
+  background: none; border: none; cursor: pointer; padding: 0;
+}
 .ins-lb-list { display: flex; flex-direction: column; }
 .ins-lb-card {
   display: flex; align-items: center; gap: 8px;
