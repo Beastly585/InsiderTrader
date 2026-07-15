@@ -109,13 +109,26 @@ export function processLeaderboardRows(rows) {
     // wins by a little each time and the other wins by a lot. avgReturn adds
     // that magnitude dimension, expectancy-style, on top of frequency.
     let s=0;
-    if (hitRate!=null){if(hitRate>=70)s+=2;else if(hitRate>=50)s+=1;}else s+=0.5;
+    // Previously: an entity with no priced trades at all got +0.5 — MORE
+    // than a known, real hit rate below 50% (which got 0). That rewarded
+    // being unproven over being proven-but-mediocre, backwards from what
+    // this score should mean. Not enough data now means neutral (0), same
+    // as a known-poor record — no thumb on the scale either way.
+    if (hitRate!=null){if(hitRate>=70)s+=2;else if(hitRate>=50)s+=1;}
     if (avgReturn!=null){
       if (avgReturn>=30)s+=1.5;
       else if (avgReturn>=15)s+=1;
       else if (avgReturn>=5)s+=0.5;
       else if (avgReturn<0)s-=0.5; // a negative average should cost points, not just fail to add any
     }
+    // Who's trading matters as much as their track record — a large 10%-owner
+    // fund with big dollar volume isn't the same as a true C-suite executive
+    // with genuine operational insider knowledge, but the volume-based terms
+    // below can't tell them apart on their own. This is the same principle
+    // already stated on the About page and used in buildSignals' own
+    // cSuiteBuys weighting — applied here too, not just described elsewhere.
+    if (r.relationship==='strong') s+=1.5;
+    else if (r.relationship==='medium') s+=0.75;
     if (omTotal>=10)s+=1;else if(omTotal>=5)s+=0.5;
     if (omDiscipline>=0.7)s+=0.5;
     const proxyScore = Math.max(0,Math.min(Math.round(s*10)/10,5)); // raised cap to make room for the new magnitude term

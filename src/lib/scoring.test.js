@@ -230,6 +230,22 @@ describe('processLeaderboardRows', () => {
     expect(r.hit_rate).toBe(80);
   });
 
+  it('no longer rewards an unproven track record over a known-mediocre one — both should score the same from this component', () => {
+    const unproven = processLeaderboardRows([{ insider_name:'A', wins:0, priced:0, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:0 }])[0];
+    const knownMediocre = processLeaderboardRows([{ insider_name:'B', wins:2, priced:5, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:0 }])[0];
+    // knownMediocre has a real (if unremarkable, <50%) hit rate; unproven has
+    // none at all. Unproven should NOT outscore a known real record just for
+    // lacking data — that was the actual bug.
+    expect(unproven.proxy_score).toBeLessThanOrEqual(knownMediocre.proxy_score);
+  });
+
+  it('weighs relationship tier — a C-suite executive should outrank a director/10%-owner with an identical trading record otherwise', () => {
+    const base = { wins:5, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:10 };
+    const strong = processLeaderboardRows([{ ...base, insider_name:'CEO', relationship:'strong' }])[0];
+    const weak   = processLeaderboardRows([{ ...base, insider_name:'TenPctOwner', relationship:'weak' }])[0];
+    expect(strong.proxy_score).toBeGreaterThan(weak.proxy_score);
+  });
+
   it('a strongly negative average return costs points rather than just failing to help', () => {
     const good = processLeaderboardRows([{ insider_name:'A', wins:5, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:0 }])[0];
     const bad  = processLeaderboardRows([{ insider_name:'B', wins:5, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:-15 }])[0];

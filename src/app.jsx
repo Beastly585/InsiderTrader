@@ -23,7 +23,17 @@ const fmt = {
   price:     n => n == null ? '—' : `$${parseFloat(n).toFixed(2)}`,
   pct:       n => n == null ? '—' : `${n > 0 ? '+' : ''}${Number(n).toFixed(1)}%`,
   date:      d => d ? new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—',
-  dateShort: d => d ? new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '—',
+  dateShort: d => {
+    if (!d) return '—';
+    // Same defensive fix as fmt.ago — accepts both a bare date and a full
+    // ISO timestamp instead of assuming one, since this exact mismatch has
+    // already caused real bugs twice (Settings' connected_at, the portfolio
+    // tile's lastRefreshed).
+    const hasTime = /T\d{2}:\d{2}/.test(d);
+    const parsed = new Date(hasTime ? d : d+'T00:00:00');
+    if (isNaN(parsed)) return '—';
+    return parsed.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
+  },
   ago:       d => {
     if (!d) return '—';
     // Accepts both a bare date ("2026-07-13") and a full ISO timestamp
@@ -3442,7 +3452,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
             ) : perf===null || perf.length<2 ? (
               <p className="td-muted" style={{fontSize:10,textAlign:'center',padding:'0.4rem 0'}}>Performance history will appear here once available.</p>
             ) : (
-              <PortfolioChartWithRanges points={perf} compact/>
+              <PortfolioChartWithRanges points={perf} compact onExplore={onExpand}/>
             )}
           </div>
 
@@ -3487,21 +3497,50 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
 // Simple SVG line chart — no charting library dependency, matching the
 // existing hand-rolled-SVG convention already used elsewhere in this file
 // (see InsightsSectorChart). points: [{date, value}, ...] sorted ascending.
-function PortfolioPerformanceChart({ points }) {
-  const W = 600, H = 120, PAD = 8;
+function PortfolioPerformanceChart({ points, onClick }) {
+  const W = 600, H = 160, PAD_L = 56, PAD_R = 10, PAD_T = 10, PAD_B = 24;
   const values = points.map(p=>p.value);
   const min = Math.min(...values), max = Math.max(...values);
   const range = (max-min) || 1;
-  const stepX = (W-PAD*2) / (points.length-1);
+  const plotW = W-PAD_L-PAD_R, plotH = H-PAD_T-PAD_B;
+  const stepX = plotW / (points.length-1);
   const coords = points.map((p,i)=>({
-    x: PAD + i*stepX,
-    y: PAD + (H-PAD*2) * (1 - (p.value-min)/range),
+    x: PAD_L + i*stepX,
+    y: PAD_T + plotH * (1 - (p.value-min)/range),
   }));
   const path = coords.map((c,i)=>`${i===0?'M':'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
   const isUp = values[values.length-1] >= values[0];
+  const color = isUp?'var(--green-600)':'var(--red-600)';
+
+  // Value axis — 3 gridlines (max, mid, min) rather than a dense scale,
+  // matching how compact a Yahoo/Google Finance mini-chart actually is.
+  const yTicks = [max, (max+min)/2, min];
+  // Time axis — first, middle, last date. Enough to orient without
+  // crowding a chart this size with a full date scale.
+  const xTicks = [points[0], points[Math.floor((points.length-1)/2)], points[points.length-1]];
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{display:'block'}}>
-      <path d={path} fill="none" stroke={isUp?'var(--green-600)':'var(--red-600)'} strokeWidth="2"/>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{display:'block',cursor:onClick?'pointer':'default'}}
+      onClick={onClick} role={onClick?'button':undefined} aria-label={onClick?'Open portfolio explorer':undefined}>
+      {yTicks.map((v,i)=>{
+        const y = PAD_T + plotH*(i/2);
+        return (
+          <g key={i}>
+            <line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke="var(--border)" strokeWidth="0.5"/>
+            <text x={PAD_L-6} y={y+3} textAnchor="end" fontSize="9" fill="var(--text-3)">{fmt.money(v)}</text>
+          </g>
+        );
+      })}
+      {xTicks.map((p,i)=>(
+        <text key={i}
+          x={PAD_L + (i===0?0:i===1?plotW/2:plotW)}
+          y={H-6}
+          textAnchor={i===0?'start':i===1?'middle':'end'}
+          fontSize="9" fill="var(--text-3)">
+          {fmt.dateShort(p.date)}
+        </text>
+      ))}
+      <path d={path} fill="none" stroke={color} strokeWidth="2"/>
     </svg>
   );
 }
@@ -3519,7 +3558,7 @@ const PORTFOLIO_CHART_RANGES = [
   { key:'1y',  label:'1Y',  days:365 },
   { key:'all', label:'All', days:null },
 ];
-function PortfolioChartWithRanges({ points, compact=false }) {
+function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
   const [range, setRange] = useState('1m');
   const filtered = useMemo(() => {
     const r = PORTFOLIO_CHART_RANGES.find(r=>r.key===range);
@@ -3545,7 +3584,7 @@ function PortfolioChartWithRanges({ points, compact=false }) {
           Not enough data for this range yet.
         </p>
       ) : (
-        <PortfolioPerformanceChart points={filtered}/>
+        <PortfolioPerformanceChart points={filtered} onClick={onExplore}/>
       )}
     </div>
   );
