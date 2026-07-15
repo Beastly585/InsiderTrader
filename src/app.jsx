@@ -2520,7 +2520,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
       (f.transactionDate||f.date||'')>=cutoff
     );
     return buildSignals(base)
-      .filter(s=>s.netValue>=100_000||s.cSuiteBuys>=1)
+      .filter(s=>s.netValue>=100_000||s.cSuiteBuys>=1||s.isPolitical)
       .sort((a,b)=>b.conviction-a.conviction)
       .slice(0,30);
   },[filings,cutoff]);
@@ -2740,7 +2740,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
       return true;
     });
     return buildSignals(base)
-      .filter(s=>s.cSuiteBuys>=1||s.insiderCount>=2||s.netValue>=100_000)
+      .filter(s=>s.cSuiteBuys>=1||s.insiderCount>=2||s.netValue>=100_000||s.isPolitical)
       .filter(s=>s.conviction>=strengthThreshold)
       .sort((a,b)=>{
         const av=a[sigSort],bv=b[sigSort];
@@ -2962,7 +2962,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // Clicking any row in the left pane drives the right pane without closing.
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
-function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, ensureFilingsWindow, filingsLoading, watchlist, initialFilters }) {
+function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, initialDetailStack, ensureFilingsWindow, filingsLoading, watchlist, initialFilters }) {
   const [appetite] = React.useContext(RiskAppetiteContext);
 
   // ── left pane state ──────────────────────────────────────────────────────
@@ -2981,8 +2981,11 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const [minValue, setMinValue] = useState(0);  // $ net value floor — tile has no equivalent to seed from
 
   // ── right pane nav stack ─────────────────────────────────────────────────
-  // Each entry is a {type, ...props} detail object — same shape as DetailPanel's `detail` prop
-  const [detailStack, setDetailStack] = useState([]); // history
+  // Each entry is a {type, ...props} detail object — same shape as DetailPanel's `detail` prop.
+  // Seeded from initialDetailStack when arriving via "Expand" from the small
+  // panel, so navigation history from before expanding isn't silently lost —
+  // otherwise this always started empty regardless of what was already open.
+  const [detailStack, setDetailStack] = useState(() => initialDetailStack || []); // history
   const [detail,      setDetail]      = useState(null);
 
   function navigate(d) {
@@ -3020,7 +3023,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
       return true;
     });
     let s = buildSignals(base)
-      .filter(sig=>sig.cSuiteBuys>=1||sig.insiderCount>=2||sig.netValue>=100_000)
+      .filter(sig=>sig.cSuiteBuys>=1||sig.insiderCount>=2||sig.netValue>=100_000||sig.isPolitical)
       .filter(sig=>sig.conviction>=strengthThreshold);
     if (minValue>0) s = s.filter(sig=>Math.abs(sig.netValue)>=minValue);
     if (search) { const q=search.toLowerCase(); s=s.filter(sig=>sig.ticker.toLowerCase().includes(q)||sig.company.toLowerCase().includes(q)); }
@@ -4075,7 +4078,7 @@ function InsightsSnapshot({ filings, loading, onOpenDetail, onGoTo }) {
 
   const topSignals = useMemo(()=>{
     const base = filings.filter(f=>f.isOpenMarket&&f.transactionType==='buy'&&(f.transactionDate||f.date||'')>=cutoff7);
-    return buildSignals(base).filter(s=>s.cSuiteBuys>=1||s.insiderCount>=2||s.netValue>=100_000)
+    return buildSignals(base).filter(s=>s.cSuiteBuys>=1||s.insiderCount>=2||s.netValue>=100_000||s.isPolitical)
       .sort((a,b)=>b.conviction-a.conviction).slice(0,4);
   },[filings,cutoff7]);
 
@@ -4699,7 +4702,7 @@ function PortfolioSuggestions({ filings, ownedTickers, onOpenDetail }) {
     const cutoff = (()=>{const d=new Date();d.setDate(d.getDate()-14);return d.toISOString().split('T')[0];})();
     const base = filings.filter(f=>f.isOpenMarket&&f.transactionType==='buy'&&(f.transactionDate||f.date||'')>=cutoff);
     return buildSignals(base)
-      .filter(s=>!owned.has((s.ticker||'').toUpperCase()) && (s.cSuiteBuys>=1||s.insiderCount>=2))
+      .filter(s=>!owned.has((s.ticker||'').toUpperCase()) && (s.cSuiteBuys>=1||s.insiderCount>=2||s.isPolitical))
       .sort((a,b)=>b.conviction-a.conviction)
       .slice(0,5);
   },[filings,owned]);
@@ -5508,7 +5511,7 @@ function SettingsPage({ user, onUpgrade }) {
                 <div className="settings-group__desc">
                   A signal scoring 10/15 — same underlying score, shown at your current setting:
                 </div>
-                <div style={{marginTop:10,maxWidth:280}}>
+                <div style={{marginTop:10,maxWidth:460}}>
                   <ConvictionBar score={10} showLabel={true}/>
                 </div>
               </div>
@@ -6182,7 +6185,7 @@ function LandingPage({ onEnter, dark, setDark }) {
           <SignedIn>
             <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Go to app →</button>
           </SignedIn>
-          {/* <span className="lp-hero__cta-note">Free during beta · No credit card</span> */}
+          <span className="lp-hero__cta-note">Free during beta · No credit card</span>
         </div>
 
         {/* Product preview strip */}
@@ -6496,6 +6499,18 @@ export default function App() {
 
   // Show landing page if: Clerk hasn't loaded yet OR user is not signed in
   const showLanding = !isLoaded || !isSignedIn;
+  // /about is a genuinely public page — signed-in users should be able to
+  // reach it too (e.g. via the help icon in the status bar), not just
+  // signed-out visitors. Without this, the authenticated router doesn't
+  // recognize '/about' as a known page id and silently falls back to
+  // Dashboard instead. Tracked as real state (not a one-off check) so it
+  // correctly toggles back if the user navigates away within the same tab.
+  const [isAboutPath, setIsAboutPath] = useState(() => window.location.pathname === '/about');
+  useEffect(() => {
+    function onPop() { setIsAboutPath(window.location.pathname === '/about'); }
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const [page,setPage] = useState(()=>appStateFromPath(window.location.pathname).page);
   const [filings,setFilings]  = useState([]);
@@ -6504,6 +6519,13 @@ export default function App() {
   const [selSignal,setSelSig] = useState(null);
   const [hlTicker,setHlTick]  = useState(null);
   const [detail,setDetail]    = useState(()=>appStateFromPath(window.location.pathname).detail);
+  // Back-history for the Data/Dashboard right-hand detail panel — previously
+  // non-existent, meaning clicking a second item while one was already open
+  // silently discarded the first with no way back. Not a breadcrumb (per
+  // design intent) — just enough history for a single "back" affordance to
+  // step through, matching the pattern already used by Insights/Watchlist/
+  // Portfolio's own drawers.
+  const [detailStack,setDetailStack] = useState([]);
   // Deep-linked ticker/insider URLs open straight to the full drawer — no
   // reason to make a shared link require an extra click to reach the content
   // it's actually linking to. Organic clicks from Dashboard/Data (via
@@ -6602,12 +6624,28 @@ export default function App() {
     })();
   },[]);
 
-  function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setDetailFull(true);setPage('signals');}
+  function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setDetailStack([]);setDetailFull(true);setPage('signals');}
   function selectSignal(s){setSelSig(s);if(s)setHlTick(s.ticker);}
-  function openDetail(d){setDetail(d);setDetailFull(false);}
+  function openDetail(d){
+    // Push whatever was open before onto the stack — covers both "clicked a
+    // link inside the currently-open detail" and "clicked a different item
+    // from the list while one was already open." Both are real navigation a
+    // person would want to step back out of, not just a silent replace.
+    setDetailStack(prev => detail ? [...prev, detail] : prev);
+    setDetail(d);
+    setDetailFull(false);
+  }
+  function goBackDetail(){
+    setDetailStack(prev=>{
+      const next=[...prev];
+      const p=next.pop();
+      setDetail(p||null);
+      return next;
+    });
+  }
   function expandDetail(){setDetailFull(true);}
-  function closeDetail(){setDetail(null);setDetailFull(false);setSelSig(null);}
-  function navTo(p){setPage(p);setDetail(null);setDetailFull(false);setSelSig(null);setHlTick(null);}
+  function closeDetail(){setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);}
+  function navTo(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);}
 
   // Sort state for the shared full-drawer explorer — independent from
   // InsightsPage's own internal sort state, since this instance is opened
@@ -6636,7 +6674,7 @@ export default function App() {
     </div>
   );
 
-  if (showLanding) return <LandingPage onEnter={enterApp} dark={dark} setDark={setDark} isLoaded={isLoaded}/>;
+  if (showLanding || isAboutPath) return <LandingPage onEnter={enterApp} dark={dark} setDark={setDark} isLoaded={isLoaded}/>;
 
   return (
     <RiskAppetiteContext.Provider value={riskAppetite}>
@@ -6723,7 +6761,7 @@ export default function App() {
       {panelOpen&&!detailFull&&(
         <>
           <div className="panel-overlay" onClick={closeDetail}/>
-          <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} watchlist={watchlist}/>
+          <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
         </>
       )}
       {panelOpen&&detailFull&&(
@@ -6732,6 +6770,7 @@ export default function App() {
           filings={filings}
           onClose={closeDetail}
           initialDetail={detail}
+          initialDetailStack={detailStack}
           sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort}
           ensureFilingsWindow={ensureFilingsWindow}
           filingsLoading={loading}
