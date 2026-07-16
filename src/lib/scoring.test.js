@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   isPro, hasDataExport, buildSignals, tierFromPct,
-  RISK_APPETITE_THRESHOLDS, processLeaderboardRows,
+  RISK_APPETITE_THRESHOLDS, processLeaderboardRows, filterAndScoreSignals,
 } from './scoring.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,5 +292,63 @@ describe('processLeaderboardRows', () => {
     ];
     const sorted = processLeaderboardRows(rows);
     expect(sorted[0].insider_name).toBe('High');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('filterAndScoreSignals — the full pipeline behind this session\'s congressional-signals investigation', () => {
+  const congressionalBuy = {
+    ticker: 'AAPL', insiderName: 'Rep. Someone', relationship: 'weak',
+    transactionCode: 'CONGRESS_P', transactionType: 'buy', isOpenMarket: true,
+    value: 250_000, transactionDate: '2026-06-01',
+  };
+  const corporateBuy = {
+    ticker: 'MSFT', insiderName: 'Jane CEO', relationship: 'strong',
+    transactionCode: 'P', transactionType: 'buy', isOpenMarket: true,
+    value: 500_000, transactionDate: '2026-06-01',
+  };
+
+  it('a congressional buy survives the full pipeline end-to-end with default options', () => {
+    const result = filterAndScoreSignals([congressionalBuy], { cutoff: '2020-01-01' });
+    expect(result).toHaveLength(1);
+    expect(result[0].isPolitical).toBe(true);
+  });
+
+  it('date cutoff excludes filings before it, regardless of source', () => {
+    const result = filterAndScoreSignals([congressionalBuy], { cutoff: '2026-12-31' });
+    expect(result).toHaveLength(0);
+  });
+
+  it('a cutoff of the empty string (no floor) never excludes anything by date — this is what "All" should resolve to, not a coercion bug', () => {
+    const result = filterAndScoreSignals([congressionalBuy], { cutoff: '' });
+    expect(result).toHaveLength(1);
+  });
+
+  it('sourceF="political" keeps only congressional filings', () => {
+    const result = filterAndScoreSignals([congressionalBuy, corporateBuy], { cutoff: '2020-01-01', sourceF: 'political' });
+    expect(result).toHaveLength(1);
+    expect(result[0].ticker).toBe('AAPL');
+  });
+
+  it('sourceF="corporate" keeps only non-congressional filings', () => {
+    const result = filterAndScoreSignals([congressionalBuy, corporateBuy], { cutoff: '2020-01-01', sourceF: 'corporate' });
+    expect(result).toHaveLength(1);
+    expect(result[0].ticker).toBe('MSFT');
+  });
+
+  it('sourceF="" (All types) keeps both', () => {
+    const result = filterAndScoreSignals([congressionalBuy, corporateBuy], { cutoff: '2020-01-01', sourceF: '' });
+    expect(result).toHaveLength(2);
+  });
+
+  it('a high strengthThreshold can still filter out a real congressional signal — confirms the threshold stage is a real, working gate, not silently bypassed', () => {
+    const result = filterAndScoreSignals([congressionalBuy], { cutoff: '2020-01-01', strengthThreshold: 999 });
+    expect(result).toHaveLength(0);
+  });
+
+  it('sectorF excludes filings outside the selected sector', () => {
+    const withSector = { ...congressionalBuy, sector: 'Technology' };
+    const result = filterAndScoreSignals([withSector], { cutoff: '2020-01-01', sectorF: 'Healthcare' });
+    expect(result).toHaveLength(0);
   });
 });

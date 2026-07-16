@@ -100,6 +100,35 @@ export function buildSignals(filings) {
   });
 }
 
+// ─── Full signal pipeline: date/source/sector filter → build → quality gate
+// → strength threshold ───────────────────────────────────────────────────────
+// Previously lived inline inside InsightsPage's own useMemo, untested. This
+// is the exact chain responsible for the congressional-signals investigation
+// this session — extracting it means a future regression here shows up as a
+// failing test immediately, rather than requiring a live console trace to
+// even locate which stage is silently dropping rows.
+//
+// options:
+//   cutoff             — inclusive date-string floor, e.g. '2026-01-01'
+//   sourceF            — '' | 'corporate' | 'political', matches the UI filter
+//   sectorF            — '' | a specific sector string
+//   strengthThreshold  — minimum conviction to survive
+export function filterAndScoreSignals(filings, { cutoff = '', sourceF = '', sectorF = '', strengthThreshold = 0 } = {}) {
+  const base = filings.filter(f => {
+    const tx = f.transactionDate || f.date || '';
+    if (tx < cutoff) return false;
+    const isPol = !!(f.transactionCode && f.transactionCode.startsWith('CONGRESS'));
+    if (sourceF === 'corporate' && isPol) return false;
+    if (sourceF === 'political' && !isPol) return false;
+    if (sectorF && f.sector !== sectorF) return false;
+    return true;
+  });
+  const built = buildSignals(base);
+  const afterGate = built.filter(s => s.cSuiteBuys>=1 || s.insiderCount>=2 || s.netValue>=100_000 || s.isPolitical);
+  const afterStrength = afterGate.filter(s => s.conviction >= strengthThreshold);
+  return afterStrength;
+}
+
 // ─── Leaderboard row processing ───────────────────────────────────────────────
 export function processLeaderboardRows(rows) {
   return rows.map(r=>{

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import logoSimple from './assets/logo-simple.png';
-import { isPro, hasDataExport, buildSignals, processLeaderboardRows, RISK_APPETITE_THRESHOLDS, RISK_APPETITE_LABELS, tierFromPct } from './lib/scoring.js';
+import { isPro, hasDataExport, buildSignals, processLeaderboardRows, RISK_APPETITE_THRESHOLDS, RISK_APPETITE_LABELS, tierFromPct, filterAndScoreSignals } from './lib/scoring.js';
+import { fmt } from './lib/format.js';
 import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -10,48 +11,9 @@ import cfg from './config.js';
 import { loadFilings, computeSignals, getSector, REL_LABELS } from './edgar.js';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
-const fmt = {
-  number:    n => n == null ? '—' : Number(n).toLocaleString(),
-  money:     n => {
-    if (n == null) return '—';
-    const a = Math.abs(n), s = n < 0 ? '-' : '';
-    if (a >= 1e9) return `${s}$${(a/1e9).toFixed(1)}B`;
-    if (a >= 1e6) return `${s}$${(a/1e6).toFixed(1)}M`;
-    if (a >= 1e3) return `${s}$${(a/1e3).toFixed(0)}K`;
-    return `${s}$${a.toFixed(0)}`;
-  },
-  price:     n => n == null ? '—' : `$${parseFloat(n).toFixed(2)}`,
-  pct:       n => n == null ? '—' : `${n > 0 ? '+' : ''}${Number(n).toFixed(1)}%`,
-  date:      d => d ? new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—',
-  dateShort: d => {
-    if (!d) return '—';
-    // Same defensive fix as fmt.ago — accepts both a bare date and a full
-    // ISO timestamp instead of assuming one, since this exact mismatch has
-    // already caused real bugs twice (Settings' connected_at, the portfolio
-    // tile's lastRefreshed).
-    const hasTime = /T\d{2}:\d{2}/.test(d);
-    const parsed = new Date(hasTime ? d : d+'T00:00:00');
-    if (isNaN(parsed)) return '—';
-    return parsed.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
-  },
-  ago:       d => {
-    if (!d) return '—';
-    // Accepts both a bare date ("2026-07-13") and a full ISO timestamp
-    // ("2026-07-13T14:23:01.234Z") — appending 'T00:00:00' onto a string
-    // that already has a time component produces an unparseable date,
-    // which silently propagates NaN through every comparison below and
-    // renders as "NaNy ago". Only append the time when the input doesn't
-    // already have one, instead of assuming every caller passes a bare date.
-    const hasTime = /T\d{2}:\d{2}/.test(d);
-    const parsed = new Date(hasTime ? d : d+'T00:00:00');
-    const days = Math.floor((Date.now()-parsed)/86400000);
-    if (!Number.isFinite(days)) return '—';
-    if (days===0) return 'today'; if (days===1) return 'yesterday';
-    if (days<30) return `${days}d ago`;
-    if (days<365) return `${Math.floor(days/30)}mo ago`;
-    return `${Math.floor(days/365)}y ago`;
-  },
-};
+// (fmt now lives in src/lib/format.js — imported above — with real test
+// coverage for the exact date-parsing bug class that hit three times this
+// session, rather than living inline and untested here.)
 
 // ─── Company profile cache & hooks ───────────────────────────────────────────
 // Module-level cache so the same ticker only hits Finnhub once per page load.
@@ -2809,18 +2771,41 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const strengthThreshold = minStrength===3?10:minStrength===2?5:0;
 
   const signals = useMemo(()=>{
-    const base = filings.filter(f=>{
-      const tx = f.transactionDate||f.date||'';
-      if (tx < cutoff) return false;
-      const isPol = !!(f.transactionCode&&f.transactionCode.startsWith('CONGRESS'));
-      if (sourceF==='corporate'&&isPol) return false;
-      if (sourceF==='political'&&!isPol) return false;
-      if (sectorF&&f.sector!==sectorF) return false;
-      return true;
-    });
-    return buildSignals(base)
-      .filter(s=>s.cSuiteBuys>=1||s.insiderCount>=2||s.netValue>=100_000||s.isPolitical)
-      .filter(s=>s.conviction>=strengthThreshold)
+    const result = filterAndScoreSignals(filings, { cutoff, sourceF, sectorF, strengthThreshold });
+
+    // Real diagnostic trace, not another theory — only logs when the
+    // political source filter is active, so this stays silent otherwise.
+    // Recomputes the intermediate stages separately (debug-only, not part
+    // of the actual product logic above, which now runs through the same
+    // tested filterAndScoreSignals function every render does).
+    if (sourceF==='political' && typeof console!=='undefined') {
+      const rawPolCount = filings.filter(f=>f.transactionCode&&f.transactionCode.startsWith('CONGRESS')).length;
+      const base = filings.filter(f=>{
+        const tx = f.transactionDate||f.date||'';
+        if (tx < cutoff) return false;
+        const isPol = !!(f.transactionCode&&f.transactionCode.startsWith('CONGRESS'));
+        if (sourceF==='corporate'&&isPol) return false;
+        if (sourceF==='political'&&!isPol) return false;
+        if (sectorF&&f.sector!==sectorF) return false;
+        return true;
+      });
+      const built = buildSignals(base);
+      const builtPol = built.filter(s=>s.isPolitical);
+      const gatePol = built.filter(s=>(s.cSuiteBuys>=1||s.insiderCount>=2||s.netValue>=100_000||s.isPolitical)&&s.isPolitical);
+      const strengthPol = result.filter(s=>s.isPolitical);
+      console.log('%c[Congressional signal trace]', 'font-weight:bold;color:#7C6FFF', {
+        '1. Raw congressional filings in fetched window': rawPolCount,
+        '2. After date/source filter (base)': base.length,
+        '3. Built into signals (grouped by ticker)': builtPol.length,
+        '3b. Built signals detail': builtPol.map(s=>({ticker:s.ticker, buys:s.buys, sells:s.sells, buyValue:s.buyValue, conviction:s.conviction.toFixed(2), politicalBuys:s.politicalBuys})),
+        '4. Survive quality gate': gatePol.length,
+        '5. Survive strength threshold': strengthPol.length,
+        'strengthThreshold currently': strengthThreshold,
+        'cutoff currently': cutoff,
+      });
+    }
+
+    return result
       .sort((a,b)=>{
         const av=a[sigSort],bv=b[sigSort];
         if(typeof av==='number'){if(av<bv)return sigDir;if(av>bv)return -sigDir;}
@@ -2898,7 +2883,23 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               <span className="ins-filter-group__label">Type</span>
               <div className="dash-tile-pills">
                 {[['','All'],['corporate','Corporate'],['political','Congressional']].map(([v,l])=>(
-                  <button key={v} className={`dash-tile-pill${sourceF===v?' dash-tile-pill--active':''}`} onClick={()=>setSourceF(v)}>{l}</button>
+                  <button key={v} className={`dash-tile-pill${sourceF===v?' dash-tile-pill--active':''}`}
+                    onClick={()=>{
+                      setSourceF(v);
+                      // Congressional filings can take up to 45 days to be
+                      // disclosed — a real, structural lag, not a bug. A
+                      // narrow window (the 7-day default, or anything under
+                      // 90) will very often show zero congressional activity
+                      // even when hundreds of real filings exist, simply
+                      // because most haven't been required to file yet by
+                      // that point. Widen automatically rather than let
+                      // someone select "Congressional" and reasonably
+                      // conclude the feature is broken.
+                      if (v==='political' && (days==null ? false : days<90)) {
+                        setDays(90);
+                        ensureFilingsWindow&&ensureFilingsWindow(90);
+                      }
+                    }}>{l}</button>
                 ))}
               </div>
             </div>
@@ -2931,7 +2932,11 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             :signals.length===0?<div className="ins-empty">
               <div style={{fontWeight:500,marginBottom:4}}>No qualifying signals</div>
               <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>
-                {minStrength>1?'Try lowering the strength filter or widening the timespan.':'Form 4s file 1–2 business days after trades. Try 7d or 30d.'}
+                {minStrength>1
+                  ? 'Try lowering the strength filter or widening the timespan.'
+                  : sourceF==='political'
+                    ? 'Congressional trades can take up to 45 days to be disclosed — a much longer lag than corporate Form 4s. Try widening the window to 90d or All.'
+                    : 'Form 4s file 1–2 business days after trades. Try 7d or 30d.'}
               </div>
             </div>
             :<div className="ins-sig-list">
