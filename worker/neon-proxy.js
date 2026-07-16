@@ -463,6 +463,13 @@ async function handleWatchlist(request, env, origin) {
     try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
     const { action, item_type, item_value } = body;
     if (!['add','remove'].includes(action))   return corsResponse({ error: 'Invalid action' }, 400, origin, env);
+    // Only gate 'add' — same principle as SnapTrade's disconnect staying
+    // ungated: removing something should always be allowed regardless of
+    // plan (it shrinks usage, not grows it), so a downgraded user isn't
+    // trapped unable to clean up their own list.
+    if (action==='add' && !(await isProServerSide(env, userId))) {
+      return corsResponse({ error: 'Watchlist is a Pro feature' }, 403, origin, env);
+    }
     if (!['ticker','insider'].includes(item_type)) return corsResponse({ error: 'Invalid item_type' }, 400, origin, env);
     if (!item_value || typeof item_value !== 'string') return corsResponse({ error: 'Missing item_value' }, 400, origin, env);
 
