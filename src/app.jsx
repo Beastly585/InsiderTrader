@@ -2793,11 +2793,29 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
       const builtPol = built.filter(s=>s.isPolitical);
       const gatePol = built.filter(s=>(s.cSuiteBuys>=1||s.insiderCount>=2||s.netValue>=100_000||s.isPolitical)&&s.isPolitical);
       const strengthPol = result.filter(s=>s.isPolitical);
+      // Every filing in `base` is guaranteed to have transactionCode
+      // starting with 'CONGRESS' (that's the filter that got it here) — so
+      // if built.length is 0 (not just builtPol.length), the failure is
+      // inside buildSignals itself, most likely its own
+      // `if (!f.isOpenMarket) continue` guard silently dropping every one
+      // of these rows. Checking the actual field value directly instead of
+      // inferring it through the pipeline stages.
+      const withTicker = base.filter(f=>f.ticker);
+      const withOpenMarketTrue = base.filter(f=>f.isOpenMarket===true);
+      const withValidType = base.filter(f=>f.transactionType==='buy'||f.transactionType==='sell');
       console.log('%c[Congressional signal trace]', 'font-weight:bold;color:#7C6FFF', {
         '1. Raw congressional filings in fetched window': rawPolCount,
         '2. After date/source filter (base)': base.length,
-        '3. Built into signals (grouped by ticker)': builtPol.length,
-        '3b. Built signals detail': builtPol.map(s=>({ticker:s.ticker, buys:s.buys, sells:s.sells, buyValue:s.buyValue, conviction:s.conviction.toFixed(2), politicalBuys:s.politicalBuys})),
+        '2a. base rows with a truthy ticker field': withTicker.length,
+        '2b. base rows with isOpenMarket === true (exact)': withOpenMarketTrue.length,
+        "2c. base rows with transactionType exactly 'buy' or 'sell'": withValidType.length,
+        '2d. Sample of 3 raw base rows, unmodified': base.slice(0,3).map(f=>({
+          ticker:f.ticker, isOpenMarket:f.isOpenMarket, transactionType:f.transactionType,
+          transactionCode:f.transactionCode, value:f.value, relationship:f.relationship,
+        })),
+        '3. Total signals built (any source)': built.length,
+        '3b. Of those, marked isPolitical': builtPol.length,
+        '3c. Built signals detail': builtPol.map(s=>({ticker:s.ticker, buys:s.buys, sells:s.sells, buyValue:s.buyValue, conviction:s.conviction.toFixed(2), politicalBuys:s.politicalBuys})),
         '4. Survive quality gate': gatePol.length,
         '5. Survive strength threshold': strengthPol.length,
         'strengthThreshold currently': strengthThreshold,
