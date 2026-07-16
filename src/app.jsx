@@ -1621,48 +1621,60 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
     return (
       <div className={`dp-trade dp-trade--${tt}`}>
-        {/* Row 1 — what and when: type, date, ticker/insider context, total $ */}
-        <div className="dp-trade-row1">
-          <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-          <span className="dp-trade-date">{dateLabel}</span>
-          {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
-          {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:r.ticker,company:r.company_name})}>{r.ticker}</span>}
-          {showInsider&&r.insider_name&&<span className="dp-clickable dp-trade-row2__name" onClick={()=>nav('trader',{name:r.insider_name,title:r.title})}>{r.insider_name}</span>}
-          <span className="dp-trade-val">{r.value?fmt.money(r.value):<span className="td-muted">—</span>}</span>
-        </div>
-        {/* Row 2 — the actual purchase detail, explicitly labeled and grouped
-            instead of packed together as bare symbols: shares, price then,
-            price now, and how much that move actually was. */}
-        <div className="dp-trade-row2">
-          <span className="dp-trade-detail">
-            <span className="dp-trade-detail__label">Shares</span>
-            <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
-          </span>
-          {hasRealPrice ? (<>
-            <span className="dp-trade-detail">
-              <span className="dp-trade-detail__label">Price</span>
-              <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
-            </span>
-            {ret!=null && (
-              <span className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Now</span>
-                <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
-                  {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
-                </span>
-              </span>
+        <div className="dp-trade-split">
+          {/* LEFT — context: what kind of trade, when, who/what ticker, and
+              the transaction code / market type metadata */}
+          <div className="dp-trade-left">
+            <div className="dp-trade-left__top">
+              <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+              <span className="dp-trade-date">{dateLabel}</span>
+              {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+            </div>
+            <div className="dp-trade-left__bottom">
+              {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:r.ticker,company:r.company_name})}>{r.ticker}</span>}
+              {showInsider&&r.insider_name&&<span className="dp-clickable dp-trade-row2__name" onClick={()=>nav('trader',{name:r.insider_name,title:r.title})}>{r.insider_name}</span>}
+              <span className="code-pill" title={codeLabel}>{code}</span>
+              {isOM&&<span className="dp-trade-om-label">Open market</span>}
+              {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+            </div>
+          </div>
+          {/* RIGHT — every number that describes the purchase itself, all
+              grouped together and explicitly labeled: shares, price then,
+              price now, position change, and the total dollar amount. */}
+          <div className="dp-trade-right">
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Shares</span>
+              <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+            </div>
+            {hasRealPrice ? (<>
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Price</span>
+                <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
+              </div>
+              {ret!=null && (
+                <div className="dp-trade-detail">
+                  <span className="dp-trade-detail__label">Now</span>
+                  <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
+                    {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
+                  </span>
+                </div>
+              )}
+            </>) : (
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__val dp-trade-row2__noprice">{codeLabel}</span>
+              </div>
             )}
-            {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
-          </>) : (
-            <span className="dp-trade-row2__noprice">{codeLabel}</span>
-          )}
-        </div>
-        {/* Row 3 — secondary metadata: position change, transaction code,
-            market type. Was a bare unlabeled dot before — now says plainly
-            what it means instead of relying on a symbol with no legend. */}
-        <div className="dp-trade-row3">
-          {(r.pct_owned_change||r.pctOwnedChange)!=null&&<span className="val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}% of position</span>}
-          <span className="code-pill" title={codeLabel}>{code}</span>
-          {isOM&&<span className="dp-trade-om-label">Open market</span>}
+            {(r.pct_owned_change||r.pctOwnedChange)!=null && (
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">% of position</span>
+                <span className="dp-trade-detail__val val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%</span>
+              </div>
+            )}
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Total</span>
+              <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -2765,7 +2777,14 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const pro = isPro(user);
   const [appetite] = React.useContext(RiskAppetiteContext);
   const [days, setDays] = useState(7);
-  const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
+  // days=null means "All" — must resolve to no cutoff at all, not today's
+  // date. The date-arithmetic version below silently coerced null to 0,
+  // which set the cutoff to today (the narrowest possible window, the exact
+  // opposite of "All") rather than an unbounded one.
+  const cutoff = useMemo(()=>{
+    if (days==null) return '2021-01-01'; // earliest data in the DB, matches edgar.js's own all-time floor
+    const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];
+  },[days]);
   const [sigSort, setSigSort] = useState('conviction');
   const [sigDir,  setSigDir]  = useState(-1);
   const [sourceF, setSourceF] = useState('');
@@ -2855,8 +2874,9 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <div className="ins-filter-group">
               <span className="ins-filter-group__label">Window</span>
               <div className="dash-tile-pills">
-                {[1,3,7,30,90].map(d=>(
-                  <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>setDays(d)}>{d}d</button>
+                {[{v:1,l:'1d'},{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
+                  <button key={o.l} className={`dash-tile-pill${days===o.v?' dash-tile-pill--active':''}`}
+                    onClick={()=>{setDays(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
                 ))}
               </div>
             </div>
@@ -3300,8 +3320,15 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               <div className="drawer__toolbar-divider"/>
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Min position</span>
-                <input type="number" className="ins-filter-select" placeholder="$0" style={{width:90}}
-                  value={lbMinValue||''} onChange={e=>setLbMinValue(e.target.value?Number(e.target.value):0)}/>
+                <div className="dash-tile-pills" style={{gap:2}}>
+                  {[[0,'Any'],[50000,'$50K'],[100000,'$100K'],[1000000,'$1M'],[10000000,'$10M']].map(([v,l])=>(
+                    <button key={l} className={`dash-tile-pill${lbMinValue===v?' dash-tile-pill--active':''}`}
+                      onClick={()=>setLbMinValue(v)}>{l}</button>
+                  ))}
+                </div>
+                <input type="number" className="ins-filter-select" placeholder="Custom $" style={{width:90,marginLeft:4}}
+                  value={lbMinValue&&![0,50000,100000,1000000,10000000].includes(lbMinValue)?lbMinValue:''}
+                  onChange={e=>setLbMinValue(e.target.value?Number(e.target.value):0)}/>
               </div>
             </div>
           )}
@@ -4082,6 +4109,8 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
   const [error, setError] = useState(null);
   const [yearsBack, setYearsBack] = useState(null); // null = all-time, matches the previous fixed default
   const [source, setSource] = useState(null); // null='all' | 'corporate' | 'congress'
+  const [sort, setSort] = useState('proxy_score');
+  const [dir, setDir] = useState(-1);
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
@@ -4091,6 +4120,15 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
       .catch(e=>setError(e.message));
   },[yearsBack,source]);
 
+  const sorted = useMemo(()=>{
+    if (!rows) return [];
+    return [...rows].sort((a,b)=>{
+      const av=a[sort]??-Infinity, bv=b[sort]??-Infinity;
+      return dir>0?av-bv:bv-av;
+    });
+  },[rows,sort,dir]);
+  function onSortClick(col){ if(sort===col)setDir(d=>-d); else{setSort(col);setDir(-1);} }
+
   return (
     <div className="ins-lb-list-wrap">
       <div className="ins-lb-pill-row">
@@ -4099,19 +4137,23 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
           <button key={l} className={`dash-tile-pill${yearsBack===v?' dash-tile-pill--active':''}`}
             onClick={()=>setYearsBack(v)}>{l}</button>
         ))}
-      </div>
-      <div className="ins-lb-pill-row">
-        <span className="ins-lb-pill-row__label">Source</span>
+        <span className="ins-lb-pill-row__label" style={{marginLeft:8}}>Source</span>
         {[[null,'All'],['corporate','Corp'],['congress','Congress']].map(([v,l])=>(
           <button key={l} className={`dash-tile-pill${source===v?' dash-tile-pill--active':''}`}
             onClick={()=>setSource(v)}>{l}</button>
         ))}
       </div>
+      <div className="ins-lb-col-hdr">
+        <span className="ins-lb-col-hdr__spacer"/>
+        <span className="ins-lb-col-hdr__name">Insider</span>
+        <button className={`ins-lb-col-hdr__sort${sort==='om_buys'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('om_buys')}>Buys{sort==='om_buys'&&(dir<0?' ↓':' ↑')}</button>
+        <button className={`ins-lb-col-hdr__sort${sort==='hit_rate'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('hit_rate')}>Hit rate{sort==='hit_rate'&&(dir<0?' ↓':' ↑')}</button>
+      </div>
       {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
       :rows===null?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
       :rows.length===0?<div className="ins-empty">Not enough data yet</div>
       :<div className="ins-lb-list">
-        {rows.slice(0,15).map((r,i)=>(
+        {sorted.slice(0,15).map((r,i)=>(
           <div key={i} className="ins-lb-card" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
             <div className="ins-lb-card__rank">{i+1}</div>
             <div className="ins-lb-card__body">

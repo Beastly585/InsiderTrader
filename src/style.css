@@ -314,37 +314,28 @@ pre {
 .dp-trade--buy  { border-left:2px solid var(--green-600); }
 .dp-trade--sell { border-left:2px solid var(--red-600); }
 
-/* Row 1: badge, date, optional context (cluster/ticker/insider), value
-   pushed to the end. Flex rather than a fixed grid — the old grid assumed
-   exactly 4 children in a fixed order (badge/shares/value/date), which
-   breaks as soon as the child count varies (cluster badge, ticker, and
-   insider name are all optional depending on context). */
-.dp-trade-row1 {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-}
-.dp-trade-val { font-family:var(--font-mono); font-size: 0.7812rem; font-weight:600; margin-left: auto; }
+/* Two columns: left is context (what/when/who), right is every number that
+   describes the purchase itself, grouped together instead of scattered
+   across rows mixed in with dates, codes, and tickers. */
+.dp-trade-split { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dp-trade-left { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.dp-trade-left__top { display: flex; align-items: center; gap: 8px; }
+.dp-trade-left__bottom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .dp-trade-date { font-size: 0.6875rem; color:var(--text-3); font-weight:600; white-space:nowrap; }
+.dp-trade-row2__name { font-size: 0.6875rem; }
 
-/* Row 2: the actual purchase detail — shares, price then, price now — each
-   explicitly labeled and grouped instead of packed as bare symbols. */
-.dp-trade-row2 {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  margin-top: 6px;
+.dp-trade-right {
+  display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap;
+  justify-content: flex-end; flex-shrink: 0;
 }
-.dp-trade-detail { display: flex; flex-direction: column; gap: 1px; }
+.dp-trade-detail { display: flex; flex-direction: column; gap: 1px; align-items: flex-end; }
 .dp-trade-detail__label {
   font-size: 0.5938rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .03em; color: var(--text-3);
+  letter-spacing: .03em; color: var(--text-3); white-space: nowrap;
 }
-.dp-trade-detail__val { font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-2); }
-.dp-trade-row2__name { font-size: 0.6875rem; }
-.dp-trade-row2__noprice { font-style: italic; opacity: .75; font-size: 0.75rem; color: var(--text-3); }
-
-/* Row 3: secondary metadata — position change, transaction code, market type */
-.dp-trade-row3 {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin-top: 6px; font-size: 0.6875rem; color: var(--text-3);
-}
+.dp-trade-detail__val { font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; }
+.dp-trade-detail__val--total { font-weight: 700; color: var(--text); font-size: 0.8125rem; }
+.dp-trade-row2__noprice { font-style: italic; opacity: .75; }
 .dp-trade-om-label {
   font-size: 0.625rem; font-weight: 600; color: var(--blue-600);
   background: var(--blue-50); padding: 1px 6px; border-radius: 4px;
@@ -1549,14 +1540,28 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--surface-2);
 }
 .ins-lb-list-wrap { height: 100%; overflow-y: auto; }
-.ins-lb-window-picker {
-  display: flex; align-items: center; gap: 4px;
-  padding: 8px 12px 4px;
+.ins-lb-pill-row {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 0.5px solid var(--border);
 }
-.ins-lb-window-select {
-  font-size: 0.6875rem; font-weight: 600; color: var(--accent-strong);
+.ins-lb-pill-row .dash-tile-pill { padding: 2px 7px; font-size: 0.625rem; height: 20px; }
+.ins-lb-pill-row__label {
+  font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .03em; color: var(--text-3); margin-right: 2px;
+}
+.ins-lb-col-hdr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px; font-size: 0.625rem; color: var(--text-3);
+}
+.ins-lb-col-hdr__spacer { width: 18px; flex-shrink: 0; } /* aligns under the rank number */
+.ins-lb-col-hdr__name { flex: 1; font-weight: 600; }
+.ins-lb-col-hdr__sort {
   background: none; border: none; cursor: pointer; padding: 0;
+  font: inherit; color: var(--text-3); font-weight: 600; white-space: nowrap;
 }
+.ins-lb-col-hdr__sort:hover { color: var(--text-2); }
+.ins-lb-col-hdr__sort--active { color: var(--accent-strong); }
 .ins-lb-list { display: flex; flex-direction: column; }
 .ins-lb-card {
   display: flex; align-items: center; gap: 8px;
