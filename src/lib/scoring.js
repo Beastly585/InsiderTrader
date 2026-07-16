@@ -54,7 +54,7 @@ export function buildSignals(filings) {
     const isPol = !!(f.transactionCode&&f.transactionCode.startsWith('CONGRESS'));
     if (!map[f.ticker]) map[f.ticker] = {
       ticker:f.ticker, company:f.company, sector:f.sector, isPolitical:isPol,
-      buys:0, sells:0, buyValue:0, sellValue:0, cSuiteBuys:0, maxPositionSwing:0,
+      buys:0, sells:0, buyValue:0, sellValue:0, cSuiteBuys:0, politicalBuys:0, maxPositionSwing:0,
       insiders:new Set(), lastTradeDate:'', trades:[],
     };
     const s = map[f.ticker];
@@ -65,6 +65,16 @@ export function buildSignals(filings) {
     if (f.transactionType==='buy') {
       s.buys++; s.buyValue+=f.value||0;
       if (f.relationship==='strong') s.cSuiteBuys++;
+      // A member of Congress buying carries its own kind of informational
+      // edge — access to policy and regulatory information ahead of the
+      // public — analogous to, not weaker than, a corporate executive's
+      // operational knowledge. Without this, congressional-only signals
+      // were structurally locked out of the cSuiteBuys term entirely
+      // (relationship is never 'strong' for a member of Congress), capping
+      // their conviction at buys-minus-sells plus a small log term — easily
+      // pushed to zero or negative by any modest sell imbalance, even with
+      // real dollar volume behind the activity.
+      if (isPol) s.politicalBuys++;
       // Missing pct_owned_change (e.g. an insider's first-ever disclosed
       // holding, with no prior position to measure a % change from) is
       // treated as neutral — no bonus, not a penalty defaulting to 0-looks-bad.
@@ -85,7 +95,7 @@ export function buildSignals(filings) {
     return {
       ...s, insiderCount:s.insiders.size,
       netValue: s.buyValue-s.sellValue,
-      conviction: (s.cSuiteBuys*5)+(s.buys-s.sells)+Math.min(Math.log10(s.buyValue+1),5)+swingBonus,
+      conviction: (s.cSuiteBuys*5)+(s.politicalBuys*5)+(s.buys-s.sells)+Math.min(Math.log10(s.buyValue+1),5)+swingBonus,
     };
   });
 }

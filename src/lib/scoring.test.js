@@ -74,12 +74,39 @@ describe('buildSignals — open-market filtering (regression test for tonight\'s
 
   it('congressional trades count even though relationship is not "strong"', () => {
     const filings = [
-      { ticker:'AAPL', insiderName:'Rep. Someone', relationship:'strong', transactionCode:'CONGRESS_P',
+      { ticker:'AAPL', insiderName:'Rep. Someone', relationship:'weak', transactionCode:'CONGRESS_P',
         transactionType:'buy', isOpenMarket:true, value:250_000, transactionDate:'2026-01-01' },
     ];
     const signals = buildSignals(filings);
     expect(signals).toHaveLength(1);
     expect(signals[0].isPolitical).toBe(true);
+  });
+
+  it('a congressional buy gets real conviction weight, not just a pass through the quality gate — without this, congressional-only tickers were structurally locked out of any C-suite-equivalent bonus, since relationship is never "strong" for a member of Congress', () => {
+    const filings = [
+      { ticker:'AAPL', insiderName:'Rep. Someone', relationship:'weak', transactionCode:'CONGRESS_P',
+        transactionType:'buy', isOpenMarket:true, value:250_000, transactionDate:'2026-01-01' },
+    ];
+    const signals = buildSignals(filings);
+    expect(signals[0].politicalBuys).toBe(1);
+    // Same math as a single C-suite buy of the same value: cSuiteBuys*5 term
+    // is unavailable to Congress, but politicalBuys*5 fills that same role.
+    expect(signals[0].conviction).toBeGreaterThanOrEqual(5);
+  });
+
+  it('a sell-heavy congressional ticker still gets positive conviction from a real buy, instead of the sell imbalance alone driving it negative — this was the actual bug: 3 sells + 1 buy previously computed to a negative score with no offsetting term available', () => {
+    const filings = [
+      { ticker:'AAPL', insiderName:'Rep. A', relationship:'weak', transactionCode:'CONGRESS_P',
+        transactionType:'buy', isOpenMarket:true, value:100_000, transactionDate:'2026-01-01' },
+      ...['Rep. B','Rep. C','Rep. D'].map(name => ({
+        ticker:'AAPL', insiderName:name, relationship:'weak', transactionCode:'CONGRESS_S',
+        transactionType:'sell', isOpenMarket:true, value:100_000, transactionDate:'2026-01-02',
+      })),
+    ];
+    const signals = buildSignals(filings);
+    expect(signals[0].buys).toBe(1);
+    expect(signals[0].sells).toBe(3);
+    expect(signals[0].conviction).toBeGreaterThan(0);
   });
 });
 
