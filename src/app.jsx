@@ -1605,34 +1605,64 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     // strike price that isn't comparable — don't compute a misleading return.
     const hasRealPrice = isOM && pr>0;
     const isForeign=r.is_foreign_price||r.isForeignPrice||(hasRealPrice&&cur&&Math.abs((cur-pr)/pr)>=3);
+    // For a BUY, price rising afterward is a good outcome. For a SELL, it's
+    // the opposite — price rising after you sold means you left money on
+    // the table. The percentage shown stays true to the actual price move
+    // (so it never contradicts the prices displayed next to it — a sale
+    // shown at $6.94 → $7.69 should never read as a negative number, that
+    // would look like a math error), but the color now reflects whether
+    // this was actually a good outcome for THIS trade's direction, which
+    // previously used the same green-if-positive logic for both buys and
+    // sells — backwards for every sell.
     const ret=(hasRealPrice&&cur&&!isForeign)?((cur-pr)/pr*100):null;
+    const isGoodOutcome = ret!=null ? (tt==='sell' ? ret<0 : ret>=0) : null;
     const dt=r.transaction_date||r.transactionDate||r.date;
     const codeLabel = TX_CODE_TOOLTIPS[code]||code;
     const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
     return (
       <div className={`dp-trade dp-trade--${tt}`}>
+        {/* Row 1 — what and when: type, date, ticker/insider context, total $ */}
         <div className="dp-trade-row1">
           <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-          <span className="dp-trade-shares">{r.shares?`${fmt.number(r.shares)} sh`:'—'}</span>
-          <span className="dp-trade-val">{r.value?fmt.money(r.value):<span className="td-muted">—</span>}</span>
           <span className="dp-trade-date">{dateLabel}</span>
-        </div>
-        <div className="dp-trade-row2">
           {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
           {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:r.ticker,company:r.company_name})}>{r.ticker}</span>}
           {showInsider&&r.insider_name&&<span className="dp-clickable dp-trade-row2__name" onClick={()=>nav('trader',{name:r.insider_name,title:r.title})}>{r.insider_name}</span>}
-          {hasRealPrice ? (
-            <span className="dp-trade-row2__price">
-              <span className="dp-trade-row2__mono">@{fmt.price(pr)}</span>
-              {ret!=null&&<span className={ret>=0?'val-buy':'val-sell'}> →{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span>}
-              {isForeign&&<span style={{color:'var(--amber-600)'}}> <IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+          <span className="dp-trade-val">{r.value?fmt.money(r.value):<span className="td-muted">—</span>}</span>
+        </div>
+        {/* Row 2 — the actual purchase detail, explicitly labeled and grouped
+            instead of packed together as bare symbols: shares, price then,
+            price now, and how much that move actually was. */}
+        <div className="dp-trade-row2">
+          <span className="dp-trade-detail">
+            <span className="dp-trade-detail__label">Shares</span>
+            <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+          </span>
+          {hasRealPrice ? (<>
+            <span className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Price</span>
+              <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
             </span>
-          ) : (
+            {ret!=null && (
+              <span className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Now</span>
+                <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
+                  {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
+                </span>
+              </span>
+            )}
+            {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+          </>) : (
             <span className="dp-trade-row2__noprice">{codeLabel}</span>
           )}
-          {(r.pct_owned_change||r.pctOwnedChange)!=null&&<span className="val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%pos</span>}
+        </div>
+        {/* Row 3 — secondary metadata: position change, transaction code,
+            market type. Was a bare unlabeled dot before — now says plainly
+            what it means instead of relying on a symbol with no legend. */}
+        <div className="dp-trade-row3">
+          {(r.pct_owned_change||r.pctOwnedChange)!=null&&<span className="val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}% of position</span>}
           <span className="code-pill" title={codeLabel}>{code}</span>
-          {isOM&&<span className="om-dot" title="Open market transaction">●</span>}
+          {isOM&&<span className="dp-trade-om-label">Open market</span>}
         </div>
       </div>
     );
@@ -1672,19 +1702,32 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
         {d.type==='trader'&&(busy?<div className="state-box" style={{padding:'2rem'}}><Spinner/><p>Loading…</p></div>:!traderStats?<div className="state-box" style={{padding:'2rem'}}><p>No trades found.</p></div>:(<>
 
-          {/* HERO: the one number that matters most, banking-app style */}
+          {/* HERO: previously showed only one of Realized P&L or Est.
+              Position Value, with whichever wasn't primary buried in a
+              small chip below. No real reason to force a choice — show
+              both prominently when both apply, and gracefully fall back to
+              whichever one actually exists otherwise (e.g. a fully open
+              position with nothing realized yet has no P&L to show at all). */}
           {heroStats&&(
             <div className="trader-hero">
               <div className="trader-hero__top">
-                <div>
-                  <div className="trader-hero__label">
-                    {heroStats.hasRealizedData?'Realized P&L':'Est. Position Value'}
-                  </div>
-                  <div className={`trader-hero__value ${heroStats.hasRealizedData?(heroStats.totalRealized>=0?'val-buy':'val-sell'):''}`}>
-                    {heroStats.hasRealizedData
-                      ? `${heroStats.totalRealized>=0?'+':''}${fmt.money(heroStats.totalRealized)}`
-                      : fmt.money(heroStats.totalCurrentValue)}
-                  </div>
+                <div className="trader-hero__metrics">
+                  {heroStats.hasRealizedData && (
+                    <div className="trader-hero__metric">
+                      <div className="trader-hero__label">Realized P&L</div>
+                      <div className={`trader-hero__value ${heroStats.totalRealized>=0?'val-buy':'val-sell'}`}>
+                        {heroStats.totalRealized>=0?'+':''}{fmt.money(heroStats.totalRealized)}
+                      </div>
+                    </div>
+                  )}
+                  {heroStats.totalCurrentValue>0 && (
+                    <div className="trader-hero__metric">
+                      <div className="trader-hero__label">{heroStats.hasRealizedData?'Position Value':'Est. Position Value'}</div>
+                      <div className={`trader-hero__value${heroStats.hasRealizedData?' trader-hero__value--secondary':''}`}>
+                        {fmt.money(heroStats.totalCurrentValue)}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <TrustStars score={score}/>
               </div>
@@ -1695,8 +1738,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                   <span className={`hero-chip ${traderStats.combinedHitRate>=60?'hero-chip--good':traderStats.combinedHitRate<40?'hero-chip--bad':''}`}>
                     {traderStats.combinedHitRate}% hit rate
                   </span>}
-                {heroStats.totalCurrentValue>0&&heroStats.hasRealizedData&&
-                  <span className="hero-chip">{fmt.money(heroStats.totalCurrentValue)} held now</span>}
               </div>
             </div>
           )}
@@ -1878,13 +1919,14 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
           const cur=t.currentPrice||t.current_price;
           const isForeign=t.isForeignPrice||t.is_foreign_price||(pr&&cur&&pr>0&&Math.abs((cur-pr)/pr)>=3);
           const ret=(pr&&cur&&pr>0&&!isForeign)?((cur-pr)/pr*100):null;
+          const isGoodOutcome = ret!=null ? (tt==='sell' ? ret<0 : ret>=0) : null;
           return(<>
             <div className="dp-summary">
               <div className="dp-sum-item"><span className="dp-sum-label">Type</span><Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Value</span><span className="dp-sum-val">{fmt.money(t.value)}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Shares</span><span className="dp-sum-val">{fmt.number(t.shares)}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:11}}> <IconWarning style={{width:9,height:9,display:'inline',verticalAlign:'-1px'}}/> verify (3x+ move)</span>}</span></div>
-              {ret!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Now</span><span className={`dp-sum-val ${ret>=0?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span></div>}
+              {ret!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Now</span><span className={`dp-sum-val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span></div>}
               {(t.pctOwnedChange||t.pct_owned_change)!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Pos Δ</span><span className="dp-sum-val val-buy">+{(t.pctOwnedChange||t.pct_owned_change).toFixed(1)}%</span></div>}
             </div>
             <div className="dp-section-label" style={{marginTop:12}}>Insider</div>
@@ -2992,6 +3034,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const [lbSort, setLbSort]   = useState('hit_rate');
   const [lbYearsBack, setLbYearsBack] = useState(2); // null = all-time
   const [lbSource, setLbSource] = useState(null); // null='all' | 'corporate' | 'congress'
+  const [lbMinValue, setLbMinValue] = useState(0); // minimum bought_value, filtered client-side
   const [lbDir,  setLbDir]    = useState(-1);
   const [srcF,   setSrcF]     = useState(initialFilters?.sourceF ?? '');
   const [secF,   setSecF]     = useState(initialFilters?.sectorF ?? '');
@@ -3066,11 +3109,12 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
     if (!lbRows) return [];
     let rows = lbRows;
     if (search) { const q=search.toLowerCase(); rows=rows.filter(r=>r.insider_name.toLowerCase().includes(q)); }
+    if (lbMinValue>0) { rows=rows.filter(r=>(r.bought_value||0)>=lbMinValue); }
     return [...rows].sort((a,b)=>{
       const av=a[lbSort]??-Infinity, bv=b[lbSort]??-Infinity;
       return lbDir>0?av-bv:bv-av;
     });
-  },[lbRows,lbSort,lbDir,search]);
+  },[lbRows,lbSort,lbDir,search,lbMinValue]);
   function lbOnSort(col){ if(lbSort===col)setLbDir(d=>-d); else{setLbSort(col);setLbDir(-1);} }
 
   function resetDrawerFilters(){setMinStr(1);setDaysBack(30);setMinValue(0);setSrcF('');setSecF('');setSearch('');}
@@ -3247,11 +3291,17 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Sort by</span>
                 <div className="dash-tile-pills" style={{gap:2}}>
-                  {[['hit_rate','Hit rate'],['om_buys','Buys'],['bought_value','Bought']].map(([k,l])=>(
+                  {[['hit_rate','Hit rate'],['om_buys','Buys'],['bought_value','Bought'],['avg_return','Biggest return']].map(([k,l])=>(
                     <button key={k} className={`dash-tile-pill${lbSort===k?' dash-tile-pill--active':''}`}
                       onClick={()=>lbOnSort(k)}>{l}{lbSort===k&&(lbDir<0?'↓':'↑')}</button>
                   ))}
                 </div>
+              </div>
+              <div className="drawer__toolbar-divider"/>
+              <div className="drawer__filter-group">
+                <span className="drawer__filter-label">Min position</span>
+                <input type="number" className="ins-filter-select" placeholder="$0" style={{width:90}}
+                  value={lbMinValue||''} onChange={e=>setLbMinValue(e.target.value?Number(e.target.value):0)}/>
               </div>
             </div>
           )}
@@ -4043,19 +4093,19 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
 
   return (
     <div className="ins-lb-list-wrap">
-      <div className="ins-lb-window-picker">
-        <span className="td-muted" style={{fontSize:11}}>by hit rate ·</span>
-        <select className="ins-lb-window-select" value={yearsBack==null?'all':yearsBack} onChange={e=>setYearsBack(e.target.value==='all'?null:Number(e.target.value))}>
-          <option value="1">1yr</option>
-          <option value="2">2yr</option>
-          <option value="5">5yr</option>
-          <option value="all">all-time</option>
-        </select>
-        <select className="ins-lb-window-select" value={source==null?'all':source} onChange={e=>setSource(e.target.value==='all'?null:e.target.value)}>
-          <option value="all">All</option>
-          <option value="corporate">Corporate</option>
-          <option value="congress">Congress</option>
-        </select>
+      <div className="ins-lb-pill-row">
+        <span className="ins-lb-pill-row__label">Window</span>
+        {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>(
+          <button key={l} className={`dash-tile-pill${yearsBack===v?' dash-tile-pill--active':''}`}
+            onClick={()=>setYearsBack(v)}>{l}</button>
+        ))}
+      </div>
+      <div className="ins-lb-pill-row">
+        <span className="ins-lb-pill-row__label">Source</span>
+        {[[null,'All'],['corporate','Corp'],['congress','Congress']].map(([v,l])=>(
+          <button key={l} className={`dash-tile-pill${source===v?' dash-tile-pill--active':''}`}
+            onClick={()=>setSource(v)}>{l}</button>
+        ))}
       </div>
       {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
       :rows===null?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
