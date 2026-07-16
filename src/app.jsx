@@ -3580,12 +3580,18 @@ const PORTFOLIO_CHART_RANGES = [
 ];
 function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
   const [range, setRange] = useState('1m');
-  const filtered = useMemo(() => {
+  const { display, fellBack } = useMemo(() => {
     const r = PORTFOLIO_CHART_RANGES.find(r=>r.key===range);
-    if (!r || r.days==null) return points;
+    if (!r || r.days==null) return { display: points, fellBack: false };
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-r.days);
     const iso = cutoff.toISOString().split('T')[0];
-    return points.filter(p=>p.date>=iso);
+    const inRange = points.filter(p=>p.date>=iso);
+    // Fewer than 2 points for the selected range isn't really "no data" —
+    // it just means the position or the available history doesn't go back
+    // that far yet. Show whatever data does exist (the life of the
+    // position) rather than an empty state, but say so explicitly instead
+    // of silently displaying something different from what was selected.
+    return inRange.length>=2 ? { display: inRange, fellBack: false } : { display: points, fellBack: points.length>=2 };
   }, [points, range]);
 
   return (
@@ -3599,12 +3605,19 @@ function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
           </button>
         ))}
       </div>
-      {filtered.length<2 ? (
+      {display.length<2 ? (
         <p className="td-muted" style={{fontSize:compact?10:11,textAlign:'center',padding:compact?'0.5rem 0':'1rem 0'}}>
-          Not enough data for this range yet.
+          Not enough data yet.
         </p>
       ) : (
-        <PortfolioPerformanceChart points={filtered} onClick={onExplore}/>
+        <>
+          {fellBack && (
+            <p className="td-muted" style={{fontSize:compact?9:10,padding:'2px 12px 0'}}>
+              Showing full history — not enough data for {PORTFOLIO_CHART_RANGES.find(r=>r.key===range)?.label} yet.
+            </p>
+          )}
+          <PortfolioPerformanceChart points={display} onClick={onExplore}/>
+        </>
       )}
     </div>
   );
@@ -3667,28 +3680,14 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
     <div className="drawer-overlay" onClick={e=>{if(e.target.classList.contains('drawer-overlay'))onClose();}}>
       <div className="drawer drawer--wide">
 
-        {/* Header — matches the same stacked pattern every other drawer
-            uses (InsightsDrawer, WatchlistPage) instead of the bare
-            .drawer__hdr class, which has no base styling of its own */}
+        {/* Header — title, total value, close. Chart moved to the right
+            column, sitting above the ticker detail rather than spanning
+            the full width above everything. */}
         <div className="drawer__hdr--stacked">
           <div className="drawer__hdr-row1">
             <span className="drawer__title">Portfolio</span>
             {port && <span className="port-hdr-val">{fmt.money(port.totalValue)}</span>}
             <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
-          </div>
-
-          {/* Recent performance chart — gracefully degrades if history
-              isn't available yet rather than show anything fabricated */}
-          <div className="port-perf-chart">
-            {perf===undefined ? (
-              <div style={{padding:'0.75rem',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>
-            ) : perf===null || perf.length<2 ? (
-              <p className="td-muted" style={{fontSize:11,padding:'0.6rem 1rem'}}>
-                Performance history will appear here once enough data has been collected.
-              </p>
-            ) : (
-              <PortfolioChartWithRanges points={perf}/>
-            )}
           </div>
         </div>
 
@@ -3777,8 +3776,19 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
             )}
           </div>
 
-          {/* RIGHT: inline ticker detail panel */}
+          {/* RIGHT: performance chart (always shown) + inline ticker detail */}
           <div className="drawer__detail">
+            <div className="port-perf-chart">
+              {perf===undefined ? (
+                <div style={{padding:'0.75rem',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>
+              ) : perf===null || perf.length<2 ? (
+                <p className="td-muted" style={{fontSize:11,padding:'0.6rem 1rem'}}>
+                  Performance history will appear here once enough data has been collected.
+                </p>
+              ) : (
+                <PortfolioChartWithRanges points={perf}/>
+              )}
+            </div>
             {!detail
               ? <div className="drawer__detail-empty">
                   <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
@@ -4344,7 +4354,43 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
   // rolling recent snapshot per ticker, not a multi-year series. That's a
   // separate backfill task, not a query change alone.
   return `
-    WITH agg AS (
+    SELECT agg.*,
+      -- Proxy rank, mirroring processLeaderboardRows' own weights (hit rate,
+      -- return magnitude, relationship tier, trade volume) — used ONLY to
+      -- order rows before LIMIT is applied. This is the actual fix: without
+      -- this, the query had no ORDER BY at all, so LIMIT cut off whatever
+      -- arbitrary subset Postgres happened to return first (which read as
+      -- roughly alphabetical) — the true top performers by any real
+      -- criterion could easily have been excluded before ever reaching the
+      -- frontend's own scoring. The frontend still computes its own
+      -- authoritative proxy_score for display; this is purely to make sure
+      -- the right rows survive the LIMIT in the first place.
+      --
+      -- Subquery, not a WITH CTE: the Worker's query endpoint only allows
+      -- requests starting with the literal word SELECT (a real, deliberate
+      -- security guard, not something to route around) — a CTE starting
+      -- with WITH failed that check and 403'd, which is what actually
+      -- caused this to look like a Pro-access problem for every user
+      -- regardless of plan. Same query logic, just restructured to start
+      -- with SELECT instead.
+      (
+        CASE WHEN agg.priced>=5 AND agg.wins::float/NULLIF(agg.priced,0)>=0.7 THEN 2
+             WHEN agg.priced>=5 AND agg.wins::float/NULLIF(agg.priced,0)>=0.5 THEN 1
+             ELSE 0 END
+        + CASE WHEN agg.avg_return_pct>=30 THEN 1.5
+               WHEN agg.avg_return_pct>=15 THEN 1
+               WHEN agg.avg_return_pct>=5  THEN 0.5
+               WHEN agg.avg_return_pct<0   THEN -0.5
+               ELSE 0 END
+        + CASE WHEN agg.relationship='strong' THEN 1.5
+               WHEN agg.relationship='medium' THEN 0.75
+               ELSE 0 END
+        + CASE WHEN (agg.om_buys+agg.om_sells)>=10 THEN 1
+               WHEN (agg.om_buys+agg.om_sells)>=5  THEN 0.5
+               ELSE 0 END
+        + CASE WHEN agg.total_buys>0 AND agg.om_buys::float/agg.total_buys>=0.7 THEN 0.5 ELSE 0 END
+      ) AS proxy_rank
+    FROM (
       SELECT f.insider_name,
              -- Pick the most frequently-filed title for this name, not just
              -- whatever GROUP BY happened to land on — avoids one person
@@ -4396,36 +4442,7 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
         ${sourceClause}
       GROUP BY f.insider_name
       HAVING COUNT(*) FILTER (WHERE f.transaction_type IN ('buy','sell') AND f.is_open_market) >= ${minTrades}
-    )
-    SELECT *,
-      -- Proxy rank, mirroring processLeaderboardRows' own weights (hit rate,
-      -- return magnitude, relationship tier, trade volume) — used ONLY to
-      -- order rows before LIMIT is applied. This is the actual fix: without
-      -- this, the query had no ORDER BY at all, so LIMIT cut off whatever
-      -- arbitrary subset Postgres happened to return first (which read as
-      -- roughly alphabetical) — the true top performers by any real
-      -- criterion could easily have been excluded before ever reaching the
-      -- frontend's own scoring. The frontend still computes its own
-      -- authoritative proxy_score for display; this is purely to make sure
-      -- the right rows survive the LIMIT in the first place.
-      (
-        CASE WHEN priced>=5 AND wins::float/NULLIF(priced,0)>=0.7 THEN 2
-             WHEN priced>=5 AND wins::float/NULLIF(priced,0)>=0.5 THEN 1
-             ELSE 0 END
-        + CASE WHEN avg_return_pct>=30 THEN 1.5
-               WHEN avg_return_pct>=15 THEN 1
-               WHEN avg_return_pct>=5  THEN 0.5
-               WHEN avg_return_pct<0   THEN -0.5
-               ELSE 0 END
-        + CASE WHEN relationship='strong' THEN 1.5
-               WHEN relationship='medium' THEN 0.75
-               ELSE 0 END
-        + CASE WHEN (om_buys+om_sells)>=10 THEN 1
-               WHEN (om_buys+om_sells)>=5  THEN 0.5
-               ELSE 0 END
-        + CASE WHEN total_buys>0 AND om_buys::float/total_buys>=0.7 THEN 0.5 ELSE 0 END
-      ) AS proxy_rank
-    FROM agg
+    ) agg
     ORDER BY proxy_rank DESC NULLS LAST
     LIMIT ${limit}
   `;
