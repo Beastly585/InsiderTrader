@@ -33,7 +33,7 @@ function getRel(title, isOfficer) {
   return 'weak';
 }
 
-function enrich(raw) {
+export function enrich(raw) {
   const rel = raw.relationship || getRel(raw.title, raw.isOfficer);
   const value = raw.value != null ? parseFloat(raw.value)
               : (raw.shares && raw.price ? Math.round(raw.shares * parseFloat(raw.price)) : null);
@@ -52,7 +52,21 @@ function enrich(raw) {
     relLabel:     REL_LABELS[rel] || 'Director',
     value,
     signal,
-    isOpenMarket: OPEN_MARKET.has(raw.transactionCode),
+    // Trust the database's own is_open_market value when present — it's
+    // computed correctly at ingestion for every source (confirmed for both
+    // SEC Form 4 codes and congressional CONGRESS_P/CONGRESS_S codes).
+    // Previously this unconditionally overwrote that correct value with a
+    // client-side recomputation checking membership in OPEN_MARKET, a set
+    // containing only the bare SEC codes ('P', 'S') — which silently
+    // evaluated to false for every congressional trade regardless of what
+    // the database actually said, since their codes are 'CONGRESS_P' /
+    // 'CONGRESS_S', not bare 'P'/'S'. This was the actual root cause of
+    // congressional signals never appearing: buildSignals' very first
+    // guard (`if (!f.isOpenMarket) continue`) discarded every congressional
+    // filing before any downstream scoring logic ever ran, regardless of
+    // how correct that logic was. Only recompute as a fallback when the
+    // database value is genuinely missing, not to override a real one.
+    isOpenMarket: raw.isOpenMarket ?? OPEN_MARKET.has(raw.transactionCode),
   };
 }
 
