@@ -5,14 +5,36 @@ Runs once daily (DIGEST_TYPE=daily) and once weekly (DIGEST_TYPE=weekly) as
 separate scheduled steps. Pro-gated, same as instant alerts — matches the
 Settings > Email digests tab's own "Upgrade to Pro to enable email digests."
 
+Reads as a real newsletter now, not a single flat list — three sections,
+each shown only when it has content:
+  1. Insights              — top signals overall, respecting the user's
+                              existing filters (source, min conviction, min
+                              value)
+  2. Movers in your Portfolio — activity on tickers the user actually holds,
+                              via SnapTrade (fetched once per run through the
+                              Worker's internal batch endpoint — portfolio
+                              positions are never stored in this database,
+                              only available live through SnapTrade, and
+                              decryption of a user's connection secret stays
+                              inside the Worker's own single audited path
+                              rather than being duplicated here)
+  3. Movers you follow      — activity on watchlisted tickers/insiders
+
 Respects each user's own filters:
-  - digest_watchlist_only   : restrict to their watchlist tickers only
+  - digest_watchlist_only   : when true, ONLY the "Movers you follow" section
+                              is sent — skips Insights and Portfolio entirely,
+                              preserving this setting's original, explicit
+                              meaning rather than silently reinterpreting it
   - digest_congressional / digest_corporate : which filing sources to include
   - digest_min_conviction   : 'any' | 'medium' | 'high' — a simplified proxy
                               based on trade value + insider seniority, not
                               the full client-side conviction algorithm
-  - digest_top_signals      : cap the email at the top N tickers by net buy
-                              value, rather than listing every single trade
+  - digest_top_signals      : cap the email at the top N tickers by net BUY
+                              value (fixed this run — was previously sorting
+                              by absolute value, which ranked heavy selling
+                              exactly as "top" as heavy buying, contradicting
+                              this setting's own name and the app's own
+                              buying-is-the-signal thesis throughout)
 
 This is a simplified summary, not a re-implementation of the app's full
 signal-clustering logic — good enough for an email digest, not meant to be
@@ -25,12 +47,14 @@ from collections import defaultdict
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
 
-DATABASE_URL   = os.environ.get("DATABASE_URL", "")
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-FROM_EMAIL     = os.environ.get("ALERTS_FROM_EMAIL", "alerts@mail.seli.app")
-APP_URL        = os.environ.get("APP_URL", "https://seli.app")
-DIGEST_TYPE    = os.environ.get("DIGEST_TYPE", "daily")  # 'daily' | 'weekly'
-DRY_RUN        = os.environ.get("DRY_RUN", "false").lower() == "true"
+DATABASE_URL     = os.environ.get("DATABASE_URL", "")
+RESEND_API_KEY   = os.environ.get("RESEND_API_KEY", "")
+FROM_EMAIL       = os.environ.get("ALERTS_FROM_EMAIL", "alerts@mail.seli.app")
+APP_URL          = os.environ.get("APP_URL", "https://seli.app")
+DIGEST_TYPE      = os.environ.get("DIGEST_TYPE", "daily")  # 'daily' | 'weekly'
+DRY_RUN          = os.environ.get("DRY_RUN", "false").lower() == "true"
+WORKER_URL       = os.environ.get("WORKER_URL", "")
+WORKER_API_KEY   = os.environ.get("WORKER_API_KEY", "")
 
 if DIGEST_TYPE not in ("daily", "weekly"):
     log.error("DIGEST_TYPE must be 'daily' or 'weekly'"); sys.exit(1)
@@ -41,6 +65,25 @@ if not RESEND_API_KEY and not DRY_RUN:
 
 CSUITE_TITLE_RE = re.compile(r"chief|ceo|cfo|coo|cto|president", re.I)
 PERIOD_DAYS = 1 if DIGEST_TYPE == "daily" else 7
+FROM_NAME = f"Seli - {'Daily' if DIGEST_TYPE == 'daily' else 'Weekly'} Digest"
+
+# ── Brand colors — pulled directly from the app's own light-theme CSS
+# variables (style.css), not invented separately for email. Using the LIGHT
+# theme specifically: email clients default to a white background, and the
+# previous version used the app's DARK-mode green/red/border values on an
+# assumed-white background, which is why row borders were nearly invisible
+# and the palette read as slightly off in real inboxes.
+C_ACCENT       = "#5A4FE8"  # light-theme --accent
+C_ACCENT_STR   = "#4338C9"  # light-theme --accent-strong
+C_AQUA         = "#3FBFA0"  # a light-mode-legible shade of the brand aqua (#8BE8CF is a dark-background accent — too pale to read against white, darkened for contrast while staying the same hue)
+C_GREEN        = "#15803D"  # light-theme --green-600
+C_RED          = "#C0392B"  # light-theme --red-600
+C_TEXT         = "#111827"
+C_TEXT_MUTED   = "#6B7280"
+C_TEXT_FAINT   = "#9CA3AF"
+C_BORDER       = "#E5E7EB"  # a real light-mode border — the old #232A36 was a dark-mode value, nearly invisible on white
+C_BG           = "#FFFFFF"
+C_SECTION_BG   = "#F8F7FF"  # a very light purple tint for section headers
 
 
 def get_connection():
@@ -58,7 +101,7 @@ def send_email(to_email, subject, html) -> bool:
         r = requests.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={"from": FROM_EMAIL, "to": [to_email], "subject": subject, "html": html},
+            json={"from": f"{FROM_NAME} <{FROM_EMAIL}>", "to": [to_email], "subject": subject, "html": html},
             timeout=15,
         )
         if not r.ok:
@@ -73,9 +116,11 @@ def send_email(to_email, subject, html) -> bool:
 def fmt_money(v):
     if v is None: return "—"
     v = float(v)
+    sign = "-" if v < 0 else ""
+    v = abs(v)
     for div, suf in [(1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")]:
-        if abs(v) >= div: return f"${v/div:,.1f}{suf}"
-    return f"${v:,.0f}"
+        if v >= div: return f"{sign}${v/div:,.1f}{suf}"
+    return f"{sign}${v:,.0f}"
 
 
 def conviction_tier(rows_for_ticker) -> str:
@@ -86,29 +131,111 @@ def conviction_tier(rows_for_ticker) -> str:
     return "medium" if has_med else "low"
 
 
-def build_digest_html(period_label: str, tickers: list[dict]) -> str:
+def fetch_portfolio_tickers_by_user() -> dict[str, set[str]]:
+    """One batch call to the Worker's internal endpoint, covering every Pro
+    user with a linked SnapTrade account — not a per-user call. Decryption
+    of each user's connection secret happens entirely inside the Worker's
+    own single audited path (getSnapTradeConnection); this script never
+    touches encrypted secrets or decryption keys directly. Best-effort: if
+    the Worker call fails for any reason, the digest still sends without the
+    portfolio section rather than blocking the whole run."""
+    if not WORKER_URL or not WORKER_API_KEY:
+        log.info("WORKER_URL/WORKER_API_KEY not set — skipping 'Movers in your Portfolio' section for this run.")
+        return {}
+    try:
+        r = requests.get(
+            f"{WORKER_URL}/internal/portfolio-tickers-batch",
+            headers={"X-API-Key": WORKER_API_KEY},
+            timeout=60,  # this call fans out to SnapTrade per linked user server-side, can be slow
+        )
+        if not r.ok:
+            log.error(f"portfolio-tickers-batch failed: {r.status_code} {r.text[:200]}")
+            return {}
+        data = r.json().get("tickers_by_user", {})
+        return {uid: set(tickers) for uid, tickers in data.items()}
+    except Exception as e:
+        log.error(f"portfolio-tickers-batch request failed: {e}")
+        return {}
+
+
+def build_section_rows(tickers: list[dict]) -> str:
     rows = ""
     for t in tickers:
-        color = "#22D3A5" if t["net_value"] >= 0 else "#ef4444"
+        color = C_GREEN if t["net_value"] >= 0 else C_RED
         rows += f"""
-        <tr style="border-bottom:1px solid #232A36;">
-          <td style="padding:10px 8px;"><a href="{APP_URL}" style="color:#7C6FFF;font-weight:700;text-decoration:none;">{t['ticker']}</a><br>
-              <span style="color:#8B95A5;font-size:12px;">{t['company']}</span></td>
-          <td style="padding:10px 8px;color:#8B95A5;font-size:12px;text-transform:capitalize;">{t['tier']}</td>
-          <td style="padding:10px 8px;font-size:12px;">{t['insider_count']} insider{'s' if t['insider_count'] != 1 else ''}</td>
-          <td style="padding:10px 8px;text-align:right;font-weight:600;color:{color};">{fmt_money(t['net_value'])}</td>
+        <tr>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};">
+            <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:700;text-decoration:none;font-size:14px;">{t['ticker']}</a><br>
+            <span style="color:{C_TEXT_MUTED};font-size:12px;">{t['company']}</span>
+          </td>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};color:{C_TEXT_MUTED};font-size:12px;text-transform:capitalize;">{t['tier']}</td>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{C_TEXT_MUTED};">{t['insider_count']} insider{'s' if t['insider_count'] != 1 else ''}</td>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};text-align:right;font-weight:700;color:{color};font-size:13px;white-space:nowrap;">{fmt_money(t['net_value'])}</td>
         </tr>"""
+    return rows
+
+
+def build_section(title: str, subtitle: str, tickers: list[dict]) -> str:
+    if not tickers:
+        return ""
     return f"""
-    <div style="font-family:-apple-system,sans-serif;max-width:560px;margin:0 auto;color:#111827;">
-      <p style="font-size:14px;">Your {period_label} insider trading digest — {len(tickers)} ticker{'s' if len(tickers)!=1 else ''} with notable activity:</p>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        {rows}
+    <tr><td style="padding:24px 0 8px;">
+      <div style="background:{C_SECTION_BG};border-radius:8px;padding:12px 16px;margin-bottom:2px;">
+        <div style="font-size:13px;font-weight:700;color:{C_ACCENT_STR};text-transform:uppercase;letter-spacing:0.04em;">{title}</div>
+        <div style="font-size:12px;color:{C_TEXT_MUTED};margin-top:2px;">{subtitle}</div>
+      </div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        {build_section_rows(tickers)}
       </table>
-      <p style="margin-top:20px;"><a href="{APP_URL}" style="color:#7C6FFF;">Open Seli →</a></p>
-      <p style="color:#8B95A5;font-size:11px;margin-top:24px;">
-        You're getting this because you enabled the {period_label} digest in Settings. Not financial advice.
-      </p>
-    </div>"""
+    </td></tr>"""
+
+
+def build_digest_html(period_label: str, insights: list[dict], portfolio_movers: list[dict], watchlist_movers: list[dict], watchlist_only: bool) -> str:
+    total = len(insights) + len(portfolio_movers) + len(watchlist_movers)
+    sections = ""
+    if not watchlist_only:
+        sections += build_section("Insights", f"Top signals from the {period_label} window", insights)
+        sections += build_section("Movers in your portfolio", "Insider activity on tickers you hold", portfolio_movers)
+    sections += build_section("Movers you follow", "Insider activity on your watchlist", watchlist_movers)
+
+    # Full HTML document, not a bare fragment — real DOCTYPE/head/viewport
+    # meta for better rendering consistency across clients, and specifically
+    # so mobile mail apps scale this correctly instead of rendering it at
+    # desktop width and forcing a pinch-zoom.
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seli — {period_label} digest</title>
+</head>
+<body style="margin:0;padding:0;background:#F3F4F6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:{C_BG};border-radius:12px;overflow:hidden;">
+  <tr><td style="background:linear-gradient(135deg,{C_ACCENT} 0%,{C_ACCENT_STR} 60%,{C_AQUA} 100%);padding:20px 24px;">
+    <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-0.02em;">Seli</span>
+    <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">{period_label.capitalize()} digest</span>
+  </td></tr>
+  <tr><td style="padding:20px 20px 4px;">
+    <p style="font-size:14px;color:{C_TEXT};margin:0;">{total} ticker{'s' if total!=1 else ''} with notable activity this {period_label.replace('daily','day').replace('weekly','week')}:</p>
+  </td></tr>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:0 20px;">
+    {sections}
+  </table>
+  <tr><td style="padding:20px;">
+    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:13px;padding:10px 20px;border-radius:8px;text-decoration:none;">Open Seli →</a>
+  </td></tr>
+  <tr><td style="padding:0 20px 20px;">
+    <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0;">
+      You're getting this because you enabled the {period_label} digest in Settings. Not financial advice.
+    </p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
 
 
 def main():
@@ -133,8 +260,6 @@ def main():
 
     log.info(f"Building {DIGEST_TYPE} digest for {len(users)} user(s)...")
 
-    # Pull the period's raw open-market filings once, filter/aggregate per
-    # user in Python — cheaper than N separate queries for a modest user count.
     cur.execute("""
         SELECT ticker, company_name, insider_name, insider_title, transaction_type,
                value, transaction_code
@@ -149,53 +274,68 @@ def main():
         log.info("No filings in this period — skipping send for all users.")
         cur.close(); conn.close(); return
 
+    portfolio_tickers_by_user = fetch_portfolio_tickers_by_user()
+
     period_label = "daily" if DIGEST_TYPE == "daily" else "weekly"
     sent = 0
 
-    for u in users:
-        rows = period_filings
-        if u["digest_watchlist_only"]:
-            cur.execute("SELECT item_value FROM public.user_watchlist WHERE clerk_user_id = %s AND item_type = 'ticker'", (u["clerk_user_id"],))
-            watched = {r[0] for r in cur.fetchall()}
-            if not watched:
-                continue  # opted into watchlist-only but has nothing watched — nothing to send
-            rows = [r for r in rows if r["ticker"] in watched]
-
+    def apply_shared_filters(rows, u):
         if not u["digest_congressional"]:
             rows = [r for r in rows if not (r["transaction_code"] or "").startswith("CONGRESS")]
         if not u["digest_corporate"]:
             rows = [r for r in rows if (r["transaction_code"] or "").startswith("CONGRESS")]
+        return rows
 
+    def build_ticker_list(rows, u, cap_applies=True):
         by_ticker = defaultdict(list)
         for r in rows:
             by_ticker[r["ticker"]].append(r)
-
         tickers = []
         for ticker, trs in by_ticker.items():
             net = sum((t["value"] or 0) if t["transaction_type"] == "buy" else -(t["value"] or 0) for t in trs)
             tier = conviction_tier(trs)
             if u["digest_min_conviction"] == "high" and tier != "high": continue
             if u["digest_min_conviction"] == "medium" and tier == "low": continue
-            # Minimum trade value filter — 0 means no minimum (matches the UI's "Any amount")
             if u["digest_min_value"] and max((t["value"] or 0) for t in trs) < u["digest_min_value"]: continue
             tickers.append({
                 "ticker": ticker, "company": trs[0]["company_name"],
                 "tier": tier, "insider_count": len({t["insider_name"] for t in trs}),
                 "net_value": net,
             })
+        tickers.sort(key=lambda t: t["net_value"], reverse=True)
+        if cap_applies:
+            cap = u.get("digest_max_signals") or 0
+            if cap > 0:
+                tickers = tickers[:cap]
+        return tickers
 
-        if not tickers:
-            continue  # nothing matched this user's filters this period
+    for u in users:
+        base_rows = apply_shared_filters(period_filings, u)
 
-        tickers.sort(key=lambda t: abs(t["net_value"]), reverse=True)
-        # digest_max_signals: 0 (or unset) means unlimited — otherwise cap at
-        # the user's chosen number, replacing the old fixed-at-10 boolean.
-        cap = u.get("digest_max_signals") or 0
-        if cap > 0:
-            tickers = tickers[:cap]
+        watchlist_rows = []
+        cur.execute("SELECT item_value FROM public.user_watchlist WHERE clerk_user_id = %s AND item_type = 'ticker'", (u["clerk_user_id"],))
+        watched = {r[0] for r in cur.fetchall()}
+        if watched:
+            watchlist_rows = [r for r in base_rows if r["ticker"] in watched]
 
-        html = build_digest_html(period_label, tickers)
-        subject = f"Your {period_label} digest — {len(tickers)} ticker{'s' if len(tickers)!=1 else ''} to know about"
+        portfolio_rows = []
+        held = portfolio_tickers_by_user.get(u["clerk_user_id"])
+        if held:
+            portfolio_rows = [r for r in base_rows if r["ticker"] in held]
+
+        insights = build_ticker_list(base_rows, u) if not u["digest_watchlist_only"] else []
+        portfolio_movers = build_ticker_list(portfolio_rows, u, cap_applies=False) if not u["digest_watchlist_only"] else []
+        watchlist_movers = build_ticker_list(watchlist_rows, u, cap_applies=False)
+
+        if u["digest_watchlist_only"] and not watched:
+            continue
+
+        total = len(insights) + len(portfolio_movers) + len(watchlist_movers)
+        if total == 0:
+            continue
+
+        html = build_digest_html(period_label, insights, portfolio_movers, watchlist_movers, u["digest_watchlist_only"])
+        subject = f"Your {period_label} digest — {total} ticker{'s' if total!=1 else ''} to know about"
         if send_email(u["email"], subject, html):
             sent += 1
 

@@ -152,6 +152,9 @@ export default {
     if (url.pathname === '/snaptrade/performance') {
       return handleSnapTradePerformance(request, env, origin);
     }
+    if (url.pathname === '/internal/portfolio-tickers-batch') {
+      return handlePortfolioTickersBatch(request, env, origin);
+    }
 
     return handleQuery(request, env, origin);
   },
@@ -412,18 +415,44 @@ async function handleTestEmail(request, env, origin) {
     if (!email) return corsResponse({ error: 'Could not verify your account email' }, 500, origin, env);
 
     const fromEmail = env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app';
+    const fromName  = 'Seli - Test Email';
     const appUrl = env.APP_URL || 'https://seli.app';
-    const html = `
-      <div style="font-family:-apple-system,sans-serif;max-width:560px;margin:0 auto;color:#111827;">
-        <p style="font-size:14px;">This is a test email from Seli — if you're reading this, your notification delivery is working correctly.</p>
-        <p style="font-size:13px;color:#8B95A5;">Real digests and instant alerts will look similar to this, populated with actual insider activity matching your Settings.</p>
-        <p style="margin-top:20px;"><a href="${appUrl}" style="color:#7C6FFF;">Open Seli →</a></p>
-      </div>`;
+    // Same brand structure and light-theme colors as send_digests.py /
+    // send_instant_alerts.py — this is the first real email a new Pro user
+    // sees, so it should look like the same product those two do, not a
+    // separate, unstyled fallback.
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seli — test email</title>
+</head>
+<body style="margin:0;padding:0;background:#F3F4F6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
+  <tr><td style="background:linear-gradient(135deg,#5A4FE8 0%,#4338C9 60%,#3FBFA0 100%);padding:20px 24px;">
+    <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-0.02em;">Seli</span>
+    <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">Test email</span>
+  </td></tr>
+  <tr><td style="padding:24px 20px 8px;">
+    <p style="font-size:14px;color:#111827;margin:0 0 12px;">This is a test email from Seli — if you're reading this, your notification delivery is working correctly.</p>
+    <p style="font-size:13px;color:#6B7280;margin:0;">Real digests and instant alerts will look similar to this, populated with actual insider activity matching your Settings.</p>
+  </td></tr>
+  <tr><td style="padding:20px;">
+    <a href="${appUrl}" style="display:inline-block;background:#5A4FE8;color:#ffffff;font-weight:700;font-size:13px;padding:10px 20px;border-radius:8px;text-decoration:none;">Open Seli →</a>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
 
     const resp = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: fromEmail, to: [email], subject: 'Seli — test email', html }),
+      body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [email], subject: 'Seli — test email', html }),
     });
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
@@ -780,6 +809,74 @@ async function handleSnapTradePositions(request, env, origin) {
   }
 }
 
+// ── Internal, server-to-server only. Never reachable from the browser or by
+// a regular user's own session token — deliberately does NOT accept the
+// Clerk-JWT path that every other endpoint allows, since this is the only
+// endpoint in the file that returns MULTIPLE users' data in one response.
+// Accepting a regular user's own valid token here would let any signed-in
+// user pull every other Pro user's portfolio tickers. Requires the exact
+// same X-API-Key mechanism used for the ingestion cron, re-checked
+// explicitly here rather than trusting the top-level dispatch check (which
+// accepts either mechanism, correctly, for every other route).
+async function handlePortfolioTickersBatch(request, env, origin) {
+  const apiKey = request.headers.get('X-API-Key') || '';
+  const expected = env.WORKER_API_KEY || '';
+  let diff = (!expected || apiKey.length !== expected.length) ? 1 : 0;
+  for (let i = 0; i < Math.max(apiKey.length, expected.length); i++) {
+    diff |= (apiKey.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
+  }
+  if (diff !== 0) return corsResponse({ error: 'Unauthorized' }, 401, origin, env);
+
+  try {
+    const rows = await neonFetch(env, `
+      SELECT pc.clerk_user_id
+      FROM public.portfolio_connections pc
+      JOIN public.subscriptions s ON s.clerk_user_id = pc.clerk_user_id
+      WHERE pc.status = 'active' AND s.status IN ('active','trialing')
+    `);
+
+    const result = {};
+    // Sequential, not Promise.all — this is a batch cron job, not a
+    // user-facing request someone is waiting on, so there's no reason to
+    // burst every linked user's SnapTrade call simultaneously and risk
+    // rate-limiting. One user's failure is caught and skipped rather than
+    // failing the whole batch.
+    for (const row of (rows.rows || [])) {
+      const clerkUserId = row.clerk_user_id;
+      try {
+        const conn = await getSnapTradeConnection(env, clerkUserId);
+        if (!conn) continue;
+        const accounts = await signSnapTradeRequest(env, 'GET', '/api/v1/accounts', {
+          query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
+        });
+        const tickers = new Set();
+        for (const acct of (accounts || [])) {
+          const positions = await signSnapTradeRequest(env, 'GET', `/api/v1/accounts/${acct.id}/positions/all`, {
+            query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
+          });
+          const list = Array.isArray(positions) ? positions
+            : (positions && typeof positions === 'object')
+              ? (Array.isArray(positions.results) ? positions.results : Object.values(positions).filter(Array.isArray).flat())
+              : [];
+          for (const p of list) {
+            const ticker = p.instrument?.symbol || p.instrument?.raw_symbol;
+            if (ticker) tickers.add(ticker);
+          }
+        }
+        if (tickers.size > 0) result[clerkUserId] = [...tickers];
+      } catch (e) {
+        console.error(`[Worker] portfolio-tickers-batch: skipping ${clerkUserId} after error:`, e.message);
+        // Continue to the next user rather than fail the whole batch over
+        // one account's SnapTrade error.
+      }
+    }
+
+    return corsResponse({ tickers_by_user: result }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] portfolio-tickers-batch failed:', e.message);
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
 // Best-effort — SnapTrade's docs mention an account balance history
 // endpoint by name (getAccountBalanceHistory) but I don't have its exact
 // REST path confirmed the way the positions endpoint was (that one was

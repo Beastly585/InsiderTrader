@@ -6,6 +6,11 @@ Checks filings that haven't been alert-processed yet (alerted_at IS NULL)
 against each Pro user's watchlist + instant-alert preferences, and sends one
 batched email per user for whatever matched in this run.
 
+Deliberately simpler than the digest — a single event-driven list, not a
+multi-section newsletter — but shares the same brand language (colors,
+header gradient) so the two feel like the same product, not two different
+ones.
+
 Four trigger types, matching the Settings > Instant alerts UI exactly:
   - instant_watchlist_ticker : any insider trades a ticker they're watching
                                (subject to their instant_min_value floor)
@@ -31,6 +36,7 @@ log = logging.getLogger(__name__)
 DATABASE_URL     = os.environ.get("DATABASE_URL", "")
 RESEND_API_KEY   = os.environ.get("RESEND_API_KEY", "")
 FROM_EMAIL       = os.environ.get("ALERTS_FROM_EMAIL", "alerts@mail.seli.app")
+FROM_NAME        = "Seli - Alert"
 APP_URL          = os.environ.get("APP_URL", "https://seli.app")
 DRY_RUN          = os.environ.get("DRY_RUN", "false").lower() == "true"
 BATCH_LIMIT      = 2000  # safety cap — a normal 15-min cycle should be far under this
@@ -41,6 +47,19 @@ if not RESEND_API_KEY and not DRY_RUN:
     log.error("RESEND_API_KEY required (or set DRY_RUN=true to test without sending)"); sys.exit(1)
 
 CSUITE_TITLE_RE = re.compile(r"chief|ceo|cfo|coo|cto|president", re.I)
+
+# Same brand palette as send_digests.py — light theme, pulled from the app's
+# own style.css variables, not invented separately per template.
+C_ACCENT       = "#5A4FE8"
+C_ACCENT_STR   = "#4338C9"
+C_AQUA         = "#3FBFA0"
+C_GREEN        = "#15803D"
+C_RED          = "#C0392B"
+C_TEXT         = "#111827"
+C_TEXT_MUTED   = "#6B7280"
+C_TEXT_FAINT   = "#9CA3AF"
+C_BORDER       = "#E5E7EB"
+C_BG           = "#FFFFFF"
 
 
 def get_connection():
@@ -58,7 +77,7 @@ def send_email(to_email: str, subject: str, html: str) -> bool:
         r = requests.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={"from": FROM_EMAIL, "to": [to_email], "subject": subject, "html": html},
+            json={"from": f"{FROM_NAME} <{FROM_EMAIL}>", "to": [to_email], "subject": subject, "html": html},
             timeout=15,
         )
         if not r.ok:
@@ -73,9 +92,11 @@ def send_email(to_email: str, subject: str, html: str) -> bool:
 def fmt_money(v):
     if v is None: return "—"
     v = float(v)
+    sign = "-" if v < 0 else ""
+    v = abs(v)
     for div, suf in [(1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")]:
-        if abs(v) >= div: return f"${v/div:,.1f}{suf}"
-    return f"${v:,.0f}"
+        if v >= div: return f"{sign}${v/div:,.1f}{suf}"
+    return f"{sign}${v:,.0f}"
 
 
 def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
@@ -89,25 +110,54 @@ def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
             "high_conviction":  "High conviction signal",
             "reversal":         "Reversal detected",
         }[m["reason"]]
+        color = C_GREEN if m["transaction_type"] == "buy" else C_RED
         rows += f"""
-        <tr style="border-bottom:1px solid #232A36;">
-          <td style="padding:10px 8px;"><a href="{APP_URL}" style="color:#7C6FFF;font-weight:700;text-decoration:none;">{m['ticker']}</a><br>
-              <span style="color:#8B95A5;font-size:12px;">{m['company']}</span></td>
-          <td style="padding:10px 8px;color:#8B95A5;font-size:12px;">{reason_label}</td>
-          <td style="padding:10px 8px;font-size:12px;">{m['insider_name']}</td>
-          <td style="padding:10px 8px;text-align:right;font-weight:600;color:{'#22D3A5' if (m['transaction_type']=='buy') else '#ef4444'};">{fmt_money(m['value'])}</td>
+        <tr>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};">
+            <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:700;text-decoration:none;font-size:14px;">{m['ticker']}</a><br>
+            <span style="color:{C_TEXT_MUTED};font-size:12px;">{m['company']}</span>
+          </td>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};color:{C_TEXT_MUTED};font-size:12px;">{reason_label}</td>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{C_TEXT_MUTED};">{m['insider_name']}</td>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};text-align:right;font-weight:700;color:{color};font-size:13px;white-space:nowrap;">{fmt_money(m['value'])}</td>
         </tr>"""
-    html = f"""
-    <div style="font-family:-apple-system,sans-serif;max-width:560px;margin:0 auto;color:#111827;">
-      <p style="font-size:14px;">{n} of your instant alert{'s were' if n != 1 else ' was'} triggered:</p>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        {rows}
-      </table>
-      <p style="margin-top:20px;"><a href="{APP_URL}" style="color:#7C6FFF;">Open Seli →</a></p>
-      <p style="color:#8B95A5;font-size:11px;margin-top:24px;">
-        You're getting this because you enabled instant alerts in Settings. Not financial advice.
-      </p>
-    </div>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seli — alert</title>
+</head>
+<body style="margin:0;padding:0;background:#F3F4F6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:{C_BG};border-radius:12px;overflow:hidden;">
+  <tr><td style="background:linear-gradient(135deg,{C_ACCENT} 0%,{C_ACCENT_STR} 60%,{C_AQUA} 100%);padding:20px 24px;">
+    <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-0.02em;">Seli</span>
+    <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">Instant alert</span>
+  </td></tr>
+  <tr><td style="padding:20px 20px 8px;">
+    <p style="font-size:14px;color:{C_TEXT};margin:0;">{n} of your instant alert{'s were' if n != 1 else ' was'} triggered:</p>
+  </td></tr>
+  <tr><td style="padding:0 20px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      {rows}
+    </table>
+  </td></tr>
+  <tr><td style="padding:20px;">
+    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:13px;padding:10px 20px;border-radius:8px;text-decoration:none;">Open Seli →</a>
+  </td></tr>
+  <tr><td style="padding:0 20px 20px;">
+    <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0;">
+      You're getting this because you enabled instant alerts in Settings. Not financial advice.
+    </p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
     return subject, html
 
 
@@ -115,9 +165,6 @@ def main():
     conn = get_connection()
     cur = conn.cursor()
 
-    # New filings since last check, with each one's prior trade direction for
-    # the same insider+ticker already computed via correlated subquery — this
-    # is what powers reversal detection without a second round trip.
     cur.execute("""
         SELECT f.accession_number, f.ticker, f.company_name, f.insider_name, f.insider_title,
                f.transaction_type, f.value, f.is_open_market,
@@ -141,7 +188,6 @@ def main():
 
     log.info(f"Checking {len(new_filings)} new filings against Pro users' alert preferences...")
 
-    # Pro users with at least one instant-alert type enabled
     cur.execute("""
         SELECT p.clerk_user_id, p.email, p.instant_watchlist_ticker, p.instant_followed_insider,
                p.instant_high_conviction, p.instant_reversal,
@@ -166,13 +212,12 @@ def main():
         SELECT clerk_user_id, item_type, item_value FROM public.user_watchlist
         WHERE clerk_user_id = ANY(%s)
     """, (user_ids,))
-    watchlist_tickers = {}   # clerk_user_id -> set(ticker)
-    watchlist_insiders = {}  # clerk_user_id -> set(insider_name)
+    watchlist_tickers = {}
+    watchlist_insiders = {}
     for uid, item_type, item_value in cur.fetchall():
         target = watchlist_tickers if item_type == "ticker" else watchlist_insiders
         target.setdefault(uid, set()).add(item_value)
 
-    # Build (user -> [matches]) across all new filings
     per_user_matches: dict[str, list[dict]] = {}
 
     def add_match(uid, filing, reason):
@@ -195,7 +240,6 @@ def main():
                 add_match(uid, f, "watchlist_ticker")
             if u["instant_followed_insider"] and meets_min and f["insider_name"] in watchlist_insiders.get(uid, ()):
                 add_match(uid, f, "followed_insider")
-            # High-conviction threshold is per-user now — was hardcoded to $1M for everyone
             hc_threshold = u["instant_high_conviction_threshold"] or 1_000_000
             if u["instant_high_conviction"] and is_csuite_buy and f["value"] >= hc_threshold:
                 add_match(uid, f, "high_conviction")
@@ -211,8 +255,6 @@ def main():
 
     log.info(f"Sent {sent} alert email(s) to {len(per_user_matches)} user(s), covering {len(new_filings)} filings.")
 
-    # Mark ALL considered filings as processed, matched or not, so they're
-    # never re-evaluated on the next run.
     cur.execute("UPDATE public.filings SET alerted_at = now() WHERE accession_number = ANY(%s)",
                 ([f["accession_number"] for f in new_filings],))
     conn.commit()
