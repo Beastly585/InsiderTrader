@@ -1878,6 +1878,23 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .modal-close:hover { color: var(--text); background: var(--surface-3); }
 .modal-body { flex: 1; overflow-y: auto; }
+
+.tile-info-btn {
+  background: none; border: none; cursor: pointer; padding: 2px;
+  color: var(--text-3); display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; transition: color .1s, background .1s;
+  flex-shrink: 0;
+}
+.tile-info-btn:hover { color: var(--text-2); background: var(--surface-3); }
+.tile-info-modal { max-width: 480px; max-height: none; }
+.tile-info-modal__body {
+  padding: 16px 20px 20px; font-size: 0.8125rem; line-height: 1.65; color: var(--text-2);
+}
+.tile-info-modal__body p { margin: 0 0 12px; }
+.tile-info-modal__body p:last-child { margin-bottom: 0; }
+.tile-info-modal__body strong { color: var(--text); }
+.tile-info-modal__body ul { margin: 0 0 12px; padding-left: 18px; }
+.tile-info-modal__body li { margin-bottom: 4px; }
 .modal-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
 .modal-table thead th {
   padding: 8px 14px; text-align: left; font-size: 0.625rem; font-weight: 700;

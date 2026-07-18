@@ -1116,6 +1116,53 @@ function TrustStars({score}) {
   );
 }
 
+// ─── Tile info modal — the "?" button on tiles that explains what a tile
+// shows and how its data is calculated, opening centered rather than as a
+// hover tooltip since this content is meant to be substantive (multiple
+// paragraphs, not a one-line hint). Reuses the same modal-overlay/modal-close
+// pattern as every other modal in the app, just at a width sized for prose
+// instead of a data table. `children` is the explanation content — plain
+// JSX, so a tile can pass a couple of paragraphs, a short list, whatever
+// actually explains it, rather than being squeezed into a single string prop.
+function TileInfoButton({ title, children }) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = e => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [open]);
+
+  return (
+    <>
+      <button
+        className="tile-info-btn"
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        title={`About: ${title}`}
+        aria-label={`About ${title}`}
+      >
+        <IconHelp style={{ width: 12, height: 12 }} />
+      </button>
+      {open && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+          <div className="modal-panel tile-info-modal">
+            <div className="modal-panel__hdr">
+              <span className="modal-panel__title">{title}</span>
+              <button className="modal-close" onClick={() => setOpen(false)} title="Close (Esc)">
+                <IconClose style={{ width: 12, height: 12 }} />
+              </button>
+            </div>
+            <div className="modal-body tile-info-modal__body">
+              {children}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── Company profile card ─────────────────────────────────────────────────────
 // Shown at the top of the ticker detail panel. Pulls Finnhub profile (market cap,
 // industry, exchange, logo) and EDGAR description (Item 1 business summary).
@@ -2109,6 +2156,10 @@ function HeatmapOnly() {
       <div className="mkt-heatmap-label">
         S&amp;P 500 sectors
         <span className="td-muted" style={{fontWeight:400,marginLeft:6}}>day return · by weight · ETF proxy</span>
+        <TileInfoButton title="S&P 500 sector heatmap">
+          <p>Shows each S&amp;P 500 sector's price move for the current trading day, sized by that sector's actual weight in the index — a bigger tile means it makes up more of the S&amp;P 500, not that it moved more.</p>
+          <p>Uses a representative sector ETF as a proxy for each sector's overall performance (e.g. Technology tracked via XLK), rather than averaging every individual stock's move directly.</p>
+        </TileInfoButton>
         {Object.keys(sectors).length===0&&(
           <span className="td-muted" style={{marginLeft:'auto',fontSize:11}}>
             {mkt?.err?'unavailable':'loading…'}
@@ -2586,6 +2637,17 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--signals">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Insider signals</span>
+              <TileInfoButton title="Insider signals">
+                <p>Shows tickers with notable open-market insider or congressional activity, ranked by <strong>conviction</strong> — a score built from several factors, not just dollar amount:</p>
+                <ul>
+                  <li>A C-suite executive or member of Congress buying counts more than a director or 10%-owner — both are treated as carrying a real informational edge, not just volume</li>
+                  <li>More buys than sells on the same ticker adds to the score; more sells than buys subtracts from it</li>
+                  <li>Total dollar value contributes, but on a diminishing scale (log-based) — a $50M buy isn't 50x more meaningful than a $1M one</li>
+                  <li>A single move representing a large share of someone's existing position counts as a stronger signal than a routine top-up</li>
+                </ul>
+                <p>Only <strong>open-market</strong> transactions count — option exercises, RSU vests, and grants are structurally excluded, since they don't represent a personal-funds bet the way a real purchase does.</p>
+                <p>A ticker also needs at least one qualifying signal — a C-suite/congressional buy, 2+ different insiders trading it, or $100K+ net buying — to appear here at all, filtering out routine, low-signal noise.</p>
+              </TileInfoButton>
               <div className="dash-tile__hdr-controls">
                 <div className="dash-tile-pills">
                   {DASH_DATE_OPTS.map(o=>(
@@ -2648,6 +2710,12 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--top-insiders">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Top insiders</span>
+              <TileInfoButton title="Top insiders">
+                <p>Ranks insiders and members of Congress by their real track record on open-market trades — not by trade volume or dollar amount alone.</p>
+                <p><strong>Hit rate</strong> is the share of buys that were later worth meaningfully more (5%+) than the purchase price. It only shows once there are at least 5 priced trades to base it on — with 1–2 trades, a single win or loss would swing the number by 50+ points, which isn't a real track record, just noise. An entity can still appear on the list by trade volume even without enough data for a hit rate yet.</p>
+                <p>Where available, hovering the hit rate shows the <strong>same insider's average return next to the S&P 500's own return over the identical time windows</strong> — context for whether the market was doing the heavy lifting, not a replacement for the hit rate itself.</p>
+                <p className="td-muted" style={{fontSize:'0.75rem'}}>Known limitation: hit rate compares each trade's price against today's price, not a fixed time horizon — a trade from years ago and one from last week aren't measured over equal spans.</p>
+              </TileInfoButton>
             </div>
             <div className="dash-tile__body">
               <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
@@ -2656,6 +2724,9 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--news">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Market news</span>
+              <TileInfoButton title="Market news">
+                <p>General financial news, not filtered to any specific ticker or insider — a general market-context feed alongside the insider-specific tiles.</p>
+              </TileInfoButton>
             </div>
             <div className="dash-tile__body">
               <MarketNews/>
@@ -2868,6 +2939,17 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               Insider signals
               <span className="ins-explore-hint" aria-hidden="true">⤢</span>
             </button>
+            <TileInfoButton title="Insider signals">
+              <p>Shows tickers with notable open-market insider or congressional activity, ranked by <strong>conviction</strong> — a score built from several factors, not just dollar amount:</p>
+              <ul>
+                <li>A C-suite executive or member of Congress buying counts more than a director or 10%-owner — both are treated as carrying a real informational edge, not just volume</li>
+                <li>More buys than sells on the same ticker adds to the score; more sells than buys subtracts from it</li>
+                <li>Total dollar value contributes, but on a diminishing scale (log-based) — a $50M buy isn't 50x more meaningful than a $1M one</li>
+                <li>A single move representing a large share of someone's existing position counts as a stronger signal than a routine top-up</li>
+              </ul>
+              <p>Only <strong>open-market</strong> transactions count — option exercises, RSU vests, and grants are structurally excluded, since they don't represent a personal-funds bet the way a real purchase does.</p>
+              <p>A ticker also needs at least one qualifying signal — a C-suite/congressional buy, 2+ different insiders trading it, or $100K+ net buying — to appear here at all, filtering out routine, low-signal noise.</p>
+            </TileInfoButton>
           </div>
 
           {/* Filters — belong to this panel specifically, not floating above
@@ -3023,6 +3105,12 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               Top insiders
               <span className="ins-explore-hint" aria-hidden="true">⤢</span>
             </button>
+            <TileInfoButton title="Top insiders">
+              <p>Ranks insiders and members of Congress by their real track record on open-market trades — not by trade volume or dollar amount alone.</p>
+              <p><strong>Hit rate</strong> is the share of buys that were later worth meaningfully more (5%+) than the purchase price. It only shows once there are at least 5 priced trades to base it on — with 1–2 trades, a single win or loss would swing the number by 50+ points, which isn't a real track record, just noise. An entity can still appear on the list by trade volume even without enough data for a hit rate yet.</p>
+              <p>Where available, hovering the hit rate shows the <strong>same insider's average return next to the S&P 500's own return over the identical time windows</strong> — context for whether the market was doing the heavy lifting, not a replacement for the hit rate itself.</p>
+              <p className="td-muted" style={{fontSize:'0.75rem'}}>Known limitation: hit rate compares each trade's price against today's price, not a fixed time horizon — a trade from years ago and one from last week aren't measured over equal spans.</p>
+            </TileInfoButton>
           </div>
           <div className="ins-lb-panel__body">
             <InsiderLeaderboardSidebar onOpenDetail={openInDrawer} watchlist={watchlist}/>
@@ -3943,7 +4031,14 @@ function InsightsPortfolioPanel({ filings, cutoff, days, onOpenDetail, watchlist
 
   if (err) return (
     <div className="ins-sig-panel">
-      <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Your portfolio</span></div>
+      <div className="ins-sig-panel__hdr">
+        <span className="ins-sig-panel__title">Your portfolio</span>
+        <TileInfoButton title="Your portfolio">
+          <p>Connects to your brokerage via SnapTrade (read-only — this app can never place trades or move money) to show insider activity on tickers you actually hold.</p>
+          <p><strong>Position value</strong> is your current holding's live market value. <strong>Realized P&amp;L</strong> is profit/loss from positions you've already closed, tracked separately since they measure different things — closing a position and simply holding one aren't the same event.</p>
+          <p>The performance chart is built from real historical daily closes for your held tickers, weighted by your current share count — it shows what your current position would have been worth over time, not a transaction-by-transaction reconstruction of every buy and sell you made.</p>
+        </TileInfoButton>
+      </div>
       <div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Portfolio linking isn't available right now.</div>
     </div>
   );
