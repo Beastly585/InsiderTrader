@@ -3423,7 +3423,13 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                             <span className="td-muted" style={{fontSize:11,width:18}}>{i+1}</span>
                             <span style={{fontSize:12,fontWeight:500,flex:1}}>{r.insider_name}</span>
                             {r.hit_rate!=null&&(
-                              <span className={`td-mono ${r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}`} style={{fontSize:13,fontWeight:700}}>{r.hit_rate}%</span>
+                              <span
+                                className={`td-mono ${r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}`}
+                                style={{fontSize:13,fontWeight:700,cursor:r.avg_spy_return_pct!=null?'help':'default'}}
+                                title={r.avg_spy_return_pct!=null
+                                  ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return_pct>=0?'+':''}${r.avg_spy_return_pct.toFixed(1)}%`
+                                  : undefined}
+                              >{r.hit_rate}%</span>
                             )}
                           </div>
                           <div className="drawer__list-row__sub">
@@ -4189,7 +4195,13 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
             </div>
             <div className="ins-lb-card__score">
               {r.hit_rate!=null&&(
-                <div className={`ins-lb-card__rate ${r.hit_rate>=70?'val-buy':r.hit_rate>=50?'':'val-sell'}`}>{r.hit_rate}%</div>
+                <div
+                  className={`ins-lb-card__rate ${r.hit_rate>=70?'val-buy':r.hit_rate>=50?'':'val-sell'}`}
+                  style={{cursor:r.avg_spy_return_pct!=null?'help':'default'}}
+                  title={r.avg_spy_return_pct!=null
+                    ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return_pct>=0?'+':''}${r.avg_spy_return_pct.toFixed(1)}%`
+                    : undefined}
+                >{r.hit_rate}%</div>
               )}
               <ConvictionBar score={r.proxy_score} max={4}/>
             </div>
@@ -4468,6 +4480,17 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
   // which public.prices_history doesn't have yet — it only maintains a
   // rolling recent snapshot per ticker, not a multi-year series. That's a
   // separate backfill task, not a query change alone.
+  // Approach 5 from the earlier brainstorm: show the market's own return as
+  // context alongside the existing hit-rate number, without redefining
+  // "win" or touching the existing scoring formula at all. Deliberately the
+  // cheapest, lowest-risk of the options discussed — no new judgment call
+  // about what counts as a win, just an honest second number sitting next
+  // to the first one. Known limitation, stated plainly rather than hidden:
+  // the comparison window still varies per trade (transaction date to
+  // today), so a 2020 trade and a trade from last week aren't measured over
+  // equal spans — a fixed-horizon or calendar-year version would be more
+  // rigorous, but needs a full per-ticker historical price backfill, a
+  // materially bigger project than this.
   return `
     SELECT agg.*,
       -- Proxy rank, mirroring processLeaderboardRows' own weights (hit rate,
@@ -4545,12 +4568,41 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
                          AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
                     THEN (ph_buy.close-f.price_per_share)/f.price_per_share*100
                END
-             ) AS avg_return_pct
+             ) AS avg_return_pct,
+             -- SPY's own return over the exact same transaction-date-to-today
+             -- window, averaged over the SAME priced trade set as
+             -- avg_return_pct above (same WHERE conditions deliberately
+             -- duplicated, not approximated) — so the two numbers are
+             -- directly comparable context, not two different populations.
+             -- NULL (not 0) whenever benchmark_prices doesn't have data for
+             -- the relevant dates yet, so an incomplete backfill degrades
+             -- gracefully instead of silently reporting a false 0% move.
+             AVG(
+               CASE WHEN f.transaction_type='buy' AND f.is_open_market
+                         AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
+                         AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
+                         AND spy_then.close IS NOT NULL AND spy_now.close IS NOT NULL
+                    THEN (spy_now.close-spy_then.close)/spy_then.close*100
+               END
+             ) AS avg_spy_return_pct
       FROM public.filings f
       LEFT JOIN LATERAL (
         SELECT close FROM public.prices_history
         WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
       ) ph_buy ON true
+      -- SPY's closing price on or before the transaction date — <=, not =,
+      -- since the exact date may be a weekend/holiday when SPY didn't
+      -- trade, same "walk back to the last real session" idea used
+      -- elsewhere for market data.
+      LEFT JOIN LATERAL (
+        SELECT close FROM public.benchmark_prices
+        WHERE symbol='SPY' AND date <= COALESCE(f.transaction_date, f.filing_date)
+        ORDER BY date DESC LIMIT 1
+      ) spy_then ON true
+      LEFT JOIN LATERAL (
+        SELECT close FROM public.benchmark_prices
+        WHERE symbol='SPY' ORDER BY date DESC LIMIT 1
+      ) spy_now ON true
       WHERE f.insider_name IS NOT NULL
         ${dateClause}
         ${sectorClause}

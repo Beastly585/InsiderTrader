@@ -18,9 +18,10 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 
-DATABASE_URL    = os.environ.get("DATABASE_URL", "")
-POLYGON_API_KEY = os.environ.get("POLYGON_API_KEY", "")
-LOOKBACK_DAYS   = int(os.environ.get("PRICE_LOOKBACK_DAYS", "3"))
+DATABASE_URL      = os.environ.get("DATABASE_URL", "")
+POLYGON_API_KEY   = os.environ.get("POLYGON_API_KEY", "")
+LOOKBACK_DAYS     = int(os.environ.get("PRICE_LOOKBACK_DAYS", "3"))
+BENCHMARK_SYMBOL  = os.environ.get("BENCHMARK_SYMBOL", "SPY")
 
 if not DATABASE_URL or not POLYGON_API_KEY:
     print("ERROR: DATABASE_URL and POLYGON_API_KEY required")
@@ -107,5 +108,31 @@ with conn.cursor() as cur:
         written += 1
 
 conn.commit()
+
+# Refresh the benchmark table too, from the SAME grouped-daily response
+# already fetched above — not a second API call. This is what keeps
+# benchmark_prices current going forward after the one-time deep backfill
+# (Nasdaq.com's manual CSV export, since neither Polygon's nor Alpha
+# Vantage's free tiers could deliver full history — see
+# import_benchmark_csv.py for that story). Polygon's free tier is exactly
+# the right fit for THIS part: one recent day, not years of history.
+benchmark_bar = bar_by_ticker.get(BENCHMARK_SYMBOL)
+if benchmark_bar:
+    close, ts = benchmark_bar.get("c"), benchmark_bar.get("t")
+    if close and ts:
+        bar_date = date.fromtimestamp(ts / 1000)
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO public.benchmark_prices (symbol, date, close)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (symbol, date) DO UPDATE SET close = EXCLUDED.close
+            """, (BENCHMARK_SYMBOL, bar_date, round(float(close), 4)))
+        conn.commit()
+        print(f"Also refreshed benchmark_prices for {BENCHMARK_SYMBOL} ({bar_date}, close={close})")
+    else:
+        print(f"{BENCHMARK_SYMBOL} was in the session data but missing close/timestamp — benchmark not refreshed this run")
+else:
+    print(f"{BENCHMARK_SYMBOL} not found in this session's grouped-daily data — benchmark not refreshed this run")
+
 conn.close()
 print(f"\nDone. Written: {written}  Skipped (not in session data): {skipped}")
