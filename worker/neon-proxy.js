@@ -126,17 +126,13 @@ export default {
       return handleTestEmail(request, env, origin);
     }
 
-    if (url.pathname === '/portfolio' || url.pathname.startsWith('/portfolio')) {
-      return handlePortfolio(request, env, origin);
-    }
-
     // ── SnapTrade — real per-user portfolio linking ──────────────────────
-    // Distinct from the /portfolio route above, which is the older
-    // single-shared-Alpaca-key implementation (same data for every user —
-    // not real per-user linking). Once this is live and wired into the
-    // frontend, /portfolio becomes dead code worth removing in a follow-up
-    // pass — not deleted here, since that's a frontend-coordinated change,
-    // not something to do silently as a side effect of adding this.
+    // The old /portfolio route (a single shared Alpaca key returning the
+    // same data regardless of who called it, with zero authentication)
+    // has been removed — it was dead from the frontend's perspective once
+    // this was wired in, and its lack of auth meant it stayed live and
+    // reachable by anyone who found the URL. Confirmed via grep that
+    // nothing in the frontend called it before removing it here.
     if (url.pathname === '/snaptrade/connect') {
       return handleSnapTradeConnect(request, env, origin);
     }
@@ -154,6 +150,9 @@ export default {
     }
     if (url.pathname === '/internal/portfolio-tickers-batch') {
       return handlePortfolioTickersBatch(request, env, origin);
+    }
+    if (url.pathname === '/public/data-stats') {
+      return handlePublicDataStats(request, env, origin);
     }
 
     return handleQuery(request, env, origin);
@@ -527,28 +526,6 @@ async function handleWatchlist(request, env, origin) {
   return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
 }
 
-async function handlePortfolio(request, env, origin) {
-  const alpacaKey    = env.ALPACA_KEY;
-  const alpacaSecret = env.ALPACA_SECRET;
-
-  if (!alpacaKey || !alpacaSecret) {
-    return corsResponse({ positions: [], account: null, isPaper: true }, 200, origin, env);
-  }
-
-  const base    = env.ALPACA_LIVE ? 'https://api.alpaca.markets' : 'https://paper-api.alpaca.markets';
-  const headers = { 'APCA-API-KEY-ID': alpacaKey, 'APCA-API-SECRET-KEY': alpacaSecret };
-
-  try {
-    const [posResp, acctResp] = await Promise.all([
-      fetch(`${base}/v2/positions`, { headers }),
-      fetch(`${base}/v2/account`,   { headers }),
-    ]);
-    const [positions, account] = await Promise.all([posResp.json(), acctResp.json()]);
-    return corsResponse({ positions, account, isPaper: !env.ALPACA_LIVE }, 200, origin, env);
-  } catch (e) {
-    return corsResponse({ error: `Alpaca failed: ${e.message}` }, 502, origin, env);
-  }
-}
 
 // ── SnapTrade — real per-user portfolio linking ─────────────────────────────
 //
@@ -877,6 +854,26 @@ async function handlePortfolioTickersBatch(request, env, origin) {
     return corsResponse({ error: e.message }, 500, origin, env);
   }
 }
+// ── Genuinely public, no auth path at all — deliberately not built on the
+// generic /query endpoint's auth-fallback behavior, since that fallback can
+// send the server-to-server WORKER_API_KEY as a header from unauthenticated
+// callers, and that key was specifically designed this session to never
+// leave the server side. This route requires nothing, checks nothing, and
+// returns exactly one non-sensitive number the landing page needs before
+// anyone has signed in.
+async function handlePublicDataStats(request, env, origin) {
+  try {
+    const result = await neonFetch(env,
+      `SELECT MIN(COALESCE(transaction_date, filing_date)) AS oldest FROM public.filings`
+    );
+    const oldest = result.rows?.[0]?.oldest || null;
+    return corsResponse({ oldest_filing_date: oldest }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] handlePublicDataStats failed:', e.message);
+    return corsResponse({ oldest_filing_date: null }, 200, origin, env); // degrade gracefully — the landing page has a hardcoded fallback for this
+  }
+}
+
 // Best-effort — SnapTrade's docs mention an account balance history
 // endpoint by name (getAccountBalanceHistory) but I don't have its exact
 // REST path confirmed the way the positions endpoint was (that one was
