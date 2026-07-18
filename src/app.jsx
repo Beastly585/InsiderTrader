@@ -3425,9 +3425,9 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                             {r.hit_rate!=null&&(
                               <span
                                 className={`td-mono ${r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}`}
-                                style={{fontSize:13,fontWeight:700,cursor:r.avg_spy_return_pct!=null?'help':'default'}}
-                                title={r.avg_spy_return_pct!=null
-                                  ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return_pct>=0?'+':''}${r.avg_spy_return_pct.toFixed(1)}%`
+                                style={{fontSize:13,fontWeight:700,cursor:r.avg_spy_return!=null?'help':'default'}}
+                                title={r.avg_spy_return!=null
+                                  ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
                                   : undefined}
                               >{r.hit_rate}%</span>
                             )}
@@ -4197,9 +4197,9 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
               {r.hit_rate!=null&&(
                 <div
                   className={`ins-lb-card__rate ${r.hit_rate>=70?'val-buy':r.hit_rate>=50?'':'val-sell'}`}
-                  style={{cursor:r.avg_spy_return_pct!=null?'help':'default'}}
-                  title={r.avg_spy_return_pct!=null
-                    ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return_pct>=0?'+':''}${r.avg_spy_return_pct.toFixed(1)}%`
+                  style={{cursor:r.avg_spy_return!=null?'help':'default'}}
+                  title={r.avg_spy_return!=null
+                    ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
                     : undefined}
                 >{r.hit_rate}%</div>
               )}

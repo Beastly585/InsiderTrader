@@ -352,3 +352,44 @@ describe('filterAndScoreSignals — the full pipeline behind this session\'s con
     expect(result).toHaveLength(0);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('processLeaderboardRows — avg_spy_return_pct string coercion (regression test for a real production crash)', () => {
+  it('coerces a string avg_spy_return_pct (Postgres/Neon\'s actual wire format for numeric/AVG results) into a real number', () => {
+    // This exact shape — a string, not a number — is what crashed
+    // production: `r.avg_spy_return_pct.toFixed(1)` on a string threw
+    // "toFixed is not a function", because the field was passed straight
+    // through the {...r} spread with no coercion, unlike avg_return_pct,
+    // which already got Math.round(x*10)/10 applied (and *10 on a string
+    // implicitly converts it to a number in JS, which is why that sibling
+    // field never crashed).
+    const rows = [{
+      insider_name: 'A', wins: 5, priced: 10, om_buys: 10, om_sells: 0, total_buys: 10,
+      avg_return_pct: '12.345', avg_spy_return_pct: '8.219',
+    }];
+    const [r] = processLeaderboardRows(rows);
+    expect(typeof r.avg_spy_return).toBe('number');
+    expect(r.avg_spy_return).toBe(8.2);
+    // The actual failing call in production — must not throw.
+    expect(() => r.avg_spy_return.toFixed(1)).not.toThrow();
+    expect(r.avg_spy_return.toFixed(1)).toBe('8.2');
+  });
+
+  it('still works correctly when avg_spy_return_pct genuinely is a number, not just a string', () => {
+    const rows = [{
+      insider_name: 'A', wins: 5, priced: 10, om_buys: 10, om_sells: 0, total_buys: 10,
+      avg_return_pct: 12, avg_spy_return_pct: 8.219,
+    }];
+    const [r] = processLeaderboardRows(rows);
+    expect(r.avg_spy_return).toBe(8.2);
+  });
+
+  it('is null (not NaN or a crash) when avg_spy_return_pct is genuinely absent — e.g. the benchmark backfill hasn\'t reached this trade\'s date range yet', () => {
+    const rows = [{
+      insider_name: 'A', wins: 5, priced: 10, om_buys: 10, om_sells: 0, total_buys: 10,
+      avg_return_pct: 12, avg_spy_return_pct: null,
+    }];
+    const [r] = processLeaderboardRows(rows);
+    expect(r.avg_spy_return).toBeNull();
+  });
+});

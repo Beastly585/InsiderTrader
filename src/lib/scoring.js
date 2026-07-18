@@ -140,6 +140,14 @@ export function processLeaderboardRows(rows) {
     // rate until there's actually enough priced data to trust one.
     const hitRate = r.priced>=5 ? Math.round((r.wins/r.priced)*100) : null;
     const avgReturn = r.avg_return_pct!=null ? Math.round(r.avg_return_pct*10)/10 : null;
+    // Same treatment as avgReturn above — the multiplication forces a real
+    // number even if Postgres/Neon's HTTP interface sent this as a string
+    // (which it does for numeric/AVG results). avg_return_pct already went
+    // through this coercion; avg_spy_return_pct was passing through the
+    // spread below unprocessed, which is exactly what crashed in
+    // production — a string has no .toFixed(), and the display code called
+    // it directly on the raw field instead of this processed one.
+    const avgSpyReturn = r.avg_spy_return_pct!=null ? Math.round(r.avg_spy_return_pct*10)/10 : null;
     const omTotal = (r.om_buys||0)+(r.om_sells||0);
     const omDiscipline = r.total_buys>0 ? (r.om_buys/r.total_buys) : 0;
     // Same scoring shape as trustScore() but using query-computable proxies.
@@ -171,6 +179,6 @@ export function processLeaderboardRows(rows) {
     if (omTotal>=10)s+=1;else if(omTotal>=5)s+=0.5;
     if (omDiscipline>=0.7)s+=0.5;
     const proxyScore = Math.max(0,Math.min(Math.round(s*10)/10,5)); // raised cap to make room for the new magnitude term
-    return {...r, hit_rate:hitRate, avg_return:avgReturn, om_total:omTotal, proxy_score:proxyScore};
+    return {...r, hit_rate:hitRate, avg_return:avgReturn, avg_spy_return:avgSpyReturn, om_total:omTotal, proxy_score:proxyScore};
   }).sort((a,b)=>(b.proxy_score-a.proxy_score)||(b.wins-a.wins));
 }
