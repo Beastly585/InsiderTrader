@@ -2369,6 +2369,18 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--accent); color: #fff; border: none; border-radius: 999px;
   cursor: pointer; transition: background .12s, transform .12s, box-shadow .12s;
   letter-spacing: -0.1px; white-space: nowrap;
+  position: relative; overflow: hidden; z-index: 0;
+}
+.lp-btn-primary::before {
+  content: ''; position: absolute; inset: 0;
+  background: rgba(255,255,255,0.22);
+  transform: translateX(-100%);
+  transition: transform .3s ease;
+  z-index: -1;
+}
+.lp-btn-primary:hover::before { transform: translateX(0); }
+@media (prefers-reduced-motion: reduce) {
+  .lp-btn-primary::before { transition: none; }
 }
 .lp-btn-primary:hover {
   background: var(--accent-strong);
@@ -2384,9 +2396,22 @@ td { padding:7px 11px; vertical-align:middle; }
   background: transparent; color: var(--text-2);
   border: 1px solid var(--border-md); border-radius: 999px;
   cursor: pointer; transition: all .12s; white-space: nowrap;
+  position: relative; overflow: hidden; z-index: 0;
+}
+.lp-btn-ghost::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--accent-50);
+  transform: translateX(-100%);
+  transition: transform .3s ease;
+  z-index: -1;
+}
+.lp-btn-ghost:hover::before { transform: translateX(0); }
+@media (prefers-reduced-motion: reduce) {
+  .lp-btn-ghost::before { transition: none; }
 }
 .lp-btn-ghost:hover { color: var(--text); border-color: var(--text-3); background: var(--surface-2); }
 .lp-btn-ghost--full { width: 100%; text-align: center; border-radius: var(--radius-md); padding: 11px; }
+
 
 /* Hero */
 .lp-hero {
@@ -2625,24 +2650,37 @@ td { padding:7px 11px; vertical-align:middle; }
   letter-spacing: -1px; line-height: 1.15; color: var(--text);
   margin-bottom: 56px;
 }
-.lp-features-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
-  background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+/* Benefit list — one row per benefit, text on one side and a snippet
+   placeholder on the other, alternating sides down the page. Replaces the
+   old three-across icon-card grid, which read as generic feature-badge
+   marketing rather than showing what each benefit actually looks like. */
+.lp-benefit-list { display: flex; flex-direction: column; gap: 64px; }
+.lp-benefit-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center;
 }
-@media (max-width: 768px) { .lp-features-grid { grid-template-columns: 1fr; } }
-.lp-feature-card {
-  padding: 32px 28px; background: var(--surface);
-  transition: background .12s;
+.lp-benefit-row--reverse .lp-benefit-row__text { order: 2; }
+.lp-benefit-row--reverse .lp-benefit-row__snippet { order: 1; }
+@media (max-width: 780px) {
+  .lp-benefit-row { grid-template-columns: 1fr; }
+  .lp-benefit-row--reverse .lp-benefit-row__text,
+  .lp-benefit-row--reverse .lp-benefit-row__snippet { order: initial; }
 }
-.lp-feature-card:hover { background: var(--surface-2); }
-.lp-feature-icon {
+.lp-benefit-row__icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; border-radius: var(--radius-md);
+  width: 36px; height: 36px; border-radius: var(--radius-md);
   background: var(--accent-50); color: var(--accent-strong);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
-.lp-feature-title { font-size: 0.9375rem; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.2px; }
-.lp-feature-body  { font-size: 0.8438rem; line-height: 1.65; color: var(--text-2); }
+.lp-benefit-row__title { font-size: 1.375rem; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 10px; }
+.lp-benefit-row__body { font-size: 0.9375rem; line-height: 1.65; color: var(--text-2); max-width: 420px; }
+.lp-benefit-snippet-box {
+  aspect-ratio: 4 / 3; border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-md); background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 24px;
+}
+.lp-benefit-snippet-box__label { font-size: 0.75rem; color: var(--text-3); max-width: 240px; }
+
 
 /* Pricing section */
 .lp-pricing {
@@ -2673,11 +2711,27 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .lp-price-card--featured {
   border-color: var(--accent); background: var(--accent-50);
-  box-shadow: 0 0 0 1px var(--accent);
+  box-shadow: 0 0 0 1px var(--accent); position: relative;
+  /* No padding difference from the base card — that's what actually
+     caused misaligned content in the first place (see below). Keeping
+     padding identical to .lp-price-card is what guarantees the Pro card's
+     name/price/description start at the exact same Y position as the
+     Free card's, badge or no badge. */
 }
 .lp-price-card__badge {
-  display: inline-block; padding: 2px 10px; font-size: 0.6875rem; font-weight: 600;
-  background: var(--accent); color: #fff; border-radius: 999px; align-self: flex-start;
+  /* Absolutely positioned and pulled OUTSIDE the card's own box (top is
+     negative), not just outside normal flow within it. This is the actual
+     guarantee: an absolutely-positioned element is removed from layout
+     calculation entirely, so it cannot affect the height or position of
+     anything else, in this card or the sibling Free card next to it —
+     regardless of padding, regardless of content length. Extra clearance
+     above the whole pricing row (.lp-pricing-top's margin-top) gives the
+     badge room to sit above the border without visually crowding the
+     section heading above it. */
+  position: absolute; top: -13px; left: 40px;
+  display: inline-block; padding: 4px 12px; font-size: 0.6875rem; font-weight: 600;
+  background: var(--accent); color: #fff; border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 .lp-price-card__name  { font-size: 0.8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-2); }
 .lp-price-card__price { font-size: 2.5rem; font-weight: 800; letter-spacing: -2px; line-height: 1; }
