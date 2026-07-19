@@ -6265,7 +6265,14 @@ function titleFromAppState(page, detail) {
   return `${PAGE_TITLES[page] || 'Dashboard'} — Seli`;
 }
 
-export default function App() {
+import * as Sentry from '@sentry/react';
+
+// Not exported directly — see the wrapped default export at the bottom of
+// this file. Renamed from App so an ErrorBoundary can sit ABOVE it: if
+// this component itself throws during render, the boundary needs to be a
+// parent of it, not something nested inside its own return, which
+// wouldn't catch a crash in this component's own body.
+function AppInner() {
   const [dark,setDark] = useTheme();
   const riskAppetite = useRiskAppetite();
   const { isSignedIn, isLoaded, getToken } = useAuth();
@@ -6604,6 +6611,58 @@ export default function App() {
     </GuideProvider>
     </RiskAppetiteContext.Provider>
     </>
+  );
+}
+
+// Sentry.init at module level — runs once, on import, before AppInner ever
+// renders. Ideally this lives in a separate entry file that runs before
+// React even starts, but this project's actual mounting file isn't
+// something I have access to from this conversation; module-level code
+// here still runs before any component renders, so this achieves the same
+// effect without needing to touch a file I can't see or verify.
+// Safe to call even if VITE_SENTRY_DSN isn't set yet — Sentry's own SDK
+// no-ops on an empty/undefined dsn rather than throwing, the same
+// graceful-degradation behavior relied on for the Worker side.
+Sentry.init({
+  dsn: cfg.SENTRY_DSN || '',
+  tracesSampleRate: 0.1, // matches the Worker's own sampling rate — errors are always captured regardless of this number, it only controls trace/performance-data volume
+});
+
+function AppErrorFallback({ error }) {
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24,
+      textAlign: 'center', fontFamily: 'system-ui, sans-serif',
+    }}>
+      <div style={{ fontSize: 18, fontWeight: 700 }}>Something went wrong.</div>
+      <div style={{ fontSize: 14, color: '#6B7280', maxWidth: 400 }}>
+        We've been notified and are looking into it. Refreshing the page usually fixes this.
+      </div>
+      <button
+        onClick={() => window.location.reload()}
+        style={{
+          padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
+          background: '#5A4FE8', color: '#fff', fontWeight: 600, fontSize: 13,
+        }}
+      >
+        Reload
+      </button>
+    </div>
+  );
+}
+
+// The actual export — every consumer of this module (the real mounting
+// file, whatever it imports App as) gets the boundary-wrapped version
+// automatically, with no change needed on that file's end. A crash
+// anywhere in AppInner's tree now shows this fallback instead of a blank
+// white screen, and gets reported to Sentry automatically since
+// Sentry.ErrorBoundary reports what it catches on its own.
+export default function App() {
+  return (
+    <Sentry.ErrorBoundary fallback={AppErrorFallback}>
+      <AppInner/>
+    </Sentry.ErrorBoundary>
   );
 }
 

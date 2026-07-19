@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.8",
+    "@sentry/cloudflare": "^10.66.0",
+    "@sentry/react": "^10.66.0",
     "@stripe/react-stripe-js": "^6.7.0",
     "@stripe/stripe-js": "^9.9.0",
     "react": "^18.2.0",

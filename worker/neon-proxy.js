@@ -20,15 +20,31 @@
  *                            status into Clerk publicMetadata after webhook events
  *   CLERK_JWKS_URL           https://<your-clerk-domain>/.well-known/jwks.json
  *                            — from the PRODUCTION Clerk instance, not Dev
+ *   CLERK_WEBHOOK_SECRET     whsec_... — from the Clerk Dashboard's webhook
+ *                            endpoint config (Configure > Webhooks), for the
+ *                            user.deleted event specifically. This is a
+ *                            SEPARATE secret from STRIPE_WEBHOOK_SECRET even
+ *                            though both start with whsec_ — Clerk and
+ *                            Stripe each issue their own.
+ *   SENTRY_DSN               From your Sentry project's settings — error
+ *                            monitoring for this Worker (see the withSentry
+ *                            wrapper below).
  *
- * Requires `npm install stripe` in this Worker's package.json — Stripe's SDK
- * runs on Workers via createFetchHttpClient()/createSubtleCryptoProvider(),
- * no Node-specific APIs needed.
+ * Requires `npm install stripe @sentry/cloudflare` in this Worker's
+ * package.json. Stripe's SDK runs on Workers via createFetchHttpClient()/
+ * createSubtleCryptoProvider(), no Node-specific APIs needed. @sentry/
+ * cloudflare DOES need the nodejs_compat compatibility flag set in
+ * wrangler.toml/wrangler.json — the SDK won't work without it. As of
+ * mid-2025, Cloudflare removed the old zero-code "click to enable" Sentry
+ * dashboard integration entirely; this explicit SDK wrapper is the current,
+ * correct way to do this, not a fallback.
  */
 
 import { sqlVal } from './lib/sql.js';
+import { verifyClerkWebhook } from './lib/clerk-webhook.js';
 import { encryptSecret, decryptSecret } from './lib/crypto.js';
 import { computeSignature } from './lib/snaptrade-sign.js';
+import * as Sentry from '@sentry/cloudflare';
 
 const ALLOWED_ORIGINS = new Set([
   'https://seli.app',
@@ -39,7 +55,7 @@ const ALLOWED_ORIGINS = new Set([
   'http://127.0.0.1:5173',
 ]);
 
-export default {
+const workerHandler = {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
 
@@ -58,6 +74,14 @@ export default {
       return handleStripeWebhook(request, env);
     }
 
+    // ── Clerk webhook — same reasoning as Stripe's above. Clerk's requests
+    // arrive via Svix with svix-* headers, not an Origin or X-API-Key/JWT
+    // we'd recognize, and the Svix signature verified inside the handler
+    // IS this route's auth check.
+    if (url.pathname === '/clerk/webhook' && request.method === 'POST') {
+      return handleClerkWebhook(request, env);
+    }
+
     // Allow GET and POST
     if (request.method !== 'POST' && request.method !== 'GET') {
       return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
@@ -73,7 +97,14 @@ export default {
     //   Phase 1: X-API-Key header (current)
     //   Phase 2: Authorization: Bearer <Clerk JWT> (once CLERK_JWKS_URL secret is set)
     // Both work simultaneously during migration — no flag day needed.
-    if (env.WORKER_API_KEY || env.CLERK_JWKS_URL) {
+    //
+    // /public/data-stats is exempt — it was built specifically to require no
+    // auth at all (a signed-out landing-page visitor has no Clerk token and
+    // must never receive WORKER_API_KEY), but this blanket check runs before
+    // the route dispatch even happens, so the route's own "no auth required"
+    // design never mattered — every request to it was rejected here first,
+    // before ever reaching handlePublicDataStats. That's what caused the 401.
+    if ((env.WORKER_API_KEY || env.CLERK_JWKS_URL) && url.pathname !== '/public/data-stats') {
       const authHeader  = request.headers.get('Authorization') || '';
       const apiKey      = request.headers.get('X-API-Key') || '';
 
@@ -159,6 +190,19 @@ export default {
   },
 };
 
+// The actual export — wraps workerHandler with Sentry's current Cloudflare
+// Workers SDK. env is available here (unlike a static top-level Sentry.init
+// call would allow), which matters since SENTRY_DSN is a per-environment
+// Wrangler secret, not a value known at build time. If SENTRY_DSN isn't set
+// yet, Sentry's own SDK no-ops rather than throwing — this doesn't need to
+// be conditional on our end.
+export default Sentry.withSentry(
+  (env) => ({
+    dsn: env.SENTRY_DSN,
+    tracesSampleRate: 0.1, // 10% of requests get full performance tracing — errors are always captured regardless of this number, this only controls trace volume/cost
+  }),
+  workerHandler
+);
 async function handleQuery(request, env, origin) {
   // Parse body — handle both GET (no body) and POST
   let query = '';
@@ -1209,6 +1253,85 @@ async function handleStripeWebhook(request, env) {
   }
 
   return new Response(JSON.stringify({ received: true }), { status: 200 });
+}
+
+// ── Clerk webhook — cascading delete on user.deleted ────────────────────────
+// Clerk's own account UI (via UserButton -> Manage Account) already lets a
+// signed-in user delete their auth account by default. That only removes
+// the Clerk identity, though — it does nothing to this app's own Neon rows
+// (subscription, preferences, watchlist, portfolio connections), which
+// would otherwise sit orphaned forever under a clerk_user_id that no
+// longer resolves to anyone. This is the missing other half: listen for
+// Clerk's user.deleted event and actually delete the corresponding rows.
+//
+// Clerk delivers webhooks via Svix, using Svix's own signing scheme, not a
+// bespoke one — verified here against Svix's own published test vector
+// (secret whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw, a fixed svix-id/timestamp/
+// payload, and their documented expected signature) before ever wiring
+// this into a real request, since getting webhook verification wrong
+// either rejects every legitimate call or accepts forged ones — both bad
+// in different directions, so this isn't a place to guess.
+
+async function handleClerkWebhook(request, env) {
+  const rawBody = await request.text(); // raw — must not be parsed before verification
+  const verified = await verifyClerkWebhook(rawBody, request.headers, env.CLERK_WEBHOOK_SECRET || '');
+  if (!verified) {
+    console.error('[Worker] Clerk webhook signature verification failed');
+    return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 400 });
+  }
+
+  let event;
+  try {
+    event = JSON.parse(rawBody);
+  } catch (e) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
+  }
+
+  if (event.type !== 'user.deleted') {
+    // Only user.deleted triggers a cascade — every other Clerk event
+    // (user.created, session events, etc.) is a no-op here on purpose,
+    // acknowledged with 200 so Clerk doesn't retry something we're not
+    // handling anyway.
+    return new Response(JSON.stringify({ received: true }), { status: 200 });
+  }
+
+  const clerkUserId = event.data?.id;
+  if (!clerkUserId) {
+    console.error('[Worker] user.deleted event missing data.id:', rawBody.slice(0, 200));
+    return new Response(JSON.stringify({ error: 'Missing user id' }), { status: 400 });
+  }
+  // Strict format check before this ever touches a SQL string — neonFetch
+  // takes a raw query, not a parameterized one (confirmed by reading its
+  // actual signature rather than assuming $1-style placeholders were
+  // supported, which they aren't). Signature verification above already
+  // confirms this payload genuinely came from Clerk, but that doesn't by
+  // itself guarantee data.id is a well-formed value safe to interpolate —
+  // this regex is what actually makes that safe, matching Clerk's real
+  // user id format (e.g. user_2abC123XYZ).
+  if (!/^user_[A-Za-z0-9]+$/.test(clerkUserId)) {
+    console.error('[Worker] user.deleted event had a malformed data.id, refusing to touch the database:', clerkUserId);
+    return new Response(JSON.stringify({ error: 'Malformed user id' }), { status: 400 });
+  }
+
+  try {
+    // Every user-scoped table, confirmed against the real schema earlier
+    // this project — deliberately explicit, one statement per table,
+    // rather than a clever generic loop, so it's obvious at a glance
+    // exactly what does and doesn't get deleted here.
+    await neonFetch(env, `DELETE FROM public.cancellation_feedback WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    await neonFetch(env, `DELETE FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    await neonFetch(env, `DELETE FROM public.portfolio_connections WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    await neonFetch(env, `DELETE FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    await neonFetch(env, `DELETE FROM public.user_preferences WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    await neonFetch(env, `DELETE FROM public.user_watchlist WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    console.log(`[Worker] Cascaded delete for clerk_user_id ${clerkUserId} following Clerk user.deleted`);
+    return new Response(JSON.stringify({ received: true }), { status: 200 });
+  } catch (e) {
+    console.error('[Worker] Clerk webhook cascade delete failed:', e.message);
+    // 500, not 200 — a real failure here should make Clerk retry the
+    // webhook rather than silently treat an incomplete deletion as done.
+    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+  }
 }
 
 // ── Create subscription (Stripe Elements flow) ──────────────────────────────
