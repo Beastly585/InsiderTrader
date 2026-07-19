@@ -5637,7 +5637,7 @@ function InfoTrustPage({ onBack, onEnter }) {
         </p>
 
         {/* ── How insiders beat the market ─────────────────────────────── */}
-        <section className="lp-info__section">
+        <section className="lp-info__section reveal">
           <h2>How insiders beat the market</h2>
           <p>
             The idea that insider trades carry real predictive information isn't new, and it isn't a fintech
@@ -5645,25 +5645,25 @@ function InfoTrustPage({ onBack, onEnter }) {
             rather than buried in a wall of citations.
           </p>
           <div className="lp-findings-grid">
-            <div className="lp-finding-card">
+            <div className="lp-finding-card reveal reveal--delay-0">
               <div className="lp-finding-card__icon"><IconInsights style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">Buying beats selling as a signal</div>
               <div className="lp-finding-card__body">Insiders face real legal exposure for selling on bad non-public information. That risk doesn't apply the same way to buying, which is why purchases carry more predictive weight than sales.</div>
               <div className="lp-finding-card__cite">Seyhun, 1980s–90s</div>
             </div>
-            <div className="lp-finding-card">
+            <div className="lp-finding-card reveal reveal--delay-1">
               <div className="lp-finding-card__icon"><IconFavorites style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">Clusters matter more than one trade</div>
               <div className="lp-finding-card__body">Several insiders buying independently around the same time is a stronger signal than one person acting alone. Seli's own scoring is built around this directly.</div>
               <div className="lp-finding-card__cite">Lakonishok &amp; Lee, 2001</div>
             </div>
-            <div className="lp-finding-card">
+            <div className="lp-finding-card reveal reveal--delay-2">
               <div className="lp-finding-card__icon"><IconZap style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">Timing separates signal from noise</div>
               <div className="lp-finding-card__body">Routine, calendar-driven insider trades carry little predictive value. Opportunistic, irregularly-timed ones carry almost all of it.</div>
               <div className="lp-finding-card__cite">Cohen, Malloy &amp; Pomorski, 2012</div>
             </div>
-            <div className="lp-finding-card">
+            <div className="lp-finding-card reveal reveal--delay-3">
               <div className="lp-finding-card__icon"><IconData style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">The rules keep changing, and matter</div>
               <div className="lp-finding-card__body">A 2023 SEC rule change to pre-scheduled 10b5-1 trading plans measurably shifted how insiders structure their disclosed sales. This is an active area of research, not a settled 1980s question.</div>
@@ -5680,7 +5680,7 @@ function InfoTrustPage({ onBack, onEnter }) {
         </section>
 
         {/* ── How Seli gets and scores the data ────────────────────────── */}
-        <section className="lp-info__section">
+        <section className="lp-info__section reveal">
           <h2>How Seli gets and scores the data</h2>
           <div className="lp-pipeline">
             {[
@@ -5731,7 +5731,7 @@ function InfoTrustPage({ onBack, onEnter }) {
         </section>
 
         {/* ── Historical analysis ──────────────────────────────────────── */}
-        <section className="lp-info__section">
+        <section className="lp-info__section reveal">
           <h2>Historical analysis</h2>
           <div className="lp-timeline">
             {[
@@ -5769,7 +5769,7 @@ function InfoTrustPage({ onBack, onEnter }) {
         </section>
 
         {/* ── Disclosures ───────────────────────────────────────────────── */}
-        <section className="lp-info__section lp-info__section--limits">
+        <section className="lp-info__section lp-info__section--limits reveal">
           <h2>Disclosures</h2>
           <p>
             <strong>This is not a day-trading tool.</strong> Form 4 filings carry a mandatory disclosure
@@ -5805,7 +5805,7 @@ function InfoTrustPage({ onBack, onEnter }) {
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Go to app →</button>
+            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Open Seli →</button>
           </SignedIn>
         </div>
       </div>
@@ -5844,23 +5844,31 @@ function LandingPage({ onEnter, dark, setDark }) {
   const WHATS_INSIDE = [
     {
       icon: 'IconData',
+      eyebrow: 'Data',
       title: `Every filing since ${dataSinceYear}`,
       body: `House, Senate, and corporate insider trades, all pulled straight from public SEC and STOCK Act disclosures. Nothing here is a rumor or a paid data feed. It's what was actually filed, going back to ${dataSinceYear}.`,
+      snippetLabel: 'Placeholder — Data page table, filtered to a ticker',
     },
     {
       icon: 'IconInsights',
+      eyebrow: 'Signals',
       title: 'See who\'s actually good at this',
       body: 'Insiders and members of Congress ranked by their real track record, not by how much they traded. When someone with a strong history makes a big move, it shows up fast.',
+      snippetLabel: 'Placeholder — Top insiders leaderboard row with hit rate',
     },
     {
       icon: 'IconLink',
+      eyebrow: 'Portfolio',
       title: 'Watch your own holdings, and theirs',
       body: 'Link your brokerage and see insider activity on stocks you already own. Or skip that and just follow specific tickers and people you want to keep an eye on.',
+      snippetLabel: 'Placeholder — Portfolio tile with a matched insider trade',
     },
     {
       icon: 'IconZap',
+      eyebrow: 'Alerts',
       title: 'Get notified the moment it happens',
       body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you find out right away, not the next time you happen to check.',
+      snippetLabel: 'Placeholder — instant alert email',
     },
   ];
   useEffect(() => {
@@ -5920,14 +5928,11 @@ function LandingPage({ onEnter, dark, setDark }) {
           </button>
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="lp-btn-ghost">Log in</button>
-            </SignInButton>
-            <SignInButton mode="modal">
-              <button className="lp-btn-primary">Open app →</button>
+              <button className="lp-btn-primary">Open Seli →</button>
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <button className="lp-btn-primary" onClick={onEnter}>Go to app →</button>
+            <button className="lp-btn-primary" onClick={onEnter}>Open Seli →</button>
           </SignedIn>
         </div>
         </div>
@@ -5951,13 +5956,12 @@ function LandingPage({ onEnter, dark, setDark }) {
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="lp-btn-primary lp-btn-primary--lg">Open Seli</button>
+              <button className="lp-btn-primary lp-btn-primary--lg">Open Seli →</button>
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Go to app →</button>
+            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Open Seli →</button>
           </SignedIn>
-          <span className="lp-hero__cta-note">Free during beta · No credit card</span>
         </div>
 
         {/* Product preview strip */}
@@ -6047,14 +6051,22 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-features" id="features">
         <div className="lp-section-label reveal">What's inside</div>
         <h2 className="lp-section-h2 reveal reveal--delay-1">Public data, actually easy to use.</h2>
-        <div className="lp-features-grid lp-features-grid--2col">
+        <div className="lp-benefit-list">
           {WHATS_INSIDE.map((f,i)=>{
             const Icon = LP_FEATURE_ICON_MAP[f.icon];
             return (
-              <div key={f.title} className={`lp-feature-card reveal reveal--delay-${i%3}`}>
-                <div className="lp-feature-icon">{Icon && <Icon style={{width:20,height:20}}/>}</div>
-                <div className="lp-feature-title">{f.title}</div>
-                <div className="lp-feature-body">{f.body}</div>
+              <div key={f.title} className={`lp-benefit-row ${i%2===1?'lp-benefit-row--reverse':''} reveal reveal--delay-${i%3}`}>
+                <div className="lp-benefit-row__text">
+                  <div className="lp-benefit-row__icon">{Icon && <Icon style={{width:24,height:24}}/>}</div>
+                  <div className="lp-benefit-row__eyebrow">{f.eyebrow}</div>
+                  <div className="lp-benefit-row__title">{f.title}</div>
+                  <div className="lp-benefit-row__body">{f.body}</div>
+                </div>
+                <div className="lp-benefit-row__snippet">
+                  <div className="lp-benefit-snippet-box" aria-hidden="true">
+                    <span className="lp-benefit-snippet-box__label">{f.snippetLabel}</span>
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -6084,7 +6096,7 @@ function LandingPage({ onEnter, dark, setDark }) {
               </SignInButton>
             </SignedOut>
             <SignedIn>
-              <button className="lp-btn-ghost lp-btn-ghost--full" onClick={onEnter}>Open app →</button>
+              <button className="lp-btn-ghost lp-btn-ghost--full" onClick={onEnter}>Open Seli →</button>
             </SignedIn>
           </div>
           <div className="lp-price-card lp-price-card--featured reveal reveal--delay-2">
@@ -6197,7 +6209,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <button className="lp-btn-ghost" onClick={onEnter}>Open app →</button>
+            <button className="lp-btn-ghost" onClick={onEnter}>Open Seli →</button>
           </SignedIn>
         </div>
         </div>
@@ -6311,6 +6323,7 @@ export default function App() {
   const [detailFull,setDetailFull] = useState(()=>!!appStateFromPath(window.location.pathname).detail);
   const [portfolioTickers, setPortfolioTickers] = useState([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(null); // null | 'default' | 'data_export' | 'portfolio' | 'notifications' | 'risk_management'
+  const [showStaleDataModal, setShowStaleDataModal] = useState(false);
 
   // ── Client-side routing ────────────────────────────────────────────────────
   // Deliberately narrow scope: top-level pages + the global ticker/insider
@@ -6388,6 +6401,14 @@ export default function App() {
     // Run: SELECT MAX(transaction_date) FROM public.filings to find and fix it
     return max>today ? today : max;
   },[filings]);
+  // Shared by both the subtle status-bar indicator and the more prominent
+  // top banner below — one computation, not two copies of the same date
+  // math that could quietly drift apart from each other.
+  const daysSinceLastFiling = useMemo(() => {
+    if (!lastFilingDate) return null;
+    return Math.floor((new Date() - new Date(lastFilingDate + 'T12:00:00')) / (1000*60*60*24));
+  }, [lastFilingDate]);
+  const isDataStale = daysSinceLastFiling != null && daysSinceLastFiling >= 3;
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
@@ -6452,6 +6473,32 @@ export default function App() {
   if (showLanding || isAboutPath) return <LandingPage onEnter={enterApp} dark={dark} setDark={setDark} isLoaded={isLoaded}/>;
 
   return (
+    <>
+    {isDataStale && (
+      <button className="stale-banner" onClick={() => setShowStaleDataModal(true)}>
+        <IconWarning style={{width:14,height:14}}/>
+        Live data isn't updating right now — tap for details
+      </button>
+    )}
+    {showStaleDataModal && (
+      <div className="modal-overlay" onClick={(e)=>{if(e.target===e.currentTarget)setShowStaleDataModal(false);}}>
+        <div className="modal-panel stale-modal">
+          <div className="modal-panel__hdr">
+            <span className="modal-panel__title">Data isn't updating</span>
+            <button className="modal-close" onClick={()=>setShowStaleDataModal(false)} title="Close (Esc)">
+              <IconClose style={{width:12,height:12}}/>
+            </button>
+          </div>
+          <div className="modal-body stale-modal__body">
+            <p>Live filing data hasn't updated in a few days. We're aware and working on it — nothing you need to do on your end.</p>
+            <p className="stale-modal__timestamp">
+              Last new filing: <strong>{lastFilingDate ? fmt.dateShort(lastFilingDate) : 'unknown'}</strong>
+              {daysSinceLastFiling != null && ` (${daysSinceLastFiling} day${daysSinceLastFiling===1?'':'s'} ago)`}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
     <RiskAppetiteContext.Provider value={riskAppetite}>
     <GuideProvider>
     <div className={`app-shell${panelOpen?' app-shell--panel-open':''}`}>
@@ -6464,16 +6511,12 @@ export default function App() {
           </span>
           <div className="status-bar__meta">
             {/* Data freshness */}
-            {lastFilingDate&&(()=>{
-              const daysSince = Math.floor((new Date()-new Date(lastFilingDate+'T12:00:00'))/(1000*60*60*24));
-              const stale = daysSince>=3;
-              return (
-                <span className={stale?'status-bar__stale':''} title={stale?`Data through ${lastFilingDate} — may be behind`:`Data current through ${lastFilingDate}`}>
-                  <span className="status-bar__dot" style={stale?{background:'var(--amber-600)'}:{}}/>
-                  {stale?<><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{`Data through ${fmt.dateShort(lastFilingDate)}`}</>:`Through ${fmt.dateShort(lastFilingDate)}`}
-                </span>
-              );
-            })()}
+            {lastFilingDate&&(
+              <span className={isDataStale?'status-bar__stale':''} title={isDataStale?`Data through ${lastFilingDate} — may be behind`:`Data current through ${lastFilingDate}`}>
+                <span className="status-bar__dot" style={isDataStale?{background:'var(--amber-600)'}:{}}/>
+                {isDataStale?<><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{`Data through ${fmt.dateShort(lastFilingDate)}`}</>:`Through ${fmt.dateShort(lastFilingDate)}`}
+              </span>
+            )}
             {!lastFilingDate&&<span><span className="status-bar__dot"/>{loading?'Syncing…':'Ready'}</span>}
             {/* Guide — reachable anytime, not just on first sign-in or via a
                 tile's "?". Opens in-app rather than a new tab, since it's
@@ -6560,6 +6603,7 @@ export default function App() {
     </div>
     </GuideProvider>
     </RiskAppetiteContext.Provider>
+    </>
   );
 }
 

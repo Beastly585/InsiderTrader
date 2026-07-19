@@ -1619,6 +1619,26 @@ td { padding:7px 11px; vertical-align:middle; }
 .snapshot-card__context { font-size: 0.6875rem; color: var(--text-3); line-height: 1.5; padding: 6px 14px; border-bottom: 0.5px dashed var(--border); }
 .snapshot-sector-val { font-size: 0.6875rem; font-weight: 600; }
 .status-bar__stale { color: var(--amber-600); }
+
+/* Full-width banner above the entire app shell (sidebar included) — a
+   distinct, more urgent signal than the small amber status-bar text above,
+   which stays as a passive, low-key indicator. This is the "something's
+   actually wrong, here's what and when" surface for when staleness crosses
+   the same threshold. Deliberately red, not amber, since amber is already
+   used for the subtle version — using the same color for both would blur
+   the distinction between "a quiet heads-up" and "we know, we're on it." */
+.stale-banner {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 8px 16px; border: none; cursor: pointer;
+  background: var(--red-600); color: #fff; font-size: 0.8125rem; font-weight: 600;
+  font-family: var(--font); transition: background .12s;
+}
+.stale-banner:hover { background: color-mix(in srgb, var(--red-600) 85%, black); }
+.stale-modal { max-width: 440px; }
+.stale-modal__body p { margin: 0 0 14px; font-size: 0.875rem; line-height: 1.6; color: var(--text-2); }
+.stale-modal__body p:last-child { margin-bottom: 0; }
+.stale-modal__timestamp { font-size: 0.8125rem; color: var(--text-3); }
+.stale-modal__timestamp strong { color: var(--text); }
 .snapshot-subsection { border-top: 0.5px dashed var(--border); }
 .snapshot-subsection__label { font-size: 0.6562rem; font-weight: 600; color: var(--amber-600); padding: 8px 14px 4px; }
 .snapshot-rank { font-size: 0.6875rem; color: var(--text-3); font-family: var(--font-mono); width: 14px; flex-shrink: 0; }
@@ -2367,7 +2387,7 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-btn-primary {
   padding: 8px 18px; font-size: 0.8438rem; font-weight: 600; font-family: var(--font);
   background: var(--accent); color: #fff; border: none; border-radius: 999px;
-  cursor: pointer; transition: background .12s, transform .12s, box-shadow .12s;
+  cursor: pointer; transition: background .12s, transform .15s, box-shadow .2s;
   letter-spacing: -0.1px; white-space: nowrap;
   position: relative; overflow: hidden; z-index: 0;
 }
@@ -2376,16 +2396,35 @@ td { padding:7px 11px; vertical-align:middle; }
   background: rgba(255,255,255,0.22);
   transform: translateX(-100%);
   transition: transform .3s ease;
-  z-index: -1;
+  z-index: -2;
 }
 .lp-btn-primary:hover::before { transform: translateX(0); }
+/* Second, distinct effect layered on top of the flat-color sweep above — a
+   narrow, angled light streak that sweeps across the button, the "shine"
+   look rather than a flat wipe. Wider than the button itself and rotated,
+   so the sweep crosses the full width at an angle instead of a straight
+   vertical edge moving left to right. */
+.lp-btn-primary::after {
+  content: ''; position: absolute; top: -50%; left: -60%;
+  width: 40%; height: 200%;
+  background: rgba(255,255,255,0.35);
+  transform: rotate(20deg) translateX(-220%);
+  transition: transform .55s ease;
+  z-index: -1; pointer-events: none;
+}
+.lp-btn-primary:hover::after { transform: rotate(20deg) translateX(420%); }
 @media (prefers-reduced-motion: reduce) {
-  .lp-btn-primary::before { transition: none; }
+  .lp-btn-primary::before, .lp-btn-primary::after { transition: none; }
 }
 .lp-btn-primary:hover {
   background: var(--accent-strong);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 20px rgba(124,111,255,0.35);
+  transform: translateY(-1px) scale(1.015);
+  /* color-mix, not a hardcoded rgba — the previous value (124,111,255) was
+     the dark theme's accent hardcoded directly, so the glow was subtly the
+     wrong color in light theme (accent there is a different hex entirely).
+     This tracks whichever theme's real --accent is active, correctly, and
+     is also a noticeably stronger glow than before per "make it pop more". */
+  box-shadow: 0 6px 28px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .lp-btn-primary--lg {
   padding: 13px 28px; font-size: 0.9375rem; border-radius: 999px;
@@ -2403,13 +2442,25 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--accent-50);
   transform: translateX(-100%);
   transition: transform .3s ease;
-  z-index: -1;
+  z-index: -2;
 }
 .lp-btn-ghost:hover::before { transform: translateX(0); }
-@media (prefers-reduced-motion: reduce) {
-  .lp-btn-ghost::before { transition: none; }
+.lp-btn-ghost::after {
+  content: ''; position: absolute; top: -50%; left: -60%;
+  width: 40%; height: 200%;
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  transform: rotate(20deg) translateX(-220%);
+  transition: transform .55s ease;
+  z-index: -1; pointer-events: none;
 }
-.lp-btn-ghost:hover { color: var(--text); border-color: var(--text-3); background: var(--surface-2); }
+.lp-btn-ghost:hover::after { transform: rotate(20deg) translateX(420%); }
+@media (prefers-reduced-motion: reduce) {
+  .lp-btn-ghost::before, .lp-btn-ghost::after { transition: none; }
+}
+.lp-btn-ghost:hover {
+  color: var(--text); border-color: var(--accent); background: var(--surface-2);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 20%, transparent);
+}
 .lp-btn-ghost--full { width: 100%; text-align: center; border-radius: var(--radius-md); padding: 11px; }
 
 
@@ -2646,8 +2697,8 @@ td { padding:7px 11px; vertical-align:middle; }
   letter-spacing: .1em; color: var(--accent-strong); margin-bottom: 16px;
 }
 .lp-section-h2 {
-  font-size: clamp(24px, 4vw, 40px); font-weight: 700;
-  letter-spacing: -1px; line-height: 1.15; color: var(--text);
+  font-size: clamp(28px, 4.4vw, 44px); font-weight: 800;
+  letter-spacing: -1.2px; line-height: 1.12; color: var(--text);
   margin-bottom: 56px;
 }
 /* Benefit list — one row per benefit, text on one side and a snippet
@@ -2665,13 +2716,25 @@ td { padding:7px 11px; vertical-align:middle; }
   .lp-benefit-row--reverse .lp-benefit-row__text,
   .lp-benefit-row--reverse .lp-benefit-row__snippet { order: initial; }
 }
+.lp-benefit-row__eyebrow {
+  font-size: 0.75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 10px;
+}
 .lp-benefit-row__icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; border-radius: var(--radius-md);
-  background: var(--accent-50); color: var(--accent-strong);
-  margin-bottom: 16px;
+  width: 52px; height: 52px; border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  color: #fff; box-shadow: 0 6px 20px rgba(90,79,232,0.28);
+  margin-bottom: 22px;
 }
-.lp-benefit-row__title { font-size: 1.375rem; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 10px; }
+.lp-benefit-row__title {
+  /* Deliberately a full visual tier below .lp-section-h2 at every width,
+     not just at the widest one — the clamp() minimums used to sit only
+     2px apart (24px vs 22px), which is what actually made the section
+     feel flat on anything but a very wide screen. */
+  font-size: clamp(19px, 1.7vw, 23px); font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1.25; margin-bottom: 12px;
+}
 .lp-benefit-row__body { font-size: 0.9375rem; line-height: 1.65; color: var(--text-2); max-width: 420px; }
 .lp-benefit-snippet-box {
   aspect-ratio: 4 / 3; border-radius: var(--radius-lg);
