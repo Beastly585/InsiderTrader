@@ -1147,6 +1147,32 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .detail-panel--modal .detail-panel__body { flex: 1; overflow-y: auto; }
 
+@media (max-width: 640px) {
+  /* Forces the centered-modal look regardless of which class DetailPanel's
+     own `expanded` state actually applies. That state only reliably
+     re-evaluates on this component's very first mount in a session (no
+     key prop forces a remount when navigating from one row's detail to
+     another's), so relying on it alone means only the first-ever click
+     on mobile is guaranteed to open centered — anything after that keeps
+     whatever expanded value was already set, even for a completely
+     different row. CSS doesn't have that timing problem: this always
+     applies at this width, independent of React state or when anything
+     mounted. Placed here, after .detail-panel--modal's own definition,
+     so it genuinely wins by source order rather than only working today
+     by coincidence of matching values with that rule.
+  */
+  .panel-overlay {
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.45); padding: 5vh 4vw;
+  }
+  .detail-panel {
+    position: static; width: min(820px, 92vw); height: 90vh;
+    max-height: 90vh; right: auto; top: auto; bottom: auto;
+    border-radius: var(--radius-lg); border-left: none;
+    border: 0.5px solid var(--border); animation: none;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    PER-STOCK BREAKDOWN
 ══════════════════════════════════════════════════════════════════════════ */
@@ -1728,6 +1754,16 @@ td { padding:7px 11px; vertical-align:middle; }
 @media (max-width: 640px) {
   body { font-size: 0.8125rem; }
 
+  /* This is the actual fix behind "tiles need to be taller" — content-area
+     had overflow:hidden with nothing above it in the chain to reach
+     anything taller than one viewport. Increasing tile height alone,
+     without this, would have made things worse: content beyond the first
+     tile would become genuinely unreachable, clipped with no way to
+     scroll to it. The page itself needs to scroll on a phone screen the
+     same way any normal webpage does — this was only ever "fixed height,
+     internal scroll areas" by design for the desktop shell layout. */
+  .content-area { overflow-y: auto; overflow-x: hidden; }
+
   /* Page chrome */
   .page-content { padding: 0 10px 24px; }
   .page-title { font-size: 1.1875rem; }
@@ -1739,7 +1775,11 @@ td { padding:7px 11px; vertical-align:middle; }
   .dash-pulse-strip { grid-template-columns: repeat(2, 1fr); }
   .dash-pulse-stat { padding: 8px 10px; }
   .dash-pulse-stat__val { font-size: 0.875rem; }
-  .dash-tile--signals, .dash-tile--portfolio, .dash-tile--news, .dash-tile--top-insiders { max-height: 560px; }
+  /* vh-based, not a flat px cap — scales across different phone screen
+     sizes, and now that the page itself can scroll (fix above), each tile
+     can afford real height without needing to cram three of them into one
+     fixed viewport. */
+  .dash-tile--signals, .dash-tile--portfolio, .dash-tile--news, .dash-tile--top-insiders { max-height: 78vh; min-height: 320px; }
   .sig-tabs { overflow-x: auto; }
   .sig-tab { flex-shrink: 0; }
 
