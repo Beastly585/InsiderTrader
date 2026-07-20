@@ -2859,6 +2859,43 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
       });
     }
 
+    // General-purpose version of the trace above, not limited to the
+    // political-source case — fires whenever the pipeline produces zero
+    // signals despite real filings existing in the requested window, which
+    // is a genuinely unexpected state worth surfacing regardless of which
+    // source filter is active. Same reasoning as the block above: check
+    // actual field values at each stage rather than infer where rows
+    // disappeared.
+    if (result.length===0 && filings.length>0 && typeof console!=='undefined') {
+      const base = filings.filter(f=>{
+        const tx = f.transactionDate||f.date||'';
+        if (tx < cutoff) return false;
+        const isPol = !!(f.transactionCode&&f.transactionCode.startsWith('CONGRESS'));
+        if (sourceF==='corporate'&&isPol) return false;
+        if (sourceF==='political'&&!isPol) return false;
+        if (sectorF&&f.sector!==sectorF) return false;
+        return true;
+      });
+      const built = buildSignals(base);
+      const afterGate = built.filter(s=>s.cSuiteBuys>=1||s.insiderCount>=2||s.netValue>=100_000||s.isPolitical);
+      console.log('%c[Empty signals trace]', 'font-weight:bold;color:#C0392B', {
+        '0. Total filings in memory (any date)': filings.length,
+        '0a. Sample of 3 raw filings, unmodified': filings.slice(0,3).map(f=>({
+          ticker:f.ticker, date:f.date, transactionDate:f.transactionDate,
+          isOpenMarket:f.isOpenMarket, transactionType:f.transactionType, relationship:f.relationship,
+        })),
+        '1. cutoff currently in use': cutoff,
+        '1a. Most recent transactionDate/date in filings': filings.reduce((max,f)=>{const d=f.transactionDate||f.date||'';return d>max?d:max;},''),
+        '2. After date/source/sector filter (base)': base.length,
+        '3. Signals built from base (any source)': built.length,
+        '3a. Sample of 3 built signals': built.slice(0,3).map(s=>({ticker:s.ticker, cSuiteBuys:s.cSuiteBuys, insiderCount:s.insiderCount, netValue:s.netValue, isPolitical:s.isPolitical})),
+        '4. Survive quality gate': afterGate.length,
+        '5. Survive strength threshold (final result)': result.length,
+        'strengthThreshold currently': strengthThreshold,
+        'sourceF/sectorF currently': {sourceF, sectorF},
+      });
+    }
+
     return result
       .sort((a,b)=>{
         const av=a[sigSort],bv=b[sigSort];
