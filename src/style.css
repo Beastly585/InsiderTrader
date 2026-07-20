@@ -1739,9 +1739,18 @@ td { padding:7px 11px; vertical-align:middle; }
   .dash-pulse-strip { grid-template-columns: repeat(2, 1fr); }
   .dash-pulse-stat { padding: 8px 10px; }
   .dash-pulse-stat__val { font-size: 0.875rem; }
-  .dash-tile--signals, .dash-tile--portfolio, .dash-tile--news { max-height: 380px; }
+  .dash-tile--signals, .dash-tile--portfolio, .dash-tile--news, .dash-tile--top-insiders { max-height: 560px; }
   .sig-tabs { overflow-x: auto; }
   .sig-tab { flex-shrink: 0; }
+
+  /* Mobile is a quick-check surface, not the primary way most people use
+     this app — the heatmap and sentiment strip are market context, not
+     the actual insider-activity data someone opens the app to see. Hidden
+     here rather than shrunk, so the real data tiles (signals, top
+     insiders, news) get the freed-up vertical space instead of all of
+     them being cramped together. */
+  .mkt-tile--strip-only { display: none; }
+  .dash-tile--heatmap { display: none; }
 
   /* Insights snapshot + tabs */
   .env-tabs { overflow-x: auto; flex-wrap: nowrap; }
