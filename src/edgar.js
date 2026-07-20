@@ -75,6 +75,20 @@ export function enrich(raw) {
 // Phase 2: Clerk JWT — set window.__clerkGetToken from app.jsx once Clerk loads
 // Everything in this file calls getAuthHeaders() — nothing else needs to change
 async function getAuthHeaders() {
+  // Same race-condition fix as app.jsx's own getAuthHeaders — this file has
+  // its own separate copy of this function, and until now it didn't have
+  // this fix, only that one did. On a fresh page load, fetchFromNeon (the
+  // function that loads filings, which everything signal-related is built
+  // from) can fire before App's own effect has registered
+  // window.__clerkGetToken. Previously this was masked by the
+  // WORKER_API_KEY fallback below still succeeding with a static key
+  // regardless of Clerk's loading state — with that fallback now removed,
+  // the same race condition produces empty headers and a 401 instead.
+  if (!window.__clerkGetToken) {
+    for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
+      await new Promise(r => setTimeout(r, 50)); // up to ~2s total, matching app.jsx's own version exactly
+    }
+  }
   // Phase 2: if Clerk token getter is registered, use JWT
   if (window.__clerkGetToken) {
     try {

@@ -111,7 +111,15 @@ const workerHandler = {
       // Try Clerk JWT first if configured
       if (env.CLERK_JWKS_URL && authHeader.startsWith('Bearer ')) {
         const token = authHeader.slice(7);
-        const valid = await verifyClerkJWT(token, env.CLERK_JWKS_URL).catch(() => false);
+        const valid = await verifyClerkJWT(token, env.CLERK_JWKS_URL).catch(e => {
+          // This was previously a silent .catch(() => false) — meaning
+          // every JWT failure (expired, key-rotation mismatch, malformed
+          // token, JWKS fetch failure) looked identical from the outside:
+          // just a bare 401 with no way to tell which one it actually
+          // was. Logged here so wrangler tail shows the real reason.
+          console.error('[Worker] Clerk JWT verification failed:', e.message);
+          return false;
+        });
         if (!valid) return corsResponse({ error: 'Invalid token' }, 401, origin, env);
         // JWT valid — proceed
       } else if (env.WORKER_API_KEY) {
