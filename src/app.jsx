@@ -1461,7 +1461,16 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   const [tickerRows, setTickerRows] = useState(null);
   const [busy,       setBusy]       = useState(false);
   const [bundleOn,   setBundleOn]   = useState(true);
-  const [expanded,   setExpanded]   = useState(false);
+  // Defaults to the existing centered-modal variant (detail-panel--modal,
+  // already built for the "enlarge" toggle button below) on mobile
+  // viewports, rather than always starting as the narrow side drawer — a
+  // ~390px-wide drawer sliding in from the right doesn't leave much room
+  // to actually read a signal or row's detail on a phone screen. Checked
+  // once at mount, matching the same 640px breakpoint used throughout
+  // this session's other mobile work. The toggle button (line below,
+  // "Collapse"/"Enlarge") still works normally either way — this only
+  // changes which mode someone starts in.
+  const [expanded,   setExpanded]   = useState(() => typeof window !== 'undefined' && window.innerWidth <= 640);
   const [omOnly,     setOmOnly]     = useState(true);
   const nav = (type,data) => onNavigate&&onNavigate({type,...data});
 
@@ -3700,6 +3709,8 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
 // (see InsightsSectorChart). points: [{date, value}, ...] sorted ascending.
 function PortfolioPerformanceChart({ points, onClick }) {
   const W = 600, H = 160, PAD_L = 56, PAD_R = 10, PAD_T = 10, PAD_B = 24;
+  const svgRef = useRef(null);
+  const [hoverIdx, setHoverIdx] = useState(null);
   const values = points.map(p=>p.value);
   const min = Math.min(...values), max = Math.max(...values);
   const range = (max-min) || 1;
@@ -3720,9 +3731,28 @@ function PortfolioPerformanceChart({ points, onClick }) {
   // crowding a chart this size with a full date scale.
   const xTicks = [points[0], points[Math.floor((points.length-1)/2)], points[points.length-1]];
 
+  // Converts a mouse event's screen position to the chart's own viewBox
+  // coordinates, then finds the nearest actual data point by x — not a
+  // continuous cursor-follows-exactly value, since the underlying data is
+  // daily closes, not a continuous function; snapping to the nearest real
+  // point is the honest representation of what the data actually is.
+  const handleMove = (e) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const scaleX = W / rect.width; // viewBox width vs. actual rendered width — the svg is responsive (width="100%"), so these differ except at exactly 600px wide
+    const svgX = (e.clientX - rect.left) * scaleX;
+    const idx = Math.round((svgX - PAD_L) / stepX);
+    const clamped = Math.max(0, Math.min(points.length - 1, idx));
+    setHoverIdx(clamped);
+  };
+
+  const hover = hoverIdx != null ? { point: points[hoverIdx], coord: coords[hoverIdx] } : null;
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{display:'block',cursor:onClick?'pointer':'default'}}
-      onClick={onClick} role={onClick?'button':undefined} aria-label={onClick?'Open portfolio explorer':undefined}>
+    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none"
+      style={{display:'block',cursor:onClick?'pointer':'default'}}
+      onClick={onClick} role={onClick?'button':undefined} aria-label={onClick?'Open portfolio explorer':undefined}
+      onMouseMove={handleMove} onMouseLeave={()=>setHoverIdx(null)}>
       {yTicks.map((v,i)=>{
         const y = PAD_T + plotH*(i/2);
         return (
@@ -3742,6 +3772,30 @@ function PortfolioPerformanceChart({ points, onClick }) {
         </text>
       ))}
       <path d={path} fill="none" stroke={color} strokeWidth="2"/>
+      {hover && (
+        <g style={{pointerEvents:'none'}}>
+          <line x1={hover.coord.x} y1={PAD_T} x2={hover.coord.x} y2={H-PAD_B}
+            stroke="var(--text-3)" strokeWidth="1" strokeDasharray="2,2"/>
+          <circle cx={hover.coord.x} cy={hover.coord.y} r="3.5" fill={color} stroke="var(--surface)" strokeWidth="1.5"/>
+          {/* Tooltip box — flipped to the left side of the guide line past
+              the chart's own midpoint, so it never renders partially off
+              the right edge for points late in the series. */}
+          {(() => {
+            const boxW = 92, boxH = 30;
+            const flip = hover.coord.x > PAD_L + plotW/2;
+            const boxX = flip ? hover.coord.x - boxW - 8 : hover.coord.x + 8;
+            const boxY = Math.max(PAD_T, Math.min(H-PAD_B-boxH, hover.coord.y - boxH/2));
+            return (
+              <g>
+                <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="4"
+                  fill="var(--surface)" stroke="var(--border-md)" strokeWidth="0.5"/>
+                <text x={boxX+8} y={boxY+13} fontSize="9" fill="var(--text-3)">{fmt.dateShort(hover.point.date)}</text>
+                <text x={boxX+8} y={boxY+24} fontSize="10.5" fontWeight="700" fill="var(--text)">{fmt.money(hover.point.value)}</text>
+              </g>
+            );
+          })()}
+        </g>
+      )}
     </svg>
   );
 }
