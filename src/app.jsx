@@ -1279,6 +1279,8 @@ function GuideModal({ initialSection, onClose }) {
                   key={s.id}
                   className={`guide-modal__nav-item ${s.id === activeId ? 'guide-modal__nav-item--active' : ''}`}
                   onClick={() => setActiveId(s.id)}
+                  title={s.label}
+                  aria-label={s.label}
                 >
                   <span className="guide-modal__nav-icon">{Icon && <Icon style={{ width: 14, height: 14 }} />}</span>
                   <span className="guide-modal__nav-num">{i + 1}</span>
@@ -5188,7 +5190,9 @@ function SettingsPage({ user, onUpgrade }) {
           {SECTIONS.map(s=>(
             <button key={s.id}
               className={`settings-sidenav__item${section===s.id?' settings-sidenav__item--active':''}`}
-              onClick={()=>setSection(s.id)}>
+              onClick={()=>setSection(s.id)}
+              title={s.label}
+              aria-label={s.label}>
               <span className="settings-sidenav__icon">{s.Icon ? <s.Icon style={{width:14,height:14}}/> : s.icon}</span>
               {s.label}
             </button>
@@ -6421,9 +6425,32 @@ function AppInner() {
     if (!cfg.NEON_PROXY_URL) return;
     (async () => {
       const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-      fetch(`${cfg.NEON_PROXY_URL}/portfolio`, {
-        method: 'POST', headers, body: JSON.stringify({}),
-      }).then(r=>r.json()).then(d=>{if(!d.error&&d.positions)setPortfolioTickers(d.positions.map(p=>p.symbol).filter(Boolean));}).catch(()=>{});
+      // Was previously POSTing to a route removed from the Worker when
+      // SnapTrade replaced it — silently failed for every user this whole
+      // time, meaning the Data page's "filter to my portfolio" toggle
+      // never actually worked. Fixed to call the real, current endpoint.
+      fetch(`${cfg.NEON_PROXY_URL}/snaptrade/positions`, { method: 'GET', headers })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (!d?.accounts) return; // 403 (not Pro) or 404 (no linked account) both land here — expected, not an error
+          const tickers = new Set();
+          for (const acct of d.accounts) {
+            const positions = acct.positions;
+            // Same defensive parsing as handlePortfolioTickersBatch on the
+            // Worker side — SnapTrade's own response can be a bare array,
+            // or an object wrapping one, depending on the endpoint version.
+            const list = Array.isArray(positions) ? positions
+              : (positions && typeof positions === 'object')
+                ? (Array.isArray(positions.results) ? positions.results : Object.values(positions).filter(Array.isArray).flat())
+                : [];
+            for (const p of list) {
+              const ticker = p.instrument?.symbol || p.instrument?.raw_symbol;
+              if (ticker) tickers.add(ticker);
+            }
+          }
+          setPortfolioTickers([...tickers]);
+        })
+        .catch(()=>{}); // a real network failure here just leaves the filter showing no results, not a crash
     })();
   },[]);
 
@@ -6524,7 +6551,7 @@ function AppInner() {
                 {isDataStale?<><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{`Data through ${fmt.dateShort(lastFilingDate)}`}</>:`Through ${fmt.dateShort(lastFilingDate)}`}
               </span>
             )}
-            {!lastFilingDate&&<span><span className="status-bar__dot"/>{loading?'Syncing…':'Ready'}</span>}
+            {!lastFilingDate&&<span title={loading?'Syncing…':'Ready'}><span className="status-bar__dot"/>{loading?'Syncing…':'Ready'}</span>}
             {/* Guide — reachable anytime, not just on first sign-in or via a
                 tile's "?". Opens in-app rather than a new tab, since it's
                 part of using the product, not a separate reference page. */}

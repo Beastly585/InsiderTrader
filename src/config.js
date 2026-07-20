@@ -4,7 +4,7 @@
 const cfg = {
   DATA_SOURCE:    import.meta.env.VITE_DATA_SOURCE    || 'proxy',
   NEON_PROXY_URL: import.meta.env.VITE_NEON_PROXY_URL || '',
-  WORKER_API_KEY: import.meta.env.VITE_WORKER_API_KEY || '',
+  // WORKER_API_KEY: import.meta.env.VITE_WORKER_API_KEY || '',
   FINNHUB_API_KEY:import.meta.env.VITE_FINNHUB_API_KEY|| '',
   ALPACA_LIVE:    import.meta.env.VITE_ALPACA_LIVE === 'true',
   STRIPE_PUBLISHABLE_KEY: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '',
