@@ -1070,16 +1070,19 @@ function TrustStars({score}) {
     return fillAmount;
   });
   return (
-    <span className="trust-stars" title={`${score}/5`}>
-      <span className="trust-stars__row">
-        {stars.map((fill,i)=>(
-          <span key={i} className="trust-star">
-            <span className="trust-star__bg">★</span>
-            <span className="trust-star__fg" style={{width:`${fill*100}%`}}>★</span>
-          </span>
-        ))}
+    <span className="trust-stars-wrap">
+      <span className="trust-stars__label" title="A weighted composite of hit rate, realized return size, trade volume, and how concentrated their buying is — not the same number as the hit-rate % shown below, which is a raw price outcome with no weighting.">Trust score</span>
+      <span className="trust-stars" title={`${score}/5 — composite score (hit rate + return size + volume + concentration), distinct from the hit-rate % below`}>
+        <span className="trust-stars__row">
+          {stars.map((fill,i)=>(
+            <span key={i} className="trust-star">
+              <span className="trust-star__bg">★</span>
+              <span className="trust-star__fg" style={{width:`${fill*100}%`}}>★</span>
+            </span>
+          ))}
+        </span>
+        <span className="trust-stars__num">{score}/5</span>
       </span>
-      <span className="trust-stars__num">{score}/5</span>
     </span>
   );
 }
@@ -3055,9 +3058,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
     return result
       .sort((a,b)=>{
         const av=a[sigSort],bv=b[sigSort];
-        if(typeof av==='number'){if(av<bv)return sigDir;if(av>bv)return -sigDir;}
-        else{const r=String(av||'').localeCompare(String(bv||''));return sigDir>0?r:-r;}
-        return 0;
+        let r;
+        if(typeof av==='number') r = av<bv?-1:av>bv?1:0;
+        else r = String(av||'').localeCompare(String(bv||''));
+        return sigDir>0?r:-r;
       });
   },[filings,cutoff,sourceF,sectorF,sigSort,sigDir,strengthThreshold]);
 
@@ -3072,23 +3076,11 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 
   const [portModal, setPortModal] = useState(false);
 
-  const colRef = useRef(null);
-  useEffect(()=>{
-    function measure(){
-      if(!colRef.current)return;
-      const top=colRef.current.getBoundingClientRect().top;
-      colRef.current.style.setProperty('--ins-offset',`${top+16}px`);
-    }
-    measure();
-    window.addEventListener('resize',measure);
-    return()=>window.removeEventListener('resize',measure);
-  },[]);
-
   return (
     <div className="page-content">
       {/* Portfolio bar — above everything, full width */}
       {/* Two-column body — signals | insiders */}
-      <div className="ins-3col" ref={colRef}>
+      <div className="ins-3col">
 
         {/* LEFT: Signals */}
         <div className="ins-sig-panel ins-3col__signals">
@@ -3308,7 +3300,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const [lbSort, setLbSort]   = useState('hit_rate');
   const [lbYearsBack, setLbYearsBack] = useState(2); // null = all-time
   const [lbSource, setLbSource] = useState(null); // null='all' | 'corporate' | 'congress'
-  const [lbMinValue, setLbMinValue] = useState(0); // minimum bought_value, filtered client-side
+  const [lbMinValue, setLbMinValue] = useState(50000); // minimum bought_value, filtered client-side — defaults to $50K rather than "Any" so a handful of small trades hitting 100% by chance doesn't dominate the default hit-rate sort
   const [lbDir,  setLbDir]    = useState(-1);
   const [srcF,   setSrcF]     = useState(initialFilters?.sourceF ?? '');
   const [secF,   setSecF]     = useState(initialFilters?.sectorF ?? '');
@@ -3743,38 +3735,32 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
 
   if (!pro) {
     return (
-      <div className="port-mini-tile">
-        {header}
-        <div className="port-mini-tile__body" style={{padding:14}}>
-          <span className="td-muted" style={{fontSize:11}}>
-            Portfolio linking is a Pro feature — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=billing')}>upgrade</button> to see insider activity on your real holdings.
-          </span>
-        </div>
+      <div className="port-mini-tile port-mini-tile--collapsed">
+        <span className="port-mini-tile__collapsed-label">Portfolio</span>
+        <span className="td-muted" style={{fontSize:11}}>
+          Pro feature — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=billing')}>upgrade</button> to see insider activity on your real holdings.
+        </span>
       </div>
     );
   }
 
   if (err) {
     return (
-      <div className="port-mini-tile">
-        {header}
-        <div className="port-mini-tile__body" style={{padding:14}}>
-          <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions right now.</span>
-          <button className="btn btn--ghost btn--sm" style={{marginTop:8}} onClick={refresh} disabled={refreshing}>{refreshing?'Retrying…':'Retry'}</button>
-        </div>
+      <div className="port-mini-tile port-mini-tile--collapsed">
+        <span className="port-mini-tile__collapsed-label">Portfolio</span>
+        <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions.</span>
+        <button className="btn btn--ghost btn--sm" style={{marginLeft:'auto'}} onClick={refresh} disabled={refreshing}>{refreshing?'Retrying…':'Retry'}</button>
       </div>
     );
   }
 
   if (connected===false) {
     return (
-      <div className="port-mini-tile">
-        {header}
-        <div className="port-mini-tile__body" style={{padding:14}}>
-          <span className="td-muted" style={{fontSize:11}}>
-            No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>Link your account</button> to see your real holdings and get notified when insiders trade your stocks.
-          </span>
-        </div>
+      <div className="port-mini-tile port-mini-tile--collapsed">
+        <span className="port-mini-tile__collapsed-label">Portfolio</span>
+        <span className="td-muted" style={{fontSize:11}}>
+          No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>Link your account</button> to see your real holdings and get notified when insiders trade your stocks.
+        </span>
       </div>
     );
   }

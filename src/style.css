@@ -1106,6 +1106,11 @@ td { padding:7px 11px; vertical-align:middle; }
 
 .trader-trust { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 10px; background: var(--surface-2); border-radius: var(--radius-md); border: 0.5px solid var(--border); }
 .trader-trust__label { font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--text-3); flex-shrink: 0; }
+.trust-stars-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.trust-stars__label {
+  font-size: 0.5938rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text-3); cursor: help;
+}
 .trust-stars { display: inline-flex; align-items: center; gap: 6px; }
 .trust-stars__row { display: inline-flex; }
 .trust-stars__num { font-size: 0.6875rem; font-family: var(--font-mono); color: var(--text-2); }
@@ -1450,8 +1455,8 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-3col {
   display: grid;
   grid-template-columns: 3fr 1.6fr;
-  grid-template-rows: calc(100vh - var(--ins-offset, 180px));
-  gap: 12px; min-height: 500px;
+  flex: 1; min-height: 500px;
+  gap: 12px;
 }
 .ins-3col__signals   { grid-column: 1; display: flex; flex-direction: column; min-height: 0; }
 .ins-3col__insiders  { grid-column: 2; display: flex; flex-direction: column; min-height: 0; }
@@ -1526,6 +1531,15 @@ td { padding:7px 11px; vertical-align:middle; }
   border-radius: var(--radius-lg); overflow: hidden;
   display: flex; flex-direction: column; flex-shrink: 0;
   max-height: 360px;
+}
+.port-mini-tile--collapsed {
+  flex-direction: row; align-items: center; gap: 8px;
+  padding: 10px 14px; flex-wrap: wrap;
+}
+.port-mini-tile__collapsed-label {
+  font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--text-3);
+  border-left: 2px solid var(--accent); padding-left: 8px; flex-shrink: 0;
 }
 .port-mini-tile__body {
   padding: 10px 14px 8px; display: flex; flex-direction: column; gap: 6px;
@@ -2302,7 +2316,6 @@ td { padding:7px 11px; vertical-align:middle; }
 .drawer__list-scroll { display: flex; flex-direction: column; }
 .wl-drawer-body {
   grid-template-columns: 340px 1fr;
-  height: calc(100vh - var(--ins-offset, 180px));
 }
 .drawer__list-row {
   padding: 8px 12px; border-bottom: 0.5px solid var(--border);
