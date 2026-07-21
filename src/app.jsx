@@ -5,6 +5,7 @@ import { fmt } from './lib/format.js';
 import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import * as XLSX from 'xlsx'; // npm install xlsx — SheetJS, needed for the two-sheet data export
 // src/app.jsx — Seli — insider trading intelligence platform
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
@@ -112,6 +113,7 @@ function UpgradeModal({ feature, pro, onClose }) {
   const [checkoutProduct, setCheckoutProduct] = useState(null); // null | 'pro' | 'data_export'
   const [plan, setPlan] = useState(feature==='data_export' ? 'data_export' : 'pro'); // which card is selected in the picker
   const [statusModal, setStatusModal] = useState(null);
+  const [processing, setProcessing] = useState(false); // true for the gap between payment succeeding and the confirmation being ready
 
   // Personalized per the specific action that triggered this modal — a
   // generic "Upgrade to Pro" doesn't tell someone what they were actually
@@ -135,6 +137,10 @@ function UpgradeModal({ feature, pro, onClose }) {
     { label: 'Instant alerts',            free: false, pro: true },
   ];
 
+  if (processing) {
+    return <ProcessingModal text={checkoutProduct==='pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…'}/>;
+  }
+
   if (statusModal) {
     return (
       <StatusModal
@@ -152,8 +158,10 @@ function UpgradeModal({ feature, pro, onClose }) {
         onClose={() => setCheckoutProduct(null)}
         onSuccess={async ()=>{
           const wasPro = checkoutProduct === 'pro';
-          setCheckoutProduct(null);
+          setProcessing(true);
           if (wasPro) {
+            setCheckoutProduct(null);
+            setProcessing(false);
             setStatusModal({ title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' });
             return;
           }
@@ -162,8 +170,12 @@ function UpgradeModal({ feature, pro, onClose }) {
           // it. Start the download immediately, then confirm what happened.
           try {
             const rowCount = await downloadFullExport();
+            setCheckoutProduct(null);
+            setProcessing(false);
             setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. "Export CSV" on the Data page is unlocked for you now too — no extra charge.` });
           } catch (e) {
+            setCheckoutProduct(null);
+            setProcessing(false);
             setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to the Data page and click "Export CSV" to try again, no extra charge.` });
           }
         }}
@@ -284,6 +296,25 @@ const PRODUCT_COPY = {
 };
 
 // ─── Confirm dialog — reusable "are you sure?" pattern ────────────────────────
+// ─── Processing modal — covers the real gap between "payment succeeded"
+// and "we know what to tell you" (e.g. the export download itself is still
+// in flight). Previously that gap had no modal at all: checkoutProduct was
+// cleared immediately, but statusModal wasn't set until after an await
+// resolved, so there was a render in between where neither was true and
+// the component fell through to the underlying pricing picker — which is
+// exactly the "flashes back to the original modal" bug this replaces.
+// No close button on purpose — nothing to cancel mid-flight.
+function ProcessingModal({ text='Finishing up…' }) {
+  return (
+    <div className="upgrade-overlay">
+      <div className="upgrade-modal" style={{maxWidth:300,textAlign:'center'}}>
+        <div className="processing-dots"><span/><span/><span/></div>
+        <p style={{fontSize:13,color:'var(--text-2)',marginTop:16}}>{text}</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Status modal — reusable success/confirmation pattern ─────────────────────
 function StatusModal({ title, message, onClose }) {
   return (
@@ -469,6 +500,7 @@ function BillingSection({ user }) {
   const [checkoutProduct, setCheckoutProduct] = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [statusModal, setStatusModal] = useState(null); // null | {title, message}
+  const [processing, setProcessing] = useState(false);
 
   async function load() {
     setLoadErr(null);
@@ -652,6 +684,8 @@ function BillingSection({ user }) {
         />
       )}
 
+      {processing && <ProcessingModal text={checkoutProduct==='pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…'}/>}
+
       {statusModal && (
         <StatusModal
           title={statusModal.title}
@@ -660,22 +694,28 @@ function BillingSection({ user }) {
         />
       )}
 
-      {checkoutProduct && (
+      {checkoutProduct && !processing && (
         <CheckoutModal
           product={checkoutProduct}
           onClose={()=>setCheckoutProduct(null)}
           onSuccess={async ()=>{
             const wasPro = checkoutProduct === 'pro';
-            setCheckoutProduct(null);
+            setProcessing(true);
             load();
             if (wasPro) {
+              setCheckoutProduct(null);
+              setProcessing(false);
               setStatusModal({ title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' });
               return;
             }
             try {
               const rowCount = await downloadFullExport();
+              setCheckoutProduct(null);
+              setProcessing(false);
               setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. "Export CSV" on the Data page is unlocked for you now too — no extra charge.` });
             } catch (e) {
+              setCheckoutProduct(null);
+              setProcessing(false);
               setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to the Data page and click "Export CSV" to try again, no extra charge.` });
             }
           }}
@@ -4542,24 +4582,124 @@ const EXPORT_COLS = ['transaction_date','filing_date','ticker','company_name','i
   'transaction_type','transaction_code','is_open_market','shares','price_per_share',
   'value','pct_owned_change','relationship','sector','footnotes'];
 
+const EXPORT_HEADERS = ['Transaction Date','Filing Date','Ticker','Company','Insider Name','Insider Title',
+  'Buy/Sell','Transaction Code','Open Market?','Shares','Price / Share',
+  'Value ($)','% Owned Change','Relationship','Sector','Footnotes'];
+
+// Column widths (characters) matched 1:1 to EXPORT_HEADERS above.
+const EXPORT_COL_WIDTHS = [13,12,8,28,20,22,9,16,11,11,12,13,14,11,16,32];
+
+const TX_CODE_LEGEND = [
+  ...Object.entries(TX_CODE_TOOLTIPS),
+  ['CONGRESS_P','Congressional purchase (STOCK Act disclosure)'],
+  ['CONGRESS_S','Congressional sale (STOCK Act disclosure)'],
+  ['CONGRESS_O','Congressional other/exchange transaction (STOCK Act disclosure)'],
+];
+
+const COLUMN_LEGEND = [
+  ['Transaction Date','The date the trade itself happened, when disclosed. Congressional trades often disclose only a date range or amount band, not an exact price.'],
+  ['Filing Date','The date the SEC or Congress actually received/processed the disclosure — usually a few days after the transaction date.'],
+  ['Ticker','Stock ticker symbol, when the underlying security has one.'],
+  ['Company','Full company or entity name as filed.'],
+  ['Insider Name','The person or entity who made the trade.'],
+  ['Insider Title','Their role at the company (e.g. CFO, Director), or House/Senate for congressional filers.'],
+  ['Buy/Sell','Whether this was a purchase or a sale.'],
+  ['Transaction Code','The SEC/STOCK Act code describing the transaction type — see the Code column below for what each one means.'],
+  ['Open Market?','Yes if this was a real open-market cash purchase or sale — the kind that reflects a genuine bet with their own money, as opposed to a grant, award, gift, or tax withholding.'],
+  ['Shares','Number of shares involved, when disclosed. Congressional filings typically do not disclose an exact share count.'],
+  ['Price / Share','Price per share at the time of the trade, when disclosed.'],
+  ['Value ($)','Total dollar value of the transaction, or the disclosed range midpoint for congressional trades.'],
+  ['% Owned Change','Approximate percent change in the insider\'s total position this trade represents, when calculable.'],
+  ['Relationship','Insider\'s seniority tier: strong (C-suite), medium (officer), or weak (director/10% owner/other).'],
+  ['Sector','GICS-style sector classification for the company, when known.'],
+  ['Footnotes','Any footnote text attached to the filing, verbatim.'],
+];
+
 // Shared by DataPage's own "Export CSV" button (filtered to whatever's
 // currently on screen) and the "just bought it" auto-download after
 // checkout (unfiltered — the full database, matching what was actually
-// purchased). One function, one CSV-building/download path, so the two
-// can't quietly drift into producing different files.
-async function downloadFullExport(whereClause='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC") {
+// purchased). One function, one workbook-building/download path, so the
+// two can't quietly drift into producing different files.
+//
+// The date bounds below are NOT optional/caller-supplied — they're always
+// ANDed in regardless of what extraConditions contains. Previously the
+// unfiltered "just bought it" path passed no WHERE clause at all, which is
+// exactly how obviously-corrupt rows (transaction_date values like
+// 3031-04-30, 2220-04-07, 2033-12-11 — years that don't exist in any real
+// trading history) made it into a paying customer's download: nothing
+// upstream was rejecting them. DataPage's own filtered browsing already
+// had a same-shaped clamp, which is why this never showed up there — only
+// on the one code path that had none.
+async function downloadFullExport(extraConditions='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC") {
+  const today = new Date().toISOString().split('T')[0];
+  const conditions = [
+    `COALESCE(transaction_date,filing_date) >= '2020-01-01'`, // matches the actual corporate backfill floor — nothing real predates this
+    `COALESCE(transaction_date,filing_date) <= '${today}'`,   // no future-dated garbage, ever
+  ];
+  if (extraConditions) conditions.push(extraConditions);
+  const whereClause = 'WHERE ' + conditions.join(' AND ');
+
   const data = await proxyExport(`
     SELECT ${EXPORT_COLS.map(c=>c==='shares'||c==='price_per_share'||c==='value'||c==='pct_owned_change'?`${c}::float`:c).join(',\n           ')}
     FROM public.filings ${whereClause}
-    ${orderByClause} LIMIT 50000
+    ${orderByClause} LIMIT 500000
   `);
-  const csv=[EXPORT_COLS.join(','),...data.map(r=>EXPORT_COLS.map(h=>{
-    const v=r[h];if(v==null)return '';
-    const s=String(v);return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;
-  }).join(','))].join('\n');
+
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: the data itself ──────────────────────────────────────────
+  const sheetRows = data.map(r => ({
+    'Transaction Date': r.transaction_date ? new Date(r.transaction_date) : '',
+    'Filing Date':      r.filing_date ? new Date(r.filing_date) : '',
+    'Ticker':           r.ticker || '',
+    'Company':          r.company_name || '',
+    'Insider Name':     r.insider_name || '',
+    'Insider Title':    r.insider_title || '',
+    'Buy/Sell':         r.transaction_type ? r.transaction_type[0].toUpperCase()+r.transaction_type.slice(1) : '',
+    'Transaction Code': r.transaction_code || '',
+    'Open Market?':     r.is_open_market===true ? 'Yes' : r.is_open_market===false ? 'No' : '',
+    'Shares':           r.shares!=null ? Number(r.shares) : null,
+    'Price / Share':    r.price_per_share!=null ? Number(r.price_per_share) : null,
+    'Value ($)':        r.value!=null ? Number(r.value) : null,
+    '% Owned Change':   r.pct_owned_change!=null ? Number(r.pct_owned_change) : null,
+    'Relationship':     r.relationship || '',
+    'Sector':           r.sector || '',
+    'Footnotes':        r.footnotes || '',
+  }));
+  const ws = XLSX.utils.json_to_sheet(sheetRows, { header: EXPORT_HEADERS });
+  ws['!cols'] = EXPORT_COL_WIDTHS.map(wch=>({wch}));
+
+  // Real number/date formatting so Excel renders these as actual dates,
+  // currency, and thousands-separated numbers — not plain text that
+  // happens to look like one.
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const colFormats = { 0:'yyyy-mm-dd', 1:'yyyy-mm-dd', 9:'#,##0', 10:'$#,##0.00', 11:'$#,##0.00', 12:'0.00"%"' };
+  for (let R = range.s.r + 1; R <= range.e.r; R++) {
+    for (const [colIdx, fmt] of Object.entries(colFormats)) {
+      const cell = ws[XLSX.utils.encode_cell({ r: R, c: Number(colIdx) })];
+      if (cell) cell.z = fmt;
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, ws, 'Insider Trades');
+
+  // ── Sheet 2: legend — column guide + transaction code reference ───────
+  const legendRows = [
+    ['COLUMN GUIDE'],
+    ['Column','What it means'],
+    ...COLUMN_LEGEND,
+    [],
+    ['TRANSACTION CODES'],
+    ['Code','Meaning'],
+    ...TX_CODE_LEGEND,
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(legendRows);
+  ws2['!cols'] = [{wch:18},{wch:70}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Legend');
+
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download=`insider_trades_${new Date().toISOString().split('T')[0]}.csv`;
+  a.href=URL.createObjectURL(new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=`insider_trades_${today}.xlsx`;
   a.click();
   return data.length;
 }
@@ -4944,7 +5084,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   async function doExport() {
     setExport(true);
     try {
-      await downloadFullExport(where(), orderBy());
+      await downloadFullExport(where().replace(/^WHERE\s+/i,''), orderBy());
     }catch(e){alert(`Export failed: ${e.message}`);}
     setExport(false);
   }
