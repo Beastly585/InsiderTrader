@@ -6620,7 +6620,7 @@ function AppInner() {
     )}
     <RiskAppetiteContext.Provider value={riskAppetite}>
     <GuideProvider>
-    <div className={`app-shell${panelOpen?' app-shell--panel-open':''}`}>
+    <div className={`app-shell${panelOpen?' app-shell--panel-open':''}${page==='settings'?' app-shell--settings':''}`}>
       <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>
       <main className="main-area">
         <div className="status-bar">

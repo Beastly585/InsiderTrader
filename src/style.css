@@ -272,7 +272,7 @@ pre {
 }
 
 .content-area {
-  flex: 1; padding: 0 18px 0; overflow: hidden;
+  flex: 1; padding: 0 18px; overflow: hidden;
   display: flex; flex-direction: column;
   position: relative; /* scopes the gradient below to strictly this area — not the status bar, not the footer */
 }
@@ -316,6 +316,15 @@ pre {
   padding:14px 22px 10px; border-top:0.5px solid var(--border); margin-top:20px;
   flex-shrink: 0; /* lives in main-area's flex column — never squeezed or scrolled away */
 }
+/* Settings' side-nav is a full-bleed panel, not a floating tile — it should
+   run flush to the footer with no gap. Rather than fighting content-area's
+   overflow:hidden to bleed the nav panel past its own box, just remove the
+   footer's margin-top while on this page: content-area itself grows by
+   that amount, and the sidenav (already stretched to 100% of content-area
+   via align-items:stretch) reaches the extra height for free. Settings'
+   content column stretches the same way — harmless, its own scroll area
+   just gets a little taller. */
+.app-shell--settings .footer { margin-top: 0; }
 
 /* ── Right detail panel ───────────────────────────────────────────────────── */
 .panel-overlay { display:none; position:fixed; inset:0; z-index:200; }
@@ -3352,7 +3361,7 @@ td { padding:7px 11px; vertical-align:middle; }
   flex-direction: column;
   background: var(--surface-2);
   border-right: 0.5px solid var(--border);
-  padding: 12px 10px;
+  padding: 0;
   overflow-y: auto;
 }
 .settings-sidenav__item {
