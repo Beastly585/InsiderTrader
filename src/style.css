@@ -376,6 +376,10 @@ pre {
    describes the purchase itself, grouped together instead of scattered
    across rows mixed in with dates, codes, and tickers. */
 .dp-trade-split { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dp-trade-split--stacked {
+  flex-direction: column; align-items: stretch; gap: 8px;
+}
+.dp-trade-split--stacked .dp-trade-right { justify-content: flex-start; }
 .dp-trade-left { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
 .dp-trade-left__top { display: flex; align-items: center; gap: 8px; }
 .dp-trade-left__bottom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -3819,7 +3823,7 @@ td { padding:7px 11px; vertical-align:middle; }
 .settings-select:focus { outline: none; border-color: var(--accent); }
 
 /* ── Pills ────────────────────────────────────────────────────────────────── */
-.settings-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.settings-pills { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px 14px; }
 .settings-pill {
   padding: 5px 13px;
   font-size: 0.75rem;

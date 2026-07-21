@@ -150,13 +150,22 @@ function UpgradeModal({ feature, pro, onClose }) {
       <CheckoutModal
         product={checkoutProduct}
         onClose={() => setCheckoutProduct(null)}
-        onSuccess={()=>{
+        onSuccess={async ()=>{
           const wasPro = checkoutProduct === 'pro';
           setCheckoutProduct(null);
-          setStatusModal(wasPro
-            ? { title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' }
-            : { title: 'Export unlocked', message: 'You can export the full database as CSV anytime from the Data page.' }
-          );
+          if (wasPro) {
+            setStatusModal({ title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' });
+            return;
+          }
+          // Data export — the whole point of paying for this is getting the
+          // file, not being told where to go click a different button for
+          // it. Start the download immediately, then confirm what happened.
+          try {
+            const rowCount = await downloadFullExport();
+            setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. "Export CSV" on the Data page is unlocked for you now too — no extra charge.` });
+          } catch (e) {
+            setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to the Data page and click "Export CSV" to try again, no extra charge.` });
+          }
         }}
       />
     );
@@ -655,14 +664,20 @@ function BillingSection({ user }) {
         <CheckoutModal
           product={checkoutProduct}
           onClose={()=>setCheckoutProduct(null)}
-          onSuccess={()=>{
+          onSuccess={async ()=>{
             const wasPro = checkoutProduct === 'pro';
             setCheckoutProduct(null);
             load();
-            setStatusModal(wasPro
-              ? { title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' }
-              : { title: 'Export unlocked', message: 'You can export the full database as CSV anytime from the Data page.' }
-            );
+            if (wasPro) {
+              setStatusModal({ title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' });
+              return;
+            }
+            try {
+              const rowCount = await downloadFullExport();
+              setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. "Export CSV" on the Data page is unlocked for you now too — no extra charge.` });
+            } catch (e) {
+              setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to the Data page and click "Export CSV" to try again, no extra charge.` });
+            }
           }}
         />
       )}
@@ -996,8 +1011,10 @@ async function getAuthHeaders() {
       if (token) return { 'Authorization': `Bearer ${token}` };
     } catch {}
   }
-  // Phase 1 fallback: API key
-  if (cfg.WORKER_API_KEY) return { 'X-API-Key': cfg.WORKER_API_KEY };
+  // No static-key fallback — a request without a valid Clerk token should
+  // fail with a real 401, not silently succeed via a key that would
+  // otherwise sit exposed in the public bundle the moment anyone set
+  // VITE_WORKER_API_KEY, used or not.
   return {};
 }
 
@@ -1853,7 +1870,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
     return (
       <div className={`dp-trade dp-trade--${tt}`}>
-        <div className="dp-trade-split">
+        <div className={`dp-trade-split${inline?'':' dp-trade-split--stacked'}`}>
           {/* LEFT — context: what kind of trade, when, who/what ticker, and
               the transaction code / market type metadata */}
           <div className="dp-trade-left">
@@ -4503,6 +4520,50 @@ async function proxySQL(sql) {
   return d.rows || [];
 }
 
+// Hits the dedicated /export route (server checks public.data_purchases
+// before running anything) rather than the general query passthrough —
+// same shape, different endpoint, so a non-purchaser can't just replay a
+// normal /query request with a bigger LIMIT and get the export for free.
+async function proxyExport(sql) {
+  const r = await fetch(`${cfg.NEON_PROXY_URL}/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
+    body: JSON.stringify({ query: sql }),
+  });
+  if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
+  if (r.status === 403) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
+  if (!r.ok) throw new Error('Something went wrong exporting this — try again in a moment');
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  return d.rows || [];
+}
+
+const EXPORT_COLS = ['transaction_date','filing_date','ticker','company_name','insider_name','insider_title',
+  'transaction_type','transaction_code','is_open_market','shares','price_per_share',
+  'value','pct_owned_change','relationship','sector','footnotes'];
+
+// Shared by DataPage's own "Export CSV" button (filtered to whatever's
+// currently on screen) and the "just bought it" auto-download after
+// checkout (unfiltered — the full database, matching what was actually
+// purchased). One function, one CSV-building/download path, so the two
+// can't quietly drift into producing different files.
+async function downloadFullExport(whereClause='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC") {
+  const data = await proxyExport(`
+    SELECT ${EXPORT_COLS.map(c=>c==='shares'||c==='price_per_share'||c==='value'||c==='pct_owned_change'?`${c}::float`:c).join(',\n           ')}
+    FROM public.filings ${whereClause}
+    ${orderByClause} LIMIT 50000
+  `);
+  const csv=[EXPORT_COLS.join(','),...data.map(r=>EXPORT_COLS.map(h=>{
+    const v=r[h];if(v==null)return '';
+    const s=String(v);return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;
+  }).join(','))].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=`insider_trades_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  return data.length;
+}
+
 function FilterPanel({
   sectors,
   openMkt, setOpenMkt, fromPortfolio, setFromPortfolio,
@@ -4883,24 +4944,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   async function doExport() {
     setExport(true);
     try {
-      const data=await proxySQL(`
-        SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
-               transaction_type,transaction_code,is_open_market,shares::float,
-               price_per_share::float,value::float,pct_owned_change::float,relationship,sector,footnotes
-        FROM public.filings ${where()}
-        ${orderBy()} LIMIT 50000
-      `);
-      const hdrs=['transaction_date','filing_date','ticker','company_name','insider_name','insider_title',
-        'transaction_type','transaction_code','is_open_market','shares','price_per_share',
-        'value','pct_owned_change','relationship','sector','footnotes'];
-      const csv=[hdrs.join(','),...data.map(r=>hdrs.map(h=>{
-        const v=r[h];if(v==null)return '';
-        const s=String(v);return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}`:s;
-      }).join(','))].join('\n');
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-      a.download=`insider_trades_${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
+      await downloadFullExport(where(), orderBy());
     }catch(e){alert(`Export failed: ${e.message}`);}
     setExport(false);
   }
@@ -4924,6 +4968,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               value={searchInput} onChange={e=>setSearchInput(e.target.value)}
               onKeyDown={e=>e.key==='Enter'&&setSearch(searchInput)}/>
           </div>
+          <div className="drawer__toolbar-divider"/>
           <div className="date-pills">
             {DATA_DATE_PRESETS.map(p=>(
               <button key={p.l} className={`pill${dPreset===p.d&&!dateFrom?' pill--active':''}`}
@@ -4932,9 +4977,12 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                 {p.l}</button>
             ))}
           </div>
-          <input type="date" value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setDPreset(null);}}/>
-          <span style={{color:'var(--text-3)',fontSize:12}}>→</span>
-          <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
+          <div className="drawer__toolbar-divider"/>
+          <div style={{display:'flex',alignItems:'center',gap:7}}>
+            <input type="date" value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setDPreset(null);}}/>
+            <span style={{color:'var(--text-3)',fontSize:12}}>→</span>
+            <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
+          </div>
           <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
             onClick={canExport ? doExport : ()=>onUpgrade('data_export')} disabled={exporting}>
             {exporting

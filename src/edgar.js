@@ -76,28 +76,28 @@ export function enrich(raw) {
 // Everything in this file calls getAuthHeaders() — nothing else needs to change
 async function getAuthHeaders() {
   // Same race-condition fix as app.jsx's own getAuthHeaders — this file has
-  // its own separate copy of this function, and until now it didn't have
-  // this fix, only that one did. On a fresh page load, fetchFromNeon (the
-  // function that loads filings, which everything signal-related is built
-  // from) can fire before App's own effect has registered
-  // window.__clerkGetToken. Previously this was masked by the
-  // WORKER_API_KEY fallback below still succeeding with a static key
-  // regardless of Clerk's loading state — with that fallback now removed,
-  // the same race condition produces empty headers and a 401 instead.
+  // its own separate copy of this function. On a fresh page load,
+  // fetchFromNeon (the function that loads filings, which everything
+  // signal-related is built from) can fire before App's own effect has
+  // registered window.__clerkGetToken, so this waits briefly for it rather
+  // than sending an empty/wrong auth header and 401ing with nothing to
+  // ever retry.
   if (!window.__clerkGetToken) {
     for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
       await new Promise(r => setTimeout(r, 50)); // up to ~2s total, matching app.jsx's own version exactly
     }
   }
-  // Phase 2: if Clerk token getter is registered, use JWT
+  // Clerk JWT is the only auth path now — no static-key fallback. A
+  // request with no valid token should fail with a real 401, not silently
+  // succeed via a key that would otherwise sit in the public bundle
+  // forever, used or not, the moment anyone set VITE_WORKER_API_KEY.
   if (window.__clerkGetToken) {
     try {
       const token = await window.__clerkGetToken();
       if (token) return { 'Authorization': `Bearer ${token}` };
     } catch {}
   }
-  // Phase 1 fallback: API key
-  return cfg.WORKER_API_KEY ? { 'X-API-Key': cfg.WORKER_API_KEY } : {};
+  return {};
 }
 
 // ── Main data fetch ───────────────────────────────────────────────────────────

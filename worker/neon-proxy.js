@@ -14,7 +14,7 @@
  *   STRIPE_SECRET_KEY        sk_live_... / sk_test_...
  *   STRIPE_WEBHOOK_SECRET    whsec_... — from the Stripe Dashboard webhook endpoint
  *   STRIPE_PRICE_PRO         price_... for the $11.99/mo Pro plan (the only
- *                            recurring plan — the $9.99 data export is a
+ *                            recurring plan — the $39.99 data export is a
  *                            one-time PaymentIntent, no Price object needed)
  *   CLERK_SECRET_KEY         sk_live_... / sk_test_... — used to mirror plan
  *                            status into Clerk publicMetadata after webhook events
@@ -135,6 +135,39 @@ const workerHandler = {
       }
     }
 
+    // ── Rate limiting ─────────────────────────────────────────────────────
+    // Keyed on the connecting IP rather than the authenticated user, so it
+    // covers /public/data-stats too — the one route that skips the auth
+    // check above by design (signed-out landing page visitors), and
+    // therefore the most exposed to scripted abuse since it needs no
+    // credential at all to hit repeatedly.
+    //
+    // env.RATE_LIMITER only exists once the binding below is added to
+    // wrangler.toml and deployed — until then this silently no-ops rather
+    // than breaking every request, so this code can ship now and start
+    // enforcing the moment the binding is actually provisioned:
+    //
+    //   [[unsafe.bindings]]
+    //   name = "RATE_LIMITER"
+    //   type = "ratelimit"
+    //   namespace_id = "1001"
+    //   simple = { limit = 120, period = 60 }
+    //
+    if (env.RATE_LIMITER) {
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      try {
+        const { success } = await env.RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return corsResponse({ error: 'Too many requests — slow down and try again in a moment.' }, 429, origin, env);
+        }
+      } catch (e) {
+        // A rate-limiter failure should never be the reason a real request
+        // fails — log it and let the request through rather than turning
+        // an infra hiccup into an outage.
+        console.error('[Worker] Rate limiter check failed, allowing request:', e.message);
+      }
+    }
+
     // ── Billing routes ───────────────────────────────────────────────────
     if (url.pathname === '/billing/create-subscription') {
       return handleCreateSubscription(request, env, origin);
@@ -192,6 +225,17 @@ const workerHandler = {
     }
     if (url.pathname === '/public/data-stats') {
       return handlePublicDataStats(request, env, origin);
+    }
+    // ── Full data export — gated on actually having paid for it ──────────
+    // Previously, "Export CSV" was a large query sent through the same
+    // generic /query passthrough every other page already uses for normal
+    // browsing — nothing there checked whether the caller had bought
+    // export access, only the frontend button's own visibility did. Anyone
+    // signed in, Pro or not, purchased or not, could replay the exact same
+    // request directly and get it for free. This route is the actual gate:
+    // it runs before any query executes, not after.
+    if (url.pathname === '/export') {
+      return handleExport(request, env, origin);
     }
 
     return handleQuery(request, env, origin);
@@ -317,6 +361,48 @@ async function handleQuery(request, env, origin) {
   catch { return corsResponse({ error: 'Invalid Neon response', raw: text.slice(0,200) }, 502, origin, env); }
 
   return corsResponse(result, resp.status, origin, env);
+}
+
+// ── Full data export — the real access-control gate ─────────────────────────
+// Same request shape as /query (POST { query }) so the frontend's existing
+// CSV-building code barely changes, but this checks public.data_purchases
+// BEFORE running anything, rather than relying on the frontend to only ask
+// for a big export when it's supposed to. Mirrors the exact same
+// has-purchased check handleBillingStatus already uses, so "can this user
+// export" is answered identically everywhere it's asked, not two different
+// ways that could quietly drift apart.
+async function handleExport(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  try {
+    const purchaseResult = await neonFetch(env,
+      `SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)} LIMIT 1`
+    );
+    const hasDataExport = (purchaseResult.rows || []).length > 0;
+    if (!hasDataExport) {
+      return corsResponse({ error: 'Full data export requires a one-time purchase — see Settings > Billing.' }, 403, origin, env);
+    }
+  } catch (e) {
+    console.error('[Worker] Export purchase check failed:', e.message);
+    return corsResponse({ error: 'Could not verify export access — try again in a moment.' }, 500, origin, env);
+  }
+
+  let body;
+  try { body = JSON.parse(await request.text()); }
+  catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
+
+  const query = body.query || '';
+  if (!query || typeof query !== 'string' || !query.trim().toUpperCase().startsWith('SELECT')) {
+    return corsResponse({ error: 'Only SELECT queries allowed' }, 403, origin, env);
+  }
+
+  try {
+    const result = await neonFetch(env, query);
+    return corsResponse(result, 200, origin, env);
+  } catch (e) {
+    return corsResponse({ error: e.message }, 502, origin, env);
+  }
 }
 
 
@@ -1396,7 +1482,7 @@ async function handleCreateSubscription(request, env, origin) {
   }
 }
 
-// ── Create one-time data purchase ($9.99, not a subscription) ──────────────
+// ── Create one-time data purchase ($39.99, not a subscription) ─────────────
 // Repeatable — a user can buy this more than once. Uses a PaymentIntent,
 // not a Subscription; the frontend uses the same PaymentElement UI either
 // way, it just confirms a one-time payment instead of a recurring one.
@@ -1425,7 +1511,7 @@ async function handleCreateDataPurchase(request, env, origin) {
     }
 
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: 999, // $9.99, in cents
+      amount: 3999, // $39.99, in cents
       currency: 'usd',
       customer: customerId,
       payment_method_types: ['card'],
