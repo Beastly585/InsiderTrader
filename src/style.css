@@ -577,7 +577,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* ── Pagination ───────────────────────────────────────────────────────────── */
 .pagination {
   display:flex; align-items:center; justify-content:space-between;
-  flex-wrap:wrap; gap:8px; margin-top:12px;
+  flex-wrap:wrap; gap:8px; margin-top:8px;
 }
 .pagination__info    { font-size: 0.75rem; color:var(--text-3); }
 .pagination__btns    { display:flex; align-items:center; gap:5px; }
@@ -1397,6 +1397,10 @@ td { padding:7px 11px; vertical-align:middle; }
 .position-card__txns[open] summary::before { content: '▾ '; }
 .position-card__txns summary:hover { color: var(--text); }
 .position-card__txn-list { margin-top: 4px; }
+.position-card__view-full {
+  display: block; width: 100%; text-align: center;
+  margin-top: 6px; font-weight: 600;
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    INSIGHTS — no-nav two-column layout
@@ -3947,6 +3951,30 @@ td { padding:7px 11px; vertical-align:middle; }
 .upgrade-modal--large .upgrade-modal__subtitle {
   text-align: center;
 }
+.upgrade-modal--export {
+  max-width: 420px;
+  padding: 36px 32px;
+}
+.export-price-card {
+  border: 1px solid var(--accent-strong); border-radius: 12px;
+  background: var(--accent-50); padding: 16px 18px;
+  margin-bottom: 20px; text-align: left;
+}
+.export-price-card__row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.export-price-card__label { font-size: 0.875rem; font-weight: 600; color: var(--text); }
+.export-price-card__price { font-size: 1.375rem; font-weight: 700; color: var(--accent-strong); font-family: var(--font-mono); }
+.export-price-card__features {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-top: 12px; border-top: 0.5px solid var(--border-md);
+}
+.export-price-card__features li {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.75rem; color: var(--text-2);
+}
+.export-price-card__features li svg { color: var(--accent-strong); flex-shrink: 0; }
 .upgrade-modal__logo {
   margin: 0 auto 14px; width: 40px; height: 40px; font-size: 1rem;
 }

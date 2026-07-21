@@ -171,21 +171,25 @@ function UpgradeModal({ feature, pro, onClose }) {
   if (feature==='data_export' && pro) {
     return (
       <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
-        <div className="upgrade-modal">
+        <div className="upgrade-modal upgrade-modal--export">
           <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
           <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <div className="upgrade-modal__title">Buy full data export</div>
-          <div className="upgrade-modal__subtitle">A one-time pull of everything currently in the database, delivered as CSV. Separate from your Pro subscription.</div>
-          <div className="upgrade-plan-card upgrade-plan-card--active" style={{cursor:'default'}}>
-            <span>
-              <span className="upgrade-plan-card__title">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
-              <span className="upgrade-plan-card__price">$39.99</span>
-            </span>
+          <div className="upgrade-modal__subtitle">A one-time pull of everything currently in the database, delivered as CSV — separate from your Pro subscription.</div>
+          <div className="export-price-card">
+            <div className="export-price-card__row">
+              <span className="export-price-card__label">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
+              <span className="export-price-card__price">$39.99</span>
+            </div>
+            <ul className="export-price-card__features">
+              <li><IconCheck style={{width:12,height:12}}/>Every filing currently on record</li>
+              <li><IconCheck style={{width:12,height:12}}/>Delivered as CSV, ready to download</li>
+              <li><IconCheck style={{width:12,height:12}}/>Re-purchase anytime for a fresh pull</li>
+            </ul>
           </div>
           <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct('data_export')}>Buy Export — $39.99</button>
           <div className="upgrade-modal__trust">
             <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe</span>
-            <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Re-purchase anytime for a fresh pull</span>
           </div>
         </div>
       </div>
@@ -2122,8 +2126,13 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                 <details className="position-card__txns" open={perStockBreakdown.length===1}>
                   <summary>{displayRows.length} transaction{displayRows.length!==1?'s':''} for {s.ticker}{omOnly?' (open market only)':''}</summary>
                   <div className="position-card__txn-list">
-                    {displayRows.map((r,j)=><TRow key={j} r={r} showTicker={false} showInsider={false}/>)}
+                    {(inline?displayRows:displayRows.slice(0,5)).map((r,j)=><TRow key={j} r={r} showTicker={false} showInsider={false}/>)}
                   </div>
+                  {!inline&&displayRows.length>5&&(
+                    <button className="btn btn--ghost btn--sm position-card__view-full" onClick={()=>onExpand&&onExpand()}>
+                      View full data — {displayRows.length} transactions →
+                    </button>
+                  )}
                 </details>
               </div>
             );})}
@@ -4999,7 +5008,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               ? (<><span className="spinner" style={{width:12,height:12,borderWidth:2,marginRight:6}}/>Exporting…</>)
               : canExport
                 ? '↓ Export CSV'
-                : (<>Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$39.99</span></>)}
+                : (<>Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span></>)}
           </button>
         </div>
 
@@ -5093,11 +5102,11 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                 {!pro&&<span> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
               </span>
               <div className="pagination__btns">
-                <button className="btn" onClick={()=>fetchPg(0)}       disabled={pg===0||loading||totalPgs<=1}>««</button>
-                <button className="btn" onClick={()=>fetchPg(pg-1)}    disabled={pg===0||loading||totalPgs<=1}>‹</button>
+                <button className="btn btn--sm" onClick={()=>fetchPg(0)}       disabled={pg===0||loading||totalPgs<=1}>««</button>
+                <button className="btn btn--sm" onClick={()=>fetchPg(pg-1)}    disabled={pg===0||loading||totalPgs<=1}>‹</button>
                 <span className="pagination__counter">{pg+1}/{totalPgs||1}</span>
-                <button className="btn" onClick={()=>fetchPg(pg+1)}    disabled={pg>=totalPgs-1||loading||totalPgs<=1}>›</button>
-                <button className="btn" onClick={()=>fetchPg(totalPgs-1)} disabled={pg>=totalPgs-1||loading||totalPgs<=1}>»»</button>
+                <button className="btn btn--sm" onClick={()=>fetchPg(pg+1)}    disabled={pg>=totalPgs-1||loading||totalPgs<=1}>›</button>
+                <button className="btn btn--sm" onClick={()=>fetchPg(totalPgs-1)} disabled={pg>=totalPgs-1||loading||totalPgs<=1}>»»</button>
               </div>
             </div>
           )}
