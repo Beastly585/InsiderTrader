@@ -225,21 +225,6 @@ pre {
   overflow: hidden; /* content-area scrolls internally, header/footer never move */
   position: relative;
 }
-/* Subtle background gradient behind the tiles — static, not animated. This
-   is the working interface, not a one-time marketing page; constant motion
-   here would be genuinely distracting during real use, not just ambient
-   polish. Just enough color to soften the flat white, nothing more. */
-.main-area::before {
-  content: '';
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(ellipse 900px 500px at 15% 0%, var(--accent-wash) 0%, transparent 60%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, var(--accent-wash) 0%, transparent 55%),
-    radial-gradient(ellipse 650px 450px at 90% 5%, var(--aqua-wash) 0%, transparent 55%);
-  pointer-events: none;
-  z-index: 0;
-}
-.main-area > * { position: relative; }
 
 /* Status bar — app topbar, owns the page identity */
 .status-bar {
@@ -286,7 +271,30 @@ pre {
   .status-bar__icon-btn { width: 26px; height: 26px; }
 }
 
-.content-area { flex: 1; padding: 0 18px 20px; overflow: hidden; display: flex; flex-direction: column; }
+.content-area {
+  flex: 1; padding: 0 18px 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  position: relative; /* scopes the gradient below to strictly this area — not the status bar, not the footer */
+}
+/* Subtle background gradient behind the tiles — static, not animated. This
+   is the working interface, not a one-time marketing page; constant motion
+   here would be genuinely distracting during real use, not just ambient
+   polish. Just enough color to soften the flat white, nothing more.
+   Scoped to content-area (not main-area) on purpose: the status bar already
+   has its own opaque background so it never showed through there, but the
+   footer has no background of its own and was letting the gradient bleed
+   through behind it. */
+.content-area::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 900px 500px at 15% 0%, var(--accent-wash) 0%, transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, var(--accent-wash) 0%, transparent 55%),
+    radial-gradient(ellipse 650px 450px at 90% 5%, var(--aqua-wash) 0%, transparent 55%);
+  pointer-events: none;
+  z-index: 0;
+}
+.content-area > * { position: relative; }
 .page-content  { padding-top: 16px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .page-header   { margin-bottom: 20px; }
 
@@ -3288,12 +3296,12 @@ td { padding:7px 11px; vertical-align:middle; }
 /* Page container */
 .settings-page {
   /* Fill entire content-area — no padding, no title, layout IS the page.
-     content-area's padding is 0 top / 24px sides / 32px bottom — cancel
-     only what's actually there. (Previously had a stray -22px top margin
-     that didn't match any real padding and a viewport-height calc that's
-     no longer needed now that content-area itself scrolls internally.) */
+     content-area's padding is 18px sides / 0 top / 0 bottom (bottom
+     spacing now lives solely on .footer's margin-top, shared by every
+     page) — cancel only the sides, since this page wants full-bleed nav
+     to the frame edges. */
   padding: 0;
-  margin: 0 -24px -32px;
+  margin: 0 -18px 0;
   height: 100%;
   display: flex;
   flex-direction: column;
