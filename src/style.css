@@ -272,7 +272,7 @@ pre {
 }
 
 .content-area {
-  flex: 1; padding: 0 18px; overflow: hidden;
+  flex: 1; padding: 0 18px 20px; overflow: hidden;
   display: flex; flex-direction: column;
   position: relative; /* scopes the gradient below to strictly this area — not the status bar, not the footer */
 }
@@ -313,18 +313,18 @@ pre {
 /* ── Footer ───────────────────────────────────────────────────────────────── */
 .footer {
   font-size: 0.7188rem; color:var(--text-3); text-align:center;
-  padding:14px 22px 10px; border-top:0.5px solid var(--border); margin-top:20px;
+  padding:14px 22px 10px; border-top:0.5px solid var(--border);
   flex-shrink: 0; /* lives in main-area's flex column — never squeezed or scrolled away */
 }
 /* Settings' side-nav is a full-bleed panel, not a floating tile — it should
    run flush to the footer with no gap. Rather than fighting content-area's
-   overflow:hidden to bleed the nav panel past its own box, just remove the
-   footer's margin-top while on this page: content-area itself grows by
-   that amount, and the sidenav (already stretched to 100% of content-area
-   via align-items:stretch) reaches the extra height for free. Settings'
-   content column stretches the same way — harmless, its own scroll area
-   just gets a little taller. */
-.app-shell--settings .footer { margin-top: 0; }
+   overflow:hidden to bleed the nav panel past its own box, just zero out
+   content-area's own bottom padding while on this page: content-area
+   itself shrinks by that amount and the sidenav (already stretched to 100%
+   of content-area via align-items:stretch) ends flush against the footer
+   for free. Settings' content column stretches the same way — harmless,
+   its own scroll area just gets a little shorter. */
+.app-shell--settings .content-area { padding-bottom: 0; }
 
 /* ── Right detail panel ───────────────────────────────────────────────────── */
 .panel-overlay { display:none; position:fixed; inset:0; z-index:200; }
@@ -3591,13 +3591,19 @@ td { padding:7px 11px; vertical-align:middle; }
   line-height: 1.5;
 }
 
-.risk-slider-row {
-  display: flex; align-items: center; gap: 14px;
-  padding: 16px 14px 6px;
+.risk-slider-panel {
+  padding: 18px 20px 14px;
   max-width: 460px;
 }
+.risk-slider-current {
+  text-align: center; font-size: 0.9375rem; font-weight: 700;
+  margin-bottom: 14px; color: var(--text-3);
+}
+.risk-slider-current--mid  { color: var(--amber-600); }
+.risk-slider-current--high { color: var(--green-600); }
 .risk-slider {
-  flex: 1; -webkit-appearance: none; appearance: none;
+  display: block; width: 100%;
+  -webkit-appearance: none; appearance: none;
   height: 4px; border-radius: 2px;
   background: linear-gradient(to right, var(--text-3), var(--amber-600), var(--green-600));
   outline: none; cursor: pointer;
@@ -3613,15 +3619,10 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--surface); border: 2px solid var(--accent-strong);
   cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
-.risk-slider-label {
-  font-size: 0.8125rem; font-weight: 700; color: var(--text);
-  min-width: 130px; text-align: right; flex-shrink: 0;
-}
 .risk-slider-ticks {
   display: flex; justify-content: space-between;
-  padding: 0 14px 14px;
+  margin-top: 8px;
   font-size: 0.6875rem; color: var(--text-3);
-  max-width: 460px;
 }
 
 /* ── Rows inside groups ───────────────────────────────────────────────────── */

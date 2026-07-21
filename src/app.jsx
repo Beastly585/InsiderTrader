@@ -5720,17 +5720,20 @@ function SettingsPage({ user, onUpgrade }) {
               </div>
 
               <div className="settings-group">
-                <div className="risk-slider-row">
+                <div className="settings-group__label">Conviction threshold</div>
+                <div className="risk-slider-panel">
+                  <div className={`risk-slider-current risk-slider-current--${appetite<=2?'low':appetite===3?'mid':'high'}`}>
+                    {RISK_APPETITE_LABELS[appetite]}
+                  </div>
                   <input
                     type="range" min="1" max="5" step="1" value={appetite}
                     onChange={e=>setAppetite(Number(e.target.value))}
                     className="risk-slider"
                   />
-                  <div className="risk-slider-label">{RISK_APPETITE_LABELS[appetite]}</div>
-                </div>
-                <div className="risk-slider-ticks">
-                  <span>Very conservative</span>
-                  <span>Very aggressive</span>
+                  <div className="risk-slider-ticks">
+                    <span>Very conservative</span>
+                    <span>Very aggressive</span>
+                  </div>
                 </div>
               </div>
 
