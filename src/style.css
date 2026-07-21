@@ -30,6 +30,13 @@
      there and never brought into the app's own palette. */
   --aqua:          #3FBFA0;
   --aqua-50:       #0E241F;
+  /* Background-wash variants — separate from --accent-50/--aqua-50 (which
+     are meant for solid UI fills like active nav state) because those
+     tokens are nearly indistinguishable from --bg in light mode, making
+     the frame gradient effectively invisible there. These carry their own
+     alpha so they read the same relative strength in both themes. */
+  --accent-wash:   rgba(124,111,255,0.18);
+  --aqua-wash:     rgba(63,191,160,0.14);
 
   /* Semantic colors */
   --green-600: #3ECF8E;  --green-50:  #0B2218;
@@ -64,8 +71,8 @@
   --surface:   #FFFFFF;
   --surface-2: #F7F8FA;
   --surface-3: #EDEEF4;
-  --border:    rgba(15,15,30,0.08);
-  --border-md: rgba(15,15,30,0.14);
+  --border:    rgba(15,15,30,0.11);
+  --border-md: rgba(15,15,30,0.18);
   --text:   #12131A;
   --text-2: #52546A;
   --text-3: #8F91A8;
@@ -75,6 +82,8 @@
   --accent-strong: #4338C9;
   --aqua:          #3FBFA0;
   --aqua-50:       #E4F6F1;
+  --accent-wash:   rgba(90,79,232,0.11);
+  --aqua-wash:     rgba(63,191,160,0.10);
   --green-600: #15803D;  --green-50:  #DCFCE7;
   --red-600:   #C0392B;  --red-50:    #FEE2E2;
   --blue-600:  #1A65C8;  --blue-50:   #DBEAFE;
@@ -224,10 +233,9 @@ pre {
   content: '';
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse 900px 500px at 15% 0%, var(--accent-50) 0%, transparent 60%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, var(--accent-50) 0%, transparent 55%),
-    radial-gradient(ellipse 650px 450px at 90% 5%, var(--aqua-50) 0%, transparent 55%);
-  opacity: 0.5;
+    radial-gradient(ellipse 900px 500px at 15% 0%, var(--accent-wash) 0%, transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 100%, var(--accent-wash) 0%, transparent 55%),
+    radial-gradient(ellipse 650px 450px at 90% 5%, var(--aqua-wash) 0%, transparent 55%);
   pointer-events: none;
   z-index: 0;
 }
@@ -716,11 +724,6 @@ td { padding:7px 11px; vertical-align:middle; }
   letter-spacing: 0.01em;
 }
 .auth-btn:hover { background: var(--accent-strong); transform: translateY(-1px); }
-
-/* ── Tile placement updates ──────────────────────────────────────────────── */
-.dash-tile--top-insiders { grid-column:2; grid-row:1; }
-.dash-tile--news         { grid-column:2; grid-row:2; }
-
 
 /* ── Portfolio ────────────────────────────────────────────────────────────── */
 .port-stats {
