@@ -110,7 +110,7 @@ function UpgradeModal({ feature, onClose }) {
   },[onClose]);
 
   const [checkoutProduct, setCheckoutProduct] = useState(null); // null | 'pro' | 'data_export'
-  const [plan, setPlan] = useState('pro'); // which card is selected in the picker
+  const [plan, setPlan] = useState(feature==='data_export' ? 'data_export' : 'pro'); // which card is selected in the picker
   const [statusModal, setStatusModal] = useState(null);
 
   // Personalized per the specific action that triggered this modal — a
@@ -122,7 +122,7 @@ function UpgradeModal({ feature, onClose }) {
     watchlist_insider: 'Upgrade to Pro to follow specific insiders and get notified on their trades.',
     notifications:      'Upgrade to Pro for email digests and instant alerts on the activity you care about.',
     portfolio:           'Upgrade to Pro to connect your brokerage and see insider activity on your real holdings.',
-    data_export:         'Upgrade to Pro to export the full historical dataset as CSV.',
+    data_export:         'Get a one-time CSV export of the full historical dataset — no subscription required.',
     full_history:        'Upgrade to Pro for full historical data — the free plan shows the last 12 months.',
     default:             'Full insider data, real-time alerts, and your own portfolio — in one view.',
   };
@@ -133,7 +133,6 @@ function UpgradeModal({ feature, onClose }) {
     { label: 'Full historical data',      free: false, pro: true },
     { label: 'Portfolio linking',         free: false, pro: true },
     { label: 'Instant alerts',            free: false, pro: true },
-    { label: 'CSV export',                free: false, pro: true },
   ];
 
   if (statusModal) {
@@ -155,7 +154,7 @@ function UpgradeModal({ feature, onClose }) {
           const wasPro = checkoutProduct === 'pro';
           setCheckoutProduct(null);
           setStatusModal(wasPro
-            ? { title: "You're a Pro member!", message: 'Full historical data, portfolio linking, instant alerts, and CSV export are all unlocked now.' }
+            ? { title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' }
             : { title: 'Export unlocked', message: 'You can export the full database as CSV anytime from the Data page.' }
           );
         }}
@@ -232,7 +231,7 @@ const PRODUCT_COPY = {
   pro: {
     title: 'Upgrade to Pro', price: '$11.99/month', endpoint: '/billing/create-subscription',
     subtitle: 'Full insider data, real-time alerts, and your own portfolio — in one view.',
-    features: ['Full historical data', 'Portfolio linking', 'Instant alerts', 'CSV export'],
+    features: ['Full historical data', 'Portfolio linking', 'Instant alerts'],
   },
   data_export: {
     title: 'Buy full data export', price: '$9.99 one-time', endpoint: '/billing/create-data-purchase',
@@ -627,7 +626,7 @@ function BillingSection({ user }) {
             setCheckoutProduct(null);
             load();
             setStatusModal(wasPro
-              ? { title: "You're a Pro member!", message: 'Full historical data, portfolio linking, instant alerts, and CSV export are all unlocked now.' }
+              ? { title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' }
               : { title: 'Export unlocked', message: 'You can export the full database as CSV anytime from the Data page.' }
             );
           }}
@@ -4600,8 +4599,211 @@ function FilterPanel({
   );
 }
 
+// ─── Data Drawer — expanded raw-filings explorer ───────────────────────────
+// Opened when "expand" is triggered on a detail that originated from the
+// Data page (marked by the presence of `dataFilters` on the detail object).
+// Deliberately separate from InsightsDrawer: that component's two modes
+// (ticker-aggregated signals, per-insider profiles) are a genuinely
+// different data shape from Data's own — raw, itemized filings with Data's
+// own columns (ticker/company/insider/type/value/date). Reusing
+// InsightsDrawer for this would mean "expand" always drops someone into a
+// different mental model than the one they were just looking at, which was
+// the actual complaint this exists to fix.
+//
+// Seeded from `filterState` (DataPage's active filters at the moment
+// something was opened) so expanding doesn't throw away filtering work
+// already done — same reasoning InsightsDrawer already uses for its own
+// initialFilters. Runs its own query rather than reading DataPage's state
+// directly, since DataPage may since have unmounted.
+function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers }) {
+  const f = filterState || {};
+  const [search,   setSearch]   = useState(f.search || '');
+  const [typeF,    setTypeF]    = useState(f.typeF || '');
+  const [relF,     setRelF]     = useState(f.relF || '');
+  const [sectorF,  setSectorF]  = useState(f.sectorF || '');
+  const [sourceF,  setSourceF]  = useState(f.sourceF || '');
+  const [openMkt,  setOpenMkt]  = useState(f.openMkt || false);
+  const [fromPortfolio, setFromPortfolio] = useState(f.fromPortfolio || false);
+  const [dPreset,  setDPreset]  = useState(f.dPreset ?? 7);
+  const [dateFrom, setDateFrom] = useState(f.dateFrom || '');
+  const [dateTo,   setDateTo]   = useState(f.dateTo || '');
+  const [sortKey,  setSortKey]  = useState(f.sortKey || 'transaction_date');
+  const [sortDir,  setSortDir]  = useState(f.sortDir ?? -1);
+
+  const [rows,    setRows]    = useState(null);
+  const [sectors, setSectors] = useState([]);
+  const [detailStack, setDetailStack] = useState(()=>initialDetailStack||[]);
+  const [detail,      setDetail]      = useState(initialDetail||null);
+
+  useEffect(()=>{
+    if (!cfg.NEON_PROXY_URL) return;
+    proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
+      .then(r=>setSectors(r.map(x=>x.sector).filter(Boolean))).catch(()=>{});
+  },[]);
+
+  function where() {
+    const c=[];
+    const ef=dateFrom||(dPreset!=null?(()=>{const d=new Date();d.setDate(d.getDate()-dPreset);return d.toISOString().split('T')[0];})():null);
+    const et=dateTo||new Date().toISOString().split('T')[0];
+    if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
+    c.push(`COALESCE(transaction_date,filing_date)>='2021-01-01'`);
+    c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
+    if (typeF)  c.push(`transaction_type='${typeF}'`);
+    if (relF)   c.push(`relationship='${relF}'`);
+    if (sectorF)c.push(`sector='${sectorF.replace(/'/g,"''")}'`);
+    if (openMkt)c.push(`is_open_market=true`);
+    if (sourceF==='corporate') c.push(`transaction_code NOT LIKE 'CONGRESS%'`);
+    if (sourceF==='political') c.push(`transaction_code LIKE 'CONGRESS%'`);
+    if (fromPortfolio && portfolioTickers && portfolioTickers.length) {
+      c.push(`ticker IN (${portfolioTickers.map(t=>`'${t.replace(/'/g,"''")}'`).join(',')})`);
+    } else if (fromPortfolio) {
+      c.push(`1=0`);
+    }
+    if (search){const q=search.replace(/'/g,"''");c.push(`(ticker ILIKE '%${q}%' OR insider_name ILIKE '%${q}%' OR company_name ILIKE '%${q}%')`);}
+    return c.length?'WHERE '+c.join(' AND '):'';
+  }
+  function orderBy() {
+    const col = DATA_SORTABLE_COLS.find(c=>c.key===sortKey);
+    const dir = sortDir>0?'ASC':'DESC';
+    if (!col) return `ORDER BY COALESCE(transaction_date,filing_date) DESC`;
+    if (sortKey==='transaction_date') return `ORDER BY COALESCE(transaction_date,filing_date) ${dir} NULLS LAST`;
+    return `ORDER BY ${sortKey} ${dir} NULLS LAST`;
+  }
+
+  useEffect(()=>{
+    if (!cfg.NEON_PROXY_URL) return;
+    setRows(null);
+    proxySQL(`
+      SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
+             relationship,transaction_type,transaction_code,is_open_market,
+             shares::float,price_per_share::float,value::float,pct_owned_change::float,sector
+      FROM public.filings ${where()}
+      ${orderBy()}
+      LIMIT 300
+    `).then(setRows).catch(()=>setRows([]));
+  },[search,typeF,relF,sectorF,sourceF,openMkt,fromPortfolio,dPreset,dateFrom,dateTo,sortKey,sortDir]);
+
+  function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
+  function goBack() { const prev=detailStack[detailStack.length-1]; setDetailStack(s=>s.slice(0,-1)); setDetail(prev||null); }
+
+  return (
+    <div className="drawer-overlay" onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="drawer">
+        <div className="drawer__hdr-row1">
+          <span className="drawer__title">Filings</span>
+          <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>
+        </div>
+
+        <div className="drawer__toolbar">
+          <div className="drawer__filter-group drawer__filter-group--search">
+            <span className="drawer__filter-label">Search</span>
+            <div className="drawer__search-wrap">
+              <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input className="drawer__search" placeholder="Ticker, insider, company…"
+                value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
+            </div>
+          </div>
+          <div className="drawer__toolbar-divider"/>
+          <div className="drawer__filter-group">
+            <span className="drawer__filter-label">Window</span>
+            <div className="dash-tile-pills" style={{gap:2}}>
+              {DATA_DATE_PRESETS.map(p=>(
+                <button key={p.l} className={`dash-tile-pill${dPreset===p.d&&!dateFrom?' dash-tile-pill--active':''}`}
+                  onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>{p.l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <FilterPanel
+          sectors={sectors}
+          openMkt={openMkt} setOpenMkt={setOpenMkt}
+          fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
+          sectorF={sectorF} setSectorF={setSectorF}
+          sourceF={sourceF} setSourceF={setSourceF}
+          relF={relF} setRelF={setRelF}
+          typeF={typeF} setTypeF={setTypeF}
+        />
+
+        <div className="drawer__body">
+          <div className="drawer__list">
+            <div className="drawer__list-hdr">
+              <span>{rows==null?'Loading…':`${rows.length}${rows.length===300?'+':''} filing${rows.length===1?'':'s'}`}</span>
+            </div>
+            {rows===null
+              ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
+              : rows.length===0
+                ? <div className="drawer__empty">No filings match these filters</div>
+                : rows.map((r,i)=>{
+                  const tt=r.transaction_type;
+                  const trade = {
+                    ticker:r.ticker,company:r.company_name,company_name:r.company_name,
+                    insiderName:r.insider_name,insider_name:r.insider_name,
+                    title:r.insider_title,insider_title:r.insider_title,
+                    transactionType:tt,transaction_type:tt,
+                    transactionCode:r.transaction_code,transaction_code:r.transaction_code,
+                    isOpenMarket:r.is_open_market,is_open_market:r.is_open_market,
+                    price:r.price_per_share,price_per_share:r.price_per_share,
+                    shares:r.shares,value:r.value,
+                    pctOwnedChange:r.pct_owned_change,pct_owned_change:r.pct_owned_change,
+                    transactionDate:r.transaction_date,transaction_date:r.transaction_date,
+                    date:r.filing_date,filing_date:r.filing_date,
+                    relationship:r.relationship,sector:r.sector,
+                  };
+                  const isActive = detail?.type==='transaction' && detail?.trade?.ticker===r.ticker
+                    && detail?.trade?.insiderName===r.insider_name && detail?.trade?.transactionDate===r.transaction_date;
+                  return (
+                    <div key={i}
+                      className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
+                      onClick={()=>navigate({type:'transaction',trade})}>
+                      <div className="drawer__list-row__main">
+                        <span className="ticker" style={{fontSize:12,fontWeight:700}}>{r.ticker||'—'}</span>
+                        <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?'Buy':tt==='sell'?'Sell':'Other'}</Badge>
+                        <span className="td-muted" style={{fontSize:11,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.company_name}</span>
+                        <span className={`td-mono drawer__list-row__val ${tt==='buy'?'val-buy':tt==='sell'?'val-sell':''}`}>{r.value?fmt.money(r.value):'—'}</span>
+                      </div>
+                      <div className="drawer__list-row__sub">
+                        <span className="td-muted" style={{fontSize:11}}>{r.insider_name}</span>
+                        <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.dateShort(r.transaction_date||r.filing_date)}</span>
+                      </div>
+                    </div>
+                  );
+                })
+            }
+          </div>
+
+          <div className="drawer__detail">
+            {!detail
+              ? <div className="drawer__detail-empty">
+                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
+                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a filing to see details</div>
+                </div>
+              : <DetailPanel
+                  detail={detail}
+                  filings={[]}
+                  onClose={()=>setDetail(null)}
+                  onNavigate={navigate}
+                  onBack={goBack}
+                  canGoBack={detailStack.length>0}
+                  watchlist={watchlist}
+                  inline={true}
+                />
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   const pro = isPro(user);
+  // CSV export is its own $9.99 one-time product (soon $39.99 for the full
+  // database), deliberately separate from the Pro subscription — Pro's job
+  // is to earn recurring revenue, and giving away the one-time product's
+  // entire value for free the moment someone subscribes undercuts it
+  // completely. So this checks the purchase flag, not `pro`.
+  const canExport = hasDataExport(user);
   const [rows,    setRows]    = useState([]);
   const [total,   setTotal]   = useState(null);
   const [loading, setLoading] = useState(false);
@@ -4718,22 +4920,14 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   const totalPgs=total!=null?Math.ceil(total/DATA_PAGE):null;
   const activeFilterCount = [typeF,relF,sectorF,sourceF,openMkt,fromPortfolio].filter(Boolean).length;
 
+  // Passed through on every onOpenDetail call from this page — marks the
+  // resulting detail as having come from Data (so expanding it opens the
+  // raw-filings explorer, not the Insights signals/insiders one) and seeds
+  // that explorer with the filters already active here.
+  const dataFilters = {search,typeF,relF,sectorF,sourceF,openMkt,fromPortfolio,dPreset,dateFrom,dateTo,sortKey,sortDir};
+
   return (
     <div className="page-content">
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,gap:12}}>
-        <p className="page-sub" style={{margin:0}}>
-          {total!=null?`${total.toLocaleString()} filings matching filters · ${DATA_PAGE}/page`:'Loading…'}
-          {!pro&&<span className="free-tier-inline"> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
-        </p>
-        <button className="btn btn--primary" onClick={pro ? doExport : ()=>onUpgrade('data_export')} disabled={exporting}>
-          {exporting
-            ? (<><span className="spinner" style={{width:13,height:13,borderWidth:2,marginRight:6}}/>Exporting…</>)
-            : pro
-              ? '↓ Export CSV'
-              : (<>Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>Pro</span></>)}
-        </button>
-      </div>
-
       <div className="data-toolbar">
         <div className="filter-bar filter-bar--wrap">
           <div className="search-wrap">
@@ -4753,6 +4947,14 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           <input type="date" value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setDPreset(null);}}/>
           <span style={{color:'var(--text-3)',fontSize:12}}>→</span>
           <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
+          <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
+            onClick={canExport ? doExport : ()=>onUpgrade('data_export')} disabled={exporting}>
+            {exporting
+              ? (<><span className="spinner" style={{width:12,height:12,borderWidth:2,marginRight:6}}/>Exporting…</>)
+              : canExport
+                ? '↓ Export CSV'
+                : (<>Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$9.99</span></>)}
+          </button>
         </div>
 
       <FilterPanel
@@ -4786,7 +4988,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                   const tt=r.transaction_type;
                   return (
                     <tr key={i} className={`row-${tt} row-clickable`}
-                      onClick={()=>onOpenDetail&&onOpenDetail({type:'transaction',trade:{
+                      onClick={()=>onOpenDetail&&onOpenDetail({type:'transaction',dataFilters,trade:{
                         ticker:r.ticker,company:r.company_name,company_name:r.company_name,
                         insiderName:r.insider_name,insider_name:r.insider_name,
                         title:r.insider_title,insider_title:r.insider_title,
@@ -4805,13 +5007,13 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                         {r.filing_date&&r.filing_date!==r.transaction_date&&
                           <div style={{fontSize:11,color:'var(--text-3)'}}>filed {fmt.dateShort(r.filing_date)}</div>}
                       </td>
-                      <td><span className="ticker dp-clickable" onClick={e=>{e.stopPropagation();r.ticker&&onOpenDetail&&onOpenDetail({type:'ticker',ticker:r.ticker,company:r.company_name});}}>{r.ticker||'—'}</span></td>
+                      <td><span className="ticker dp-clickable" onClick={e=>{e.stopPropagation();r.ticker&&onOpenDetail&&onOpenDetail({type:'ticker',dataFilters,ticker:r.ticker,company:r.company_name});}}>{r.ticker||'—'}</span></td>
                       <td className="td-company">
                         <div className="td-overflow">{r.company_name}</div>
                         <div className="td-sector-inline">{r.sector!=='Other'?r.sector:''}</div>
                       </td>
                       <td className="td-insider">
-                        <div className="td-overflow dp-clickable" onClick={e=>{e.stopPropagation();r.insider_name&&onOpenDetail&&onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title});}}>{r.insider_name}</div>
+                        <div className="td-overflow dp-clickable" onClick={e=>{e.stopPropagation();r.insider_name&&onOpenDetail&&onOpenDetail({type:'trader',dataFilters,name:r.insider_name,title:r.insider_title});}}>{r.insider_name}</div>
                         <div className="td-muted td-overflow" style={{fontSize:11}}>{r.insider_title||'—'}</div>
                       </td>
                       <td>
@@ -4835,6 +5037,13 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               </tbody>
             </table>
           </div>}
+
+          {!loading&&!error&&(
+            <p className="td-muted" style={{fontSize:11,margin:'8px 2px 0'}}>
+              {total!=null?`${total.toLocaleString()} filing${total===1?'':'s'} matching filters · ${DATA_PAGE}/page`:''}
+              {!pro&&<span> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
+            </p>
+          )}
 
           {!loading&&!error&&totalPgs>1&&(
             <div className="pagination">
@@ -6347,7 +6556,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-price-card__price">$11.99<span>/mo</span></div>
             <div className="lp-price-card__desc">For investors who need to act before the market catches up.</div>
             <ul className="lp-price-card__features">
-              {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Email alerts — instant or digest','Custom alert filters (conviction, sector)','Position-relative signal weighting','Connect your brokerage (SnapTrade)','CSV export','Deep-dive explorer'].map(f=>(
+              {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Email alerts — instant or digest','Custom alert filters (conviction, sector)','Position-relative signal weighting','Connect your brokerage (SnapTrade)','Deep-dive explorer'].map(f=>(
                 <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
@@ -6854,17 +7063,26 @@ function AppInner() {
         </>
       )}
       {panelOpen&&detailFull&&(
-        <InsightsDrawer
-          type={detail?.type==='trader' ? 'insiders' : 'signals'}
-          filings={filings}
-          onClose={closeDetail}
-          initialDetail={detail}
-          initialDetailStack={detailStack}
-          sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort}
-          ensureFilingsWindow={ensureFilingsWindow}
-          filingsLoading={loading}
-          watchlist={watchlist}
-        />
+        detail?.dataFilters
+          ? <DataDrawer
+              initialDetail={detail}
+              initialDetailStack={detailStack}
+              filterState={detail.dataFilters}
+              onClose={closeDetail}
+              watchlist={watchlist}
+              portfolioTickers={portfolioTickers}
+            />
+          : <InsightsDrawer
+              type={detail?.type==='trader' ? 'insiders' : 'signals'}
+              filings={filings}
+              onClose={closeDetail}
+              initialDetail={detail}
+              initialDetailStack={detailStack}
+              sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort}
+              ensureFilingsWindow={ensureFilingsWindow}
+              filingsLoading={loading}
+              watchlist={watchlist}
+            />
       )}
     </div>
     </GuideProvider>
