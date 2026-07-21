@@ -939,7 +939,6 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
             <span className="nav-icon">$</span>
           </button>
         )}
-        <div className="sidebar__footer-divider"/>
         {/* Settings — gear, separate from primary nav */}
         <button
           className={`nav-item nav-item--icon-only nav-item--sm${page==='settings'?' nav-item--active':''}`}
@@ -5735,15 +5734,14 @@ function SettingsPage({ user, onUpgrade }) {
                     <span>Very aggressive</span>
                   </div>
                 </div>
-              </div>
-
-              <div className="settings-group">
-                <div className="settings-group__label">Preview</div>
-                <div className="settings-group__desc">
-                  A signal scoring 10/15 — same underlying score, shown at your current setting:
-                </div>
-                <div style={{marginTop:10,maxWidth:460}}>
-                  <ConvictionBar score={10} showLabel={true}/>
+                <div className="risk-slider-preview">
+                  <div className="risk-slider-preview__label">Preview</div>
+                  <div className="risk-slider-preview__desc">
+                    A signal scoring 10/15 — same underlying score, shown at your current setting:
+                  </div>
+                  <div style={{marginTop:10,maxWidth:280}}>
+                    <ConvictionBar score={10} showLabel={true}/>
+                  </div>
                 </div>
               </div>
             </div>
@@ -6899,14 +6897,19 @@ function AppInner() {
     load(daysBack);
   }
 
-  // Most recent filing date in the loaded dataset — shown in status bar so
-  // users know immediately whether the data is fresh (especially on Monday mornings
-  // after a weekend gap where new filings may not have been ingested yet).
+  // Most recent FILING date in the loaded dataset — filing_date (when SEC
+  // received/processed it, i.e. when we'd have ingested it), not
+  // transaction_date. Those two routinely differ: insiders have up to ~2
+  // business days to report a trade, so a filing ingested today can carry
+  // a transaction_date from a day or two earlier. Prioritizing
+  // transaction_date here (as this used to) meant the "Through" indicator
+  // showed how recent the underlying trades were, not how fresh our own
+  // data pull is — which is what this is actually supposed to communicate.
   const lastFilingDate = useMemo(()=>{
     if (!filings.length) return null;
     const today = new Date().toISOString().split('T')[0];
     const max = filings.reduce((best,f)=>{
-      const d = f.transactionDate||f.date||'';
+      const d = f.date||f.transactionDate||'';
       return d>best?d:best;
     },'');
     // Clamp to today — future dates indicate a bad DB row (malformed XML date)
@@ -6990,7 +6993,7 @@ function AppInner() {
 
   // ── Landing page gate ──────────────────────────────────────────────────────
   // ── Simple client-side routing for legal pages ────────────────────────────
-  const path = window.location.pathname;
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
   if (path === '/terms') return <TermsPage />;
   if (path === '/privacy') return <PrivacyPage />;
 
