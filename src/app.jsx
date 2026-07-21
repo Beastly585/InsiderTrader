@@ -1458,16 +1458,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   const [tickerRows, setTickerRows] = useState(null);
   const [busy,       setBusy]       = useState(false);
   const [bundleOn,   setBundleOn]   = useState(true);
-  // Defaults to the existing centered-modal variant (detail-panel--modal,
-  // already built for the "enlarge" toggle button below) on mobile
-  // viewports, rather than always starting as the narrow side drawer — a
-  // ~390px-wide drawer sliding in from the right doesn't leave much room
-  // to actually read a signal or row's detail on a phone screen. Checked
-  // once at mount, matching the same 640px breakpoint used throughout
-  // this session's other mobile work. The toggle button (line below,
-  // "Collapse"/"Enlarge") still works normally either way — this only
-  // changes which mode someone starts in.
-  const [expanded,   setExpanded]   = useState(() => typeof window !== 'undefined' && window.innerWidth <= 640);
   const [omOnly,     setOmOnly]     = useState(true);
   const nav = (type,data) => onNavigate&&onNavigate({type,...data});
 
@@ -1907,13 +1897,11 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   };
 
   return (
-    <div className={expanded&&!inline?'detail-modal-overlay':undefined} onClick={expanded&&!inline?(e)=>{if(e.target===e.currentTarget)setExpanded(false);}:undefined}>
-    <div className={inline?'detail-panel detail-panel--inline':expanded?'detail-panel detail-panel--modal':'detail-panel'}>
+    <div className={inline?'detail-panel detail-panel--inline':'detail-panel'}>
       <div className="detail-panel__header">
         {canGoBack&&<button className="btn btn--ghost btn--icon" onClick={onBack} title="Back">←</button>}
         <div style={{minWidth:0,flex:1}}>{header()}</div>
         {!inline&&onExpand&&<button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
-        {!inline&&<button className="btn btn--ghost btn--icon" onClick={()=>setExpanded(e=>!e)} title={expanded?'Collapse':'Enlarge'}>{expanded?'▣':'▢'}</button>}
         {!inline&&<button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>}
         {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:11}} onClick={onClose} title="Clear"><IconClose style={{width:12,height:12}}/></button>}
       </div>
@@ -2169,7 +2157,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
       </div>
     </div>
-    </div>
   );
 }
 
@@ -2214,7 +2201,7 @@ const SECTOR_WEIGHTS = [
   {label:'Utilities',     sym:'XLU', weight:2.5},
   {label:'Real Estate',   sym:'XLRE',weight:2.1},
 ];
-const INDEX_SYMS = ['SPY','QQQ','VIX','IWM'];
+const INDEX_SYMS = ['SPY','QQQ','IWM'];
 
 // ─── Shared market data hook ──────────────────────────────────────────────────
 // Fetches once per page load, shared between SentimentStrip and HeatmapOnly
@@ -2256,9 +2243,8 @@ function useMktData() {
   // Finnhub fallback for indices
   useEffect(()=>{
     if (!data || Object.keys(data.indices).length || !cfg.FINNHUB_API_KEY) return;
-    const fn = sym => sym==='VIX'?'^VIX':sym;
     Promise.all(INDEX_SYMS.map(sym=>
-      fetch(`https://finnhub.io/api/v1/quote?symbol=${fn(sym)}&token=${cfg.FINNHUB_API_KEY}`)
+      fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${cfg.FINNHUB_API_KEY}`)
         .then(r=>r.json()).then(d=>({sym,price:d.c,chg:d.c&&d.pc?(((d.c-d.pc)/d.pc)*100):null}))
         .catch(()=>null)
     )).then(res=>{
@@ -2317,7 +2303,7 @@ function SentimentStrip({ filings }) {
             <div key={sym} className="mkt-stat">
               <span className="mkt-stat__label">{sym}</span>
               {d?.price!=null?<>
-                <span className="mkt-stat__val">{sym==='VIX'?Number(d.price).toFixed(2):fmt.price(d.price)}</span>
+                <span className="mkt-stat__val">{fmt.price(d.price)}</span>
                 {d.chg!=null&&<span className={`mkt-stat__chg ${d.chg>=0?'val-buy':'val-sell'}`}>{d.chg>=0?'+':''}{Number(d.chg).toFixed(2)}%</span>}
               </>:<span className="mkt-stat__loading">—</span>}
             </div>
@@ -2551,31 +2537,145 @@ function PortfolioTickerNews({ tickers }) {
 // Broad market news — Finnhub's general news category, not scoped to any
 // ticker. Distinct from DashNews/PortfolioNews below, which are intentionally
 // ticker-scoped to signals and holdings respectively.
-function MarketNews() {
+// Shared fetch/filter logic between the compact dashboard tile and the
+// expanded drawer, so the two never drift out of sync on what "My News"
+// actually means.
+//
+// "My News" scope: starred tickers, plus tickers recently traded by
+// followed insiders (derived from `filings`, which the dashboard already
+// has loaded — there's no such thing as "news about an insider" from
+// Finnhub, insiders aren't public entities with their own coverage, so the
+// closest honest equivalent is news on what they've actually been trading).
+// Capped at 15 tickers — Finnhub's free tier has no bulk multi-symbol news
+// endpoint, so this is 15 real parallel requests, not one.
+function useMyNewsTickers(watchlist, filings) {
+  return useMemo(() => {
+    if (!watchlist) return [];
+    const fromInsiders = (filings||[])
+      .filter(f => f.insiderName && watchlist.insiders?.includes(f.insiderName))
+      .map(f => f.ticker);
+    return [...new Set([...(watchlist.tickers||[]), ...fromInsiders])].filter(Boolean).slice(0,15);
+  }, [watchlist?.tickers, watchlist?.insiders, filings]);
+}
+
+function useMarketNews({ myTickers, myNewsOn, limit }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const hasKey = !!cfg.FINNHUB_API_KEY;
-  useEffect(()=>{
+  const tickerKey = myTickers.join(',');
+
+  useEffect(() => {
     if (!hasKey) return;
+    let cancelled = false;
     setLoading(true);
-    fetch(`https://finnhub.io/api/v1/news?category=general&token=${cfg.FINNHUB_API_KEY}`)
-      .then(r=>r.json())
-      .then(a=>{ setNews((a||[]).filter(n=>n.headline&&n.url).slice(0,12)); setLoading(false); })
-      .catch(()=>setLoading(false));
-  },[hasKey]);
+
+    if (myNewsOn) {
+      if (!myTickers.length) { setNews([]); setLoading(false); return; }
+      const to = new Date().toISOString().split('T')[0];
+      const from = (()=>{const d=new Date();d.setDate(d.getDate()-14);return d.toISOString().split('T')[0];})();
+      Promise.all(myTickers.map(t =>
+        fetch(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${from}&to=${to}&token=${cfg.FINNHUB_API_KEY}`)
+          .then(r=>r.json()).then(a=>Array.isArray(a)?a.map(n=>({...n,_ticker:t})):[]).catch(()=>[])
+      )).then(results => {
+        if (cancelled) return;
+        const merged = results.flat()
+          .filter(n=>n.headline&&n.url)
+          .sort((a,b)=>(b.datetime||0)-(a.datetime||0))
+          .slice(0, limit);
+        setNews(merged); setLoading(false);
+      });
+    } else {
+      fetch(`https://finnhub.io/api/v1/news?category=general&token=${cfg.FINNHUB_API_KEY}`)
+        .then(r=>r.json())
+        .then(a=>{
+          if (cancelled) return;
+          setNews((a||[]).filter(n=>n.headline&&n.url).slice(0, limit));
+          setLoading(false);
+        })
+        .catch(()=>{ if(!cancelled) setLoading(false); });
+    }
+    return ()=>{ cancelled=true; };
+  }, [hasKey, myNewsOn, limit, tickerKey]);
+
+  return { news, loading, hasKey };
+}
+
+// Headlines open in a new tab rather than an in-app iframe — most
+// publishers (Reuters, Bloomberg, WSJ, etc.) send X-Frame-Options or a CSP
+// frame-ancestors header that blocks embedding entirely, so an iframe here
+// would show a broken/blank frame for the majority of sources rather than
+// the article. New tab is the reliable option, not a placeholder choice.
+function NewsList({ news, loading, hasKey, emptyHint }) {
   if (!hasKey) return <div className="dp-placeholder" style={{padding:'1rem'}}><p style={{fontSize:11}}>No headlines available right now.</p></div>;
   if (loading) return <div style={{padding:'1.5rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>;
-  if (!news.length) return <div style={{padding:'1rem',fontSize:12,color:'var(--text-3)'}}>No headlines available right now</div>;
+  if (!news.length) return <div style={{padding:'1rem',fontSize:12,color:'var(--text-3)'}}>{emptyHint||'No headlines available right now'}</div>;
   return (
     <div className="dash-news-list">
       {news.map((n,i)=>(
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
-            <span className="td-muted" style={{fontSize:11}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            <span className="td-muted" style={{fontSize:11}}>{n._ticker?`${n._ticker} · `:''}{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
       ))}
+    </div>
+  );
+}
+
+function MarketNews({ watchlist, filings, limit=12 }) {
+  const [myNewsOn, setMyNewsOn] = useState(false);
+  const pro = !!watchlist?.pro;
+  const myTickers = useMyNewsTickers(watchlist, filings);
+  const { news, loading, hasKey } = useMarketNews({ myTickers, myNewsOn: myNewsOn&&pro, limit });
+
+  return (
+    <div className="dash-news-wrap">
+      {watchlist&&(
+        <label
+          className={`bundle-toggle${myNewsOn&&pro?' bundle-toggle--active':''}`}
+          style={{margin:'8px 12px 0',alignSelf:'flex-start'}}
+          title={pro?'Only news for your starred tickers and followed insiders\' recent trades':'Pro feature — filters news to your starred tickers and followed insiders'}
+        >
+          <input type="checkbox" checked={myNewsOn&&pro}
+            onChange={()=>pro?setMyNewsOn(v=>!v):watchlist.setShowUpgrade?.('watchlist_ticker')}/>
+          My news{!pro&&<span className="settings-pro-badge" style={{marginLeft:5}}>Pro</span>}
+        </label>
+      )}
+      <NewsList news={news} loading={loading} hasKey={hasKey}
+        emptyHint={myNewsOn&&pro?'No recent news for your starred tickers or followed insiders\' trades.':undefined}/>
+    </div>
+  );
+}
+
+function NewsDrawer({ watchlist, filings, onClose }) {
+  const [myNewsOn, setMyNewsOn] = useState(false);
+  const pro = !!watchlist?.pro;
+  const myTickers = useMyNewsTickers(watchlist, filings);
+  const { news, loading, hasKey } = useMarketNews({ myTickers, myNewsOn: myNewsOn&&pro, limit: 60 });
+
+  return (
+    <div className="drawer-overlay" onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="drawer drawer--news">
+        <div className="drawer__hdr-row1">
+          <span className="drawer__title">Market news</span>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <label
+              className={`bundle-toggle${myNewsOn&&pro?' bundle-toggle--active':''}`}
+              title={pro?'Only news for your starred tickers and followed insiders\' recent trades':'Pro feature — filters news to your starred tickers and followed insiders'}
+            >
+              <input type="checkbox" checked={myNewsOn&&pro}
+                onChange={()=>pro?setMyNewsOn(v=>!v):watchlist?.setShowUpgrade?.('watchlist_ticker')}/>
+              My news{!pro&&<span className="settings-pro-badge" style={{marginLeft:5}}>Pro</span>}
+            </label>
+            <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>
+          </div>
+        </div>
+        <div className="drawer__body drawer__body--single">
+          <NewsList news={news} loading={loading} hasKey={hasKey}
+            emptyHint={myNewsOn&&pro?'No recent news for your starred tickers or followed insiders\' trades.':undefined}/>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2586,6 +2686,7 @@ function MarketNews() {
 
 function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist }) {
   const [days, setDays] = useState(7);
+  const [newsExpanded, setNewsExpanded] = useState(false);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
 
   const signals = useMemo(()=>{
@@ -2686,14 +2787,18 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Market news</span>
               <TileInfoButton section="welcome" title="Market news"/>
+              <div className="dash-tile__hdr-controls">
+                <button className="btn btn--ghost btn--icon" onClick={()=>setNewsExpanded(true)} title="Open full news view">⤢</button>
+              </div>
             </div>
             <div className="dash-tile__body">
-              <MarketNews/>
+              <MarketNews watchlist={watchlist} filings={filings} limit={12}/>
             </div>
           </div>
         </div>
 
       </div>
+      {newsExpanded&&<NewsDrawer watchlist={watchlist} filings={filings} onClose={()=>setNewsExpanded(false)}/>}
     </div>
   );
 }
@@ -4059,11 +4164,11 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
   const [dir, setDir] = useState(-1);
 
   useEffect(()=>{
-    if (!cfg.NEON_PROXY_URL) return;
-    setRows(null);
+    if (!cfg.NEON_PROXY_URL) { setError('Not configured'); return; }
+    setRows(null); setError(null);
     queryNeon(LEADERBOARD_QUERY(20, null, 5, yearsBack, source))
       .then(r=>setRows(processLeaderboardRows(r)))
-      .catch(e=>setError(e.message));
+      .catch(e=>setError(e.message||'Failed to load'));
   },[yearsBack,source]);
 
   const sorted = useMemo(()=>{

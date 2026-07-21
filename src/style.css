@@ -1132,6 +1132,9 @@ td { padding:7px 11px; vertical-align:middle; }
   cursor: pointer; white-space: nowrap;
 }
 .bundle-toggle input { width: 12px; height: 12px; cursor: pointer; }
+.bundle-toggle--active { color: var(--accent); font-weight: 600; }
+.bundle-toggle--active input { accent-color: var(--accent); }
+.dash-news-wrap { display: flex; flex-direction: column; }
 .entity-badge {
   font-size: 0.5938rem; font-weight: 500;
   background: var(--amber-50); color: var(--amber-600);
@@ -1162,36 +1165,16 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   DETAIL PANEL — EXPAND TO MODAL
+   DETAIL PANEL — mobile becomes a centered modal
 ══════════════════════════════════════════════════════════════════════════ */
-.detail-modal-overlay {
-  position: fixed; inset: 0; z-index: 200;
-  background: rgba(0,0,0,0.45);
-  display: flex; align-items: center; justify-content: center;
-  padding: 5vh 4vw;
-}
-.detail-panel--modal {
-  position: static; width: min(820px, 92vw); height: 90vh;
-  max-height: 90vh; border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg); border: 0.5px solid var(--border);
-  display: flex; flex-direction: column;
-}
-.detail-panel--modal .detail-panel__body { flex: 1; overflow-y: auto; }
-
 @media (max-width: 640px) {
-  /* Forces the centered-modal look regardless of which class DetailPanel's
-     own `expanded` state actually applies. That state only reliably
-     re-evaluates on this component's very first mount in a session (no
-     key prop forces a remount when navigating from one row's detail to
-     another's), so relying on it alone means only the first-ever click
-     on mobile is guaranteed to open centered — anything after that keeps
-     whatever expanded value was already set, even for a completely
-     different row. CSS doesn't have that timing problem: this always
-     applies at this width, independent of React state or when anything
-     mounted. Placed here, after .detail-panel--modal's own definition,
-     so it genuinely wins by source order rather than only working today
-     by coincidence of matching values with that rule.
-  */
+  /* .panel-overlay and .detail-panel are the base classes (rendered by the
+     parent and by DetailPanel respectively) — this reshapes them directly
+     at this breakpoint, independent of any component state. There used to
+     be a desktop-only "Enlarge" toggle producing the same centered-modal
+     look via separate --modal classes; that toggle was redundant with the
+     Explore-view button and was removed, but this mobile behavior never
+     depended on it and is unaffected. */
   .panel-overlay {
     display: flex; align-items: center; justify-content: center;
     background: rgba(0,0,0,0.45); padding: 5vh 4vw;
@@ -2428,6 +2411,14 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* ── PortfolioDrawer extras ──────────────────────────────────────────────── */
 .drawer--wide .drawer__body { grid-template-columns: 340px 1fr; }
+
+/* News drawer — single scrollable list, not a two-pane explorer, so it
+   doesn't need the full 1360px width the other drawers use. */
+.drawer--news { width: min(560px, 92vw); }
+.drawer__body--single {
+  display: block; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--border-md) transparent;
+}
 
 /* Account stat chips in drawer header */
 .port-ds { display:flex; flex-direction:column; gap:1px; padding:0 12px; border-right:0.5px solid var(--border); }
