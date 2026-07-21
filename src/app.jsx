@@ -102,7 +102,7 @@ function useCompanyProfile(ticker, cik) {
 // reference had — Seli doesn't have real customer reviews yet, and
 // fabricating one would be dishonest. That visual slot is an honest
 // trust line instead.
-function UpgradeModal({ feature, onClose }) {
+function UpgradeModal({ feature, pro, onClose }) {
   useEffect(()=>{
     const h = e => { if (e.key==='Escape') onClose(); };
     window.addEventListener('keydown', h);
@@ -162,6 +162,36 @@ function UpgradeModal({ feature, onClose }) {
     );
   }
 
+  // Already-Pro users hitting the data-export wall don't need (or want) an
+  // "Upgrade to Pro" pitch — they already have Pro, and the export is a
+  // separate one-time purchase specifically because it's NOT part of the
+  // subscription. A dedicated, single-purpose modal here instead of the
+  // dual Free/Pro comparison avoids the confusing experience of being told
+  // to upgrade to something you already have.
+  if (feature==='data_export' && pro) {
+    return (
+      <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
+        <div className="upgrade-modal">
+          <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
+          <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+          <div className="upgrade-modal__title">Buy full data export</div>
+          <div className="upgrade-modal__subtitle">A one-time pull of everything currently in the database, delivered as CSV. Separate from your Pro subscription.</div>
+          <div className="upgrade-plan-card upgrade-plan-card--active" style={{cursor:'default'}}>
+            <span>
+              <span className="upgrade-plan-card__title">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
+              <span className="upgrade-plan-card__price">$39.99</span>
+            </span>
+          </div>
+          <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct('data_export')}>Buy Export — $39.99</button>
+          <div className="upgrade-modal__trust">
+            <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe</span>
+            <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Re-purchase anytime for a fresh pull</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
       <div className="upgrade-modal upgrade-modal--large">
@@ -198,13 +228,13 @@ function UpgradeModal({ feature, onClose }) {
             <span className="upgrade-plan-card__radio"/>
             <span>
               <span className="upgrade-plan-card__title">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
-              <span className="upgrade-plan-card__price">$9.99</span>
+              <span className="upgrade-plan-card__price">$39.99</span>
             </span>
           </button>
         </div>
 
         <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct(plan)}>
-          {plan==='pro' ? 'Upgrade Now — $11.99/mo' : 'Buy Export — $9.99'}
+          {plan==='pro' ? 'Upgrade Now — $11.99/mo' : 'Buy Export — $39.99'}
         </button>
 
         <div className="upgrade-modal__trust">
@@ -234,7 +264,7 @@ const PRODUCT_COPY = {
     features: ['Full historical data', 'Portfolio linking', 'Instant alerts'],
   },
   data_export: {
-    title: 'Buy full data export', price: '$9.99 one-time', endpoint: '/billing/create-data-purchase',
+    title: 'Buy full data export', price: '$39.99 one-time', endpoint: '/billing/create-data-purchase',
     subtitle: 'A one-time pull of everything currently in the database.',
     features: ['Every filing on record', 'Delivered as CSV', 'Re-purchase anytime for a fresh pull'],
   },
@@ -578,7 +608,7 @@ function BillingSection({ user }) {
             <div className="settings-row__label">
               {status.hasDataExport ? 'Purchased' : 'Not purchased'}
             </div>
-            <div className="settings-row__sub">One-time pull of everything in the database — $9.99</div>
+            <div className="settings-row__sub">One-time pull of everything in the database — $39.99</div>
           </div>
           <button className="btn btn--primary" onClick={()=>setCheckoutProduct('data_export')}>
             {status.hasDataExport ? 'Buy again' : 'Buy →'}
@@ -4686,6 +4716,21 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
   function goBack() { const prev=detailStack[detailStack.length-1]; setDetailStack(s=>s.slice(0,-1)); setDetail(prev||null); }
 
+  // Same reasoning as InsightsDrawer's own version of this: expanding from a
+  // docked preview should land with the row you were just looking at
+  // visible and marked selected, not scrolled off the top of a freshly
+  // fetched 300-row list. Only fires once per open.
+  const rowKey = (t) => t ? `${t.ticker}|${t.insiderName||t.insider_name}|${t.transactionDate||t.transaction_date}` : null;
+  const listRef = useRef(null);
+  const scrolledOnOpenRef = useRef(false);
+  useEffect(()=>{
+    if (scrolledOnOpenRef.current || !detail || detail.type!=='transaction' || !rows) return;
+    const key = rowKey(detail.trade);
+    if (!key) return;
+    const el = listRef.current?.querySelector(`[data-row-key="${CSS.escape(key)}"]`);
+    if (el) { el.scrollIntoView({ block: 'center' }); scrolledOnOpenRef.current = true; }
+  },[detail, rows]);
+
   return (
     <div className="drawer-overlay" onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="drawer">
@@ -4726,7 +4771,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
         />
 
         <div className="drawer__body">
-          <div className="drawer__list">
+          <div className="drawer__list" ref={listRef}>
             <div className="drawer__list-hdr">
               <span>{rows==null?'Loading…':`${rows.length}${rows.length===300?'+':''} filing${rows.length===1?'':'s'}`}</span>
             </div>
@@ -4754,6 +4799,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                     && detail?.trade?.insiderName===r.insider_name && detail?.trade?.transactionDate===r.transaction_date;
                   return (
                     <div key={i}
+                      data-row-key={rowKey(trade)}
                       className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
                       onClick={()=>navigate({type:'transaction',trade})}>
                       <div className="drawer__list-row__main">
@@ -4798,11 +4844,11 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
 
 function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   const pro = isPro(user);
-  // CSV export is its own $9.99 one-time product (soon $39.99 for the full
-  // database), deliberately separate from the Pro subscription — Pro's job
-  // is to earn recurring revenue, and giving away the one-time product's
-  // entire value for free the moment someone subscribes undercuts it
-  // completely. So this checks the purchase flag, not `pro`.
+  // CSV export is its own $39.99 one-time product, deliberately separate
+  // from the Pro subscription — Pro's job is to earn recurring revenue, and
+  // giving away the one-time product's entire value for free the moment
+  // someone subscribes undercuts it completely. So this checks the purchase
+  // flag, not `pro`.
   const canExport = hasDataExport(user);
   const [rows,    setRows]    = useState([]);
   const [total,   setTotal]   = useState(null);
@@ -4953,7 +4999,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               ? (<><span className="spinner" style={{width:12,height:12,borderWidth:2,marginRight:6}}/>Exporting…</>)
               : canExport
                 ? '↓ Export CSV'
-                : (<>Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$9.99</span></>)}
+                : (<>Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$39.99</span></>)}
           </button>
         </div>
 
@@ -5039,23 +5085,19 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           </div>}
 
           {!loading&&!error&&(
-            <p className="td-muted" style={{fontSize:11,margin:'8px 2px 0'}}>
-              {total!=null?`${total.toLocaleString()} filing${total===1?'':'s'} matching filters · ${DATA_PAGE}/page`:''}
-              {!pro&&<span> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
-            </p>
-          )}
-
-          {!loading&&!error&&totalPgs>1&&(
             <div className="pagination">
               <span className="pagination__info">
-                {pg*DATA_PAGE+1}–{Math.min((pg+1)*DATA_PAGE,total||0)} of {(total||0).toLocaleString()}
+                {total!=null
+                  ? `${pg*DATA_PAGE+1}–${Math.min((pg+1)*DATA_PAGE,total||0)} of ${total.toLocaleString()} filing${total===1?'':'s'}`
+                  : ''}
+                {!pro&&<span> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
               </span>
               <div className="pagination__btns">
-                <button className="btn" onClick={()=>fetchPg(0)}       disabled={pg===0||loading}>««</button>
-                <button className="btn" onClick={()=>fetchPg(pg-1)}    disabled={pg===0||loading}>‹</button>
-                <span className="pagination__counter">{pg+1}/{totalPgs}</span>
-                <button className="btn" onClick={()=>fetchPg(pg+1)}    disabled={pg>=totalPgs-1||loading}>›</button>
-                <button className="btn" onClick={()=>fetchPg(totalPgs-1)} disabled={pg>=totalPgs-1||loading}>»»</button>
+                <button className="btn" onClick={()=>fetchPg(0)}       disabled={pg===0||loading||totalPgs<=1}>««</button>
+                <button className="btn" onClick={()=>fetchPg(pg-1)}    disabled={pg===0||loading||totalPgs<=1}>‹</button>
+                <span className="pagination__counter">{pg+1}/{totalPgs||1}</span>
+                <button className="btn" onClick={()=>fetchPg(pg+1)}    disabled={pg>=totalPgs-1||loading||totalPgs<=1}>›</button>
+                <button className="btn" onClick={()=>fetchPg(totalPgs-1)} disabled={pg>=totalPgs-1||loading||totalPgs<=1}>»»</button>
               </div>
             </div>
           )}
@@ -6583,7 +6625,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             </ul>
           </div>
           <div className="lp-price-card--landscape__action">
-            <div className="lp-price-card__price">$9.99<span>/one-time</span></div>
+            <div className="lp-price-card__price">$39.99<span>/one-time</span></div>
             <SignedOut>
               <SignInButton mode="modal">
                 <button className="lp-btn-ghost lp-btn-ghost--full">Download dataset →</button>
@@ -7051,10 +7093,10 @@ function AppInner() {
         </footer>
       </main>
       {watchlist.showUpgrade&&(
-        <UpgradeModal feature={watchlist.showUpgrade} onClose={()=>watchlist.setShowUpgrade(null)}/>
+        <UpgradeModal feature={watchlist.showUpgrade} pro={isPro(user)} onClose={()=>watchlist.setShowUpgrade(null)}/>
       )}
       {showUpgradeModal&&(
-        <UpgradeModal feature={showUpgradeModal} onClose={()=>setShowUpgradeModal(null)}/>
+        <UpgradeModal feature={showUpgradeModal} pro={isPro(user)} onClose={()=>setShowUpgradeModal(null)}/>
       )}
       {panelOpen&&!detailFull&&(
         <>
