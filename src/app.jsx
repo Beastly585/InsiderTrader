@@ -855,7 +855,6 @@ function IconSettings(p)  { return <svg {...ICON_PROPS} {...p}><circle cx="12" c
 function IconHelp(p)      { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }
 function IconSun(p)       { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>; }
 function IconMoon(p)      { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>; }
-function IconSignOut(p)   { return <svg {...ICON_PROPS} {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>; }
 function IconReversal(p)  { return <svg {...ICON_PROPS} {...p}><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>; }
 function IconClose(p)     { return <svg {...ICON_PROPS} {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>; }
 function IconCheck(p)      { return <svg {...ICON_PROPS} {...p}><polyline points="20 6 9 17 4 12"/></svg>; }
@@ -916,12 +915,8 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
           aria-label="Settings">
           <IconSettings className="nav-icon nav-icon--svg"/>
         </button>
-        <button className="nav-item nav-item--icon-only nav-item--sm nav-item--signout"
-          onClick={()=>{ window.__clerkSignOut && window.__clerkSignOut(); }}
-          title="Sign out"
-          aria-label="Sign out">
-          <IconSignOut className="nav-icon nav-icon--svg"/>
-        </button>
+        {/* Sign out removed — redundant with Clerk's own UserButton dropdown
+            in the status bar, which already handles account/sign-out. */}
       </div>
     </nav>
   );
@@ -1338,9 +1333,11 @@ function TileInfoButton({ section, title }) {
   );
 }
 
-// Persistent status-bar entry point into the same guide, separate from the
-// per-tile "?" — always opens at the beginning, for anyone who wants the
-// full walkthrough rather than one specific answer.
+// Persistent status-bar entry point into the guide — always opens at the
+// beginning, for anyone who wants the full walkthrough rather than one
+// specific tile's answer. Previously this lived alongside a separate "?"
+// icon that linked out to /about — two adjacent help-shaped icons doing
+// different things. Consolidated into one: this is now the "?" itself.
 function GuideStatusBarButton() {
   const guide = useContext(GuideContext);
   return (
@@ -1350,7 +1347,7 @@ function GuideStatusBarButton() {
       title="Guide"
       aria-label="Open guide"
     >
-      <IconInsights style={{ width: 16, height: 16 }} />
+      <IconHelp style={{ width: 16, height: 16 }} />
     </button>
   );
 }
@@ -1449,7 +1446,7 @@ function FollowBtn({ name, watchlist }) {
   );
 }
 
-function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, watchlist, inline=false, onExpand }) {
+function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, watchlist, inline=false, onExpand, hideProfileCard=false }) {
   // Note: this component is only ever mounted by the caller when `detail` is
   // truthy (see App's panelOpen guard), so `d` is always defined here. No
   // early-return guard before the hooks below — that pattern breaks React's
@@ -2092,7 +2089,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
 
         {d.type==='ticker'&&(busy?<div className="state-box" style={{padding:'2rem'}}><Spinner/><p>Loading…</p></div>:!tickerStats?<div className="state-box" style={{padding:'2rem'}}><p>No data.</p></div>:(<>
-          <CompanyProfileCard ticker={d.ticker} cik={tickerRows?.[0]?.cik_issuer} company={d.company}/>
+          {!hideProfileCard && <CompanyProfileCard ticker={d.ticker} cik={tickerRows?.[0]?.cik_issuer} company={d.company}/>}
           <div className="dp-summary">
             <div className="dp-sum-item"><span className="dp-sum-label">Buys</span><span className="val-buy dp-sum-val">{tickerStats.buys}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Sells</span><span className="val-sell dp-sum-val">{tickerStats.sells}</span></div>
@@ -2602,23 +2599,11 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
       .slice(0,30);
   },[filings,cutoff]);
 
-  const bentoRef = React.useRef(null);
-  useEffect(()=>{
-    function measure(){
-      if(!bentoRef.current)return;
-      const top=bentoRef.current.getBoundingClientRect().top;
-      bentoRef.current.style.setProperty('--dash-offset',`${top+16}px`);
-    }
-    measure();
-    window.addEventListener('resize',measure);
-    return()=>window.removeEventListener('resize',measure);
-  },[]);
-
   return (
     <div className="page-content">
       <SentimentStrip filings={filings}/>
 
-      <div className="dash-bento" ref={bentoRef}>
+      <div className="dash-bento">
 
         {/* LEFT: Heatmap (top) + Signals (below, scrollable) */}
         <div className="dash-col-left">
@@ -3707,8 +3692,15 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
 // Simple SVG line chart — no charting library dependency, matching the
 // existing hand-rolled-SVG convention already used elsewhere in this file
 // (see InsightsSectorChart). points: [{date, value}, ...] sorted ascending.
-function PortfolioPerformanceChart({ points, onClick }) {
-  const W = 600, H = 160, PAD_L = 56, PAD_R = 10, PAD_T = 10, PAD_B = 24;
+function PortfolioPerformanceChart({ points, onClick, compact=true }) {
+  // The Explore view's container has no fixed width constraint and is
+  // typically much wider than the compact tile's — a fixed 160px height
+  // regardless of that width is exactly what produced the flat, stretched
+  // look. Both dimensions grow for the non-compact case, not just height
+  // alone, so the chart reads as genuinely taller rather than the same
+  // thin strip rendered at a bigger scale.
+  const W = compact ? 600 : 900, H = compact ? 160 : 280;
+  const PAD_L = 56, PAD_R = 10, PAD_T = 10, PAD_B = 24;
   const svgRef = useRef(null);
   const [hoverIdx, setHoverIdx] = useState(null);
   const values = points.map(p=>p.value);
@@ -3851,7 +3843,7 @@ function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
               Showing full history — not enough data for {PORTFOLIO_CHART_RANGES.find(r=>r.key===range)?.label} yet.
             </p>
           )}
-          <PortfolioPerformanceChart points={display} onClick={onExplore}/>
+          <PortfolioPerformanceChart points={display} onClick={onExplore} compact={compact}/>
         </>
       )}
     </div>
@@ -4011,8 +4003,9 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
             )}
           </div>
 
-          {/* RIGHT: performance chart (always shown) + inline ticker detail */}
+          {/* RIGHT: ticker profile (only once a position is selected) + performance chart (always shown) + inline ticker detail */}
           <div className="drawer__detail">
+            {selected && <CompanyProfileCard ticker={selected} company={detail?.company||''}/>}
             <div className="port-perf-chart">
               {perf===undefined ? (
                 <div style={{padding:'0.75rem',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>
@@ -4038,6 +4031,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
                   canGoBack={detailStack.length>0}
                   watchlist={watchlist}
                   inline={true}
+                  hideProfileCard={true}
                 />
             }
           </div>
@@ -6647,12 +6641,6 @@ function AppInner() {
                 tile's "?". Opens in-app rather than a new tab, since it's
                 part of using the product, not a separate reference page. */}
             <GuideStatusBarButton/>
-            {/* Why insider data — opens in a new tab rather than navigating
-                away from whatever the user is doing in the app */}
-            <a href="/about" target="_blank" rel="noopener noreferrer"
-               className="status-bar__icon-btn" title="Why insider data">
-              <IconHelp style={{width:16,height:16}}/>
-            </a>
             {/* Theme toggle — moved here from the sidebar */}
             <button className="status-bar__icon-btn" onClick={()=>setDark(d=>!d)}
               title={dark?'Switch to light mode':'Switch to dark mode'}

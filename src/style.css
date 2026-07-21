@@ -25,6 +25,11 @@
   --accent:        #7C6FFF;
   --accent-50:     #151230;
   --accent-strong: #A099FF;
+  /* Secondary brand color — same aqua used in the email templates
+     (send_digests.py / send_instant_alerts.py), previously only defined
+     there and never brought into the app's own palette. */
+  --aqua:          #3FBFA0;
+  --aqua-50:       #0E241F;
 
   /* Semantic colors */
   --green-600: #3ECF8E;  --green-50:  #0B2218;
@@ -68,6 +73,8 @@
   --accent:        #5A4FE8;
   --accent-50:     #EEEDF9;
   --accent-strong: #4338C9;
+  --aqua:          #3FBFA0;
+  --aqua-50:       #E4F6F1;
   --green-600: #15803D;  --green-50:  #DCFCE7;
   --red-600:   #C0392B;  --red-50:    #FEE2E2;
   --blue-600:  #1A65C8;  --blue-50:   #DBEAFE;
@@ -218,7 +225,8 @@ pre {
   position: absolute; inset: 0;
   background:
     radial-gradient(ellipse 900px 500px at 15% 0%, var(--accent-50) 0%, transparent 60%),
-    radial-gradient(ellipse 700px 500px at 100% 100%, var(--accent-50) 0%, transparent 55%);
+    radial-gradient(ellipse 700px 500px at 100% 100%, var(--accent-50) 0%, transparent 55%),
+    radial-gradient(ellipse 650px 450px at 90% 5%, var(--aqua-50) 0%, transparent 55%);
   opacity: 0.5;
   pointer-events: none;
   z-index: 0;
@@ -809,7 +817,10 @@ td { padding:7px 11px; vertical-align:middle; }
   display: grid;
   grid-template-columns: 3fr 1.6fr;
   gap: 10px;
-  height: calc(100vh - var(--dash-offset, 200px));
+  /* Fills whatever page-content has left, same flexbox model the rest of
+     the shell already uses — no JS-measured pixel height to go stale when
+     the sentiment strip's own height settles after its async data load. */
+  flex: 1;
   min-height: 480px;
 }
 .dash-col-left  { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
