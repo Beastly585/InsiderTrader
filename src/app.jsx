@@ -1837,41 +1837,76 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
           </div>
           {/* RIGHT — every number that describes the purchase itself, all
               grouped together and explicitly labeled: shares, price then,
-              price now, position change, and the total dollar amount. */}
-          <div className="dp-trade-right">
-            <div className="dp-trade-detail">
-              <span className="dp-trade-detail__label">Shares</span>
-              <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
-            </div>
-            {hasRealPrice ? (<>
+              price now, position change, and the total dollar amount.
+
+              In the wide inline drawer (`inline`), this is a fixed 5-column
+              grid where EVERY column slot always renders — showing "—" when
+              a value doesn't apply — so the columns line up vertically across
+              every transaction row regardless of which fields each row has.
+              In the narrow docked side panel there isn't room for a rigid
+              5-column table, so it keeps the original content-width flex
+              layout that only shows the cells that apply. */}
+          {inline ? (
+            <div className="dp-trade-right dp-trade-right--grid">
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Shares</span>
+                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+              </div>
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">Price</span>
-                <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
+                <span className="dp-trade-detail__val">{hasRealPrice?fmt.price(pr):'—'}</span>
               </div>
-              {ret!=null && (
-                <div className="dp-trade-detail">
-                  <span className="dp-trade-detail__label">Now</span>
-                  <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
-                    {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
-                  </span>
-                </div>
-              )}
-            </>) : (
               <div className="dp-trade-detail">
-                <span className="dp-trade-detail__val dp-trade-row2__noprice">{codeLabel}</span>
+                <span className="dp-trade-detail__label">Now</span>
+                {hasRealPrice&&ret!=null
+                  ? <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span>
+                  : <span className="dp-trade-detail__val td-muted">{hasRealPrice?'—':codeLabel}</span>}
               </div>
-            )}
-            {(r.pct_owned_change||r.pctOwnedChange)!=null && (
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">% of position</span>
-                <span className="dp-trade-detail__val val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%</span>
+                <span className="dp-trade-detail__val val-buy">{(r.pct_owned_change||r.pctOwnedChange)!=null?`+${(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%`:'—'}</span>
               </div>
-            )}
-            <div className="dp-trade-detail">
-              <span className="dp-trade-detail__label">Total</span>
-              <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Total</span>
+                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="dp-trade-right">
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Shares</span>
+                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+              </div>
+              {hasRealPrice ? (<>
+                <div className="dp-trade-detail">
+                  <span className="dp-trade-detail__label">Price</span>
+                  <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
+                </div>
+                {ret!=null && (
+                  <div className="dp-trade-detail">
+                    <span className="dp-trade-detail__label">Now</span>
+                    <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
+                      {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
+                    </span>
+                  </div>
+                )}
+              </>) : (
+                <div className="dp-trade-detail">
+                  <span className="dp-trade-detail__val dp-trade-row2__noprice">{codeLabel}</span>
+                </div>
+              )}
+              {(r.pct_owned_change||r.pctOwnedChange)!=null && (
+                <div className="dp-trade-detail">
+                  <span className="dp-trade-detail__label">% of position</span>
+                  <span className="dp-trade-detail__val val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%</span>
+                </div>
+              )}
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Total</span>
+                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -3539,15 +3574,15 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               <div className="drawer__toolbar-divider"/>
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Min position</span>
-                <div className="dash-tile-pills" style={{gap:2}}>
+                <div className="dash-tile-pills" style={{gap:2,alignItems:'center'}}>
                   {[[0,'Any'],[50000,'$50K'],[100000,'$100K'],[1000000,'$1M'],[10000000,'$10M']].map(([v,l])=>(
                     <button key={l} className={`dash-tile-pill${lbMinValue===v?' dash-tile-pill--active':''}`}
                       onClick={()=>setLbMinValue(v)}>{l}</button>
                   ))}
+                  <input type="number" className="ins-filter-select" placeholder="Custom $" style={{width:84,marginLeft:4}}
+                    value={lbMinValue&&![0,50000,100000,1000000,10000000].includes(lbMinValue)?lbMinValue:''}
+                    onChange={e=>setLbMinValue(e.target.value?Number(e.target.value):0)}/>
                 </div>
-                <input type="number" className="ins-filter-select" placeholder="Custom $" style={{width:90,marginLeft:4}}
-                  value={lbMinValue&&![0,50000,100000,1000000,10000000].includes(lbMinValue)?lbMinValue:''}
-                  onChange={e=>setLbMinValue(e.target.value?Number(e.target.value):0)}/>
               </div>
             </div>
           )}
@@ -3618,15 +3653,17 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                           <div className="drawer__list-row__main">
                             <span className="td-muted" style={{fontSize:11,width:18}}>{i+1}</span>
                             <span style={{fontSize:12,fontWeight:500,flex:1}}>{r.insider_name}</span>
-                            {r.hit_rate!=null&&(
-                              <span
-                                className={`td-mono ${r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}`}
-                                style={{fontSize:13,fontWeight:700,cursor:r.avg_spy_return!=null?'help':'default'}}
-                                title={r.avg_spy_return!=null
-                                  ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
-                                  : undefined}
-                              >{r.hit_rate}%</span>
-                            )}
+                            {r.hit_rate!=null
+                              ? <span
+                                  className={`td-mono ${r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}`}
+                                  style={{fontSize:13,fontWeight:700,cursor:r.avg_spy_return!=null?'help':'default'}}
+                                  title={r.avg_spy_return!=null
+                                    ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
+                                    : undefined}
+                                >{r.hit_rate}%</span>
+                              : <span className="td-muted" style={{fontSize:11,fontWeight:500,cursor:'help'}}
+                                  title="Congressional filings disclose only a dollar range — no share count or purchase price — so a price-based hit rate can't be computed. Ranked by buy activity instead.">n/a</span>
+                            }
                           </div>
                           <div className="drawer__list-row__sub">
                             <span className="td-muted" style={{fontSize:11}}>{r.insider_title||'Unknown'}</span>
@@ -3735,7 +3772,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
         {header}
         <div className="port-mini-tile__body" style={{padding:14}}>
           <span className="td-muted" style={{fontSize:11}}>
-            No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>link one in Settings</button> to see your real holdings here.
+            No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>Link your account</button> to see your real holdings and get notified when insiders trade your stocks.
           </span>
         </div>
       </div>
@@ -4239,15 +4276,17 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
             </div>
             <div className="ins-lb-card__score">
               {watchlist&&<FollowBtn name={r.insider_name} watchlist={watchlist}/>}
-              {r.hit_rate!=null&&(
-                <div
-                  className={`ins-lb-card__rate ${r.hit_rate>=70?'val-buy':r.hit_rate>=50?'':'val-sell'}`}
-                  style={{cursor:r.avg_spy_return!=null?'help':'default'}}
-                  title={r.avg_spy_return!=null
-                    ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
-                    : undefined}
-                >{r.hit_rate}%</div>
-              )}
+              {r.hit_rate!=null
+                ? <div
+                    className={`ins-lb-card__rate ${r.hit_rate>=70?'val-buy':r.hit_rate>=50?'':'val-sell'}`}
+                    style={{cursor:r.avg_spy_return!=null?'help':'default'}}
+                    title={r.avg_spy_return!=null
+                      ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
+                      : undefined}
+                  >{r.hit_rate}%</div>
+                : <div className="ins-lb-card__rate td-muted" style={{fontSize:'0.6875rem',cursor:'help'}}
+                    title="Congressional filings disclose only a dollar range — no share count or purchase price — so a price-based hit rate can't be computed. Ranked by buy activity instead.">n/a</div>
+              }
               <ConvictionBar score={r.proxy_score} max={4}/>
             </div>
           </div>

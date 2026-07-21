@@ -384,6 +384,16 @@ pre {
   display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap;
   justify-content: flex-end; flex-shrink: 0;
 }
+/* Wide inline drawer only: fixed-width columns so Shares / Price / Now /
+   % of position / Total line up vertically across every transaction row,
+   instead of each row sizing its own columns to its own content. Every row
+   renders all five slots (missing values show "—"), so nothing shifts. */
+.dp-trade-right--grid {
+  display: grid;
+  grid-template-columns: 92px 88px 132px 96px 92px;
+  gap: 0 16px; flex-wrap: nowrap;
+}
+.dp-trade-right--grid .dp-trade-detail { align-items: flex-end; }
 .dp-trade-detail { display: flex; flex-direction: column; gap: 1px; align-items: flex-end; }
 .dp-trade-detail__label {
   font-size: 0.5938rem; font-weight: 700; text-transform: uppercase;
