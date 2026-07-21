@@ -1048,8 +1048,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* ══════════════════════════════════════════════════════════════════════════
    ALL DATA — filter panel & sortable table
 ══════════════════════════════════════════════════════════════════════════ */
-.data-layout { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: stretch; flex: 1; min-height: 0; }
-@media (max-width: 900px) { .data-layout { grid-template-columns: 1fr; } }
+.data-layout { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .data-main { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .data-main .table-wrap { flex: 1; overflow-y: auto; }
 
