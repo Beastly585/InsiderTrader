@@ -2548,13 +2548,23 @@ function PortfolioTickerNews({ tickers }) {
 // closest honest equivalent is news on what they've actually been trading).
 // Capped at 15 tickers — Finnhub's free tier has no bulk multi-symbol news
 // endpoint, so this is 15 real parallel requests, not one.
+//
+// Returns {ticker, reason} pairs, not bare strings — `reason` is what
+// actually earns the personalization tag on each article: 'starred' if the
+// ticker itself is on the watchlist, otherwise the name of the first
+// followed insider whose trade pulled it in. A ticker can qualify both
+// ways; starred wins since it's the more direct signal.
 function useMyNewsTickers(watchlist, filings) {
   return useMemo(() => {
     if (!watchlist) return [];
-    const fromInsiders = (filings||[])
-      .filter(f => f.insiderName && watchlist.insiders?.includes(f.insiderName))
-      .map(f => f.ticker);
-    return [...new Set([...(watchlist.tickers||[]), ...fromInsiders])].filter(Boolean).slice(0,15);
+    const starred = new Set(watchlist.tickers||[]);
+    const reasonByTicker = new Map();
+    for (const t of starred) reasonByTicker.set(t, 'starred');
+    for (const f of (filings||[])) {
+      if (!f.ticker || !f.insiderName || !watchlist.insiders?.includes(f.insiderName)) continue;
+      if (!reasonByTicker.has(f.ticker)) reasonByTicker.set(f.ticker, f.insiderName);
+    }
+    return [...reasonByTicker.entries()].slice(0,15).map(([ticker,reason])=>({ticker,reason}));
   }, [watchlist?.tickers, watchlist?.insiders, filings]);
 }
 
@@ -2562,7 +2572,7 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const hasKey = !!cfg.FINNHUB_API_KEY;
-  const tickerKey = myTickers.join(',');
+  const tickerKey = myTickers.map(t=>t.ticker).join(',');
 
   useEffect(() => {
     if (!hasKey) return;
@@ -2573,9 +2583,9 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
       if (!myTickers.length) { setNews([]); setLoading(false); return; }
       const to = new Date().toISOString().split('T')[0];
       const from = (()=>{const d=new Date();d.setDate(d.getDate()-14);return d.toISOString().split('T')[0];})();
-      Promise.all(myTickers.map(t =>
-        fetch(`https://finnhub.io/api/v1/company-news?symbol=${t}&from=${from}&to=${to}&token=${cfg.FINNHUB_API_KEY}`)
-          .then(r=>r.json()).then(a=>Array.isArray(a)?a.map(n=>({...n,_ticker:t})):[]).catch(()=>[])
+      Promise.all(myTickers.map(({ticker,reason}) =>
+        fetch(`https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${from}&to=${to}&token=${cfg.FINNHUB_API_KEY}`)
+          .then(r=>r.json()).then(a=>Array.isArray(a)?a.map(n=>({...n,_ticker:ticker,_reason:reason})):[]).catch(()=>[])
       )).then(results => {
         if (cancelled) return;
         const merged = results.flat()
@@ -2600,6 +2610,20 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
   return { news, loading, hasKey };
 }
 
+// Small tag showing exactly why an article surfaced under My News — the
+// ticker, plus (on hover, and inline when it's not starred) which followed
+// insider's trade actually pulled it in. Not just "personalized", a real
+// reason.
+function NewsMatchBadge({ ticker, reason }) {
+  const viaInsider = reason && reason!=='starred';
+  return (
+    <span className="news-match-badge"
+      title={viaInsider ? `${ticker} — matched via ${reason}'s recent trade` : `${ticker} — on your watchlist`}>
+      {ticker}{viaInsider && <span className="news-match-badge__via"> · via {reason}</span>}
+    </span>
+  );
+}
+
 // Headlines open in a new tab rather than an in-app iframe — most
 // publishers (Reuters, Bloomberg, WSJ, etc.) send X-Frame-Options or a CSP
 // frame-ancestors header that blocks embedding entirely, so an iframe here
@@ -2614,7 +2638,8 @@ function NewsList({ news, loading, hasKey, emptyHint }) {
       {news.map((n,i)=>(
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
-            <span className="td-muted" style={{fontSize:11}}>{n._ticker?`${n._ticker} · `:''}{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            {n._ticker&&<NewsMatchBadge ticker={n._ticker} reason={n._reason}/>}
+            <span className="td-muted" style={{fontSize:11}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
@@ -2623,28 +2648,14 @@ function NewsList({ news, loading, hasKey, emptyHint }) {
   );
 }
 
-function MarketNews({ watchlist, filings, limit=12 }) {
-  const [myNewsOn, setMyNewsOn] = useState(false);
+function MarketNews({ watchlist, filings, limit=12, myNewsOn=false }) {
   const pro = !!watchlist?.pro;
   const myTickers = useMyNewsTickers(watchlist, filings);
   const { news, loading, hasKey } = useMarketNews({ myTickers, myNewsOn: myNewsOn&&pro, limit });
 
   return (
-    <div className="dash-news-wrap">
-      {watchlist&&(
-        <label
-          className={`bundle-toggle${myNewsOn&&pro?' bundle-toggle--active':''}`}
-          style={{margin:'8px 12px 0',alignSelf:'flex-start'}}
-          title={pro?'Only news for your starred tickers and followed insiders\' recent trades':'Pro feature — filters news to your starred tickers and followed insiders'}
-        >
-          <input type="checkbox" checked={myNewsOn&&pro}
-            onChange={()=>pro?setMyNewsOn(v=>!v):watchlist.setShowUpgrade?.('watchlist_ticker')}/>
-          My news{!pro&&<span className="settings-pro-badge" style={{marginLeft:5}}>Pro</span>}
-        </label>
-      )}
-      <NewsList news={news} loading={loading} hasKey={hasKey}
-        emptyHint={myNewsOn&&pro?'No recent news for your starred tickers or followed insiders\' trades.':undefined}/>
-    </div>
+    <NewsList news={news} loading={loading} hasKey={hasKey}
+      emptyHint={myNewsOn&&pro?'No recent news for your starred tickers or followed insiders\' trades.':undefined}/>
   );
 }
 
@@ -2687,6 +2698,7 @@ function NewsDrawer({ watchlist, filings, onClose }) {
 function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist }) {
   const [days, setDays] = useState(7);
   const [newsExpanded, setNewsExpanded] = useState(false);
+  const [newsMyNewsOn, setNewsMyNewsOn] = useState(false);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
 
   const signals = useMemo(()=>{
@@ -2788,11 +2800,21 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               <span className="dash-tile__title">Market news</span>
               <TileInfoButton section="welcome" title="Market news"/>
               <div className="dash-tile__hdr-controls">
+                {watchlist&&(
+                  <label
+                    className={`bundle-toggle${newsMyNewsOn&&watchlist.pro?' bundle-toggle--active':''}`}
+                    title={watchlist.pro?'Only news for your starred tickers and followed insiders\' recent trades':'Pro feature — filters news to your starred tickers and followed insiders'}
+                  >
+                    <input type="checkbox" checked={newsMyNewsOn&&watchlist.pro}
+                      onChange={()=>watchlist.pro?setNewsMyNewsOn(v=>!v):watchlist.setShowUpgrade?.('watchlist_ticker')}/>
+                    My news{!watchlist.pro&&<span className="settings-pro-badge" style={{marginLeft:5}}>Pro</span>}
+                  </label>
+                )}
                 <button className="btn btn--ghost btn--icon" onClick={()=>setNewsExpanded(true)} title="Open full news view">⤢</button>
               </div>
             </div>
             <div className="dash-tile__body">
-              <MarketNews watchlist={watchlist} filings={filings} limit={12}/>
+              <MarketNews watchlist={watchlist} filings={filings} limit={12} myNewsOn={newsMyNewsOn}/>
             </div>
           </div>
         </div>
@@ -4208,7 +4230,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
           <div key={i} className="ins-lb-card" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
             <div className="ins-lb-card__rank">{i+1}</div>
             <div className="ins-lb-card__body">
-              <div style={{display:'flex',alignItems:'center',gap:6}}><div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>{watchlist&&<FollowBtn name={r.insider_name} watchlist={watchlist}/>}</div>
+              <div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>
               <div className="td-muted" style={{fontSize:11}}>{r.insider_title||'Unknown'}</div>
               <div className="ins-lb-card__meta">
                 <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
@@ -4216,6 +4238,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
               </div>
             </div>
             <div className="ins-lb-card__score">
+              {watchlist&&<FollowBtn name={r.insider_name} watchlist={watchlist}/>}
               {r.hit_rate!=null&&(
                 <div
                   className={`ins-lb-card__rate ${r.hit_rate>=70?'val-buy':r.hit_rate>=50?'':'val-sell'}`}
