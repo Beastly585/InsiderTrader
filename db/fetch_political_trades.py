@@ -245,6 +245,12 @@ TX_RE = re.compile(
     re.IGNORECASE
 )
 TICKER_RE = re.compile(r'\(([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\)')
+# Words that legitimately show up in these parenthetical spots on disclosure
+# PDFs when there's no applicable ticker (e.g. "(NONE)" for a non-traded
+# asset) — all of them happen to also be valid 1-5 letter uppercase matches
+# for TICKER_RE above, so without this list they'd silently get stored as
+# if they were real ticker symbols.
+TICKER_BLOCKLIST = {'NONE','NULL','NA','TBD','VOID'}
 NOISE_RE  = re.compile(
     r'^(ID\s+Owner|S\s+O:|D:|F\s+S:|L:|Filing ID|Clerk of|Name:|Status:|State/|'
     r'ID\s+|Amendment|Page\s+\d|PTR\s*$|\s*$)',
@@ -314,7 +320,7 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
                                       "municipal","note","reit trust"]):
                 continue
 
-        if ticker and not re.match(r'^[A-Z]{1,5}(?:\.[A-Z])?$', ticker):
+        if ticker and (not re.match(r'^[A-Z]{1,5}(?:\.[A-Z])?$', ticker) or ticker in TICKER_BLOCKLIST):
             ticker = None
 
         tt, tc, tc_label = classify_tx(tx_type)
@@ -597,7 +603,7 @@ def parse_senate_html(html: str, meta: dict) -> list[CongressTrade]:
             tc_label += " (Senate)"
 
             clean_ticker = re.sub(r'[^A-Z.]', '', ticker)[:6]
-            if clean_ticker in ("--","NA","N/A",""): clean_ticker = None
+            if clean_ticker in ("--","NA","N/A","NONE","NULL","TBD",""): clean_ticker = None
             if clean_ticker and not re.match(r'^[A-Z]{1,5}(?:\.[A-Z])?$', clean_ticker):
                 clean_ticker = None
 

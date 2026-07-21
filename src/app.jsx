@@ -1858,15 +1858,15 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               the transaction code / market type metadata */}
           <div className="dp-trade-left">
             <div className="dp-trade-left__top">
-              <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
               <span className="dp-trade-date">{dateLabel}</span>
               {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
             </div>
             <div className="dp-trade-left__bottom">
-              {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:r.ticker,company:r.company_name})}>{r.ticker}</span>}
-              {showInsider&&r.insider_name&&<span className="dp-clickable dp-trade-row2__name" onClick={()=>nav('trader',{name:r.insider_name,title:r.title})}>{r.insider_name}</span>}
+              <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
               <span className="code-pill" title={codeLabel}>{code}</span>
               {isOM&&<span className="dp-trade-om-label">Open market</span>}
+              {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:r.ticker,company:r.company_name})}>{r.ticker}</span>}
+              {showInsider&&r.insider_name&&<span className="dp-clickable dp-trade-row2__name" onClick={()=>nav('trader',{name:r.insider_name,title:r.title})}>{r.insider_name}</span>}
               {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
             </div>
           </div>
@@ -2774,6 +2774,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [days, setDays] = useState(7);
   const [newsExpanded, setNewsExpanded] = useState(false);
   const [newsMyNewsOn, setNewsMyNewsOn] = useState(false);
+  const [insidersExpanded, setInsidersExpanded] = useState(false);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
 
   const signals = useMemo(()=>{
@@ -2865,6 +2866,9 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Top insiders</span>
               <TileInfoButton section="insights-formula" title="Top insiders"/>
+              <div className="dash-tile__hdr-controls">
+                <button className="btn btn--ghost btn--icon" onClick={()=>setInsidersExpanded(true)} title="Open full insiders view">⤢</button>
+              </div>
             </div>
             <div className="dash-tile__body">
               <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
@@ -2896,6 +2900,17 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
       </div>
       {newsExpanded&&<NewsDrawer watchlist={watchlist} filings={filings} onClose={()=>setNewsExpanded(false)}/>}
+      {insidersExpanded&&(
+        <InsightsDrawer
+          type="insiders"
+          filings={filings}
+          watchlist={watchlist}
+          onClose={()=>setInsidersExpanded(false)}
+          sigSort="conviction" sigDir={-1} sigOnSort={()=>{}}
+          ensureFilingsWindow={()=>{}}
+          filingsLoading={loading}
+        />
+      )}
     </div>
   );
 }
@@ -3121,12 +3136,12 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 
         {/* LEFT: Signals */}
         <div className="ins-sig-panel ins-3col__signals">
-          <div className="ins-sig-panel__hdr ins-sig-panel__hdr--explorable">
-            <button className="ins-panel-title-link" title="Open full Explore view" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('signals');}}>
-              Insider signals
-              <span className="ins-explore-hint" aria-hidden="true">⤢</span>
-            </button>
+          <div className="ins-sig-panel__hdr">
+            <span className="ins-sig-panel__title">Insider signals</span>
             <TileInfoButton section="insights-formula" title="Insider signals"/>
+            <div className="dash-tile__hdr-controls">
+              <button className="btn btn--ghost btn--icon" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('signals');}} title="Open full Explore view">⤢</button>
+            </div>
           </div>
 
           {/* Filters — belong to this panel specifically, not floating above
@@ -3277,12 +3292,12 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             pro={pro}
           />
         <div className="ins-lb-panel-wrap" style={{flex:1,minHeight:0}}>
-          <div className="ins-sig-panel__hdr ins-sig-panel__hdr--explorable">
-            <button className="ins-panel-title-link" title="Open full Explore view" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('insiders');}}>
-              Top insiders
-              <span className="ins-explore-hint" aria-hidden="true">⤢</span>
-            </button>
+          <div className="ins-sig-panel__hdr">
+            <span className="ins-sig-panel__title">Top insiders</span>
             <TileInfoButton section="insights-formula" title="Top insiders"/>
+            <div className="dash-tile__hdr-controls">
+              <button className="btn btn--ghost btn--icon" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('insiders');}} title="Open full Explore view">⤢</button>
+            </div>
           </div>
           <div className="ins-lb-panel__body">
             <InsiderLeaderboardSidebar onOpenDetail={openInDrawer} watchlist={watchlist}/>
@@ -3772,32 +3787,38 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
 
   if (!pro) {
     return (
-      <div className="port-mini-tile port-mini-tile--collapsed">
-        <span className="port-mini-tile__collapsed-label">Portfolio</span>
-        <span className="td-muted" style={{fontSize:11}}>
-          Pro feature — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=billing')}>upgrade</button> to see insider activity on your real holdings.
-        </span>
+      <div className="port-mini-tile">
+        <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
+        <div className="port-mini-tile__body">
+          <span className="td-muted" style={{fontSize:11}}>
+            Pro feature — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=billing')}>upgrade</button> to see insider activity on your real holdings.
+          </span>
+        </div>
       </div>
     );
   }
 
   if (err) {
     return (
-      <div className="port-mini-tile port-mini-tile--collapsed">
-        <span className="port-mini-tile__collapsed-label">Portfolio</span>
-        <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions.</span>
-        <button className="btn btn--ghost btn--sm" style={{marginLeft:'auto'}} onClick={refresh} disabled={refreshing}>{refreshing?'Retrying…':'Retry'}</button>
+      <div className="port-mini-tile">
+        <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
+        <div className="port-mini-tile__body" style={{flexDirection:'row',alignItems:'center'}}>
+          <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions.</span>
+          <button className="btn btn--ghost btn--sm" style={{marginLeft:'auto'}} onClick={refresh} disabled={refreshing}>{refreshing?'Retrying…':'Retry'}</button>
+        </div>
       </div>
     );
   }
 
   if (connected===false) {
     return (
-      <div className="port-mini-tile port-mini-tile--collapsed">
-        <span className="port-mini-tile__collapsed-label">Portfolio</span>
-        <span className="td-muted" style={{fontSize:11}}>
-          No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>Link your account</button> to see your real holdings and get notified when insiders trade your stocks.
-        </span>
+      <div className="port-mini-tile">
+        <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
+        <div className="port-mini-tile__body">
+          <span className="td-muted" style={{fontSize:11}}>
+            No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>Link your account</button> to see your real holdings and get notified when insiders trade your stocks.
+          </span>
+        </div>
       </div>
     );
   }
@@ -6845,6 +6866,15 @@ function AppInner() {
   // site — any code path that changes `page` or `detail` gets picked up
   // automatically, so nothing elsewhere in the file needs to change.
   useEffect(() => {
+    // /terms and /privacy are handled by an early return above, entirely
+    // outside the page/detail state model — appStateFromPath has no entry
+    // for them, so it was defaulting to 'dashboard' on mount, and this
+    // effect would then push that path over whatever was actually in the
+    // address bar. That's the actual mechanism behind "loads /terms, then
+    // reverts to the dashboard a moment later": the URL got silently
+    // overwritten, and the early-return check above reads the URL fresh
+    // on every render, so it stopped matching once that happened.
+    if (window.location.pathname === '/terms' || window.location.pathname === '/privacy') return;
     const path = pathFromAppState(page, detail);
     if (window.location.pathname !== path) {
       window.history.pushState({ page, detail }, '', path);

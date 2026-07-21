@@ -33,10 +33,14 @@
   /* Background-wash variants — separate from --accent-50/--aqua-50 (which
      are meant for solid UI fills like active nav state) because those
      tokens are nearly indistinguishable from --bg in light mode, making
-     the frame gradient effectively invisible there. These carry their own
-     alpha so they read the same relative strength in both themes. */
-  --accent-wash:   rgba(124,111,255,0.18);
-  --aqua-wash:     rgba(63,191,160,0.14);
+     the frame gradient effectively invisible there. Dark mode's alpha is
+     lower than light's on purpose — a dark background already makes color
+     read more strongly at the same alpha, so matching light mode's numbers
+     here made the gradient more prominent in dark mode, not equally
+     subtle, which read as competing with tile content rather than sitting
+     behind it. */
+  --accent-wash:   rgba(124,111,255,0.10);
+  --aqua-wash:     rgba(63,191,160,0.08);
 
   /* Semantic colors */
   --green-600: #3ECF8E;  --green-50:  #0B2218;
@@ -322,6 +326,7 @@ pre {
    for free. Settings' content column stretches the same way — harmless,
    its own scroll area just gets a little shorter. */
 .app-shell--settings .content-area { padding-bottom: 0; }
+.app-shell--settings .content-area::before { display: none; }
 
 /* ── Right detail panel ───────────────────────────────────────────────────── */
 .panel-overlay { display:none; position:fixed; inset:0; z-index:200; }
@@ -1519,7 +1524,6 @@ td { padding:7px 11px; vertical-align:middle; }
   font-size: 0.75rem; opacity: 0; transform: translateX(-2px);
   transition: opacity .15s, transform .15s;
 }
-.ins-sig-panel__hdr--explorable:hover .ins-explore-hint { opacity: 1; transform: translateX(0); }
 .ins-empty { padding: 20px 16px; font-size: 0.75rem; color: var(--text-2); }
 
 /* Portfolio mini tile — compact, stacked above Top insiders in the right
@@ -1531,15 +1535,6 @@ td { padding:7px 11px; vertical-align:middle; }
   border-radius: var(--radius-lg); overflow: hidden;
   display: flex; flex-direction: column; flex-shrink: 0;
   max-height: 360px;
-}
-.port-mini-tile--collapsed {
-  flex-direction: row; align-items: center; gap: 8px;
-  padding: 10px 14px; flex-wrap: wrap;
-}
-.port-mini-tile__collapsed-label {
-  font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .08em; color: var(--text-3);
-  border-left: 2px solid var(--accent); padding-left: 8px; flex-shrink: 0;
 }
 .port-mini-tile__body {
   padding: 10px 14px 8px; display: flex; flex-direction: column; gap: 6px;

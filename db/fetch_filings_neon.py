@@ -312,7 +312,14 @@ def parse_form4_xml(xml_text, accession, cik, fallback_filing_date=None, fallbac
     ie         = root.find("issuer")
     company    = xtxt(ie,"issuerName") or fallback_company
     tr         = xtxt(ie,"issuerTradingSymbol")
-    ticker     = tr.upper().strip() if tr else None
+    # Some filers (private companies, trusts, entities with no public ticker)
+    # literally put "N/A", "NONE", "NA", etc. in this field — take it
+    # verbatim only if it actually looks like a ticker (letters, optional
+    # single dot for share classes like BRK.A), otherwise there's genuinely
+    # no ticker for this filing and it should be null, not a placeholder
+    # word stored as if it were a real symbol.
+    _t = tr.upper().strip() if tr else None
+    ticker = _t if _t and re.match(r'^[A-Z]{1,6}(\.[A-Z]{1,2})?$', _t) and _t not in ('NONE','NULL','NA','TBD') else None
     cik_issuer = xtxt(ie,"issuerCik")
 
     owners = root.findall("reportingOwner") or root.findall(".//reportingOwner")
