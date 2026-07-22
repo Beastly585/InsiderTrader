@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext } from 'react';
 import logoSimple from './assets/logo-simple.png';
-import { isPro, hasDataExport, buildSignals, processLeaderboardRows, RISK_APPETITE_THRESHOLDS, RISK_APPETITE_LABELS, tierFromPct, filterAndScoreSignals } from './lib/scoring.js';
+import { isPro, buildSignals, processLeaderboardRows, RISK_APPETITE_THRESHOLDS, RISK_APPETITE_LABELS, tierFromPct, filterAndScoreSignals } from './lib/scoring.js';
 import { fmt } from './lib/format.js';
 import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import * as XLSX from 'xlsx'; // npm install xlsx — SheetJS, needed for the two-sheet data export
+import XLSX from 'xlsx-js-style'; // npm install xlsx-js-style — same API as plain xlsx, but plain xlsx silently drops cell styles (bold etc.) since that's a Pro-only feature there. Default import, not named — this package exports CommonJS-style.
 // src/app.jsx — Seli — insider trading intelligence platform
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
@@ -172,11 +172,11 @@ function UpgradeModal({ feature, pro, onClose }) {
             const rowCount = await downloadFullExport();
             setCheckoutProduct(null);
             setProcessing(false);
-            setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. "Export CSV" on the Data page is unlocked for you now too — no extra charge.` });
+            setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.` });
           } catch (e) {
             setCheckoutProduct(null);
             setProcessing(false);
-            setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to the Data page and click "Export CSV" to try again, no extra charge.` });
+            setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to Settings > Billing and click "Re-download" to get your file, no extra charge.` });
           }
         }}
       />
@@ -674,18 +674,23 @@ function BillingSection({ user }) {
 
         {/* Full purchase history, per the request — not just a yes/no flag. */}
         {dataExports.length > 0 && (
-          <div className="settings-subsection settings-subsection--list">
-            <div className="settings-subsection__heading">Export history</div>
+          <div className="settings-group" style={{marginTop:14}}>
+            <div className="settings-group__label">Export history</div>
             {dataExports.map((p, i) => (
-              <div key={i} className="settings-export-row">
-                <span>{new Date(p.purchased_at).toLocaleDateString(undefined, {year:'numeric',month:'short',day:'numeric'})}</span>
+              <div key={i} className="settings-row settings-row--toggle">
+                <div>
+                  <div className="settings-row__label">
+                    {new Date(p.purchased_at).toLocaleDateString(undefined, {year:'numeric',month:'short',day:'numeric'})}
+                  </div>
+                  <div className="settings-row__sub">${(p.amount_cents/100).toFixed(2)}</div>
+                </div>
                 <button className="btn btn--ghost btn--sm" disabled={redownloadingIdx!=null} onClick={()=>handleRedownload(i)}>
                   {redownloadingIdx===i ? 'Downloading…' : 'Re-download'}
                 </button>
               </div>
             ))}
-            {redownloadErr && <div className="checkout-error" style={{marginTop:8}}>{redownloadErr}</div>}
-            <div className="td-muted" style={{fontSize:11,marginTop:8}}>
+            {redownloadErr && <div className="checkout-error" style={{margin:'10px 16px'}}>{redownloadErr}</div>}
+            <div className="td-muted" style={{fontSize:11,padding:'10px 16px'}}>
               Re-download pulls your purchase's data fresh from the database right now — not a frozen copy of exactly what existed on the original purchase date.
             </div>
           </div>
@@ -730,11 +735,11 @@ function BillingSection({ user }) {
               const rowCount = await downloadFullExport();
               setCheckoutProduct(null);
               setProcessing(false);
-              setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. "Export CSV" on the Data page is unlocked for you now too — no extra charge.` });
+              setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.` });
             } catch (e) {
               setCheckoutProduct(null);
               setProcessing(false);
-              setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to the Data page and click "Export CSV" to try again, no extra charge.` });
+              setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to Settings > Billing and click "Re-download" to get your file, no extra charge.` });
             }
           }}
         />
@@ -4667,6 +4672,10 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
     ${orderByClause} LIMIT 500000
   `, mode);
 
+  if (data.length === 0) {
+    throw new Error('No matching rows came back from the database — this looks like a real problem, not an empty result. Try again in a moment, and if it persists, this needs a look before you trust any export.');
+  }
+
   const wb = XLSX.utils.book_new();
 
   // ── Sheet 1: the data itself ──────────────────────────────────────────
@@ -4702,6 +4711,12 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
       if (cell) cell.z = fmt;
     }
   }
+  // Bold the header row — plain 'xlsx' silently drops this, which is
+  // exactly why this uses xlsx-js-style instead.
+  for (let C = range.s.c; C <= range.e.c; C++) {
+    const cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
+    if (cell) cell.s = { font: { bold: true } };
+  }
   XLSX.utils.book_append_sheet(wb, ws, 'Insider Trades');
 
   // ── Sheet 2: legend — column guide + transaction code reference ───────
@@ -4720,6 +4735,15 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   ];
   const ws2 = XLSX.utils.aoa_to_sheet(legendRows);
   ws2['!cols'] = [{wch:18},{wch:70}];
+  // Bold both section-title rows and both column-header rows (0, 1, and
+  // the section break at COLUMN_LEGEND.length + 2).
+  const boldLegendRows = [0, 1, COLUMN_LEGEND.length + 2, COLUMN_LEGEND.length + 3];
+  for (const R of boldLegendRows) {
+    for (let C = 0; C <= 1; C++) {
+      const cell = ws2[XLSX.utils.encode_cell({ r: R, c: C })];
+      if (cell) cell.s = { font: { bold: true } };
+    }
+  }
   XLSX.utils.book_append_sheet(wb, ws2, 'Legend');
 
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -5016,13 +5040,17 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   // CSV export is its own $39.99 one-time product, deliberately separate
   // from the Pro subscription — Pro's job is to earn recurring revenue, and
   // giving away the one-time product's entire value for free the moment
-  // someone subscribes undercuts it completely. So this checks the purchase
-  // flag, not `pro`.
-  const canExport = hasDataExport(user);
+  // someone subscribes undercuts it completely.
+  //
+  // This button ALWAYS opens the purchase flow, regardless of whether the
+  // user has bought before — it never triggers a direct download itself.
+  // The one download that comes with a purchase happens automatically
+  // right after checkout; anything after that is a deliberate, separate
+  // "Re-download" action in Settings > Billing, not a second free door
+  // into the same data from here.
   const [rows,    setRows]    = useState([]);
   const [total,   setTotal]   = useState(null);
   const [loading, setLoading] = useState(false);
-  const [exporting,setExport] = useState(false);
   const [pg,      setPg]      = useState(0);
   const [error,   setError]   = useState(null);
   const [sectors, setSectors] = useState([]);
@@ -5107,14 +5135,6 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
     else { setSortKey(key); setSortDir(key==='transaction_date'?-1:1); }
   }
 
-  async function doExport() {
-    setExport(true);
-    try {
-      await downloadFullExport(where().replace(/^WHERE\s+/i,''), orderBy());
-    }catch(e){alert(`Export failed: ${e.message}`);}
-    setExport(false);
-  }
-
   const totalPgs=total!=null?Math.ceil(total/DATA_PAGE):null;
   const activeFilterCount = [typeF,relF,sectorF,sourceF,openMkt,fromPortfolio].filter(Boolean).length;
 
@@ -5150,12 +5170,8 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
             <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
           </div>
           <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
-            onClick={canExport ? doExport : ()=>onUpgrade('data_export')} disabled={exporting}>
-            {exporting
-              ? (<><span className="spinner" style={{width:12,height:12,borderWidth:2,marginRight:6}}/>Exporting…</>)
-              : canExport
-                ? '↓ Export CSV'
-                : (<>Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span></>)}
+            onClick={()=>onUpgrade('data_export')}>
+            Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>
           </button>
         </div>
 
