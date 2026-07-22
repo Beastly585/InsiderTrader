@@ -4597,7 +4597,12 @@ async function proxyExport(sql, mode='consume') {
   if (r.status === 403) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
   if (!r.ok) throw new Error('Something went wrong exporting this — try again in a moment');
   const d = await r.json();
-  if (d.error) throw new Error(d.error);
+  if (d.error) {
+    const diag = d.diagnostic
+      ? ` [diagnostic: total rows in table = ${d.diagnostic.totalRowsInTable ?? 'unknown'}; most recent dates = ${JSON.stringify(d.diagnostic.mostRecentDates ?? d.diagnostic.diagnosticError)}]`
+      : '';
+    throw new Error(d.error + diag);
+  }
   return d.rows || [];
 }
 
@@ -4664,8 +4669,8 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   // least one bad field even when the other is fine, and rejecting the
   // whole row for that lost real data along with the bad value.
   const conditions = [
-    `COALESCE(transaction_date,filing_date) >= '2020-01-01'`,
-    `COALESCE(transaction_date,filing_date) <= '${today}'`,
+    `COALESCE(transaction_date,filing_date)::date >= '2020-01-01'::date`,
+    `COALESCE(transaction_date,filing_date)::date <= '${today}'::date`,
   ];
   if (extraConditions) conditions.push(extraConditions);
   const whereClause = 'WHERE ' + conditions.join(' AND ');
@@ -4674,18 +4679,53 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   // corrupted transaction_date or filing_date comes back as NULL (blank
   // in the sheet) rather than either showing garbage or taking the row's
   // otherwise-good data down with it.
-  const dateExpr = col => `CASE WHEN ${col} >= '2020-01-01' AND ${col} <= '${today}' THEN ${col} END AS ${col}`;
+  const dateExpr = col => `CASE WHEN ${col}::date >= '2020-01-01'::date AND ${col}::date <= '${today}'::date THEN ${col} END AS ${col}`;
   const selectCols = EXPORT_COLS.map(c => {
     if (c==='transaction_date' || c==='filing_date') return dateExpr(c);
     if (c==='shares'||c==='price_per_share'||c==='value'||c==='pct_owned_change') return `${c}::float`;
     return c;
   }).join(',\n           ');
 
-  const data = await proxyExport(`
-    SELECT ${selectCols}
-    FROM public.filings ${whereClause}
-    ${orderByClause} LIMIT 500000
-  `, mode);
+  // Paginated rather than one LIMIT 500000 request — Neon's HTTP SQL
+  // endpoint caps both request AND response size at 64MB (their own
+  // documented limit), and a single request for hundreds of thousands of
+  // rows across 16 columns, several of them free text, blows past that
+  // easily. That's what "No matching rows" actually was: not a bad WHERE
+  // clause, not bad data — an oversized response Neon rejected in a shape
+  // this code wasn't recognizing as an error, so it silently looked like
+  // zero rows came back. Paging in chunks keeps each individual request
+  // safely under the cap while still fetching everything that matches.
+  // ctid appended as a tiebreaker — LIMIT/OFFSET pagination across
+  // separate requests isn't guaranteed stable unless the ORDER BY is
+  // fully deterministic, and with a table this size, many rows almost
+  // certainly share the exact same date. Without a tiebreaker, ties could
+  // land differently between page N and page N+1, causing a row to be
+  // duplicated in one page and skipped in another. ctid always exists on
+  // any Postgres table, so this works regardless of the table's own schema.
+  const stableOrderBy = `${orderByClause}, ctid`;
+
+  const PAGE_SIZE = 20000;
+  const MAX_ROWS = 2000000; // safety ceiling, not a real-world expectation
+  let data = [];
+  let offset = 0;
+  let pageMode = mode;
+  while (true) {
+    const page = await proxyExport(`
+      SELECT ${selectCols}
+      FROM public.filings ${whereClause}
+      ${stableOrderBy} LIMIT ${PAGE_SIZE} OFFSET ${offset}
+    `, pageMode);
+    data = data.concat(page);
+    if (page.length < PAGE_SIZE || data.length >= MAX_ROWS) break;
+    offset += PAGE_SIZE;
+    // Only the FIRST page should spend a one-time 'consume' allowance —
+    // this is still one logical download, just split into several
+    // requests because of the size cap. Every page after the first uses
+    // 'redownload' (requires only that a purchase exists at all) so
+    // continuing to page doesn't fail because the first page already
+    // marked the purchase used.
+    pageMode = 'redownload';
+  }
 
   if (data.length === 0) {
     throw new Error('No matching rows came back from the database — this looks like a real problem, not an empty result. Try again in a moment, and if it persists, this needs a look before you trust any export.');
