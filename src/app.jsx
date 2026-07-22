@@ -501,6 +501,18 @@ function BillingSection({ user }) {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [statusModal, setStatusModal] = useState(null); // null | {title, message}
   const [processing, setProcessing] = useState(false);
+  const [redownloadingIdx, setRedownloadingIdx] = useState(null); // index of the export-history row currently downloading, or null
+  const [redownloadErr, setRedownloadErr] = useState(null);
+
+  async function handleRedownload(idx) {
+    setRedownloadingIdx(idx); setRedownloadErr(null);
+    try {
+      await downloadFullExport('', undefined, 'redownload');
+    } catch (e) {
+      setRedownloadErr(e.message);
+    }
+    setRedownloadingIdx(null);
+  }
 
   async function load() {
     setLoadErr(null);
@@ -667,9 +679,15 @@ function BillingSection({ user }) {
             {dataExports.map((p, i) => (
               <div key={i} className="settings-export-row">
                 <span>{new Date(p.purchased_at).toLocaleDateString(undefined, {year:'numeric',month:'short',day:'numeric'})}</span>
-                <span className="td-muted">${(p.amount_cents/100).toFixed(2)}</span>
+                <button className="btn btn--ghost btn--sm" disabled={redownloadingIdx!=null} onClick={()=>handleRedownload(i)}>
+                  {redownloadingIdx===i ? 'Downloading…' : 'Re-download'}
+                </button>
               </div>
             ))}
+            {redownloadErr && <div className="checkout-error" style={{marginTop:8}}>{redownloadErr}</div>}
+            <div className="td-muted" style={{fontSize:11,marginTop:8}}>
+              Re-download pulls your purchase's data fresh from the database right now — not a frozen copy of exactly what existed on the original purchase date.
+            </div>
           </div>
         )}
       </div>
@@ -4564,11 +4582,11 @@ async function proxySQL(sql) {
 // before running anything) rather than the general query passthrough —
 // same shape, different endpoint, so a non-purchaser can't just replay a
 // normal /query request with a bigger LIMIT and get the export for free.
-async function proxyExport(sql) {
+async function proxyExport(sql, mode='consume') {
   const r = await fetch(`${cfg.NEON_PROXY_URL}/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
-    body: JSON.stringify({ query: sql }),
+    body: JSON.stringify({ query: sql, mode }),
   });
   if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
   if (r.status === 403) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
@@ -4630,11 +4648,15 @@ const COLUMN_LEGEND = [
 // upstream was rejecting them. DataPage's own filtered browsing already
 // had a same-shaped clamp, which is why this never showed up there — only
 // on the one code path that had none.
-async function downloadFullExport(extraConditions='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC") {
+async function downloadFullExport(extraConditions='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC", mode='consume') {
   const today = new Date().toISOString().split('T')[0];
   const conditions = [
-    `COALESCE(transaction_date,filing_date) >= '2020-01-01'`, // matches the actual corporate backfill floor — nothing real predates this
-    `COALESCE(transaction_date,filing_date) <= '${today}'`,   // no future-dated garbage, ever
+    // Both fields bounded independently — not just the COALESCEd value.
+    // COALESCE prioritizes transaction_date, so a row with a valid
+    // transaction_date but a corrupted filing_date would still pass a
+    // COALESCE-only check and leak the bad filing_date into the output.
+    `(transaction_date IS NULL OR (transaction_date >= '2020-01-01' AND transaction_date <= '${today}'))`,
+    `(filing_date IS NULL OR (filing_date >= '2020-01-01' AND filing_date <= '${today}'))`,
   ];
   if (extraConditions) conditions.push(extraConditions);
   const whereClause = 'WHERE ' + conditions.join(' AND ');
@@ -4643,7 +4665,7 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
     SELECT ${EXPORT_COLS.map(c=>c==='shares'||c==='price_per_share'||c==='value'||c==='pct_owned_change'?`${c}::float`:c).join(',\n           ')}
     FROM public.filings ${whereClause}
     ${orderByClause} LIMIT 500000
-  `);
+  `, mode);
 
   const wb = XLSX.utils.book_new();
 
@@ -4683,12 +4705,16 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   XLSX.utils.book_append_sheet(wb, ws, 'Insider Trades');
 
   // ── Sheet 2: legend — column guide + transaction code reference ───────
+  // Every row padded to exactly 2 columns, including section headers and
+  // the blank separator — a ragged array-of-arrays (some 1-cell rows, some
+  // 2-cell, one empty) is a real, avoidable risk for stricter XLSX readers
+  // (Apple Numbers among them), and padding costs nothing.
   const legendRows = [
-    ['COLUMN GUIDE'],
+    ['COLUMN GUIDE',''],
     ['Column','What it means'],
     ...COLUMN_LEGEND,
-    [],
-    ['TRANSACTION CODES'],
+    ['',''],
+    ['TRANSACTION CODES',''],
     ['Code','Meaning'],
     ...TX_CODE_LEGEND,
   ];

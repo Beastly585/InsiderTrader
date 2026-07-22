@@ -3682,8 +3682,9 @@ td { padding:7px 11px; vertical-align:middle; }
   color: var(--text-3); margin-bottom: 4px;
 }
 .settings-export-row {
-  display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text);
-  padding: 3px 0;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.75rem; color: var(--text);
+  padding: 5px 0;
 }
 .settings-inline-link {
   background: none; border: none; padding: 0; margin: 0; font: inherit;

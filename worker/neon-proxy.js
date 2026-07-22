@@ -364,41 +364,70 @@ async function handleQuery(request, env, origin) {
 }
 
 // ── Full data export — the real access-control gate ─────────────────────────
-// Same request shape as /query (POST { query }) so the frontend's existing
-// CSV-building code barely changes, but this checks public.data_purchases
-// BEFORE running anything, rather than relying on the frontend to only ask
-// for a big export when it's supposed to. Mirrors the exact same
-// has-purchased check handleBillingStatus already uses, so "can this user
-// export" is answered identically everywhere it's asked, not two different
-// ways that could quietly drift apart.
+// Two modes, both requiring a real purchase record, checked server-side:
+//
+//   mode: 'consume' (default) — used by the Data page's own Export CSV
+//   button. Requires a purchase that hasn't been downloaded yet
+//   (downloaded_at IS NULL). Marks it consumed on success. This is what
+//   makes the purchase genuinely one-time — previously ANY purchase, ever,
+//   permanently unlocked unlimited fresh exports for free, which is not
+//   what "one-time" is supposed to mean.
+//
+//   mode: 'redownload' — used by the Settings > Billing "Re-download"
+//   button. Requires only that a purchase exists at all (any, used or
+//   not) — a deliberate, narrow exception for "I lost the file, get it
+//   again," not a second general-purpose export button. Never marks
+//   anything as consumed.
+//
+// Needs a new column: ALTER TABLE public.data_purchases ADD COLUMN
+// downloaded_at timestamptz NULL;
 async function handleExport(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
+  let body;
+  try { body = JSON.parse(await request.text()); }
+  catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
+
+  const mode = body.mode === 'redownload' ? 'redownload' : 'consume';
+  const query = body.query || '';
+  if (!query || typeof query !== 'string' || !query.trim().toUpperCase().startsWith('SELECT')) {
+    return corsResponse({ error: 'Only SELECT queries allowed' }, 403, origin, env);
+  }
+
+  let purchaseKey;
   try {
-    const purchaseResult = await neonFetch(env,
-      `SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)} LIMIT 1`
-    );
-    const hasDataExport = (purchaseResult.rows || []).length > 0;
-    if (!hasDataExport) {
-      return corsResponse({ error: 'Full data export requires a one-time purchase — see Settings > Billing.' }, 403, origin, env);
+    if (mode === 'consume') {
+      const result = await neonFetch(env,
+        `SELECT stripe_payment_intent_id FROM public.data_purchases
+         WHERE clerk_user_id = ${sqlVal(clerkUserId)} AND downloaded_at IS NULL
+         ORDER BY purchased_at DESC LIMIT 1`
+      );
+      purchaseKey = result.rows?.[0]?.stripe_payment_intent_id;
+      if (!purchaseKey) {
+        return corsResponse({ error: 'You\'ve already used this purchase\'s one-time download — buy again for a fresh export, or use Re-download in Settings > Billing to get the same one again.' }, 403, origin, env);
+      }
+    } else {
+      const result = await neonFetch(env,
+        `SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)} LIMIT 1`
+      );
+      if (!(result.rows || []).length) {
+        return corsResponse({ error: 'Full data export requires a one-time purchase — see Settings > Billing.' }, 403, origin, env);
+      }
     }
   } catch (e) {
     console.error('[Worker] Export purchase check failed:', e.message);
     return corsResponse({ error: 'Could not verify export access — try again in a moment.' }, 500, origin, env);
   }
 
-  let body;
-  try { body = JSON.parse(await request.text()); }
-  catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
-
-  const query = body.query || '';
-  if (!query || typeof query !== 'string' || !query.trim().toUpperCase().startsWith('SELECT')) {
-    return corsResponse({ error: 'Only SELECT queries allowed' }, 403, origin, env);
-  }
-
   try {
     const result = await neonFetch(env, query);
+    if (mode === 'consume' && purchaseKey) {
+      // Mark it used only after the query actually succeeded — a failed
+      // export shouldn't burn the one-time allowance.
+      await neonFetch(env, `UPDATE public.data_purchases SET downloaded_at = now() WHERE stripe_payment_intent_id = ${sqlVal(purchaseKey)}`)
+        .catch(e => console.error('[Worker] Failed to mark export consumed (non-fatal):', e.message));
+    }
     return corsResponse(result, 200, origin, env);
   } catch (e) {
     return corsResponse({ error: e.message }, 502, origin, env);
@@ -1607,7 +1636,7 @@ async function handleBillingStatus(request, env, origin) {
     const subRow = subResult.rows?.[0];
 
     const purchaseResult = await neonFetch(env,
-      `SELECT amount_cents, purchased_at
+      `SELECT amount_cents, purchased_at, downloaded_at
        FROM public.data_purchases
        WHERE clerk_user_id = ${sqlVal(clerkUserId)}
        ORDER BY purchased_at DESC`
