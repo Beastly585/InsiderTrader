@@ -1410,6 +1410,11 @@ function GuideModal({ initialSection, onClose }) {
                 </button>
               );
             })}
+            <div className="guide-modal__nav-legal">
+              <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
+              <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+              <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
+            </div>
           </nav>
           <div className="guide-modal__content">
             <div className="guide-modal__content-inner">
@@ -5686,7 +5691,7 @@ function TermsPage() {
             <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
             <span className="lp-wordmark">Seli</span>
           </a>
-          <button className="lp-btn-ghost" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
+          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
             {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
           </button>
         </div>
@@ -5738,6 +5743,7 @@ function TermsPage() {
         <p>Questions about these Terms? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </div>
       <footer className="lp-footer">
+        <div className="lp-footer__frame">
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
@@ -5746,6 +5752,7 @@ function TermsPage() {
           <a href="/">Home</a>
           <span>·</span>
           <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
+        </div>
         </div>
       </footer>
     </div>
@@ -5763,7 +5770,7 @@ function PrivacyPage() {
             <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
             <span className="lp-wordmark">Seli</span>
           </a>
-          <button className="lp-btn-ghost" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
+          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
             {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
           </button>
         </div>
@@ -5822,6 +5829,7 @@ function PrivacyPage() {
         <p>Questions about this Privacy Policy? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </div>
       <footer className="lp-footer">
+        <div className="lp-footer__frame">
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
@@ -5830,6 +5838,7 @@ function PrivacyPage() {
           <a href="/">Home</a>
           <span>·</span>
           <a href="/terms" className="lp-footer__link-muted">Terms of Service</a>
+        </div>
         </div>
       </footer>
     </div>
@@ -5847,7 +5856,7 @@ function CookiePage() {
             <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
             <span className="lp-wordmark">Seli</span>
           </a>
-          <button className="lp-btn-ghost" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
+          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
             {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
           </button>
         </div>
@@ -5881,6 +5890,7 @@ function CookiePage() {
         <p>Questions about this Cookie Policy? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </div>
       <footer className="lp-footer">
+        <div className="lp-footer__frame">
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
@@ -5889,6 +5899,7 @@ function CookiePage() {
           <a href="/">Home</a>
           <span>·</span>
           <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
+        </div>
         </div>
       </footer>
     </div>
@@ -6005,7 +6016,7 @@ function HelpCenterPage() {
             <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
             <span className="lp-wordmark">Seli</span>
           </a>
-          <button className="lp-btn-ghost" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
+          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
             {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
           </button>
         </div>
@@ -6030,6 +6041,7 @@ function HelpCenterPage() {
         </div>
       </div>
       <footer className="lp-footer">
+        <div className="lp-footer__frame">
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
@@ -6042,6 +6054,7 @@ function HelpCenterPage() {
           <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
           <span>·</span>
           <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
+        </div>
         </div>
       </footer>
     </div>
@@ -6249,6 +6262,11 @@ function SettingsPage({ user, onUpgrade }) {
               {s.label}
             </button>
           ))}
+          <div className="settings-sidenav__legal">
+            <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
+            <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+            <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
+          </div>
         </div>
 
         {/* ── Content ──────────────────────────────────────────────────── */}
@@ -6981,7 +6999,7 @@ function LandingPage({ onEnter, dark, setDark }) {
           <a href="/about" onClick={goToAbout} className="lp-nav__link">About</a>
         </div>
         <div className="lp-nav__actions">
-          <button className="lp-btn-ghost" onClick={()=>setDark(d=>!d)} title="Toggle theme">
+          <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={()=>setDark(d=>!d)} title="Toggle theme">
             {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
           </button>
           <SignedOut>
@@ -7672,12 +7690,6 @@ function AppInner() {
           <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
           {' · '}
           <a href="/help" target="_blank" rel="noreferrer">Help</a>
-          {' · '}
-          <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
-          {' · '}
-          <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
-          {' · '}
-          <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
           {' · '}Not financial advice.
         </footer>
       </main>

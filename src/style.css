@@ -2071,6 +2071,16 @@ td { padding:7px 11px; vertical-align:middle; }
   padding: 12px 8px; display: flex; flex-direction: column; gap: 2px;
   overflow-y: auto;
 }
+.guide-modal__nav-legal {
+  margin-top: auto;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 10px 4px; border-top: 0.5px solid var(--border);
+}
+.guide-modal__nav-legal a {
+  font-size: 0.6875rem; color: var(--text-3); text-decoration: none;
+  padding: 3px 0;
+}
+.guide-modal__nav-legal a:hover { color: var(--text-2); text-decoration: underline; }
 .guide-modal__nav-item {
   display: flex; align-items: center; gap: 8px; text-align: left;
   background: none; border: none; cursor: pointer; width: 100%;
@@ -2616,6 +2626,14 @@ td { padding:7px 11px; vertical-align:middle; }
   border: 1px solid var(--border-md); border-radius: 999px;
   cursor: pointer; transition: all .12s; white-space: nowrap;
   position: relative; overflow: hidden; z-index: 0;
+}
+/* Icon-only variant (e.g. the theme toggle) — the base rule's asymmetric
+   text padding (7px vertical / 14px horizontal) doesn't center a bare
+   icon child, which is what made the toggle icon look off-center rather
+   than sitting in the middle of its circle. */
+.lp-btn-ghost--icon {
+  padding: 0; width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .lp-btn-ghost::before {
   content: ''; position: absolute; inset: 0;
@@ -3405,6 +3423,16 @@ td { padding:7px 11px; vertical-align:middle; }
   padding: 0;
   overflow-y: auto;
 }
+.settings-sidenav__legal {
+  margin-top: auto;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 11px; border-top: 0.5px solid var(--border);
+}
+.settings-sidenav__legal a {
+  font-size: 0.6875rem; color: var(--text-3); text-decoration: none;
+  padding: 3px 0;
+}
+.settings-sidenav__legal a:hover { color: var(--text-2); text-decoration: underline; }
 .settings-sidenav__item {
   display: flex;
   align-items: center;
