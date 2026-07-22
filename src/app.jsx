@@ -1268,6 +1268,12 @@ const GUIDE_SECTIONS = [
     ),
   },
   {
+    id: 'using-seli',
+    label: 'Using Seli',
+    icon: 'IconHome',
+    render: () => HELP_SECTIONS.find(s => s.id === 'using-seli').render(),
+  },
+  {
     id: 'insights-formula',
     label: 'How signals are scored',
     icon: 'IconInsights',
@@ -5665,6 +5671,11 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 
 // ─── TERMS OF SERVICE ─────────────────────────────────────────────────────────
+// One place to change when a professional support address replaces this —
+// referenced by Terms, Privacy, Cookie Policy, and the Help Center rather
+// than repeated as a literal in each.
+const SUPPORT_EMAIL = '7withak@gmail.com';
+
 function TermsPage() {
   return (
     <div className="legal-page" data-theme="dark">
@@ -5718,7 +5729,7 @@ function TermsPage() {
         <p>We may update these Terms at any time. Continued use of the Service after changes constitutes acceptance of the new Terms.</p>
 
         <h2>14. Contact</h2>
-        <p>Questions about these Terms? Contact us at <a href="mailto:7withak@gmail.com">7withak@gmail.com</a>.</p>
+        <p>Questions about these Terms? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__logo">
@@ -5796,7 +5807,7 @@ function PrivacyPage() {
         <p>We may update this Privacy Policy periodically. We will notify you of material changes by email or through the Service.</p>
 
         <h2>11. Contact</h2>
-        <p>Questions about this Privacy Policy? Contact us at <a href="mailto:7withak@gmail.com">7withak@gmail.com</a>.</p>
+        <p>Questions about this Privacy Policy? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__logo">
@@ -5807,6 +5818,206 @@ function PrivacyPage() {
           <a href="/">Home</a>
           <span>·</span>
           <a href="/terms" className="lp-footer__link-muted">Terms of Service</a>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// ─── COOKIE POLICY ────────────────────────────────────────────────────────────
+function CookiePage() {
+  return (
+    <div className="legal-page" data-theme="dark">
+      <nav className="lp-nav">
+        <a className="lp-nav__logo" href="/">
+          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+          <span className="lp-wordmark">Seli</span>
+        </a>
+      </nav>
+      <div className="legal-content">
+        <h1>Cookie Policy</h1>
+        <p className="legal-date">Last updated: July 22, 2026</p>
+
+        <h2>1. What This Covers</h2>
+        <p>This explains the cookies and similar browser-storage technologies (like localStorage) that Seli uses. We keep this simple on purpose: we don't use advertising or tracking cookies, and we don't sell data to anyone.</p>
+
+        <h2>2. Essential Cookies</h2>
+        <p>Signing in and staying signed in requires a session cookie, set by our authentication provider, Clerk (clerk.com). This is strictly necessary — without it, the Service can't tell you're signed in, and there's no way to opt out of it while still using an account.</p>
+
+        <h2>3. Local Storage (Not a Cookie, But Similar)</h2>
+        <p>We also use your browser's localStorage — data that stays on your device, not sent to our servers — for a few small preferences: whether you've already seen the welcome guide, your light/dark theme choice, and your selected risk-appetite setting on the Signal Ranking slider. Clearing your browser's site data resets these to their defaults; nothing about your account is lost by doing this.</p>
+
+        <h2>4. What We Don't Use</h2>
+        <p>No advertising cookies. No third-party tracking or analytics cookies. No cross-site tracking. No cookie-based fingerprinting.</p>
+
+        <h2>5. Third-Party Services</h2>
+        <p>Some features route through services with their own cookie practices when you actively use them — Stripe during checkout, and your brokerage's own site during the SnapTrade connection flow. We don't control those cookies; their own policies apply while you're on their pages.</p>
+
+        <h2>6. Your Choices</h2>
+        <p>Most browsers let you block or delete cookies in settings. Blocking Clerk's session cookie will prevent sign-in entirely, since it's required for authentication — there isn't a way around this while still using an account-based Service.</p>
+
+        <h2>7. Changes to This Policy</h2>
+        <p>We may update this policy if what we use changes. Material changes will be reflected here with an updated date.</p>
+
+        <h2>8. Contact</h2>
+        <p>Questions about this Cookie Policy? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+      </div>
+      <footer className="lp-footer">
+        <div className="lp-footer__logo">
+          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+          <span className="lp-wordmark">Seli</span>
+        </div>
+        <div className="lp-footer__links">
+          <a href="/">Home</a>
+          <span>·</span>
+          <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// ─── HELP CENTER ──────────────────────────────────────────────────────────────
+// A real, linkable page — not just a modal — so a support email or footer
+// link can point somewhere specific. Every section ends in a live path
+// forward (a link to Settings, or to support) rather than leaving the
+// reader stuck if the article didn't solve their problem.
+const HELP_SECTIONS = [
+  {
+    id: 'using-seli',
+    label: 'Using Seli',
+    render: () => (
+      <>
+        <p>Seli has five sections, each doing a different job. Here's what each one is actually for:</p>
+        <h3>Dashboard</h3>
+        <p>Your daily overview — market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news. Start here if you just want to know what's happening today.</p>
+        <h3>Insights</h3>
+        <p>The full, filterable signal feed — every conviction-scored trade, filterable by window, strength, type (corporate vs. congressional), and sector. This is where to dig into "what's actually worth paying attention to right now."</p>
+        <h3>Data</h3>
+        <p>The raw, unscored filings — every trade, searchable and filterable, with a link back to the original government filing. No ranking or opinion applied. If you want to draw your own conclusions, this is where to work.</p>
+        <h3>Watchlist</h3>
+        <p>Tickers and insiders you've chosen to follow (Pro). Their activity surfaces ahead of everything else, and it's what instant alerts and personalized digests are built from.</p>
+        <h3>Settings</h3>
+        <p>Your plan, billing, notification preferences, risk appetite for signal ranking, and brokerage connection all live here.</p>
+      </>
+    ),
+  },
+  {
+    id: 'faq',
+    label: 'FAQ',
+    render: () => (
+      <>
+        <h3>Where does the data come from?</h3>
+        <p>Every trade comes from a public government filing — SEC Form 4 for corporate insiders, and STOCK Act periodic transaction reports for Congress. Nothing is scraped from rumors or licensed from a third party.</p>
+        <h3>How current is it?</h3>
+        <p>Seli checks for new filings on a recurring basis throughout the trading day — a disclosure typically appears within minutes of becoming public, not the next morning.</p>
+        <h3>Is this financial advice?</h3>
+        <p>No. Seli is informational only. Nothing here is a recommendation to buy or sell anything — see our <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
+        <h3>Can Seli place trades for me?</h3>
+        <p>No. Brokerage connections are read-only. Seli can see your positions to show relevant signals; it can never place a trade.</p>
+        <h3>Why don't option exercises or RSU vests count toward conviction scores?</h3>
+        <p>Only open-market trades — someone putting their own cash in — count toward conviction. A scheduled option exercise or equity vest doesn't reflect a discretionary bet the way an open-market purchase does.</p>
+        <h3>Still have a question?</h3>
+        <p>Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> — real questions from real users are exactly what shapes this FAQ and the product itself.</p>
+      </>
+    ),
+  },
+  {
+    id: 'billing',
+    label: 'Billing',
+    render: () => (
+      <>
+        <h3>What does Pro include?</h3>
+        <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests — $11.99/month.</p>
+        <h3>What's the Full Data Export?</h3>
+        <p>A separate, one-time $39.99 purchase — a complete pull of the database as a spreadsheet, independent of a Pro subscription. Each purchase includes one download; if you need it again later, use Re-download in Settings &gt; Billing at no extra charge (this pulls current data, not a frozen copy from your original purchase date).</p>
+        <h3>How do I cancel Pro?</h3>
+        <p>Settings &gt; Billing &gt; Cancel subscription. You keep full access through the end of the period you already paid for — cancellation doesn't cut you off immediately.</p>
+        <h3>Can I come back after canceling?</h3>
+        <p>Yes, anytime — Settings &gt; Billing shows a reactivate option if you cancel before the period actually ends, or you can simply upgrade again afterward.</p>
+        <h3>Billing questions we didn't cover?</h3>
+        <p>Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> with your account email and we'll sort it out directly.</p>
+      </>
+    ),
+  },
+  {
+    id: 'alerts',
+    label: 'Alerts',
+    render: () => (
+      <>
+        <p>Two separate systems, both configured in Settings &gt; Notifications, both Pro features:</p>
+        <h3>Instant alerts</h3>
+        <p>Fire as soon as a qualifying trade is detected — a ticker or insider on your watchlist trading, a high-conviction signal, or a reversal (an insider trading opposite their recent pattern). Each trigger can be turned on or off independently.</p>
+        <h3>Digests</h3>
+        <p>A daily or weekly email summary instead of (or alongside) instant alerts — top signals, filtered by minimum conviction, source (corporate/congressional), and whether it's limited to your watchlist.</p>
+        <h3>Not receiving alerts you expect?</h3>
+        <p>First check Settings &gt; Notifications to confirm the specific trigger is switched on — a common cause is a trigger being off by default. There's also a test-email button there to confirm delivery is working at all. If it's still not arriving, email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+      </>
+    ),
+  },
+  {
+    id: 'portfolio',
+    label: 'Portfolio Connection',
+    render: () => (
+      <>
+        <h3>How does linking work?</h3>
+        <p>Through SnapTrade, a third-party connection service — Seli never sees or stores your brokerage username or password. Access is read-only: Seli can see your positions, never place a trade.</p>
+        <h3>Can I disconnect?</h3>
+        <p>Anytime, from Settings — disconnecting removes the stored connection immediately, not on a delay.</p>
+        <h3>My broker isn't listed</h3>
+        <p>Broker support is expanding — if yours isn't available yet, check back, or let us know at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> which one you'd want to see supported.</p>
+        <h3>The performance chart looks off</h3>
+        <p>Portfolio performance is an approximation based on your current holdings, not a full reconstruction of every historical buy and sell — so it shows what your present position would be worth over time, not necessarily your actual realized returns.</p>
+      </>
+    ),
+  },
+];
+
+function HelpCenterPage() {
+  const [activeId, setActiveId] = useState('using-seli');
+  const idx = HELP_SECTIONS.findIndex(s => s.id === activeId);
+  const section = HELP_SECTIONS[idx] ?? HELP_SECTIONS[0];
+
+  return (
+    <div className="legal-page" data-theme="dark">
+      <nav className="lp-nav">
+        <a className="lp-nav__logo" href="/">
+          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+          <span className="lp-wordmark">Seli</span>
+        </a>
+      </nav>
+      <div className="legal-content help-center">
+        <h1>Help Center</h1>
+        <div className="help-center__body">
+          <nav className="help-center__nav" aria-label="Help topics">
+            {HELP_SECTIONS.map(s => (
+              <button
+                key={s.id}
+                className={`help-center__nav-item ${s.id === activeId ? 'help-center__nav-item--active' : ''}`}
+                onClick={() => setActiveId(s.id)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </nav>
+          <div className="help-center__content">
+            {section.render()}
+          </div>
+        </div>
+      </div>
+      <footer className="lp-footer">
+        <div className="lp-footer__logo">
+          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+          <span className="lp-wordmark">Seli</span>
+        </div>
+        <div className="lp-footer__links">
+          <a href="/">Home</a>
+          <span>·</span>
+          <a href="/terms" className="lp-footer__link-muted">Terms</a>
+          <span>·</span>
+          <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+          <span>·</span>
+          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
         </div>
       </footer>
     </div>
@@ -7019,9 +7230,13 @@ function LandingPage({ onEnter, dark, setDark }) {
         <div className="lp-footer__links">
           <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
           <span>·</span>
+          <a href="/help" className="lp-footer__link-muted">Help</a>
+          <span>·</span>
           <a href="/terms" className="lp-footer__link-muted">Terms</a>
           <span>·</span>
           <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+          <span>·</span>
+          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
           <span>·</span>
           <span>Not financial advice</span>
         </div>
@@ -7173,7 +7388,7 @@ function AppInner() {
     // reverts to the dashboard a moment later": the URL got silently
     // overwritten, and the early-return check above reads the URL fresh
     // on every render, so it stopped matching once that happened.
-    if (window.location.pathname === '/terms' || window.location.pathname === '/privacy') return;
+    if (['/terms','/privacy','/cookies','/help'].includes(window.location.pathname)) return;
     const path = pathFromAppState(page, detail);
     if (window.location.pathname !== path) {
       window.history.pushState({ page, detail }, '', path);
@@ -7325,6 +7540,8 @@ function AppInner() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   if (path === '/terms') return <TermsPage />;
   if (path === '/privacy') return <PrivacyPage />;
+  if (path === '/cookies') return <CookiePage />;
+  if (path === '/help') return <HelpCenterPage />;
 
   // ── Loading state — show minimal spinner while Clerk initializes
   // Prevents the flash of landing page that appears for ~200ms on first load
@@ -7430,9 +7647,13 @@ function AppInner() {
         <footer className="footer">
           <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
           {' · '}
+          <a href="/help" target="_blank" rel="noreferrer">Help</a>
+          {' · '}
           <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
           {' · '}
           <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+          {' · '}
+          <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
           {' · '}Not financial advice.
         </footer>
       </main>
