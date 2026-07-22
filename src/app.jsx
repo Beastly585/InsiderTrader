@@ -1410,11 +1410,6 @@ function GuideModal({ initialSection, onClose }) {
                 </button>
               );
             })}
-            <div className="guide-modal__nav-legal">
-              <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
-              <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
-              <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
-            </div>
           </nav>
           <div className="guide-modal__content">
             <div className="guide-modal__content-inner">
@@ -1440,6 +1435,11 @@ function GuideModal({ initialSection, onClose }) {
               )}
             </div>
           </div>
+        </div>
+        <div className="guide-modal__legal-bar">
+          <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
+          <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+          <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
         </div>
       </div>
     </div>
@@ -6262,11 +6262,6 @@ function SettingsPage({ user, onUpgrade }) {
               {s.label}
             </button>
           ))}
-          <div className="settings-sidenav__legal">
-            <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
-            <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
-            <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
-          </div>
         </div>
 
         {/* ── Content ──────────────────────────────────────────────────── */}
@@ -6658,6 +6653,11 @@ function SettingsPage({ user, onUpgrade }) {
             </div>
           )}
 
+          <div className="settings-content__legal">
+            <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
+            <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+            <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
+          </div>
         </div>
       </div>
     </div>
@@ -7687,10 +7687,8 @@ function AppInner() {
           {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow}/>}
         </div>
         <footer className="footer">
-          <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
-          {' · '}
-          <a href="/help" target="_blank" rel="noreferrer">Help</a>
-          {' · '}Not financial advice.
+          <span className="footer__center">Not financial advice.</span>
+          <a href="/help" target="_blank" rel="noreferrer" className="footer__right">Help</a>
         </footer>
       </main>
       {watchlist.showUpgrade&&(

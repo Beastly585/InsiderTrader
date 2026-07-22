@@ -313,10 +313,13 @@ pre {
 
 /* ── Footer ───────────────────────────────────────────────────────────────── */
 .footer {
-  font-size: 0.7188rem; color:var(--text-3); text-align:center;
+  font-size: 0.7188rem; color:var(--text-3);
   padding:14px 22px 10px; border-top:0.5px solid var(--border);
   flex-shrink: 0; /* lives in main-area's flex column — never squeezed or scrolled away */
+  position: relative; display: flex; align-items: center; min-height: 20px;
 }
+.footer__center { position: absolute; left: 50%; transform: translateX(-50%); }
+.footer__right { margin-left: auto; }
 /* Settings' side-nav is a full-bleed panel, not a floating tile — it should
    run flush to the footer with no gap. Rather than fighting content-area's
    overflow:hidden to bleed the nav panel past its own box, just zero out
@@ -2066,21 +2069,19 @@ td { padding:7px 11px; vertical-align:middle; }
 .guide-modal { max-width: 760px; width: 92vw; height: 78vh; max-height: 640px; }
 .guide-modal__hdr { flex-shrink: 0; }
 .guide-modal__body { flex: 1; display: flex; min-height: 0; }
+.guide-modal__legal-bar {
+  flex-shrink: 0; display: flex; gap: 14px; justify-content: center;
+  padding: 8px 16px; border-top: 0.5px solid var(--border);
+}
+.guide-modal__legal-bar a {
+  font-size: 0.6875rem; color: var(--text-3); text-decoration: none;
+}
+.guide-modal__legal-bar a:hover { color: var(--text-2); text-decoration: underline; }
 .guide-modal__nav {
   flex-shrink: 0; width: 200px; border-right: 1px solid var(--border);
   padding: 12px 8px; display: flex; flex-direction: column; gap: 2px;
   overflow-y: auto;
 }
-.guide-modal__nav-legal {
-  margin-top: auto;
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 10px 10px 4px; border-top: 0.5px solid var(--border);
-}
-.guide-modal__nav-legal a {
-  font-size: 0.6875rem; color: var(--text-3); text-decoration: none;
-  padding: 3px 0;
-}
-.guide-modal__nav-legal a:hover { color: var(--text-2); text-decoration: underline; }
 .guide-modal__nav-item {
   display: flex; align-items: center; gap: 8px; text-align: left;
   background: none; border: none; cursor: pointer; width: 100%;
@@ -3249,10 +3250,13 @@ td { padding:7px 11px; vertical-align:middle; }
 /* ── Legal pages (Terms + Privacy) ────────────────────────────────────────── */
 .legal-page {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
 }
+.legal-page > .legal-content { flex: 1; }
 .legal-content {
   max-width: 720px;
   margin: 0 auto;
@@ -3423,16 +3427,14 @@ td { padding:7px 11px; vertical-align:middle; }
   padding: 0;
   overflow-y: auto;
 }
-.settings-sidenav__legal {
-  margin-top: auto;
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 12px 11px; border-top: 0.5px solid var(--border);
+.settings-content__legal {
+  display: flex; gap: 14px;
+  margin-top: 32px; padding-top: 16px; border-top: 0.5px solid var(--border);
 }
-.settings-sidenav__legal a {
-  font-size: 0.6875rem; color: var(--text-3); text-decoration: none;
-  padding: 3px 0;
+.settings-content__legal a {
+  font-size: 0.75rem; color: var(--text-3); text-decoration: none;
 }
-.settings-sidenav__legal a:hover { color: var(--text-2); text-decoration: underline; }
+.settings-content__legal a:hover { color: var(--text-2); text-decoration: underline; }
 .settings-sidenav__item {
   display: flex;
   align-items: center;
