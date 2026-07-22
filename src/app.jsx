@@ -4601,7 +4601,7 @@ async function proxyExport(sql, mode='consume') {
   });
   if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
   if (r.status === 403) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
-  if (!r.ok) throw new Error('Something went wrong exporting this — try again in a moment');
+  if (!r.ok) throw new Error(`Something went wrong exporting this (status ${r.status}) — try again in a moment`);
   const d = await r.json();
   if (d.error) {
     const diag = d.diagnostic
@@ -4622,7 +4622,7 @@ async function proxyExport(sql, mode='consume') {
 // deterministic access problems retrying won't fix, and silently burning
 // time on doomed retries before surfacing the same error just delays
 // telling the user what's actually wrong.
-async function proxyExportWithRetry(sql, mode, maxRetries=3) {
+async function proxyExportWithRetry(sql, mode, maxRetries=4) {
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -4630,9 +4630,14 @@ async function proxyExportWithRetry(sql, mode, maxRetries=3) {
     } catch (e) {
       lastErr = e;
       const msg = e.message || '';
-      const retryable = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('went wrong exporting');
+      const is503 = msg.includes('status 503');
+      const retryable = is503 || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('went wrong exporting');
       if (!retryable || attempt === maxRetries) throw e;
-      await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt))); // 0.5s, 1s, 2s backoff
+      // 503 gets much longer backoff — plausibly a connection pool that
+      // needs real time to drain, not a one-off blip. Other transient
+      // failures keep the shorter backoff.
+      const delay = is503 ? 3000 * Math.pow(2, attempt) : 500 * Math.pow(2, attempt);
+      await new Promise(r => setTimeout(r, delay));
     }
   }
   throw lastErr;
@@ -4777,6 +4782,13 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
     // continuing to page doesn't fail because the first page already
     // marked the purchase used.
     pageMode = 'redownload';
+    // A small gap between pages rather than firing the next request the
+    // instant this one resolves — for a very large export that's dozens
+    // of sequential requests, and giving Neon's connection pool a beat to
+    // release each one before the next arrives should help regardless of
+    // whether the 503s turn out to be a direct-vs-pooled connection
+    // string issue or something else entirely.
+    await new Promise(r => setTimeout(r, 150));
   }
 
   if (data.length === 0) {
