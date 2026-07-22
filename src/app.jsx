@@ -5677,56 +5677,62 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 const SUPPORT_EMAIL = '7withak@gmail.com';
 
 function TermsPage() {
+  const [dark, setDark] = useTheme();
   return (
-    <div className="legal-page" data-theme="dark">
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
       <nav className="lp-nav">
-        <a className="lp-nav__logo" href="/">
-          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-        </a>
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+          </a>
+          <button className="lp-btn-ghost" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
+            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+          </button>
+        </div>
       </nav>
       <div className="legal-content">
         <h1>Terms of Service</h1>
         <p className="legal-date">Last updated: June 26, 2025</p>
 
         <h2>1. Acceptance of Terms</h2>
-        <p>By accessing or using Seli ("the Service"), operated by Kevin Maresca ("we," "us," or "our"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.</p>
+        <p>By accessing or using Seli ("the Service"), operated by Kevin Maresca ("we," "us," or "our"), you agree to be bound by these Terms of Service. If you don't agree, please don't use Seli.</p>
 
         <h2>2. Description of Service</h2>
-        <p>Seli is a financial intelligence platform that aggregates and displays publicly available SEC Form 4 insider trading disclosures, congressional trading disclosures filed under the STOCK Act, and related market data. All data displayed is sourced from public government databases including the SEC's EDGAR system.</p>
+        <p>Seli aggregates and scores publicly available SEC Form 4 insider trading disclosures, congressional trading disclosures filed under the STOCK Act, and related market data. Every trade you see on Seli is sourced from public government databases, including the SEC's EDGAR system.</p>
 
         <h2>3. Not Financial Advice</h2>
-        <p>The information provided by Seli is for informational and educational purposes only. Nothing on this Service constitutes financial, investment, legal, or tax advice. We are not a registered investment advisor, broker-dealer, or financial planner. You should consult a qualified financial professional before making any investment decisions. Past insider trading patterns are not indicative of future results.</p>
+        <p>Seli is informational and educational, not investment guidance. Nothing here — conviction scores, rankings, alerts, or anything else — constitutes financial, investment, legal, or tax advice. We are not a registered investment advisor, broker-dealer, or financial planner. Talk to a qualified financial professional before making investment decisions. Past insider trading patterns don't predict future results.</p>
 
         <h2>4. Data Accuracy</h2>
-        <p>We make reasonable efforts to display accurate data sourced from public filings. However, we make no representations or warranties about the completeness, accuracy, or timeliness of the data. SEC filings may contain errors, and there may be delays between filing dates and our display of data. You assume all risk associated with your use of this information.</p>
+        <p>We make reasonable efforts to keep Seli's data accurate, but we make no representations or warranties about its completeness, accuracy, or timeliness. SEC filings themselves can contain errors, and there can be delays between a filing's actual date and when it appears in Seli. You assume all risk associated with relying on this information.</p>
 
         <h2>5. User Accounts</h2>
-        <p>You must create an account to access certain features. You are responsible for maintaining the security of your account credentials. You agree to provide accurate information and to notify us immediately of any unauthorized use of your account.</p>
+        <p>You'll need an account to access certain features. You're responsible for keeping your account credentials secure, providing accurate information, and telling us right away if you notice unauthorized use of your account.</p>
 
         <h2>6. Brokerage Connections</h2>
-        <p>If you connect a brokerage account, you authorize us to retrieve read-only account data (positions, balances, and account information) on your behalf. We do not store your brokerage credentials. We do not execute trades on your behalf. You may disconnect your brokerage account at any time through your account settings.</p>
+        <p>If you connect a brokerage account, you're authorizing Seli to retrieve read-only account data — positions, balances, account information — on your behalf. We never store your brokerage credentials, and Seli can never execute a trade for you. You can disconnect your brokerage account at any time from Settings.</p>
 
         <h2>7. Subscriptions and Billing</h2>
-        <p>Certain features require a paid subscription. Subscriptions are billed monthly. You may cancel at any time; cancellation takes effect at the end of the current billing period. We reserve the right to change pricing with 30 days notice. Payments are processed by Stripe and subject to their terms of service.</p>
+        <p>Certain features require a paid subscription. Subscriptions bill monthly. You can cancel anytime; cancellation takes effect at the end of your current billing period, not immediately. We reserve the right to change pricing with 30 days' notice. Payments are processed by Stripe and subject to Stripe's own terms of service.</p>
 
         <h2>8. Prohibited Uses</h2>
-        <p>You may not: (a) use the Service for any unlawful purpose; (b) scrape, crawl, or otherwise systematically extract data from the Service; (c) resell or redistribute our data without written permission; (d) attempt to gain unauthorized access to any part of the Service; (e) use the Service to facilitate insider trading or securities fraud.</p>
+        <p>You may not: (a) use Seli for any unlawful purpose; (b) scrape, crawl, or otherwise systematically extract data from Seli; (c) resell or redistribute our data without written permission; (d) attempt to gain unauthorized access to any part of Seli; (e) use Seli to facilitate insider trading or securities fraud.</p>
 
         <h2>9. Intellectual Property</h2>
-        <p>The Service, including its design, algorithms, and conviction scoring methodology, is the property of Kevin Maresca. The underlying SEC filing data is public domain. You may not copy, modify, or distribute our proprietary systems without permission.</p>
+        <p>Seli — including its design, algorithms, and conviction scoring methodology — is the property of Kevin Maresca. The underlying SEC filing data itself is public domain. You may not copy, modify, or distribute Seli's proprietary systems without permission.</p>
 
         <h2>10. Disclaimer of Warranties</h2>
-        <p>The Service is provided "as is" without warranty of any kind. We disclaim all warranties, express or implied, including warranties of merchantability, fitness for a particular purpose, and non-infringement.</p>
+        <p>Seli is provided "as is," without warranty of any kind. We disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, and non-infringement.</p>
 
         <h2>11. Limitation of Liability</h2>
-        <p>To the maximum extent permitted by law, Kevin Maresca shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the Service, including any investment losses.</p>
+        <p>To the maximum extent permitted by law, Kevin Maresca isn't liable for indirect, incidental, special, consequential, or punitive damages arising from your use of Seli, including investment losses.</p>
 
         <h2>12. Governing Law</h2>
         <p>These Terms are governed by the laws of the State of New Mexico, United States, without regard to conflict of law principles.</p>
 
         <h2>13. Changes to Terms</h2>
-        <p>We may update these Terms at any time. Continued use of the Service after changes constitutes acceptance of the new Terms.</p>
+        <p>We may update these Terms at any time. Continuing to use Seli after a change means you accept the new Terms.</p>
 
         <h2>14. Contact</h2>
         <p>Questions about these Terms? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
@@ -5748,39 +5754,45 @@ function TermsPage() {
 
 // ─── PRIVACY POLICY ───────────────────────────────────────────────────────────
 function PrivacyPage() {
+  const [dark, setDark] = useTheme();
   return (
-    <div className="legal-page" data-theme="dark">
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
       <nav className="lp-nav">
-        <a className="lp-nav__logo" href="/">
-          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-        </a>
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+          </a>
+          <button className="lp-btn-ghost" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
+            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+          </button>
+        </div>
       </nav>
       <div className="legal-content">
         <h1>Privacy Policy</h1>
         <p className="legal-date">Last updated: June 26, 2025</p>
 
         <h2>1. Overview</h2>
-        <p>Seli, operated by Kevin Maresca, is committed to protecting your privacy. This policy explains what information we collect, how we use it, and your rights regarding your data.</p>
+        <p>Seli, operated by Kevin Maresca, takes your privacy seriously. Here's exactly what Seli collects, how it's used, and the rights you have over your own data.</p>
 
         <h2>2. Information We Collect</h2>
         <h3>Account Information</h3>
-        <p>When you create an account, we collect your email address and, if you sign in with Google, your Google profile name and profile picture. Authentication is handled by Clerk (clerk.com) — we do not store your password.</p>
+        <p>When you create a Seli account, we collect your email address and, if you sign in with Google, your Google profile name and picture. Authentication runs through Clerk (clerk.com) — Seli never stores your password.</p>
 
         <h3>Watchlist Data</h3>
-        <p>If you add tickers or insiders to your watchlist, we store those preferences in our database associated with your account identifier.</p>
+        <p>Tickers and insiders you add to your watchlist are stored in Seli's database, tied to your account.</p>
 
         <h3>Brokerage Connection Data</h3>
-        <p>If you connect a brokerage account, we store an encrypted access token in our database to retrieve your portfolio data. We store your position data temporarily for display purposes. We do not store your brokerage username or password.</p>
+        <p>If you connect a brokerage account, Seli stores an encrypted access token to retrieve your portfolio data, and holds your position data temporarily for display. Seli never stores your brokerage username or password.</p>
 
         <h3>Usage Data</h3>
-        <p>We collect standard server logs including IP addresses, browser type, and pages visited for security and performance monitoring. We do not sell this data.</p>
+        <p>Standard server logs — IP addresses, browser type, pages visited — for security and performance monitoring. Seli never sells this data.</p>
 
         <h2>3. How We Use Your Information</h2>
-        <p>We use your information to: (a) provide and improve the Service; (b) display your portfolio alongside relevant insider trading signals; (c) send transactional emails (account verification, password reset) through Clerk; (d) send alert emails if you subscribe to Pro notifications; (e) process payments through Stripe.</p>
+        <p>To: (a) provide and improve Seli; (b) show your portfolio alongside relevant insider trading signals; (c) send transactional emails (account verification, password reset) through Clerk; (d) send alert emails if you subscribe to Pro notifications; (e) process payments through Stripe.</p>
 
         <h2>4. Data Sharing</h2>
-        <p>We do not sell your personal data. We share data only with the following service providers who process it on our behalf:</p>
+        <p>Seli doesn't sell your personal data. We share data only with the service providers who help run Seli:</p>
         <ul>
           <li><strong>Clerk</strong> (clerk.com) — authentication and user management</li>
           <li><strong>Stripe</strong> (stripe.com) — payment processing</li>
@@ -5789,22 +5801,22 @@ function PrivacyPage() {
         </ul>
 
         <h2>5. Data Retention</h2>
-        <p>We retain your account data for as long as your account is active. If you delete your account, we will delete your personal data within 30 days. Watchlist and broker connection data is deleted immediately upon disconnection or account deletion.</p>
+        <p>Your account data stays with us for as long as your account is active. Delete your account, and we delete your personal data within 30 days. Watchlist and broker connection data is removed immediately on disconnection or account deletion — no delay there.</p>
 
         <h2>6. Security</h2>
-        <p>We use industry-standard security measures including encrypted connections (HTTPS), encrypted storage of sensitive tokens (AES-256), and access controls. No system is 100% secure — you use the Service at your own risk.</p>
+        <p>Encrypted connections (HTTPS), encrypted storage of sensitive tokens (AES-256), and access controls throughout. No system is 100% secure — you use Seli at your own risk.</p>
 
         <h2>7. Your Rights</h2>
-        <p>You may: (a) access or export your data by contacting us; (b) delete your account and associated data at any time; (c) disconnect any brokerage connection at any time through account settings; (d) opt out of marketing emails at any time.</p>
+        <p>You can: (a) access or export your data by contacting us; (b) delete your account and everything tied to it, anytime; (c) disconnect any brokerage connection anytime from Settings; (d) opt out of marketing emails anytime.</p>
 
         <h2>8. Cookies</h2>
-        <p>We use only essential cookies required for authentication (managed by Clerk). We do not use advertising or tracking cookies.</p>
+        <p>Seli uses only essential cookies required for authentication (managed by Clerk) — no advertising or tracking cookies. Full details live in our <a href="/cookies">Cookie Policy</a>.</p>
 
         <h2>9. Children's Privacy</h2>
-        <p>The Service is not directed at children under 13. We do not knowingly collect personal information from children under 13.</p>
+        <p>Seli isn't directed at children under 13, and we don't knowingly collect personal information from anyone under 13.</p>
 
         <h2>10. Changes to This Policy</h2>
-        <p>We may update this Privacy Policy periodically. We will notify you of material changes by email or through the Service.</p>
+        <p>We may update this Privacy Policy periodically. We'll notify you of material changes by email or in Seli itself.</p>
 
         <h2>11. Contact</h2>
         <p>Questions about this Privacy Policy? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
@@ -5826,38 +5838,44 @@ function PrivacyPage() {
 
 // ─── COOKIE POLICY ────────────────────────────────────────────────────────────
 function CookiePage() {
+  const [dark, setDark] = useTheme();
   return (
-    <div className="legal-page" data-theme="dark">
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
       <nav className="lp-nav">
-        <a className="lp-nav__logo" href="/">
-          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-        </a>
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+          </a>
+          <button className="lp-btn-ghost" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
+            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+          </button>
+        </div>
       </nav>
       <div className="legal-content">
         <h1>Cookie Policy</h1>
         <p className="legal-date">Last updated: July 22, 2026</p>
 
         <h2>1. What This Covers</h2>
-        <p>This explains the cookies and similar browser-storage technologies (like localStorage) that Seli uses. We keep this simple on purpose: we don't use advertising or tracking cookies, and we don't sell data to anyone.</p>
+        <p>The cookies and similar browser-storage technologies (like localStorage) Seli actually uses — kept short on purpose, since Seli doesn't use advertising or tracking cookies, and never sells data to anyone.</p>
 
         <h2>2. Essential Cookies</h2>
-        <p>Signing in and staying signed in requires a session cookie, set by our authentication provider, Clerk (clerk.com). This is strictly necessary — without it, the Service can't tell you're signed in, and there's no way to opt out of it while still using an account.</p>
+        <p>Signing in and staying signed in requires a session cookie, set by Seli's authentication provider, Clerk (clerk.com). It's strictly necessary — without it, Seli can't tell you're signed in, so there's no opt-out for it while still using an account.</p>
 
         <h2>3. Local Storage (Not a Cookie, But Similar)</h2>
-        <p>We also use your browser's localStorage — data that stays on your device, not sent to our servers — for a few small preferences: whether you've already seen the welcome guide, your light/dark theme choice, and your selected risk-appetite setting on the Signal Ranking slider. Clearing your browser's site data resets these to their defaults; nothing about your account is lost by doing this.</p>
+        <p>Seli also uses your browser's localStorage — data that stays on your device, never sent to our servers — for a few small preferences: whether you've already seen the welcome guide, your light/dark theme choice, and your risk-appetite setting on the Signal Ranking slider. Clearing your browser's site data resets these to their defaults; your account itself is untouched.</p>
 
-        <h2>4. What We Don't Use</h2>
+        <h2>4. What Seli Doesn't Use</h2>
         <p>No advertising cookies. No third-party tracking or analytics cookies. No cross-site tracking. No cookie-based fingerprinting.</p>
 
         <h2>5. Third-Party Services</h2>
-        <p>Some features route through services with their own cookie practices when you actively use them — Stripe during checkout, and your brokerage's own site during the SnapTrade connection flow. We don't control those cookies; their own policies apply while you're on their pages.</p>
+        <p>A few features route through services with their own cookie practices while you're actively using them — Stripe during checkout, and your brokerage's own site during the SnapTrade connection flow. Seli doesn't control those cookies; their own policies apply while you're on their pages.</p>
 
         <h2>6. Your Choices</h2>
-        <p>Most browsers let you block or delete cookies in settings. Blocking Clerk's session cookie will prevent sign-in entirely, since it's required for authentication — there isn't a way around this while still using an account-based Service.</p>
+        <p>Most browsers let you block or delete cookies in settings. Blocking Clerk's session cookie prevents sign-in entirely, since it's required for authentication — there's no way around this while still using a Seli account.</p>
 
         <h2>7. Changes to This Policy</h2>
-        <p>We may update this policy if what we use changes. Material changes will be reflected here with an updated date.</p>
+        <p>We may update this policy if what Seli uses changes. Material changes show up here with an updated date.</p>
 
         <h2>8. Contact</h2>
         <p>Questions about this Cookie Policy? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
@@ -5977,14 +5995,20 @@ function HelpCenterPage() {
   const [activeId, setActiveId] = useState('using-seli');
   const idx = HELP_SECTIONS.findIndex(s => s.id === activeId);
   const section = HELP_SECTIONS[idx] ?? HELP_SECTIONS[0];
+  const [dark, setDark] = useTheme();
 
   return (
-    <div className="legal-page" data-theme="dark">
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
       <nav className="lp-nav">
-        <a className="lp-nav__logo" href="/">
-          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-        </a>
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+          </a>
+          <button className="lp-btn-ghost" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
+            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+          </button>
+        </div>
       </nav>
       <div className="legal-content help-center">
         <h1>Help Center</h1>
