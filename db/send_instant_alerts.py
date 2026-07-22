@@ -29,9 +29,20 @@ Four trigger types, matching the Settings > Instant alerts UI exactly:
 from __future__ import annotations
 import os, sys, re, logging, requests
 from datetime import datetime, timezone
+from pathlib import Path
+from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
+
+# Same auto-load as fetch_filings_neon.py / fetch_political_trades.py in
+# this same db/ folder — this script was the one outlier reading only from
+# the shell environment, which is what made a placeholder value ("...")
+# easy to paste in literally instead of the real connection string. With
+# this, DATABASE_URL (and everything else below) loads from db/.env
+# automatically, the same as its sibling scripts, and testing this file no
+# longer requires retyping the connection string by hand each run.
+load_dotenv(Path(__file__).parent / ".env")
 
 DATABASE_URL     = os.environ.get("DATABASE_URL", "")
 RESEND_API_KEY   = os.environ.get("RESEND_API_KEY", "")
@@ -111,14 +122,23 @@ def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
             "reversal":         "Reversal detected",
         }[m["reason"]]
         color = C_GREEN if m["transaction_type"] == "buy" else C_RED
+        action = "Buy" if m["transaction_type"] == "buy" else "Sell"
+        # Filings only ever report a date, never a time of day — showing a
+        # fabricated timestamp here would be showing something the source
+        # filing itself doesn't contain.
+        date_label = m["trade_date"].strftime("%b %d, %Y") if m["trade_date"] else "—"
+        shares_label = f"{m['shares']:,.0f} sh" if m["shares"] is not None else None
+        price_label = f"@ ${m['price_per_share']:,.2f}" if m["price_per_share"] else None
+        detail_bits = " ".join(b for b in (shares_label, price_label) if b) or "—"
         rows += f"""
         <tr>
           <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};">
             <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:700;text-decoration:none;font-size:14px;">{m['ticker']}</a><br>
-            <span style="color:{C_TEXT_MUTED};font-size:12px;">{m['company']}</span>
+            <span style="color:{C_TEXT_MUTED};font-size:12px;">{m['company_name']}</span>
           </td>
           <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};color:{C_TEXT_MUTED};font-size:12px;">{reason_label}</td>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{C_TEXT_MUTED};">{m['insider_name']}</td>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{C_TEXT_MUTED};">{m['insider_name']}<br><span style="color:{C_TEXT_FAINT};">{date_label}</span></td>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{color};font-weight:700;">{action}<br><span style="color:{C_TEXT_MUTED};font-weight:400;">{detail_bits}</span></td>
           <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};text-align:right;font-weight:700;color:{color};font-size:13px;white-space:nowrap;">{fmt_money(m['value'])}</td>
         </tr>"""
 
@@ -132,7 +152,7 @@ def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
 <body style="margin:0;padding:0;background:#F3F4F6;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
 <tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:{C_BG};border-radius:12px;overflow:hidden;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:{C_BG};border-radius:12px;overflow:hidden;">
   <tr><td style="background:linear-gradient(135deg,{C_ACCENT} 0%,{C_ACCENT_STR} 60%,{C_AQUA} 100%);padding:20px 24px;">
     <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-0.02em;">Seli</span>
     <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">Instant alert</span>
@@ -167,7 +187,9 @@ def main():
 
     cur.execute("""
         SELECT f.accession_number, f.ticker, f.company_name, f.insider_name, f.insider_title,
-               f.transaction_type, f.value, f.is_open_market,
+               f.transaction_type, f.transaction_code, f.value, f.is_open_market,
+               f.shares, f.price_per_share,
+               COALESCE(f.transaction_date, f.filing_date) AS trade_date,
                (SELECT p.transaction_type FROM public.filings p
                 WHERE p.insider_name = f.insider_name AND p.ticker = f.ticker
                   AND p.is_open_market = true
