@@ -4718,39 +4718,58 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
     return c;
   }).join(',\n           ');
 
-  // Paginated rather than one LIMIT 500000 request — Neon's HTTP SQL
-  // endpoint caps both request AND response size at 64MB (their own
-  // documented limit), and a single request for hundreds of thousands of
-  // rows across 16 columns, several of them free text, blows past that
-  // easily. That's what "No matching rows" actually was: not a bad WHERE
-  // clause, not bad data — an oversized response Neon rejected in a shape
-  // this code wasn't recognizing as an error, so it silently looked like
-  // zero rows came back. Paging in chunks keeps each individual request
-  // safely under the cap while still fetching everything that matches.
-  // ctid appended as a tiebreaker — LIMIT/OFFSET pagination across
-  // separate requests isn't guaranteed stable unless the ORDER BY is
-  // fully deterministic, and with a table this size, many rows almost
-  // certainly share the exact same date. Without a tiebreaker, ties could
-  // land differently between page N and page N+1, causing a row to be
-  // duplicated in one page and skipped in another. ctid always exists on
-  // any Postgres table, so this works regardless of the table's own schema.
+  // ctid appended as a tiebreaker — sort ties (very likely on a table this
+  // size, since many rows share the same date) need a deterministic
+  // secondary key for pagination to be gap-free and duplicate-free. ctid
+  // always exists on any Postgres table.
+  //
+  // NOTE: keyset pagination below is built around this exact sort key
+  // (COALESCE(transaction_date,filing_date) DESC, ctid) — every current
+  // caller uses the default and none pass a custom orderByClause. If that
+  // ever changes, the keyset comparison needs to change to match it.
   const stableOrderBy = `${orderByClause}, ctid`;
 
+  // Keyset (cursor) pagination, not OFFSET — this is the actual fix for
+  // what crashed around a million rows. OFFSET N forces Postgres to scan
+  // and discard N rows before it can return the next page, so cost grows
+  // with depth: cheap at offset 1,000, expensive at offset 980,000. That's
+  // almost certainly what finally exceeded a resource limit inside the
+  // Worker and crashed it — Cloudflare's own generic error response for a
+  // crashed Worker doesn't carry the CORS headers this app's own code
+  // would normally add, which is why the browser reported it as a CORS
+  // failure rather than a timeout. Keyset pagination asks "rows after the
+  // last one I saw" via an index seek instead of a scan-and-discard, so
+  // cost stays roughly constant no matter how deep into the data it goes.
+  //
+  // _cursor_date/_cursor_tid are pagination bookkeeping only — stripped
+  // out of every row before it's used, never shown in the actual export.
   const PAGE_SIZE = 20000;
   const MAX_ROWS = 2000000; // safety ceiling, not a real-world expectation
   let data = [];
-  let offset = 0;
   let pageMode = mode;
+  let cursor = null; // { date, tid } of the last row seen, or null for the first page
   while (true) {
+    const keysetCondition = cursor
+      ? `(COALESCE(transaction_date,filing_date), ctid) < ('${String(cursor.date).replace(/'/g,"''")}', '${String(cursor.tid).replace(/'/g,"''")}'::tid)`
+      : null;
+    const pageWhere = keysetCondition ? `${whereClause} AND ${keysetCondition}` : whereClause;
+
     const page = await proxyExportWithRetry(`
-      SELECT ${selectCols}
-      FROM public.filings ${whereClause}
-      ${stableOrderBy} LIMIT ${PAGE_SIZE} OFFSET ${offset}
+      SELECT ${selectCols},
+             COALESCE(transaction_date,filing_date) AS _cursor_date,
+             ctid::text AS _cursor_tid
+      FROM public.filings ${pageWhere}
+      ${stableOrderBy} LIMIT ${PAGE_SIZE}
     `, pageMode);
-    data = data.concat(page);
+
+    if (page.length > 0) {
+      const last = page[page.length - 1];
+      cursor = { date: last._cursor_date, tid: last._cursor_tid };
+    }
+    const cleaned = page.map(({ _cursor_date, _cursor_tid, ...rest }) => rest);
+    data = data.concat(cleaned);
     if (onProgress) onProgress(data.length);
     if (page.length < PAGE_SIZE || data.length >= MAX_ROWS) break;
-    offset += PAGE_SIZE;
     // Only the FIRST page should spend a one-time 'consume' allowance —
     // this is still one logical download, just split into several
     // requests because of the size cap. Every page after the first uses
