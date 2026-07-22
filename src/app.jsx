@@ -4589,6 +4589,57 @@ async function proxySQL(sql) {
   return d.rows || [];
 }
 
+// Tries the pre-built R2 snapshot first — nearly all of a large export is
+// served from a static file instead of pulled live through Neon, which is
+// what actually removes the sustained-connection pressure that kept
+// causing 503s on the old all-live-query path. Returns null (not a
+// thrown error) specifically when no snapshot exists yet, since that's an
+// expected, recoverable state the caller should fall back from — not
+// something to bail out of the whole export over.
+async function fetchExportViaSnapshot(mode, onProgress) {
+  const r = await fetch(`${cfg.NEON_PROXY_URL}/export/snapshot`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
+    body: JSON.stringify({ mode }),
+  });
+  if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
+  if (r.status === 403) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
+  if (!r.ok) throw new Error(`Something went wrong exporting this (status ${r.status}) — try again in a moment`);
+
+  const contentType = r.headers.get('Content-Type') || '';
+  if (contentType.includes('application/json')) {
+    const d = await r.json().catch(()=>({}));
+    if (d.error === 'snapshot_not_ready') return null; // expected — caller falls back
+    throw new Error(d.error || 'Export failed');
+  }
+
+  // NDJSON stream — read and parse incrementally rather than buffering
+  // the entire response before touching any of it, so progress updates
+  // reflect real, ongoing work instead of jumping from 0 to everything
+  // the instant the whole thing finishes downloading.
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const rows = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 1);
+      if (line.trim()) {
+        rows.push(JSON.parse(line));
+        if (onProgress && rows.length % 5000 === 0) onProgress(rows.length);
+      }
+    }
+  }
+  if (buffer.trim()) rows.push(JSON.parse(buffer));
+  if (onProgress) onProgress(rows.length);
+  return rows;
+}
+
 // Hits the dedicated /export route (server checks public.data_purchases
 // before running anything) rather than the general query passthrough —
 // same shape, different endpoint, so a non-purchaser can't just replay a
@@ -4695,6 +4746,18 @@ const COLUMN_LEGEND = [
 // on the one code path that had none.
 async function downloadFullExport(extraConditions='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC", mode='consume', onProgress=null) {
   const today = new Date().toISOString().split('T')[0];
+  let data = null;
+
+  // Snapshot path first — only valid for the unfiltered "everything"
+  // export (extraConditions empty), since the pre-built snapshot doesn't
+  // know about arbitrary filters. null specifically means "not ready yet"
+  // (expected, recoverable) — falls through to the live batching path
+  // below rather than failing the export over it.
+  if (!extraConditions) {
+    data = await fetchExportViaSnapshot(mode, onProgress);
+  }
+
+  if (data === null) {
   // Row inclusion stays permissive — same COALESCE check that was already
   // proven to work (this is what returned real rows before). Requiring
   // BOTH transaction_date AND filing_date to independently pass sanity
@@ -4740,7 +4803,7 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   const PAGE_SIZE = 40000; // was 20000 — still comfortably under Neon's 64MB response cap, but halves the total request count for a large export
   const PAGES_PER_BATCH = 5;
   const MAX_ROWS = 2000000; // safety ceiling, not a real-world expectation
-  let data = [];
+  data = [];
   let batchMode = mode;
   let cursor = null;
   while (true) {
@@ -4763,6 +4826,7 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
     // release each connection before the next arrives.
     await new Promise(r => setTimeout(r, 150));
   }
+  } // end of live-batching fallback (if data === null)
 
   if (data.length === 0) {
     throw new Error('No matching rows came back from the database — this looks like a real problem, not an empty result. Try again in a moment, and if it persists, this needs a look before you trust any export.');

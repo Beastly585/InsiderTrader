@@ -56,6 +56,15 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const workerHandler = {
+  // Runs on a cron schedule (needs [triggers] crons in wrangler.toml —
+  // see buildExportSnapshot's own comment for the exact config). No
+  // browser is waiting on this, so it can take its time and retry
+  // patiently — the entire "sustained pressure from a waiting browser"
+  // problem this was built to solve doesn't exist here.
+  async scheduled(event, env, ctx) {
+    await buildExportSnapshot(env);
+  },
+
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
 
@@ -236,6 +245,17 @@ const workerHandler = {
     // it runs before any query executes, not after.
     if (url.pathname === '/export') {
       return handleExport(request, env, origin);
+    }
+    // Snapshot-based export — serves nearly all of a large export from a
+    // pre-built R2 file instead of pulling millions of rows live through
+    // Neon on every single purchase. Only the last couple of days (the
+    // part that genuinely hasn't been snapshotted yet) still needs a live
+    // query, and that's small — a few thousand rows, not millions. This
+    // is what actually removes the sustained-connection pressure that
+    // kept causing 503s, rather than continuing to optimize how that
+    // pressure gets applied.
+    if (url.pathname === '/export/snapshot') {
+      return handleExportSnapshot(request, env, origin);
     }
 
     return handleQuery(request, env, origin);
@@ -509,6 +529,214 @@ async function handleExport(request, env, origin) {
   } catch (e) {
     return corsResponse({ error: e.message }, 502, origin, env);
   }
+}
+
+// Same 16 columns and date-sanitizing CASE expressions as the frontend's
+// EXPORT_COLS/dateExpr in app.jsx — kept in sync manually since this runs
+// server-side (the scheduled snapshot builder) where there's no client
+// request to supply selectCols the way handleExport's live path works.
+function exportSelectCols(todayStr) {
+  const dateExpr = col => `CASE WHEN ${col}::date >= '2020-01-01'::date AND ${col}::date <= '${todayStr}'::date THEN ${col} END AS ${col}`;
+  const cols = ['transaction_date','filing_date','ticker','company_name','insider_name','insider_title',
+    'transaction_type','transaction_code','is_open_market','shares','price_per_share',
+    'value','pct_owned_change','relationship','sector','footnotes'];
+  return cols.map(c => {
+    if (c === 'transaction_date' || c === 'filing_date') return dateExpr(c);
+    if (c==='shares'||c==='price_per_share'||c==='value'||c==='pct_owned_change') return `${c}::float`;
+    return c;
+  }).join(',\n           ');
+}
+
+// ── Scheduled snapshot builder ──────────────────────────────────────────────
+// Needs, in wrangler.toml:
+//   [[r2_buckets]]
+//   binding = "EXPORT_SNAPSHOTS"
+//   bucket_name = "<your bucket name>"
+//   [triggers]
+//   crons = ["0 6 * * *"]   # once daily — historical data doesn't change
+//                            # fast enough to need more than this
+//
+// Streams rows straight into R2 as NDJSON (one JSON object per line) via a
+// TransformStream — never accumulates the full dataset in memory
+// regardless of how large it grows, which matters because this can be
+// millions of rows. Cutoff is 2 days back from today, not today itself —
+// a deliberate safety buffer against any late-arriving ingestion for the
+// most recent day or two, which handleExportSnapshot's live delta query
+// covers anyway.
+async function buildExportSnapshot(env) {
+  if (!env.EXPORT_SNAPSHOTS) {
+    console.error('[Worker] EXPORT_SNAPSHOTS R2 binding not configured — skipping snapshot build');
+    return;
+  }
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 2);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+  const selectCols = exportSelectCols(cutoffStr);
+  const whereClause = `COALESCE(transaction_date,filing_date)::date <= '${cutoffStr}'::date`;
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const uploadPromise = env.EXPORT_SNAPSHOTS.put('filings-snapshot.ndjson', readable, {
+    httpMetadata: { contentType: 'application/x-ndjson' },
+  });
+
+  let cursor = null;
+  let pageCount = 0;
+  let rowCount = 0;
+  try {
+    while (true) {
+      const keysetCondition = cursor
+        ? `AND (COALESCE(transaction_date,filing_date), ctid) < ('${cursor.date.replace(/'/g,"''")}', '${cursor.tid.replace(/'/g,"''")}'::tid)`
+        : '';
+      const pageQuery = `
+        SELECT ${selectCols},
+               COALESCE(transaction_date,filing_date) AS _cursor_date,
+               ctid::text AS _cursor_tid
+        FROM public.filings
+        WHERE ${whereClause} ${keysetCondition}
+        ORDER BY COALESCE(transaction_date,filing_date) DESC, ctid
+        LIMIT 20000
+      `;
+      const result = await neonFetch(env, pageQuery);
+      const rows = result.rows || [];
+      if (rows.length === 0) break;
+
+      let chunk = '';
+      for (const row of rows) {
+        const { _cursor_date, _cursor_tid, ...clean } = row;
+        chunk += JSON.stringify(clean) + '\n';
+      }
+      await writer.write(encoder.encode(chunk));
+
+      const last = rows[rows.length - 1];
+      cursor = { date: last._cursor_date, tid: last._cursor_tid };
+      pageCount++;
+      rowCount += rows.length;
+      if (rows.length < 20000) break;
+    }
+    await writer.close();
+    await uploadPromise;
+    await env.EXPORT_SNAPSHOTS.put('filings-snapshot.meta.json', JSON.stringify({
+      cutoff: cutoffStr, builtAt: new Date().toISOString(), pages: pageCount, rows: rowCount,
+    }));
+    console.log(`[Worker] Export snapshot rebuilt: ${rowCount} rows across ${pageCount} pages, cutoff ${cutoffStr}`);
+  } catch (e) {
+    console.error('[Worker] Snapshot build failed:', e.message);
+    await writer.abort(e).catch(()=>{});
+  }
+}
+
+// ── Serves the pre-built snapshot + a small live delta ──────────────────────
+// Same purchase-check semantics as handleExport (consume vs redownload).
+// If no snapshot has been built yet (R2 not configured, or the first cron
+// run hasn't happened), returns snapshot_not_ready so the frontend can
+// fall back to the older, slower-but-always-available /export batching
+// path rather than fail outright.
+async function handleExportSnapshot(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  let body;
+  try { body = JSON.parse(await request.text()); }
+  catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
+  const mode = body.mode === 'redownload' ? 'redownload' : 'consume';
+
+  if (!env.EXPORT_SNAPSHOTS) {
+    return corsResponse({ error: 'snapshot_not_ready' }, 200, origin, env);
+  }
+
+  let purchaseKey;
+  try {
+    if (mode === 'consume') {
+      const result = await neonFetch(env,
+        `SELECT stripe_payment_intent_id FROM public.data_purchases
+         WHERE clerk_user_id = ${sqlVal(clerkUserId)} AND downloaded_at IS NULL
+         ORDER BY purchased_at DESC LIMIT 1`
+      );
+      purchaseKey = result.rows?.[0]?.stripe_payment_intent_id;
+      if (!purchaseKey) {
+        return corsResponse({ error: 'You\'ve already used this purchase\'s one-time download — buy again for a fresh export, or use Re-download in Settings > Billing to get the same one again.' }, 403, origin, env);
+      }
+    } else {
+      const result = await neonFetch(env,
+        `SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)} LIMIT 1`
+      );
+      if (!(result.rows || []).length) {
+        return corsResponse({ error: 'Full data export requires a one-time purchase — see Settings > Billing.' }, 403, origin, env);
+      }
+    }
+  } catch (e) {
+    console.error('[Worker] Export purchase check failed:', e.message);
+    return corsResponse({ error: 'Could not verify export access — try again in a moment.' }, 500, origin, env);
+  }
+
+  let meta;
+  try {
+    const metaObj = await env.EXPORT_SNAPSHOTS.get('filings-snapshot.meta.json');
+    if (!metaObj) return corsResponse({ error: 'snapshot_not_ready' }, 200, origin, env);
+    meta = JSON.parse(await metaObj.text());
+  } catch (e) {
+    return corsResponse({ error: 'snapshot_not_ready' }, 200, origin, env);
+  }
+
+  const snapshotObj = await env.EXPORT_SNAPSHOTS.get('filings-snapshot.ndjson');
+  if (!snapshotObj) return corsResponse({ error: 'snapshot_not_ready' }, 200, origin, env);
+
+  // The only live query in this whole path — everything up to the
+  // snapshot's cutoff already came from R2 above. This is a few thousand
+  // rows at most (a couple of days of ingestion), not millions, so it
+  // doesn't need pagination or batching at all.
+  const today = new Date().toISOString().split('T')[0];
+  const deltaQuery = `
+    SELECT ${exportSelectCols(today)}
+    FROM public.filings
+    WHERE COALESCE(transaction_date,filing_date)::date > '${meta.cutoff}'::date
+    ORDER BY COALESCE(transaction_date,filing_date) DESC
+  `;
+  let deltaRows = [];
+  try {
+    const deltaResult = await neonFetch(env, deltaQuery);
+    deltaRows = deltaResult.rows || [];
+  } catch (e) {
+    console.error('[Worker] Delta query failed (serving snapshot without it):', e.message);
+    // Snapshot itself is still good — degrade to slightly-stale data
+    // rather than failing the whole export over the small live piece.
+  }
+
+  if (mode === 'consume' && purchaseKey) {
+    await neonFetch(env, `UPDATE public.data_purchases SET downloaded_at = now() WHERE stripe_payment_intent_id = ${sqlVal(purchaseKey)}`)
+      .catch(e => console.error('[Worker] Failed to mark export consumed (non-fatal):', e.message));
+  }
+
+  // Stream the R2 snapshot straight through (passthrough — never buffered
+  // into Worker memory) with the small delta appended as extra NDJSON
+  // lines at the end.
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  (async () => {
+    try {
+      const reader = snapshotObj.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writer.write(value);
+      }
+      let deltaChunk = '';
+      for (const row of deltaRows) deltaChunk += JSON.stringify(row) + '\n';
+      if (deltaChunk) await writer.write(encoder.encode(deltaChunk));
+    } catch (e) {
+      console.error('[Worker] Snapshot stream-through failed:', e.message);
+    } finally {
+      await writer.close().catch(()=>{});
+    }
+  })();
+
+  return new Response(readable, {
+    status: 200,
+    headers: { ...corsHeaders(origin, env), 'Content-Type': 'application/x-ndjson' },
+  });
 }
 
 
