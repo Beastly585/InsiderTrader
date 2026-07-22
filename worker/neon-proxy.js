@@ -151,7 +151,7 @@ const workerHandler = {
     //   name = "RATE_LIMITER"
     //   type = "ratelimit"
     //   namespace_id = "1001"
-    //   simple = { limit = 120, period = 60 }
+    //   simple = { limit = 600, period = 60 }
     //
     if (env.RATE_LIMITER) {
       const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
@@ -381,6 +381,24 @@ async function handleQuery(request, env, origin) {
 //
 // Needs a new column: ALTER TABLE public.data_purchases ADD COLUMN
 // downloaded_at timestamptz NULL;
+// ── Full data export — the real access-control gate ─────────────────────────
+// Two modes, both requiring a real purchase record, checked server-side:
+//   'consume' (default) — the Data page's own Export button. Requires an
+//   unused purchase, marks it used on success.
+//   'redownload' — Settings > Billing's "Re-download". Requires only that
+//   a purchase exists at all, never marks anything.
+//
+// Loops internally across several keyset pages per request (pagesPerBatch,
+// default 5) instead of one page per client request — this is the actual
+// fix for sustained 503s under heavy sequential load: each client-visible
+// request used to mean one fresh connection to Neon, so a ~1M row export
+// meant 45-100+ separate connections opened in quick succession. Batching
+// several pages server-side per request cuts that by 5x or more, which
+// matters because retries alone weren't enough — the failures were
+// sustained pressure building up, not one-off blips a retry could ride out.
+//
+// Needs: ALTER TABLE public.data_purchases ADD COLUMN downloaded_at
+// timestamptz NULL;
 async function handleExport(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
@@ -390,9 +408,21 @@ async function handleExport(request, env, origin) {
   catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
 
   const mode = body.mode === 'redownload' ? 'redownload' : 'consume';
-  const query = body.query || '';
-  if (!query || typeof query !== 'string' || !query.trim().toUpperCase().startsWith('SELECT')) {
-    return corsResponse({ error: 'Only SELECT queries allowed' }, 403, origin, env);
+  const selectCols = body.selectCols || '';
+  const whereClause = body.whereClause || '';
+  const cursorIn = body.cursor || null;
+  const pagesPerBatch = Math.min(Math.max(Number(body.pagesPerBatch) || 5, 1), 10);
+  const pageSize = Math.min(Math.max(Number(body.pageSize) || 20000, 1000), 20000);
+
+  if (!selectCols || typeof selectCols !== 'string' || !whereClause || typeof whereClause !== 'string') {
+    return corsResponse({ error: 'Missing selectCols or whereClause' }, 400, origin, env);
+  }
+  // Defense in depth — reject anything that smells like an attempt to
+  // break out of the intended SELECT-only shape, even though these pieces
+  // are assembled by this app's own frontend, not raw user input.
+  const suspicious = /;|--|\/\*|\bDROP\b|\bDELETE\b|\bUPDATE\b|\bINSERT\b/i;
+  if (suspicious.test(selectCols) || suspicious.test(whereClause)) {
+    return corsResponse({ error: 'Rejected query shape' }, 403, origin, env);
   }
 
   let purchaseKey;
@@ -420,15 +450,62 @@ async function handleExport(request, env, origin) {
     return corsResponse({ error: 'Could not verify export access — try again in a moment.' }, 500, origin, env);
   }
 
+  const esc = s => String(s).replace(/'/g, "''");
+
   try {
-    const result = await neonFetch(env, query);
+    let allRows = [];
+    let cursor = cursorIn;
+    let done = false;
+
+    for (let i = 0; i < pagesPerBatch; i++) {
+      const keysetCondition = cursor
+        ? `AND (COALESCE(transaction_date,filing_date), ctid) < ('${esc(cursor.date)}', '${esc(cursor.tid)}'::tid)`
+        : '';
+      const pageQuery = `
+        SELECT ${selectCols},
+               COALESCE(transaction_date,filing_date) AS _cursor_date,
+               ctid::text AS _cursor_tid
+        FROM public.filings
+        WHERE ${whereClause} ${keysetCondition}
+        ORDER BY COALESCE(transaction_date,filing_date) DESC, ctid
+        LIMIT ${pageSize}
+      `;
+      const pageResult = await neonFetch(env, pageQuery);
+      const rows = pageResult.rows || [];
+
+      // First page of the very first batch returning zero rows is worth
+      // real diagnostics — later pages returning zero just means we've
+      // reached the end, which is normal and expected.
+      if (rows.length === 0 && i === 0 && !cursorIn) {
+        let diagnostic = { actualQuery: pageQuery };
+        try {
+          const total = await neonFetch(env, `SELECT COUNT(*) AS cnt FROM public.filings`);
+          diagnostic.totalRowsInTable = total.rows?.[0]?.cnt;
+          const sample = await neonFetch(env, `SELECT transaction_date, filing_date FROM public.filings ORDER BY filing_date DESC NULLS LAST LIMIT 3`);
+          diagnostic.mostRecentDates = sample.rows;
+        } catch (diagErr) {
+          diagnostic.diagnosticError = diagErr.message;
+        }
+        console.error('[Worker] Export query returned 0 rows on first page. Diagnostic:', JSON.stringify(diagnostic));
+        return corsResponse({ error: 'No matching rows.', diagnostic }, 200, origin, env);
+      }
+
+      if (rows.length > 0) {
+        const last = rows[rows.length - 1];
+        cursor = { date: last._cursor_date, tid: last._cursor_tid };
+        allRows = allRows.concat(rows.map(({ _cursor_date, _cursor_tid, ...rest }) => rest));
+      }
+      if (rows.length < pageSize) { done = true; break; }
+    }
+
     if (mode === 'consume' && purchaseKey) {
-      // Mark it used only after the query actually succeeded — a failed
-      // export shouldn't burn the one-time allowance.
+      // Mark it used only after at least one page actually succeeded —
+      // a failed export shouldn't burn the one-time allowance.
       await neonFetch(env, `UPDATE public.data_purchases SET downloaded_at = now() WHERE stripe_payment_intent_id = ${sqlVal(purchaseKey)}`)
         .catch(e => console.error('[Worker] Failed to mark export consumed (non-fatal):', e.message));
     }
-    return corsResponse(result, 200, origin, env);
+
+    return corsResponse({ rows: allRows, nextCursor: done ? null : cursor, done }, 200, origin, env);
   } catch (e) {
     return corsResponse({ error: e.message }, 502, origin, env);
   }

@@ -4593,11 +4593,11 @@ async function proxySQL(sql) {
 // before running anything) rather than the general query passthrough —
 // same shape, different endpoint, so a non-purchaser can't just replay a
 // normal /query request with a bigger LIMIT and get the export for free.
-async function proxyExport(sql, mode='consume') {
+async function proxyExport({ selectCols, whereClause, cursor, pagesPerBatch=5, pageSize=20000, mode='consume' }) {
   const r = await fetch(`${cfg.NEON_PROXY_URL}/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
-    body: JSON.stringify({ query: sql, mode }),
+    body: JSON.stringify({ selectCols, whereClause, cursor, pagesPerBatch, pageSize, mode }),
   });
   if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
   if (r.status === 403) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
@@ -4609,24 +4609,21 @@ async function proxyExport(sql, mode='consume') {
       : '';
     throw new Error(d.error + diag);
   }
-  return d.rows || [];
+  return { rows: d.rows || [], nextCursor: d.nextCursor || null, done: !!d.done };
 }
 
-// Wraps proxyExport with retries for the pagination loop specifically —
-// dozens to well over a hundred sequential requests for a large export
-// means SOME transient network hiccup along the way is fairly likely
-// eventually, and without this, one blip anywhere in that chain threw
-// away every page already successfully fetched. Only retries things that
-// plausibly succeed on a second attempt (a network-level failure, or a
-// 5xx from the Worker) — 401/403 fail immediately, since those are
-// deterministic access problems retrying won't fix, and silently burning
-// time on doomed retries before surfacing the same error just delays
-// telling the user what's actually wrong.
-async function proxyExportWithRetry(sql, mode, maxRetries=4) {
+// Wraps proxyExport with retries for the batch loop specifically — even
+// with server-side batching cutting the number of client-visible requests
+// by 5x+, a large export is still several dozen requests, and some
+// transient failure along the way is fairly likely eventually. Only
+// retries things that plausibly succeed on a second attempt — 401/403
+// fail immediately, since those are deterministic access problems
+// retrying won't fix.
+async function proxyExportWithRetry(params, maxRetries=4) {
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await proxyExport(sql, mode);
+      return await proxyExport(params);
     } catch (e) {
       lastErr = e;
       const msg = e.message || '';
@@ -4642,6 +4639,7 @@ async function proxyExportWithRetry(sql, mode, maxRetries=4) {
   }
   throw lastErr;
 }
+
 
 const EXPORT_COLS = ['transaction_date','filing_date','ticker','company_name','insider_name','insider_title',
   'transaction_type','transaction_code','is_open_market','shares','price_per_share',
@@ -4710,7 +4708,6 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
     `COALESCE(transaction_date,filing_date)::date <= '${today}'::date`,
   ];
   if (extraConditions) conditions.push(extraConditions);
-  const whereClause = 'WHERE ' + conditions.join(' AND ');
 
   // Each date field sanitized independently IN THE OUTPUT instead — a
   // corrupted transaction_date or filing_date comes back as NULL (blank
@@ -4726,68 +4723,44 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   // ctid appended as a tiebreaker — sort ties (very likely on a table this
   // size, since many rows share the same date) need a deterministic
   // secondary key for pagination to be gap-free and duplicate-free. ctid
-  // always exists on any Postgres table.
-  //
-  // NOTE: keyset pagination below is built around this exact sort key
-  // (COALESCE(transaction_date,filing_date) DESC, ctid) — every current
-  // caller uses the default and none pass a custom orderByClause. If that
-  // ever changes, the keyset comparison needs to change to match it.
-  const stableOrderBy = `${orderByClause}, ctid`;
+  // always exists on any Postgres table. The Worker rebuilds this same
+  // ORDER BY internally for each page it fetches — sent here mainly for
+  // clarity/documentation, since the actual sort is now hardcoded
+  // server-side to match.
+  void orderByClause; // kept as a parameter for API compatibility; the Worker owns the actual ORDER BY now
 
-  // Keyset (cursor) pagination, not OFFSET — this is the actual fix for
-  // what crashed around a million rows. OFFSET N forces Postgres to scan
-  // and discard N rows before it can return the next page, so cost grows
-  // with depth: cheap at offset 1,000, expensive at offset 980,000. That's
-  // almost certainly what finally exceeded a resource limit inside the
-  // Worker and crashed it — Cloudflare's own generic error response for a
-  // crashed Worker doesn't carry the CORS headers this app's own code
-  // would normally add, which is why the browser reported it as a CORS
-  // failure rather than a timeout. Keyset pagination asks "rows after the
-  // last one I saw" via an index seek instead of a scan-and-discard, so
-  // cost stays roughly constant no matter how deep into the data it goes.
-  //
-  // _cursor_date/_cursor_tid are pagination bookkeeping only — stripped
-  // out of every row before it's used, never shown in the actual export.
-  const PAGE_SIZE = 20000;
+  // Batched keyset pagination — the Worker loops internally across up to
+  // 5 pages per request instead of the client making one request per
+  // page. This is the fix for the sustained 503s: at one connection per
+  // client request, a ~1M row export meant 45-100+ separate connections
+  // opened in quick succession, which is what was overwhelming Neon under
+  // sustained load — keyset pagination alone fixed the "gets slower with
+  // depth" problem, but not the sheer number of connections. Batching
+  // server-side cuts that count by 5x+ without needing new infrastructure.
+  const PAGE_SIZE = 40000; // was 20000 — still comfortably under Neon's 64MB response cap, but halves the total request count for a large export
+  const PAGES_PER_BATCH = 5;
   const MAX_ROWS = 2000000; // safety ceiling, not a real-world expectation
   let data = [];
-  let pageMode = mode;
-  let cursor = null; // { date, tid } of the last row seen, or null for the first page
+  let batchMode = mode;
+  let cursor = null;
   while (true) {
-    const keysetCondition = cursor
-      ? `(COALESCE(transaction_date,filing_date), ctid) < ('${String(cursor.date).replace(/'/g,"''")}', '${String(cursor.tid).replace(/'/g,"''")}'::tid)`
-      : null;
-    const pageWhere = keysetCondition ? `${whereClause} AND ${keysetCondition}` : whereClause;
-
-    const page = await proxyExportWithRetry(`
-      SELECT ${selectCols},
-             COALESCE(transaction_date,filing_date) AS _cursor_date,
-             ctid::text AS _cursor_tid
-      FROM public.filings ${pageWhere}
-      ${stableOrderBy} LIMIT ${PAGE_SIZE}
-    `, pageMode);
-
-    if (page.length > 0) {
-      const last = page[page.length - 1];
-      cursor = { date: last._cursor_date, tid: last._cursor_tid };
-    }
-    const cleaned = page.map(({ _cursor_date, _cursor_tid, ...rest }) => rest);
-    data = data.concat(cleaned);
+    const { rows, nextCursor, done } = await proxyExportWithRetry({
+      selectCols, whereClause: conditions.join(' AND '), cursor, pagesPerBatch: PAGES_PER_BATCH, pageSize: PAGE_SIZE, mode: batchMode,
+    });
+    data = data.concat(rows);
     if (onProgress) onProgress(data.length);
-    if (page.length < PAGE_SIZE || data.length >= MAX_ROWS) break;
-    // Only the FIRST page should spend a one-time 'consume' allowance —
+    cursor = nextCursor;
+    if (done || data.length >= MAX_ROWS) break;
+    // Only the FIRST batch should spend a one-time 'consume' allowance —
     // this is still one logical download, just split into several
-    // requests because of the size cap. Every page after the first uses
+    // requests because of the size cap. Every batch after the first uses
     // 'redownload' (requires only that a purchase exists at all) so
-    // continuing to page doesn't fail because the first page already
-    // marked the purchase used.
-    pageMode = 'redownload';
-    // A small gap between pages rather than firing the next request the
-    // instant this one resolves — for a very large export that's dozens
-    // of sequential requests, and giving Neon's connection pool a beat to
-    // release each one before the next arrives should help regardless of
-    // whether the 503s turn out to be a direct-vs-pooled connection
-    // string issue or something else entirely.
+    // continuing doesn't fail because the first batch already marked the
+    // purchase used.
+    batchMode = 'redownload';
+    // A small gap between batches rather than firing the next one the
+    // instant this resolves — gives Neon's connection pool a beat to
+    // release each connection before the next arrives.
     await new Promise(r => setTimeout(r, 150));
   }
 
