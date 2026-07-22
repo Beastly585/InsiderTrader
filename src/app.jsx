@@ -4655,19 +4655,34 @@ const COLUMN_LEGEND = [
 // on the one code path that had none.
 async function downloadFullExport(extraConditions='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC", mode='consume') {
   const today = new Date().toISOString().split('T')[0];
+  // Row inclusion stays permissive — same COALESCE check that was already
+  // proven to work (this is what returned real rows before). Requiring
+  // BOTH transaction_date AND filing_date to independently pass sanity
+  // checking (the previous version of this fix) turned out to exclude
+  // nearly the entire table — date corruption from the known ingestion
+  // bugs is apparently common enough that a large share of rows have at
+  // least one bad field even when the other is fine, and rejecting the
+  // whole row for that lost real data along with the bad value.
   const conditions = [
-    // Both fields bounded independently — not just the COALESCEd value.
-    // COALESCE prioritizes transaction_date, so a row with a valid
-    // transaction_date but a corrupted filing_date would still pass a
-    // COALESCE-only check and leak the bad filing_date into the output.
-    `(transaction_date IS NULL OR (transaction_date >= '2020-01-01' AND transaction_date <= '${today}'))`,
-    `(filing_date IS NULL OR (filing_date >= '2020-01-01' AND filing_date <= '${today}'))`,
+    `COALESCE(transaction_date,filing_date) >= '2020-01-01'`,
+    `COALESCE(transaction_date,filing_date) <= '${today}'`,
   ];
   if (extraConditions) conditions.push(extraConditions);
   const whereClause = 'WHERE ' + conditions.join(' AND ');
 
+  // Each date field sanitized independently IN THE OUTPUT instead — a
+  // corrupted transaction_date or filing_date comes back as NULL (blank
+  // in the sheet) rather than either showing garbage or taking the row's
+  // otherwise-good data down with it.
+  const dateExpr = col => `CASE WHEN ${col} >= '2020-01-01' AND ${col} <= '${today}' THEN ${col} END AS ${col}`;
+  const selectCols = EXPORT_COLS.map(c => {
+    if (c==='transaction_date' || c==='filing_date') return dateExpr(c);
+    if (c==='shares'||c==='price_per_share'||c==='value'||c==='pct_owned_change') return `${c}::float`;
+    return c;
+  }).join(',\n           ');
+
   const data = await proxyExport(`
-    SELECT ${EXPORT_COLS.map(c=>c==='shares'||c==='price_per_share'||c==='value'||c==='pct_owned_change'?`${c}::float`:c).join(',\n           ')}
+    SELECT ${selectCols}
     FROM public.filings ${whereClause}
     ${orderByClause} LIMIT 500000
   `, mode);
