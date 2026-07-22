@@ -114,6 +114,7 @@ function UpgradeModal({ feature, pro, onClose }) {
   const [plan, setPlan] = useState(feature==='data_export' ? 'data_export' : 'pro'); // which card is selected in the picker
   const [statusModal, setStatusModal] = useState(null);
   const [processing, setProcessing] = useState(false); // true for the gap between payment succeeding and the confirmation being ready
+  const [progressText, setProgressText] = useState(null); // live row-count updates during a large export
 
   // Personalized per the specific action that triggered this modal — a
   // generic "Upgrade to Pro" doesn't tell someone what they were actually
@@ -138,7 +139,7 @@ function UpgradeModal({ feature, pro, onClose }) {
   ];
 
   if (processing) {
-    return <ProcessingModal text={checkoutProduct==='pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…'}/>;
+    return <ProcessingModal text={progressText || (checkoutProduct==='pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…')}/>;
   }
 
   if (statusModal) {
@@ -169,13 +170,15 @@ function UpgradeModal({ feature, pro, onClose }) {
           // file, not being told where to go click a different button for
           // it. Start the download immediately, then confirm what happened.
           try {
-            const rowCount = await downloadFullExport();
+            const rowCount = await downloadFullExport('', undefined, 'consume', n => setProgressText(`${n.toLocaleString()} rows fetched so far…`));
             setCheckoutProduct(null);
             setProcessing(false);
+            setProgressText(null);
             setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.` });
           } catch (e) {
             setCheckoutProduct(null);
             setProcessing(false);
+            setProgressText(null);
             setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to Settings > Billing and click "Re-download" to get your file, no extra charge.` });
           }
         }}
@@ -501,17 +504,18 @@ function BillingSection({ user }) {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [statusModal, setStatusModal] = useState(null); // null | {title, message}
   const [processing, setProcessing] = useState(false);
+  const [progressText, setProgressText] = useState(null); // live row-count updates during a large export
   const [redownloadingIdx, setRedownloadingIdx] = useState(null); // index of the export-history row currently downloading, or null
   const [redownloadErr, setRedownloadErr] = useState(null);
 
   async function handleRedownload(idx) {
-    setRedownloadingIdx(idx); setRedownloadErr(null);
+    setRedownloadingIdx(idx); setRedownloadErr(null); setProgressText(null);
     try {
-      await downloadFullExport('', undefined, 'redownload');
+      await downloadFullExport('', undefined, 'redownload', n => setProgressText(`${n.toLocaleString()} rows…`));
     } catch (e) {
       setRedownloadErr(e.message);
     }
-    setRedownloadingIdx(null);
+    setRedownloadingIdx(null); setProgressText(null);
   }
 
   async function load() {
@@ -685,7 +689,7 @@ function BillingSection({ user }) {
                   <div className="settings-row__sub">${(p.amount_cents/100).toFixed(2)}</div>
                 </div>
                 <button className="btn btn--ghost btn--sm" disabled={redownloadingIdx!=null} onClick={()=>handleRedownload(i)}>
-                  {redownloadingIdx===i ? 'Downloading…' : 'Re-download'}
+                  {redownloadingIdx===i ? (progressText || 'Downloading…') : 'Re-download'}
                 </button>
               </div>
             ))}
@@ -707,7 +711,7 @@ function BillingSection({ user }) {
         />
       )}
 
-      {processing && <ProcessingModal text={checkoutProduct==='pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…'}/>}
+      {processing && <ProcessingModal text={progressText || (checkoutProduct==='pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…')}/>}
 
       {statusModal && (
         <StatusModal
@@ -732,13 +736,15 @@ function BillingSection({ user }) {
               return;
             }
             try {
-              const rowCount = await downloadFullExport();
+              const rowCount = await downloadFullExport('', undefined, 'consume', n => setProgressText(`${n.toLocaleString()} rows fetched so far…`));
               setCheckoutProduct(null);
               setProcessing(false);
+              setProgressText(null);
               setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.` });
             } catch (e) {
               setCheckoutProduct(null);
               setProcessing(false);
+              setProgressText(null);
               setStatusModal({ title: 'Purchase complete — download failed', message: `Your payment went through, but the download itself hit an error (${e.message}). Your purchase is saved — head to Settings > Billing and click "Re-download" to get your file, no extra charge.` });
             }
           }}
@@ -4606,6 +4612,32 @@ async function proxyExport(sql, mode='consume') {
   return d.rows || [];
 }
 
+// Wraps proxyExport with retries for the pagination loop specifically —
+// dozens to well over a hundred sequential requests for a large export
+// means SOME transient network hiccup along the way is fairly likely
+// eventually, and without this, one blip anywhere in that chain threw
+// away every page already successfully fetched. Only retries things that
+// plausibly succeed on a second attempt (a network-level failure, or a
+// 5xx from the Worker) — 401/403 fail immediately, since those are
+// deterministic access problems retrying won't fix, and silently burning
+// time on doomed retries before surfacing the same error just delays
+// telling the user what's actually wrong.
+async function proxyExportWithRetry(sql, mode, maxRetries=3) {
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await proxyExport(sql, mode);
+    } catch (e) {
+      lastErr = e;
+      const msg = e.message || '';
+      const retryable = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('went wrong exporting');
+      if (!retryable || attempt === maxRetries) throw e;
+      await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt))); // 0.5s, 1s, 2s backoff
+    }
+  }
+  throw lastErr;
+}
+
 const EXPORT_COLS = ['transaction_date','filing_date','ticker','company_name','insider_name','insider_title',
   'transaction_type','transaction_code','is_open_market','shares','price_per_share',
   'value','pct_owned_change','relationship','sector','footnotes'];
@@ -4658,7 +4690,7 @@ const COLUMN_LEGEND = [
 // upstream was rejecting them. DataPage's own filtered browsing already
 // had a same-shaped clamp, which is why this never showed up there — only
 // on the one code path that had none.
-async function downloadFullExport(extraConditions='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC", mode='consume') {
+async function downloadFullExport(extraConditions='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC", mode='consume', onProgress=null) {
   const today = new Date().toISOString().split('T')[0];
   // Row inclusion stays permissive — same COALESCE check that was already
   // proven to work (this is what returned real rows before). Requiring
@@ -4710,12 +4742,13 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   let offset = 0;
   let pageMode = mode;
   while (true) {
-    const page = await proxyExport(`
+    const page = await proxyExportWithRetry(`
       SELECT ${selectCols}
       FROM public.filings ${whereClause}
       ${stableOrderBy} LIMIT ${PAGE_SIZE} OFFSET ${offset}
     `, pageMode);
     data = data.concat(page);
+    if (onProgress) onProgress(data.length);
     if (page.length < PAGE_SIZE || data.length >= MAX_ROWS) break;
     offset += PAGE_SIZE;
     // Only the FIRST page should spend a one-time 'consume' allowance —
