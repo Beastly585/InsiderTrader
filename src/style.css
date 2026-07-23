@@ -2148,15 +2148,49 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .guide-hero__wordmark { color: #fff; font-weight: 800; font-size: 1.0625rem; letter-spacing: -0.02em; }
 
-/* Clearly-labeled stand-in for a real screenshot/animation not yet
-   captured from the live app — a bordered, dashed box reads unambiguously
-   as "placeholder" rather than something broken or unstyled. */
-.guide-placeholder-box {
-  margin: 14px 0; padding: 28px 16px; border: 1px dashed var(--border-md);
-  border-radius: var(--radius-md); background: var(--surface-2);
-  display: flex; align-items: center; justify-content: center; text-align: center;
+/* Environment preview mockups — compact, abstracted stand-ins for the five
+   app pages, built from real CSS variables so they theme correctly rather
+   than static images. Not literal screenshots, just enough shape to
+   recognize "this is the Data page" vs "this is Settings" at a glance. */
+.env-preview {
+  margin: 14px 0; padding: 14px; border: 0.5px solid var(--border);
+  border-radius: var(--radius-md); background: var(--surface);
+  display: flex; flex-direction: column; gap: 8px;
 }
-.guide-placeholder-box__label { font-size: 0.75rem; color: var(--text-3); max-width: 320px; }
+.env-preview__stats { display: flex; gap: 10px; margin-bottom: 4px; }
+.env-preview__stat { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.env-preview__stat-label { font-size: 0.5625rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); }
+.env-preview__stat-val { height: 8px; width: 70%; border-radius: 3px; background: var(--surface-2); }
+.env-preview__row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.env-preview__row--grid { display: grid; grid-template-columns: 44px 60px 1fr 40px; align-items: center; }
+.env-preview__ticker { display: inline-block; width: 40px; height: 9px; border-radius: 3px; background: var(--accent-50); }
+.env-preview__ticker--lg { width: 56px; height: 11px; }
+.env-preview__tag { display: inline-block; width: 52px; height: 8px; border-radius: 3px; background: var(--surface-2); }
+.env-preview__bar { display: inline-block; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--green-600), var(--green-600) 70%, transparent); opacity: 0.55; }
+.env-preview__num { display: inline-block; width: 34px; height: 8px; border-radius: 3px; margin-left: auto; }
+.env-preview__num--pos { background: var(--green-600); opacity: 0.4; }
+.env-preview__pills { display: flex; gap: 6px; }
+.env-preview__pill { display: inline-block; width: 34px; height: 14px; border-radius: 999px; background: var(--surface-2); }
+.env-preview__pill--active { background: var(--accent-50); }
+.env-preview__pill--sm { width: 26px; height: 12px; }
+.env-preview__toolbar { display: flex; gap: 6px; margin-bottom: 2px; }
+.env-preview__search { flex: 1; height: 14px; border-radius: 4px; background: var(--surface-2); }
+.env-preview__table { display: flex; flex-direction: column; gap: 4px; }
+.env-preview__trow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.env-preview__trow span { height: 7px; border-radius: 3px; background: var(--surface-2); }
+.env-preview__chip-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.env-preview__star { color: var(--accent); font-size: 0.75rem; }
+.env-preview__badge { display: inline-block; width: 44px; height: 12px; border-radius: 999px; background: var(--accent-50); margin-left: auto; }
+.env-preview--split { flex-direction: row; gap: 0; padding: 0; overflow: hidden; }
+.env-preview__nav { width: 72px; flex-shrink: 0; background: var(--surface-2); padding: 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+.env-preview__nav-item { display: block; height: 8px; border-radius: 3px; background: var(--border-md); }
+.env-preview__nav-item--active { background: var(--accent); opacity: 0.6; }
+.env-preview__panel { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.env-preview__panel-title { display: block; width: 90px; height: 10px; border-radius: 3px; background: var(--surface-2); }
+.env-preview__toggle-row { display: flex; align-items: center; justify-content: space-between; }
+.env-preview__toggle-row span:first-child { width: 100px; height: 8px; border-radius: 3px; background: var(--surface-2); }
+.env-preview__toggle { width: 26px; height: 14px; border-radius: 999px; background: var(--border-md); position: relative; }
+.env-preview__toggle--on { background: var(--accent); opacity: 0.7; }
 
 .guide-trust-demo {
   display: flex; align-items: center; gap: 10px; margin-top: 8px;
@@ -2937,11 +2971,11 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-benefit-row__body { font-size: 0.9375rem; line-height: 1.65; color: var(--text-2); max-width: 420px; }
 .lp-benefit-snippet-box {
   aspect-ratio: 4 / 3; border-radius: var(--radius-lg);
-  border: 1px dashed var(--border-md); background: var(--surface-2);
-  display: flex; align-items: center; justify-content: center; text-align: center;
-  padding: 24px;
+  border: 0.5px solid var(--border); background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
 }
-.lp-benefit-snippet-box__label { font-size: 0.75rem; color: var(--text-3); max-width: 240px; }
+.lp-benefit-snippet-box .env-preview { width: 100%; margin: 0; }
 
 
 /* Pricing section */

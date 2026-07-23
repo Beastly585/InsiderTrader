@@ -1226,7 +1226,7 @@ const GUIDE_SECTIONS = [
         <div className="guide-hero">
           <div className="guide-hero__mark" aria-hidden="true">
             {/* Placeholder for the animated/simple logo mark discussed in
-                the icon list below — a static wordmark stands in for now. */}
+                the icon list below. A static wordmark stands in for now. */}
             <span className="guide-hero__wordmark">Seli</span>
           </div>
         </div>
@@ -1243,12 +1243,12 @@ const GUIDE_SECTIONS = [
       <>
         <p>Every trade in Seli comes from a public government filing. Nothing here is estimated, scraped from a rumor, or licensed from a third party.</p>
         <ul>
-          <li><strong>Corporate insiders</strong> — Form 4, filed with the SEC by executives, directors, and major shareholders within two business days of a trade.</li>
-          <li><strong>Congress</strong> — periodic transaction reports required under the STOCK Act, filed by senators and representatives.</li>
+          <li><strong>Corporate insiders.</strong> Form 4, filed with the SEC by executives, directors, and major shareholders within two business days of a trade.</li>
+          <li><strong>Congress.</strong> Periodic transaction reports required under the STOCK Act, filed by senators and representatives.</li>
         </ul>
         <p>Seli checks for new filings on a recurring basis throughout the trading day, so a disclosure typically shows up here within minutes of becoming public, not the next morning.</p>
         <div className="guide-placeholder-box" aria-hidden="true">
-          <span className="guide-placeholder-box__label">Placeholder — short animation of a new filing landing in the feed</span>
+          <span className="guide-placeholder-box__label">Placeholder: short animation of a new filing landing in the feed</span>
         </div>
       </>
     ),
@@ -1262,7 +1262,7 @@ const GUIDE_SECTIONS = [
         <p>Every filing is also available on its own, unscored and unfiltered, on the Data page. Search by ticker or insider name, filter by date range or transaction type, and see exactly what was filed, with a direct link back to the original SEC document.</p>
         <p>If you'd rather draw your own conclusions than trust anyone's scoring, including ours, this is where to work.</p>
         <div className="guide-placeholder-box" aria-hidden="true">
-          <span className="guide-placeholder-box__label">Placeholder — screenshot of the Data page table</span>
+          <span className="guide-placeholder-box__label">Placeholder: screenshot of the Data page table</span>
         </div>
       </>
     ),
@@ -1288,7 +1288,7 @@ const GUIDE_SECTIONS = [
         </ul>
         <p>Only <strong>open-market</strong> trades count toward this. Option exercises, RSU vests, and grants are left out entirely, since they don't reflect someone choosing to put their own money in.</p>
         <div className="guide-placeholder-box" aria-hidden="true">
-          <span className="guide-placeholder-box__label">Placeholder — icon showing the conviction score badge</span>
+          <span className="guide-placeholder-box__label">Placeholder: icon showing the conviction score badge</span>
         </div>
         <p style={{ marginTop: 4 }}>Insiders themselves are ranked separately, by real track record, not trade volume:</p>
         <div className="guide-trust-demo" aria-hidden="true">
@@ -1330,7 +1330,7 @@ const GUIDE_SECTIONS = [
 const GuideContext = createContext(null);
 
 // Resolves the string icon names stored in GUIDE_SECTIONS to the actual
-// icon components — kept as strings in the content array so that array
+// icon components, kept as strings in the content array so that array
 // stays plain data, not a mix of data and component references.
 const GUIDE_ICON_MAP = {
   IconHome, IconData, IconInsights, IconZap, IconSettings,
@@ -5707,7 +5707,7 @@ function TermsPage() {
         <p>Seli aggregates and scores publicly available SEC Form 4 insider trading disclosures, congressional trading disclosures filed under the STOCK Act, and related market data. Every trade you see on Seli is sourced from public government databases, including the SEC's EDGAR system.</p>
 
         <h2>3. Not Financial Advice</h2>
-        <p>Seli is informational and educational, not investment guidance. Nothing here — conviction scores, rankings, alerts, or anything else — constitutes financial, investment, legal, or tax advice. We are not a registered investment advisor, broker-dealer, or financial planner. Talk to a qualified financial professional before making investment decisions. Past insider trading patterns don't predict future results.</p>
+        <p>Seli is informational and educational, not investment guidance. Nothing here (conviction scores, rankings, alerts, or anything else) constitutes financial, investment, legal, or tax advice. We are not a registered investment advisor, broker-dealer, or financial planner. Talk to a qualified financial professional before making investment decisions. Past insider trading patterns don't predict future results.</p>
 
         <h2>4. Data Accuracy</h2>
         <p>We make reasonable efforts to keep Seli's data accurate, but we make no representations or warranties about its completeness, accuracy, or timeliness. SEC filings themselves can contain errors, and there can be delays between a filing's actual date and when it appears in Seli. You assume all risk associated with relying on this information.</p>
@@ -5716,7 +5716,7 @@ function TermsPage() {
         <p>You'll need an account to access certain features. You're responsible for keeping your account credentials secure, providing accurate information, and telling us right away if you notice unauthorized use of your account.</p>
 
         <h2>6. Brokerage Connections</h2>
-        <p>If you connect a brokerage account, you're authorizing Seli to retrieve read-only account data — positions, balances, account information — on your behalf. We never store your brokerage credentials, and Seli can never execute a trade for you. You can disconnect your brokerage account at any time from Settings.</p>
+        <p>If you connect a brokerage account, you're authorizing Seli to retrieve read-only account data (positions, balances, account information) on your behalf. We never store your brokerage credentials, and Seli can never execute a trade for you. You can disconnect your brokerage account at any time from Settings.</p>
 
         <h2>7. Subscriptions and Billing</h2>
         <p>Certain features require a paid subscription. Subscriptions bill monthly. You can cancel anytime; cancellation takes effect at the end of your current billing period, not immediately. We reserve the right to change pricing with 30 days' notice. Payments are processed by Stripe and subject to Stripe's own terms of service.</p>
@@ -5725,7 +5725,7 @@ function TermsPage() {
         <p>You may not: (a) use Seli for any unlawful purpose; (b) scrape, crawl, or otherwise systematically extract data from Seli; (c) resell or redistribute our data without written permission; (d) attempt to gain unauthorized access to any part of Seli; (e) use Seli to facilitate insider trading or securities fraud.</p>
 
         <h2>9. Intellectual Property</h2>
-        <p>Seli — including its design, algorithms, and conviction scoring methodology — is the property of Kevin Maresca. The underlying SEC filing data itself is public domain. You may not copy, modify, or distribute Seli's proprietary systems without permission.</p>
+        <p>Seli, including its design, algorithms, and conviction scoring methodology, is the property of Kevin Maresca. The underlying SEC filing data itself is public domain. You may not copy, modify, or distribute Seli's proprietary systems without permission.</p>
 
         <h2>10. Disclaimer of Warranties</h2>
         <p>Seli is provided "as is," without warranty of any kind. We disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, and non-infringement.</p>
@@ -5784,7 +5784,7 @@ function PrivacyPage() {
 
         <h2>2. Information We Collect</h2>
         <h3>Account Information</h3>
-        <p>When you create a Seli account, we collect your email address and, if you sign in with Google, your Google profile name and picture. Authentication runs through Clerk (clerk.com) — Seli never stores your password.</p>
+        <p>When you create a Seli account, we collect your email address and, if you sign in with Google, your Google profile name and picture. Authentication runs through Clerk (clerk.com). Seli never stores your password.</p>
 
         <h3>Watchlist Data</h3>
         <p>Tickers and insiders you add to your watchlist are stored in Seli's database, tied to your account.</p>
@@ -5793,7 +5793,7 @@ function PrivacyPage() {
         <p>If you connect a brokerage account, Seli stores an encrypted access token to retrieve your portfolio data, and holds your position data temporarily for display. Seli never stores your brokerage username or password.</p>
 
         <h3>Usage Data</h3>
-        <p>Standard server logs — IP addresses, browser type, pages visited — for security and performance monitoring. Seli never sells this data.</p>
+        <p>Standard server logs (IP addresses, browser type, pages visited) for security and performance monitoring. Seli never sells this data.</p>
 
         <h2>3. How We Use Your Information</h2>
         <p>To: (a) provide and improve Seli; (b) show your portfolio alongside relevant insider trading signals; (c) send transactional emails (account verification, password reset) through Clerk; (d) send alert emails if you subscribe to Pro notifications; (e) process payments through Stripe.</p>
@@ -5801,23 +5801,23 @@ function PrivacyPage() {
         <h2>4. Data Sharing</h2>
         <p>Seli doesn't sell your personal data. We share data only with the service providers who help run Seli:</p>
         <ul>
-          <li><strong>Clerk</strong> (clerk.com) — authentication and user management</li>
-          <li><strong>Stripe</strong> (stripe.com) — payment processing</li>
-          <li><strong>Neon</strong> (neon.tech) — database hosting</li>
-          <li><strong>Cloudflare</strong> (cloudflare.com) — hosting and security</li>
+          <li><strong>Clerk</strong> (clerk.com): authentication and user management</li>
+          <li><strong>Stripe</strong> (stripe.com): payment processing</li>
+          <li><strong>Neon</strong> (neon.tech): database hosting</li>
+          <li><strong>Cloudflare</strong> (cloudflare.com): hosting and security</li>
         </ul>
 
         <h2>5. Data Retention</h2>
-        <p>Your account data stays with us for as long as your account is active. Delete your account, and we delete your personal data within 30 days. Watchlist and broker connection data is removed immediately on disconnection or account deletion — no delay there.</p>
+        <p>Your account data stays with us for as long as your account is active. Delete your account, and we delete your personal data within 30 days. Watchlist and broker connection data is removed immediately on disconnection or account deletion, with no delay.</p>
 
         <h2>6. Security</h2>
-        <p>Encrypted connections (HTTPS), encrypted storage of sensitive tokens (AES-256), and access controls throughout. No system is 100% secure — you use Seli at your own risk.</p>
+        <p>Encrypted connections (HTTPS), encrypted storage of sensitive tokens (AES-256), and access controls throughout. No system is 100% secure, so you use Seli at your own risk.</p>
 
         <h2>7. Your Rights</h2>
         <p>You can: (a) access or export your data by contacting us; (b) delete your account and everything tied to it, anytime; (c) disconnect any brokerage connection anytime from Settings; (d) opt out of marketing emails anytime.</p>
 
         <h2>8. Cookies</h2>
-        <p>Seli uses only essential cookies required for authentication (managed by Clerk) — no advertising or tracking cookies. Full details live in our <a href="/cookies">Cookie Policy</a>.</p>
+        <p>Seli uses only essential cookies required for authentication (managed by Clerk), with no advertising or tracking cookies. Full details live in our <a href="/cookies">Cookie Policy</a>.</p>
 
         <h2>9. Children's Privacy</h2>
         <p>Seli isn't directed at children under 13, and we don't knowingly collect personal information from anyone under 13.</p>
@@ -5866,22 +5866,22 @@ function CookiePage() {
         <p className="legal-date">Last updated: July 22, 2026</p>
 
         <h2>1. What This Covers</h2>
-        <p>The cookies and similar browser-storage technologies (like localStorage) Seli actually uses — kept short on purpose, since Seli doesn't use advertising or tracking cookies, and never sells data to anyone.</p>
+        <p>The cookies and similar browser-storage technologies (like localStorage) Seli actually uses. Kept short on purpose, since Seli doesn't use advertising or tracking cookies, and never sells data to anyone.</p>
 
         <h2>2. Essential Cookies</h2>
-        <p>Signing in and staying signed in requires a session cookie, set by Seli's authentication provider, Clerk (clerk.com). It's strictly necessary — without it, Seli can't tell you're signed in, so there's no opt-out for it while still using an account.</p>
+        <p>Signing in and staying signed in requires a session cookie, set by Seli's authentication provider, Clerk (clerk.com). It's strictly necessary. Without it, Seli can't tell you're signed in, so there's no opt-out for it while still using an account.</p>
 
         <h2>3. Local Storage (Not a Cookie, But Similar)</h2>
-        <p>Seli also uses your browser's localStorage — data that stays on your device, never sent to our servers — for a few small preferences: whether you've already seen the welcome guide, your light/dark theme choice, and your risk-appetite setting on the Signal Ranking slider. Clearing your browser's site data resets these to their defaults; your account itself is untouched.</p>
+        <p>Seli also uses your browser's localStorage (data that stays on your device, never sent to our servers) for a few small preferences: whether you've already seen the welcome guide, your light/dark theme choice, and your risk-appetite setting on the Signal Ranking slider. Clearing your browser's site data resets these to their defaults, and your account itself is untouched.</p>
 
         <h2>4. What Seli Doesn't Use</h2>
         <p>No advertising cookies. No third-party tracking or analytics cookies. No cross-site tracking. No cookie-based fingerprinting.</p>
 
         <h2>5. Third-Party Services</h2>
-        <p>A few features route through services with their own cookie practices while you're actively using them — Stripe during checkout, and your brokerage's own site during the SnapTrade connection flow. Seli doesn't control those cookies; their own policies apply while you're on their pages.</p>
+        <p>A few features route through services with their own cookie practices while you're actively using them, such as Stripe during checkout and your brokerage's own site during the SnapTrade connection flow. Seli doesn't control those cookies, and their own policies apply while you're on their pages.</p>
 
         <h2>6. Your Choices</h2>
-        <p>Most browsers let you block or delete cookies in settings. Blocking Clerk's session cookie prevents sign-in entirely, since it's required for authentication — there's no way around this while still using a Seli account.</p>
+        <p>Most browsers let you block or delete cookies in settings. Blocking Clerk's session cookie prevents sign-in entirely, since it's required for authentication, and there's no way around this while still using a Seli account.</p>
 
         <h2>7. Changes to This Policy</h2>
         <p>We may update this policy if what Seli uses changes. Material changes show up here with an updated date.</p>
@@ -5907,7 +5907,7 @@ function CookiePage() {
 }
 
 // ─── HELP CENTER ──────────────────────────────────────────────────────────────
-// A real, linkable page — not just a modal — so a support email or footer
+// A real, linkable page, not just a modal, so a support email or footer
 // link can point somewhere specific. Every section ends in a live path
 // forward (a link to Settings, or to support) rather than leaving the
 // reader stuck if the article didn't solve their problem.
@@ -5917,13 +5917,13 @@ const HELP_SECTIONS = [
     label: 'Using Seli',
     render: () => (
       <>
-        <p>Seli has five sections, each doing a different job. Here's what each one is actually for:</p>
+        <p>Seli has five sections, each doing a different job. Here's what each one is actually for.</p>
         <h3>Dashboard</h3>
-        <p>Your daily overview — market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news. Start here if you just want to know what's happening today.</p>
+        <p>Your daily overview: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news. Start here if you just want to know what's happening today.</p>
         <h3>Insights</h3>
-        <p>The full, filterable signal feed — every conviction-scored trade, filterable by window, strength, type (corporate vs. congressional), and sector. This is where to dig into "what's actually worth paying attention to right now."</p>
+        <p>The full, filterable signal feed. Every conviction-scored trade, filterable by window, strength, type (corporate vs. congressional), and sector. This is where to dig into "what's actually worth paying attention to right now."</p>
         <h3>Data</h3>
-        <p>The raw, unscored filings — every trade, searchable and filterable, with a link back to the original government filing. No ranking or opinion applied. If you want to draw your own conclusions, this is where to work.</p>
+        <p>The raw, unscored filings. Every trade, searchable and filterable, with a link back to the original government filing. No ranking or opinion applied. If you want to draw your own conclusions, this is where to work.</p>
         <h3>Watchlist</h3>
         <p>Tickers and insiders you've chosen to follow (Pro). Their activity surfaces ahead of everything else, and it's what instant alerts and personalized digests are built from.</p>
         <h3>Settings</h3>
@@ -5937,17 +5937,17 @@ const HELP_SECTIONS = [
     render: () => (
       <>
         <h3>Where does the data come from?</h3>
-        <p>Every trade comes from a public government filing — SEC Form 4 for corporate insiders, and STOCK Act periodic transaction reports for Congress. Nothing is scraped from rumors or licensed from a third party.</p>
+        <p>Every trade comes from a public government filing: SEC Form 4 for corporate insiders, and STOCK Act periodic transaction reports for Congress. Nothing is scraped from rumors or licensed from a third party.</p>
         <h3>How current is it?</h3>
-        <p>Seli checks for new filings on a recurring basis throughout the trading day — a disclosure typically appears within minutes of becoming public, not the next morning.</p>
+        <p>Seli checks for new filings on a recurring basis throughout the trading day. A disclosure typically appears within minutes of becoming public, not the next morning.</p>
         <h3>Is this financial advice?</h3>
-        <p>No. Seli is informational only. Nothing here is a recommendation to buy or sell anything — see our <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
+        <p>No. Seli is informational only. Nothing here is a recommendation to buy or sell anything. See our <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
         <h3>Can Seli place trades for me?</h3>
-        <p>No. Brokerage connections are read-only. Seli can see your positions to show relevant signals; it can never place a trade.</p>
+        <p>No. Brokerage connections are read-only. Seli can see your positions to show relevant signals, but it can never place a trade.</p>
         <h3>Why don't option exercises or RSU vests count toward conviction scores?</h3>
-        <p>Only open-market trades — someone putting their own cash in — count toward conviction. A scheduled option exercise or equity vest doesn't reflect a discretionary bet the way an open-market purchase does.</p>
+        <p>Only open-market trades, meaning someone putting their own cash in, count toward conviction. A scheduled option exercise or equity vest doesn't reflect a discretionary bet the way an open-market purchase does.</p>
         <h3>Still have a question?</h3>
-        <p>Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> — real questions from real users are exactly what shapes this FAQ and the product itself.</p>
+        <p>Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. Real questions from real users are exactly what shapes this FAQ and the product itself.</p>
       </>
     ),
   },
@@ -5957,13 +5957,13 @@ const HELP_SECTIONS = [
     render: () => (
       <>
         <h3>What does Pro include?</h3>
-        <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests — $11.99/month.</p>
+        <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests, for $11.99 per month.</p>
         <h3>What's the Full Data Export?</h3>
-        <p>A separate, one-time $39.99 purchase — a complete pull of the database as a spreadsheet, independent of a Pro subscription. Each purchase includes one download; if you need it again later, use Re-download in Settings &gt; Billing at no extra charge (this pulls current data, not a frozen copy from your original purchase date).</p>
+        <p>A separate, one-time $39.99 purchase: a complete pull of the database as a spreadsheet, independent of a Pro subscription. Each purchase includes one download. If you need it again later, use Re-download in Settings &gt; Billing at no extra charge (this pulls current data, not a frozen copy from your original purchase date).</p>
         <h3>How do I cancel Pro?</h3>
-        <p>Settings &gt; Billing &gt; Cancel subscription. You keep full access through the end of the period you already paid for — cancellation doesn't cut you off immediately.</p>
+        <p>Settings &gt; Billing &gt; Cancel subscription. You keep full access through the end of the period you already paid for. Cancellation doesn't cut you off immediately.</p>
         <h3>Can I come back after canceling?</h3>
-        <p>Yes, anytime — Settings &gt; Billing shows a reactivate option if you cancel before the period actually ends, or you can simply upgrade again afterward.</p>
+        <p>Yes, anytime. Settings &gt; Billing shows a reactivate option if you cancel before the period actually ends, or you can simply upgrade again afterward.</p>
         <h3>Billing questions we didn't cover?</h3>
         <p>Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> with your account email and we'll sort it out directly.</p>
       </>
@@ -5974,13 +5974,13 @@ const HELP_SECTIONS = [
     label: 'Alerts',
     render: () => (
       <>
-        <p>Two separate systems, both configured in Settings &gt; Notifications, both Pro features:</p>
+        <p>Two separate systems, both configured in Settings &gt; Notifications, both Pro features.</p>
         <h3>Instant alerts</h3>
-        <p>Fire as soon as a qualifying trade is detected — a ticker or insider on your watchlist trading, a high-conviction signal, or a reversal (an insider trading opposite their recent pattern). Each trigger can be turned on or off independently.</p>
+        <p>Fire as soon as a qualifying trade is detected: a ticker or insider on your watchlist trading, a stock you actually hold in a connected brokerage account, a high-conviction signal, or a reversal (an insider trading opposite their recent pattern). Each trigger can be turned on or off independently.</p>
         <h3>Digests</h3>
-        <p>A daily or weekly email summary instead of (or alongside) instant alerts — top signals, filtered by minimum conviction, source (corporate/congressional), and whether it's limited to your watchlist.</p>
+        <p>A daily or weekly email summary instead of, or alongside, instant alerts. Top signals, filtered by minimum conviction, source (corporate or congressional), and whether it's limited to your watchlist.</p>
         <h3>Not receiving alerts you expect?</h3>
-        <p>First check Settings &gt; Notifications to confirm the specific trigger is switched on — a common cause is a trigger being off by default. There's also a test-email button there to confirm delivery is working at all. If it's still not arriving, email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+        <p>First check Settings &gt; Notifications to confirm the specific trigger is switched on. A common cause is a trigger being off by default. There's also a test-email button there to confirm delivery is working at all. If it's still not arriving, email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </>
     ),
   },
@@ -5990,13 +5990,13 @@ const HELP_SECTIONS = [
     render: () => (
       <>
         <h3>How does linking work?</h3>
-        <p>Through SnapTrade, a third-party connection service — Seli never sees or stores your brokerage username or password. Access is read-only: Seli can see your positions, never place a trade.</p>
+        <p>Through SnapTrade, a third-party connection service. Seli never sees or stores your brokerage username or password. Access is read-only: Seli can see your positions, never place a trade.</p>
         <h3>Can I disconnect?</h3>
-        <p>Anytime, from Settings — disconnecting removes the stored connection immediately, not on a delay.</p>
+        <p>Anytime, from Settings. Disconnecting removes the stored connection immediately, not on a delay.</p>
         <h3>My broker isn't listed</h3>
-        <p>Broker support is expanding — if yours isn't available yet, check back, or let us know at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> which one you'd want to see supported.</p>
+        <p>Broker support is expanding. If yours isn't available yet, check back, or let us know at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> which one you'd want to see supported.</p>
         <h3>The performance chart looks off</h3>
-        <p>Portfolio performance is an approximation based on your current holdings, not a full reconstruction of every historical buy and sell — so it shows what your present position would be worth over time, not necessarily your actual realized returns.</p>
+        <p>Portfolio performance is an approximation based on your current holdings, not a full reconstruction of every historical buy and sell. It shows what your present position would be worth over time, not necessarily your actual realized returns.</p>
       </>
     ),
   },
@@ -6919,20 +6919,6 @@ function LandingPage({ onEnter, dark, setDark }) {
   // no hedging, no forced enthusiasm.
   const WHATS_INSIDE = [
     {
-      icon: 'IconData',
-      eyebrow: 'Data',
-      title: `Every filing since ${dataSinceYear}`,
-      body: `House, Senate, and corporate insider trades, all pulled straight from public SEC and STOCK Act disclosures. Nothing here is a rumor or a paid data feed. It's what was actually filed, going back to ${dataSinceYear}.`,
-      snippetLabel: 'Placeholder — Data page table, filtered to a ticker',
-    },
-    {
-      icon: 'IconInsights',
-      eyebrow: 'Signals',
-      title: 'See who\'s actually good at this',
-      body: 'Insiders and members of Congress ranked by their real track record, not by how much they traded. When someone with a strong history makes a big move, it shows up fast.',
-      snippetLabel: 'Placeholder — Top insiders leaderboard row with hit rate',
-    },
-    {
       icon: 'IconLink',
       eyebrow: 'Portfolio',
       title: 'Watch your own holdings, and theirs',
@@ -6945,6 +6931,20 @@ function LandingPage({ onEnter, dark, setDark }) {
       title: 'Get notified the moment it happens',
       body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you find out right away, not the next time you happen to check.',
       snippetLabel: 'Placeholder — instant alert email',
+    },
+    {
+      icon: 'IconData',
+      eyebrow: 'Data',
+      title: `Every filing since ${dataSinceYear}`,
+      body: `House, Senate, and corporate insider trades, all pulled straight from public SEC and STOCK Act disclosures. Nothing here is a rumor or a paid data feed. It's what was actually filed, going back to ${dataSinceYear}.`,
+      snippetLabel: 'Placeholder — Data page table, filtered to a ticker',
+    },
+    {
+      icon: 'IconInsights',
+      eyebrow: 'Signals',
+      title: 'See who\'s actually good at this',
+      body: 'Insiders and members of Congress ranked by their real track record, not by how much they traded. When someone with a strong history makes a big move, it shows up fast.',
+      snippetLabel: 'Placeholder — Top insiders leaderboard row with hit rate',
     },
   ];
   useEffect(() => {
@@ -7021,13 +7021,14 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-hero">
         <div className="lp-hero-bg" aria-hidden="true"/>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Insider trading signals.<br/>
-          <span className="lp-hero__h1-accent">Before the market moves.</span>
+          Your portfolio, watched around the clock.<br/>
+          <span className="lp-hero__h1-accent">Seli tells you the moment it matters.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          Seli ingests every SEC Form 4 within minutes of publication,
-          scores each signal by conviction, and surfaces the ones worth acting on.
-          Built for serious retail investors.
+          Connect your brokerage or follow the tickers you care about, and get an alert the
+          instant an executive, director, or member of Congress trades one of them.
+          Every signal traces back to a real SEC or STOCK Act filing, scored by conviction
+          so you know what actually deserves your attention.
         </p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
