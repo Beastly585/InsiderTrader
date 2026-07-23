@@ -27,7 +27,7 @@ Four trigger types, matching the Settings > Instant alerts UI exactly:
                                (subject to their instant_min_value floor)
 """
 from __future__ import annotations
-import os, sys, re, logging, requests
+import os, sys, re, time, logging, requests
 from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import load_dotenv
@@ -51,6 +51,12 @@ FROM_NAME        = "Seli - Alert"
 APP_URL          = os.environ.get("APP_URL", "https://seli.app")
 DRY_RUN          = os.environ.get("DRY_RUN", "false").lower() == "true"
 BATCH_LIMIT      = 2000  # safety cap — a normal 15-min cycle should be far under this
+# For the portfolio-holding trigger — reuses the same server-to-server
+# endpoint and key the Worker already exposes for exactly this purpose
+# (handlePortfolioTickersBatch), rather than duplicating SnapTrade calls
+# or credentials here.
+WORKER_API_KEY   = os.environ.get("WORKER_API_KEY", "")
+NEON_PROXY_URL   = os.environ.get("NEON_PROXY_URL", "https://neon-proxy.beastly-insider-trades.workers.dev")
 
 if not DATABASE_URL:
     log.error("DATABASE_URL required"); sys.exit(1)
@@ -80,24 +86,35 @@ def get_connection():
         import psycopg2; return psycopg2.connect(DATABASE_URL)
 
 
-def send_email(to_email: str, subject: str, html: str) -> bool:
+def send_email(to_email: str, subject: str, html: str, max_retries: int = 3) -> bool:
     if DRY_RUN:
         log.info(f"  [DRY RUN] would send to {to_email}: {subject}")
         return True
-    try:
-        r = requests.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={"from": f"{FROM_NAME} <{FROM_EMAIL}>", "to": [to_email], "subject": subject, "html": html},
-            timeout=15,
-        )
-        if not r.ok:
-            log.error(f"  Resend error for {to_email}: {r.status_code} {r.text[:200]}")
-            return False
-        return True
-    except Exception as e:
-        log.error(f"  Send failed for {to_email}: {e}")
-        return False
+    for attempt in range(max_retries):
+        try:
+            r = requests.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                json={"from": f"{FROM_NAME} <{FROM_EMAIL}>", "to": [to_email], "subject": subject, "html": html},
+                timeout=15,
+            )
+            if r.ok:
+                return True
+            # 429 (rate limited) and 5xx (Resend-side issue) are worth
+            # retrying — a filing gets marked processed regardless of send
+            # outcome below, so a transient failure here previously meant
+            # silent, permanent loss of that specific alert. A genuine 4xx
+            # (bad request, bad key) won't succeed on retry, so fail fast
+            # on those instead of wasting the remaining attempts.
+            retryable = r.status_code == 429 or r.status_code >= 500
+            log.error(f"  Resend error for {to_email} (attempt {attempt+1}/{max_retries}): {r.status_code} {r.text[:200]}")
+            if not retryable:
+                return False
+        except Exception as e:
+            log.error(f"  Send failed for {to_email} (attempt {attempt+1}/{max_retries}): {e}")
+        if attempt < max_retries - 1:
+            time.sleep(2 * (attempt + 1))  # 2s, 4s
+    return False
 
 
 def fmt_money(v):
@@ -110,16 +127,47 @@ def fmt_money(v):
     return f"{sign}${v:,.0f}"
 
 
+def fetch_portfolio_tickers() -> dict[str, set[str]]:
+    """Real per-user holdings, sourced from the Worker's existing
+    /internal/portfolio-tickers-batch endpoint — the same server-to-server
+    route and WORKER_API_KEY already used for this exact purpose elsewhere,
+    not a new SnapTrade integration. Only Pro users with an active
+    connection have anything here. If WORKER_API_KEY isn't set, or the
+    call fails for any reason, this degrades to an empty mapping rather
+    than crashing the whole alert run — the watchlist/insider/reversal
+    triggers should keep working even if the portfolio piece is
+    unavailable for a moment.
+    """
+    if not WORKER_API_KEY:
+        log.warning("  WORKER_API_KEY not set — skipping portfolio-holding trigger this run.")
+        return {}
+    try:
+        r = requests.get(
+            f"{NEON_PROXY_URL}/internal/portfolio-tickers-batch",
+            headers={"X-API-Key": WORKER_API_KEY},
+            timeout=30,
+        )
+        if not r.ok:
+            log.warning(f"  portfolio-tickers-batch returned {r.status_code} — skipping this run: {r.text[:200]}")
+            return {}
+        data = r.json().get("tickers_by_user", {})
+        return {uid: set(tickers) for uid, tickers in data.items()}
+    except Exception as e:
+        log.warning(f"  portfolio-tickers-batch failed — skipping this run: {e}")
+        return {}
+
+
 def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
     n = len(matches)
     subject = f"{n} insider alert{'s' if n != 1 else ''} — {matches[0]['ticker']}" if n == 1 else f"{n} insider alerts triggered"
     rows = ""
     for m in matches:
         reason_label = {
-            "watchlist_ticker": "Watched ticker traded",
-            "followed_insider": "Followed insider filed",
-            "high_conviction":  "High conviction signal",
-            "reversal":         "Reversal detected",
+            "watchlist_ticker":   "Watched ticker traded",
+            "followed_insider":   "Followed insider filed",
+            "high_conviction":    "High conviction signal",
+            "reversal":           "Reversal detected",
+            "portfolio_holding":  "You hold this stock",
         }[m["reason"]]
         color = C_GREEN if m["transaction_type"] == "buy" else C_RED
         action = "Buy" if m["transaction_type"] == "buy" else "Sell"
@@ -137,7 +185,7 @@ def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
             <span style="color:{C_TEXT_MUTED};font-size:12px;">{m['company_name']}</span>
           </td>
           <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};color:{C_TEXT_MUTED};font-size:12px;">{reason_label}</td>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{C_TEXT_MUTED};">{m['insider_name']}<br><span style="color:{C_TEXT_FAINT};">{date_label}</span></td>
+          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{C_TEXT_MUTED};">{m['insider_name']}{f'<br><span style="color:{C_TEXT_FAINT};">{m["insider_title"]}</span>' if m.get('insider_title') else ''}<br><span style="color:{C_TEXT_FAINT};">{date_label}</span></td>
           <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{color};font-weight:700;">{action}<br><span style="color:{C_TEXT_MUTED};font-weight:400;">{detail_bits}</span></td>
           <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};text-align:right;font-weight:700;color:{color};font-size:13px;white-space:nowrap;">{fmt_money(m['value'])}</td>
         </tr>"""
@@ -198,6 +246,18 @@ def main():
                ) AS prior_type
         FROM public.filings f
         WHERE f.alerted_at IS NULL AND f.is_open_market = true
+          -- Recency guard — the actual permanent fix for the backfill
+          -- flood. alerted_at IS NULL only means "never been considered
+          -- by this script," not "just happened" — a bulk historical
+          -- insert (a backfill, a re-run, a data fix) creates rows with
+          -- alerted_at NULL regardless of how old the trade itself is.
+          -- Without this, "watchlist_ticker" and "followed_insider"
+          -- alerts could fire on trades from a decade ago the moment
+          -- they're inserted. 5 days covers the ingest workflow's own
+          -- Tier D safety-net lookback (4 days) with a small buffer,
+          -- while staying nowhere near old enough to let backfilled
+          -- history through as if it just happened.
+          AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - INTERVAL '5 days'
         ORDER BY COALESCE(f.transaction_date, f.filing_date)
         LIMIT %s
     """, (BATCH_LIMIT,))
@@ -240,6 +300,11 @@ def main():
         target = watchlist_tickers if item_type == "ticker" else watchlist_insiders
         target.setdefault(uid, set()).add(item_value)
 
+    # Real portfolio holdings for the new "ptfl has it" trigger — fetched
+    # once per run, not once per user, since the Worker's endpoint already
+    # returns everyone's holdings in a single batched call.
+    portfolio_tickers = fetch_portfolio_tickers()
+
     per_user_matches: dict[str, list[dict]] = {}
 
     def add_match(uid, filing, reason):
@@ -260,6 +325,16 @@ def main():
 
             if u["instant_watchlist_ticker"] and meets_min and f["ticker"] in watchlist_tickers.get(uid, ()):
                 add_match(uid, f, "watchlist_ticker")
+            # Same toggle as watchlist_ticker, deliberately — "a ticker you
+            # care about traded" is the same underlying idea whether it's
+            # explicitly starred or actually sitting in a connected
+            # brokerage account. A separate settings toggle would mean
+            # another DB column, another Settings UI control, and another
+            # thing for a user to have to know to turn on; this way it
+            # just works the moment they connect a broker and already
+            # have watchlist alerts on.
+            if u["instant_watchlist_ticker"] and meets_min and f["ticker"] in portfolio_tickers.get(uid, ()):
+                add_match(uid, f, "portfolio_holding")
             if u["instant_followed_insider"] and meets_min and f["insider_name"] in watchlist_insiders.get(uid, ()):
                 add_match(uid, f, "followed_insider")
             hc_threshold = u["instant_high_conviction_threshold"] or 1_000_000
@@ -269,19 +344,41 @@ def main():
                 add_match(uid, f, "reversal")
 
     email_by_id = {u["clerk_user_id"]: u["email"] for u in users}
+
+    # Per-filing delivery tracking — this is the actual fix for the earlier
+    # bug. Previously every filing in a batch got marked alerted_at=now()
+    # regardless of whether any individual send failed, so a transient
+    # Resend issue could silently and permanently lose that user's alert —
+    # the filing would never be looked at again. Now a filing with at
+    # least one failed delivery stays unprocessed and gets reconsidered
+    # next run. The tradeoff: a user who WAS successfully notified about
+    # that same filing could get a duplicate on the retry. A duplicate is
+    # a minor annoyance; a silently missed alert defeats the point of the
+    # feature — worth the tradeoff.
+    filing_failed = set()  # accession_numbers with at least one failed delivery this run
+    expected_notifications = len(per_user_matches)  # one email owed per matching user
     sent = 0
     for uid, matches in per_user_matches.items():
         subject, html = build_email(email_by_id[uid], matches)
         if send_email(email_by_id[uid], subject, html):
             sent += 1
+        else:
+            for m in matches:
+                filing_failed.add(m["accession_number"])
 
-    log.info(f"Sent {sent} alert email(s) to {len(per_user_matches)} user(s), covering {len(new_filings)} filings.")
+    safe_to_mark = [f["accession_number"] for f in new_filings if f["accession_number"] not in filing_failed]
 
-    cur.execute("UPDATE public.filings SET alerted_at = now() WHERE accession_number = ANY(%s)",
-                ([f["accession_number"] for f in new_filings],))
-    conn.commit()
+    log.info(f"Sent {sent}/{expected_notifications} alert email(s) to {len(per_user_matches)} user(s), covering {len(new_filings)} filings.")
+    if sent < expected_notifications:
+        log.warning(f"  {expected_notifications - sent} email(s) failed even after retries — "
+                    f"{len(filing_failed)} filing(s) left unprocessed and will be re-checked next run.")
+
+    if safe_to_mark:
+        cur.execute("UPDATE public.filings SET alerted_at = now() WHERE accession_number = ANY(%s)",
+                    (safe_to_mark,))
+        conn.commit()
     cur.close(); conn.close()
-    log.info(f"Marked {len(new_filings)} filings as alert-processed.")
+    log.info(f"Marked {len(safe_to_mark)}/{len(new_filings)} filings as alert-processed.")
 
 
 if __name__ == "__main__":

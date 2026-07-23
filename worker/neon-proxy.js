@@ -257,6 +257,23 @@ const workerHandler = {
     if (url.pathname === '/export/snapshot') {
       return handleExportSnapshot(request, env, origin);
     }
+    // TEMPORARY — manual trigger for the snapshot build, while diagnosing
+    // why the scheduled cron hasn't produced a file in R2 yet. Same
+    // WORKER_API_KEY check as other internal routes, not open to the
+    // public. Remove this once the actual cron is confirmed working —
+    // it's a debugging aid, not meant to be a permanent second way to
+    // trigger this.
+    if (url.pathname === '/internal/build-snapshot-now') {
+      const apiKey = request.headers.get('X-API-Key') || '';
+      const expected = env.WORKER_API_KEY || '';
+      let diff = (!expected || apiKey.length !== expected.length) ? 1 : 0;
+      for (let i = 0; i < Math.max(apiKey.length, expected.length); i++) {
+        diff |= (apiKey.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
+      }
+      if (diff !== 0) return corsResponse({ error: 'Unauthorized' }, 401, origin, env);
+      const result = await buildExportSnapshot(env);
+      return corsResponse(result, result.ok ? 200 : 500, origin, env);
+    }
 
     return handleQuery(request, env, origin);
   },
@@ -566,7 +583,7 @@ function exportSelectCols(todayStr) {
 async function buildExportSnapshot(env) {
   if (!env.EXPORT_SNAPSHOTS) {
     console.error('[Worker] EXPORT_SNAPSHOTS R2 binding not configured — skipping snapshot build');
-    return;
+    return { ok: false, error: 'EXPORT_SNAPSHOTS R2 binding not configured in this environment' };
   }
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 2);
@@ -574,17 +591,25 @@ async function buildExportSnapshot(env) {
   const selectCols = exportSelectCols(cutoffStr);
   const whereClause = `COALESCE(transaction_date,filing_date)::date <= '${cutoffStr}'::date`;
 
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  const encoder = new TextEncoder();
-  const uploadPromise = env.EXPORT_SNAPSHOTS.put('filings-snapshot.ndjson', readable, {
-    httpMetadata: { contentType: 'application/x-ndjson' },
-  });
-
   let cursor = null;
   let pageCount = 0;
   let rowCount = 0;
+  let writer = null; // declared here, not inside try, so catch can still abort it on failure
   try {
+    // The R2 .put() call itself used to sit outside this try block — if
+    // the binding were misconfigured in any way, that call could throw
+    // synchronously and crash the whole request before any error handling
+    // ran at all, which is exactly what an opaque Cloudflare 1101 page
+    // (no CORS headers, no message, nothing to act on) looks like from
+    // the outside. Moved inside so a bad binding produces a real,
+    // readable error instead.
+    const { readable, writable } = new TransformStream();
+    writer = writable.getWriter();
+    const encoder = new TextEncoder();
+    const uploadPromise = env.EXPORT_SNAPSHOTS.put('filings-snapshot.ndjson', readable, {
+      httpMetadata: { contentType: 'application/x-ndjson' },
+    });
+
     while (true) {
       const keysetCondition = cursor
         ? `AND (COALESCE(transaction_date,filing_date), ctid) < ('${cursor.date.replace(/'/g,"''")}', '${cursor.tid.replace(/'/g,"''")}'::tid)`
@@ -621,9 +646,11 @@ async function buildExportSnapshot(env) {
       cutoff: cutoffStr, builtAt: new Date().toISOString(), pages: pageCount, rows: rowCount,
     }));
     console.log(`[Worker] Export snapshot rebuilt: ${rowCount} rows across ${pageCount} pages, cutoff ${cutoffStr}`);
+    return { ok: true, rows: rowCount, pages: pageCount, cutoff: cutoffStr };
   } catch (e) {
-    console.error('[Worker] Snapshot build failed:', e.message);
-    await writer.abort(e).catch(()=>{});
+    console.error('[Worker] Snapshot build failed:', e.message, e.stack?.slice(0, 500));
+    if (writer) await writer.abort(e).catch(()=>{});
+    return { ok: false, error: e.message, rowsBeforeFailure: rowCount };
   }
 }
 
