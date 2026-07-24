@@ -2021,11 +2021,41 @@ async function handleCreateSubscription(request, env, origin) {
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
 
   try {
-    // Reuse existing Stripe customer if we already have one on file.
+    // Pull the full row, not just stripe_customer_id — this was the actual
+    // bug. A subscription cancelled via /billing/cancel is set to
+    // cancel_at_period_end:true but stays status:'active' in Stripe (and
+    // in this table) right up until the period actually ends. Hitting this
+    // endpoint again during that window — cancel, then resubscribe same
+    // day — used to sail straight past that and create a genuinely second
+    // Stripe subscription, so the customer ended up on two, both billing.
+    // It's worse than a one-time double charge, too: subscriptions is keyed
+    // `ON CONFLICT (clerk_user_id) DO UPDATE`, one row per user, so the new
+    // subscription's webhook overwrote this row and the first subscription's
+    // ID was gone from our DB — Settings > Billing (and this endpoint) had
+    // no way to ever see or cancel it again, so it would've kept billing
+    // every period indefinitely with nothing showing it existed.
     const existing = await neonFetch(env,
-      `SELECT stripe_customer_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+      `SELECT stripe_customer_id, stripe_subscription_id, status, cancel_at_period_end
+       FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
     );
-    let customerId = existing.rows?.[0]?.stripe_customer_id;
+    const row = existing.rows?.[0];
+    let customerId = row?.stripe_customer_id;
+
+    // Anything Stripe still considers live must be reactivated or rejected
+    // here — never silently duplicated by falling through to creation below.
+    const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due']);
+    if (row?.stripe_subscription_id && LIVE_STATUSES.has(row.status)) {
+      if (row.cancel_at_period_end) {
+        // Same Stripe call handleReactivateSubscription makes — resumes the
+        // existing subscription on its current cycle. No new charge; the
+        // webhook's customer.subscription.updated handler syncs status/plan
+        // from this same change, so nothing further to write here.
+        await stripe.subscriptions.update(row.stripe_subscription_id, { cancel_at_period_end: false });
+        return corsResponse({ reactivated: true }, 200, origin, env);
+      }
+      // Fully active, not scheduled to cancel — they're already Pro.
+      return corsResponse({ error: 'You already have an active Pro subscription.' }, 409, origin, env);
+    }
 
     if (!customerId) {
       const customer = await stripe.customers.create({
@@ -2046,10 +2076,6 @@ async function handleCreateSubscription(request, env, origin) {
       expand: ['latest_invoice.payment_intent'],
       metadata: { clerk_user_id: clerkUserId },
     });
-
-    // TEMP DEBUG — remove once the client_secret issue is diagnosed
-    console.log('[Worker] DEBUG subscription.status:', subscription.status);
-    console.log('[Worker] DEBUG latest_invoice:', JSON.stringify(subscription.latest_invoice));
 
     const clientSecret = subscription.latest_invoice.payment_intent.client_secret;
     return corsResponse({ clientSecret, subscriptionId: subscription.id }, 200, origin, env);

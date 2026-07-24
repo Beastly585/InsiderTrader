@@ -350,6 +350,13 @@ function CheckoutModal({ product, onClose, onSuccess }) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not start checkout');
+        // An existing subscription was resumed server-side instead of a new
+        // one being created (see handleCreateSubscription's reactivation
+        // path) — there's no payment to confirm, so skip the Elements/card
+        // form entirely and go straight to the same success flow a
+        // completed checkout would hit. Without this, the modal would just
+        // spin forever waiting on a clientSecret that was never coming.
+        if (data.reactivated) { if (!cancelled) onSuccess && onSuccess(); return; }
         if (!cancelled) setClientSecret(data.clientSecret);
       } catch (e) {
         if (!cancelled) setError(e.message);
@@ -7215,8 +7222,8 @@ function LPFeatureMock({ type }) {
       <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
       <div className="port-mini-tile__body">
         <div className="port-mini-tile__stats">
-          <span className="port-mini-tile__val">$32,194</span>
-          <span className="port-mini-tile__growth val-buy">+$1,482 (+4.8%)</span>
+          <span className="port-mini-tile__val">$41,194</span>
+          <span className="port-mini-tile__growth val-buy">+$2,014 (+5.1%)</span>
         </div>
         <div className="port-mini-tile__chart">
           <svg viewBox="0 0 240 70" width="100%" height="70" preserveAspectRatio="none" aria-hidden="true">
@@ -7228,9 +7235,11 @@ function LPFeatureMock({ type }) {
         </div>
         <div className="port-mini-tile__list">
           {[
-            {t:'NVDA', v:'$18,204', pnl:'+6.2%', sig:true},
-            {t:'AAPL', v:'$9,880',  pnl:'+2.1%', sig:false},
-            {t:'TSLA', v:'$4,110',  pnl:'-3.4%', sig:true},
+            {t:'NVDA',  v:'$18,204', pnl:'+6.2%', sig:true},
+            {t:'AAPL',  v:'$9,880',  pnl:'+2.1%', sig:false},
+            {t:'MSFT',  v:'$6,340',  pnl:'+3.7%', sig:true},
+            {t:'TSLA',  v:'$4,110',  pnl:'-3.4%', sig:true},
+            {t:'GOOGL', v:'$2,660',  pnl:'+1.4%', sig:false},
           ].map(r => (
             <div key={r.t} className="port-mini-row">
               <span className="ticker" style={{fontSize:12,minWidth:50}}>{r.t}</span>
@@ -7262,11 +7271,13 @@ function LPFeatureMock({ type }) {
             <span className="lp-mock-alert-email__kind">Instant alert</span>
           </div>
           <div className="lp-mock-alert-email__body">
-            <p className="lp-mock-alert-email__intro">2 of your instant alerts were triggered:</p>
+            <p className="lp-mock-alert-email__intro">4 of your instant alerts were triggered:</p>
             <table className="lp-mock-alert-email__table"><tbody>
               {[
-                {t:'NVDA', co:'NVIDIA Corp', reason:'Watched ticker traded', who:'Jensen Huang', date:'Jul 22, 2026', action:'Buy', detail:'12,000 sh @ $118.42', val:'$1.42M', buy:true},
-                {t:'TSLA', co:'Tesla Inc',   reason:'High conviction signal', who:'Elon Musk',    date:'Jul 21, 2026', action:'Sell', detail:'610 sh @ $248.55', val:'$151,616', buy:false},
+                {t:'NVDA', co:'NVIDIA Corp',    reason:'Watched ticker traded',  who:'Jensen Huang',   date:'Jul 22, 2026', action:'Buy',  detail:'12,000 sh @ $118.42', val:'$1.42M',    buy:true},
+                {t:'TSLA', co:'Tesla Inc',      reason:'High conviction signal', who:'Elon Musk',       date:'Jul 21, 2026', action:'Sell', detail:'610 sh @ $248.55',    val:'$151,616',  buy:false},
+                {t:'MSFT', co:'Microsoft Corp', reason:'Followed insider filed', who:'Satya Nadella',   date:'Jul 21, 2026', action:'Buy',  detail:'340 sh @ $421.10',    val:'$143,174',  buy:true},
+                {t:'ADSK', co:'Autodesk Inc',   reason:'You hold this stock',    who:'Andrew Anagnost', date:'Jul 19, 2026', action:'Buy',  detail:'95 sh @ $289.77',     val:'$27,528',   buy:true},
               ].map(r => (
                 <tr key={r.t}>
                   <td>
