@@ -56,18 +56,37 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const workerHandler = {
-  // Runs on a cron schedule (needs [triggers] crons in wrangler.toml —
-  // see buildExportSnapshot's own comment for the exact config). No
-  // browser is waiting on this, so it can take its time and retry
-  // patiently — the entire "sustained pressure from a waiting browser"
-  // problem this was built to solve doesn't exist here.
+  // Runs on a frequent cron schedule (needs [triggers] crons in
+  // wrangler.toml — see continueSnapshotBuild's own comment). Each call
+  // does one small, bounded increment of work and returns — safe to run
+  // as often as every minute on Workers Free, since it's a cheap no-op
+  // once the snapshot is caught up. No browser is waiting on any of this.
   async scheduled(event, env, ctx) {
-    await buildExportSnapshot(env);
+    await continueSnapshotBuild(env);
   },
 
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
+    // Top-level safety net — nothing before this existed. Every other
+    // try/catch in this file is scoped to an individual route handler; if
+    // something throws in the auth check, the rate limiter, or anywhere
+    // in dispatch BEFORE reaching a route's own code, none of that
+    // handling would ever run. Sentry's wrapper around this whole object
+    // reports errors, it doesn't suppress them, so an uncaught throw here
+    // still surfaces to the platform as a bare crash — which is exactly
+    // what an opaque 1101 with no CORS headers and no message looks like.
+    // This guarantees a real, readable JSON error instead, regardless of
+    // where in the pipeline the actual problem turns out to be.
+    try {
+      return await handleFetchInner(request, env, origin);
+    } catch (e) {
+      console.error('[Worker] UNCAUGHT top-level exception:', e.message, e.stack?.slice(0, 800));
+      return corsResponse({ error: 'Internal error: ' + e.message }, 500, origin, env);
+    }
+  },
+};
 
+async function handleFetchInner(request, env, origin) {
     // CORS preflight
     if (request.method === 'OPTIONS') {
       return corsResponse(null, 204, origin, env);
@@ -199,6 +218,11 @@ const workerHandler = {
       return handleWatchlist(request, env, origin);
     }
 
+    // ── Beta feedback ─────────────────────────────────────────────────────
+    if (url.pathname === '/feedback') {
+      return handleFeedback(request, env, origin);
+    }
+
     // ── Notification preferences ─────────────────────────────────────────
     if (url.pathname === '/prefs') {
       return handlePrefs(request, env, origin);
@@ -257,12 +281,12 @@ const workerHandler = {
     if (url.pathname === '/export/snapshot') {
       return handleExportSnapshot(request, env, origin);
     }
-    // TEMPORARY — manual trigger for the snapshot build, while diagnosing
-    // why the scheduled cron hasn't produced a file in R2 yet. Same
-    // WORKER_API_KEY check as other internal routes, not open to the
-    // public. Remove this once the actual cron is confirmed working —
-    // it's a debugging aid, not meant to be a permanent second way to
-    // trigger this.
+    // TEMPORARY (again) — brought back specifically to burst through the
+    // one-time initial historical catch-up faster than the 1-minute cron
+    // floor allows. Remove once the first full build finishes (watch for
+    // {"done":true} in the response, or filings-snapshot.meta.json
+    // appearing in R2) — the cron alone is entirely sufficient for
+    // ongoing daily increments after that.
     if (url.pathname === '/internal/build-snapshot-now') {
       const apiKey = request.headers.get('X-API-Key') || '';
       const expected = env.WORKER_API_KEY || '';
@@ -271,13 +295,12 @@ const workerHandler = {
         diff |= (apiKey.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
       }
       if (diff !== 0) return corsResponse({ error: 'Unauthorized' }, 401, origin, env);
-      const result = await buildExportSnapshot(env);
+      const result = await continueSnapshotBuild(env);
       return corsResponse(result, result.ok ? 200 : 500, origin, env);
     }
 
     return handleQuery(request, env, origin);
-  },
-};
+}
 
 // The actual export — wraps workerHandler with Sentry's current Cloudflare
 // Workers SDK. env is available here (unlike a static top-level Sentry.init
@@ -580,77 +603,137 @@ function exportSelectCols(todayStr) {
 // a deliberate safety buffer against any late-arriving ingestion for the
 // most recent day or two, which handleExportSnapshot's live delta query
 // covers anyway.
-async function buildExportSnapshot(env) {
+// Rows fetched (and JSON.stringify'd) per invocation. Conservative
+// starting point for Workers Free's 10ms CPU budget — CPU time excludes
+// time spent awaiting Neon, but every stringify call and string
+// concatenation counts, and it accumulates across the whole invocation.
+// This is a real tuning knob, not a guess I'm confident is exactly right:
+// if invocations still fail, lower this first. If they consistently
+// succeed with room to spare, it can be raised to finish the initial
+// build faster.
+const RAW_CHUNK_ROWS = 5000;
+// How many small raw parts get merged into one final compacted part.
+// Compaction is cheap (concatenating already-serialized text, no
+// re-stringify), so this can stay conservative on the CPU side — the
+// real constraint it's balancing is the 50-subrequests-per-request limit
+// on the SERVING side, which has to read back every compacted part in
+// one HTTP request. 20 raw parts of ~5,000 rows each means one compacted
+// part covers ~100,000 rows, keeping the total part count well under 50
+// even for a multi-million-row table.
+const COMPACT_GROUP_SIZE = 20;
+
+// One small, bounded increment of the snapshot build. Meant to be called
+// repeatedly (by a frequent cron, or manually for testing) — each call
+// does at most one Neon fetch, one small serialization pass, and
+// occasionally a compaction pass, then returns. State lives in R2
+// (filings-snapshot-build-state.json) between calls, so progress survives
+// across invocations and across Worker restarts.
+//
+// Self-paced: if the snapshot is already caught up through today (minus
+// the 2-day safety buffer), this is a cheap no-op — safe to call as
+// frequently as every minute without wasting real work once the initial
+// build finishes and only daily increments remain.
+async function continueSnapshotBuild(env) {
   if (!env.EXPORT_SNAPSHOTS) {
-    console.error('[Worker] EXPORT_SNAPSHOTS R2 binding not configured — skipping snapshot build');
     return { ok: false, error: 'EXPORT_SNAPSHOTS R2 binding not configured in this environment' };
   }
+
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 2);
-  const cutoffStr = cutoff.toISOString().split('T')[0];
-  const selectCols = exportSelectCols(cutoffStr);
-  const whereClause = `COALESCE(transaction_date,filing_date)::date <= '${cutoffStr}'::date`;
+  const targetCutoff = cutoff.toISOString().split('T')[0];
 
-  let cursor = null;
-  let pageCount = 0;
-  let rowCount = 0;
-  let writer = null; // declared here, not inside try, so catch can still abort it on failure
   try {
-    // The R2 .put() call itself used to sit outside this try block — if
-    // the binding were misconfigured in any way, that call could throw
-    // synchronously and crash the whole request before any error handling
-    // ran at all, which is exactly what an opaque Cloudflare 1101 page
-    // (no CORS headers, no message, nothing to act on) looks like from
-    // the outside. Moved inside so a bad binding produces a real,
-    // readable error instead.
-    const { readable, writable } = new TransformStream();
-    writer = writable.getWriter();
-    const encoder = new TextEncoder();
-    const uploadPromise = env.EXPORT_SNAPSHOTS.put('filings-snapshot.ndjson', readable, {
-      httpMetadata: { contentType: 'application/x-ndjson' },
-    });
+    // Load in-progress state, or figure out whether a new catch-up is due.
+    let state;
+    const stateObj = await env.EXPORT_SNAPSHOTS.get('filings-snapshot-build-state.json');
+    if (stateObj) {
+      state = JSON.parse(await stateObj.text());
+    } else {
+      const metaObj = await env.EXPORT_SNAPSHOTS.get('filings-snapshot.meta.json');
+      const meta = metaObj ? JSON.parse(await metaObj.text()) : null;
+      const builtThrough = meta?.builtThrough || '2019-12-31'; // no snapshot yet — start from before the real data begins
+      if (builtThrough >= targetCutoff) {
+        return { ok: true, idle: true, builtThrough }; // already current, nothing to do
+      }
+      state = {
+        fromDate: builtThrough,
+        targetCutoff,
+        cursor: null,
+        nextRawIndex: 0,
+        pendingRawKeys: [],
+        nextCompactedIndex: meta?.partCount || 0,
+      };
+    }
 
-    while (true) {
-      const keysetCondition = cursor
-        ? `AND (COALESCE(transaction_date,filing_date), ctid) < ('${cursor.date.replace(/'/g,"''")}', '${cursor.tid.replace(/'/g,"''")}'::tid)`
-        : '';
-      const pageQuery = `
-        SELECT ${selectCols},
-               COALESCE(transaction_date,filing_date) AS _cursor_date,
-               ctid::text AS _cursor_tid
-        FROM public.filings
-        WHERE ${whereClause} ${keysetCondition}
-        ORDER BY COALESCE(transaction_date,filing_date) DESC, ctid
-        LIMIT 20000
-      `;
-      const result = await neonFetch(env, pageQuery);
-      const rows = result.rows || [];
-      if (rows.length === 0) break;
+    const selectCols = exportSelectCols(state.targetCutoff);
+    const keysetCondition = state.cursor
+      ? `AND (COALESCE(transaction_date,filing_date), ctid) < ('${state.cursor.date.replace(/'/g,"''")}', '${state.cursor.tid.replace(/'/g,"''")}'::tid)`
+      : '';
+    const pageQuery = `
+      SELECT ${selectCols},
+             COALESCE(transaction_date,filing_date) AS _cursor_date,
+             ctid::text AS _cursor_tid
+      FROM public.filings
+      WHERE COALESCE(transaction_date,filing_date)::date > '${state.fromDate}'::date
+        AND COALESCE(transaction_date,filing_date)::date <= '${state.targetCutoff}'::date
+        ${keysetCondition}
+      ORDER BY COALESCE(transaction_date,filing_date) DESC, ctid
+      LIMIT ${RAW_CHUNK_ROWS}
+    `;
+    const result = await neonFetch(env, pageQuery);
+    const rows = result.rows || [];
 
+    if (rows.length > 0) {
       let chunk = '';
       for (const row of rows) {
         const { _cursor_date, _cursor_tid, ...clean } = row;
         chunk += JSON.stringify(clean) + '\n';
       }
-      await writer.write(encoder.encode(chunk));
+      const rawKey = `filings-snapshot-raw/${String(state.nextRawIndex).padStart(6, '0')}.ndjson`;
+      await env.EXPORT_SNAPSHOTS.put(rawKey, chunk);
+      state.pendingRawKeys.push(rawKey);
+      state.nextRawIndex += 1;
 
       const last = rows[rows.length - 1];
-      cursor = { date: last._cursor_date, tid: last._cursor_tid };
-      pageCount++;
-      rowCount += rows.length;
-      if (rows.length < 20000) break;
+      state.cursor = { date: last._cursor_date, tid: last._cursor_tid };
     }
-    await writer.close();
-    await uploadPromise;
-    await env.EXPORT_SNAPSHOTS.put('filings-snapshot.meta.json', JSON.stringify({
-      cutoff: cutoffStr, builtAt: new Date().toISOString(), pages: pageCount, rows: rowCount,
-    }));
-    console.log(`[Worker] Export snapshot rebuilt: ${rowCount} rows across ${pageCount} pages, cutoff ${cutoffStr}`);
-    return { ok: true, rows: rowCount, pages: pageCount, cutoff: cutoffStr };
+
+    const reachedEnd = rows.length < RAW_CHUNK_ROWS;
+    const shouldCompact = state.pendingRawKeys.length >= COMPACT_GROUP_SIZE || (reachedEnd && state.pendingRawKeys.length > 0);
+
+    if (shouldCompact) {
+      // Cheap — just concatenating already-serialized text from a handful
+      // of small objects, no re-stringify, no re-touching Postgres.
+      let combined = '';
+      for (const key of state.pendingRawKeys) {
+        const obj = await env.EXPORT_SNAPSHOTS.get(key);
+        if (obj) combined += await obj.text();
+      }
+      const compactedKey = `filings-snapshot-parts/${String(state.nextCompactedIndex).padStart(6, '0')}.ndjson`;
+      await env.EXPORT_SNAPSHOTS.put(compactedKey, combined);
+      for (const key of state.pendingRawKeys) {
+        await env.EXPORT_SNAPSHOTS.delete(key).catch(()=>{});
+      }
+      state.nextCompactedIndex += 1;
+      state.pendingRawKeys = [];
+    }
+
+    if (reachedEnd) {
+      await env.EXPORT_SNAPSHOTS.put('filings-snapshot.meta.json', JSON.stringify({
+        builtThrough: state.targetCutoff,
+        partCount: state.nextCompactedIndex,
+        updatedAt: new Date().toISOString(),
+      }));
+      await env.EXPORT_SNAPSHOTS.delete('filings-snapshot-build-state.json').catch(()=>{});
+      console.log(`[Worker] Snapshot caught up through ${state.targetCutoff}, ${state.nextCompactedIndex} parts.`);
+      return { ok: true, done: true, builtThrough: state.targetCutoff, parts: state.nextCompactedIndex };
+    }
+
+    await env.EXPORT_SNAPSHOTS.put('filings-snapshot-build-state.json', JSON.stringify(state));
+    return { ok: true, done: false, rowsThisStep: rows.length, rawPartsSoFar: state.nextRawIndex, compactedPartsSoFar: state.nextCompactedIndex };
   } catch (e) {
-    console.error('[Worker] Snapshot build failed:', e.message, e.stack?.slice(0, 500));
-    if (writer) await writer.abort(e).catch(()=>{});
-    return { ok: false, error: e.message, rowsBeforeFailure: rowCount };
+    console.error('[Worker] Snapshot build step failed:', e.message, e.stack?.slice(0, 500));
+    return { ok: false, error: e.message };
   }
 }
 
@@ -706,9 +789,7 @@ async function handleExportSnapshot(request, env, origin) {
   } catch (e) {
     return corsResponse({ error: 'snapshot_not_ready' }, 200, origin, env);
   }
-
-  const snapshotObj = await env.EXPORT_SNAPSHOTS.get('filings-snapshot.ndjson');
-  if (!snapshotObj) return corsResponse({ error: 'snapshot_not_ready' }, 200, origin, env);
+  if (!meta.partCount) return corsResponse({ error: 'snapshot_not_ready' }, 200, origin, env);
 
   // The only live query in this whole path — everything up to the
   // snapshot's cutoff already came from R2 above. This is a few thousand
@@ -718,7 +799,7 @@ async function handleExportSnapshot(request, env, origin) {
   const deltaQuery = `
     SELECT ${exportSelectCols(today)}
     FROM public.filings
-    WHERE COALESCE(transaction_date,filing_date)::date > '${meta.cutoff}'::date
+    WHERE COALESCE(transaction_date,filing_date)::date > '${meta.builtThrough}'::date
     ORDER BY COALESCE(transaction_date,filing_date) DESC
   `;
   let deltaRows = [];
@@ -736,19 +817,27 @@ async function handleExportSnapshot(request, env, origin) {
       .catch(e => console.error('[Worker] Failed to mark export consumed (non-fatal):', e.message));
   }
 
-  // Stream the R2 snapshot straight through (passthrough — never buffered
-  // into Worker memory) with the small delta appended as extra NDJSON
-  // lines at the end.
+  // Stream each compacted part straight through in order (passthrough —
+  // never buffered into Worker memory), then the small live delta
+  // appended as extra NDJSON lines at the end. meta.partCount is kept
+  // deliberately small (compaction groups many small raw pieces into
+  // fewer, larger ones) specifically so this stays well under the
+  // 50-subrequests-per-request limit on Workers Free.
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
   (async () => {
     try {
-      const reader = snapshotObj.body.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        await writer.write(value);
+      for (let i = 0; i < meta.partCount; i++) {
+        const partKey = `filings-snapshot-parts/${String(i).padStart(6, '0')}.ndjson`;
+        const partObj = await env.EXPORT_SNAPSHOTS.get(partKey);
+        if (!partObj) continue; // shouldn't happen, but one missing part shouldn't kill the whole export
+        const reader = partObj.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await writer.write(value);
+        }
       }
       let deltaChunk = '';
       for (const row of deltaRows) deltaChunk += JSON.stringify(row) + '\n';
@@ -1025,6 +1114,50 @@ async function handleWatchlist(request, env, origin) {
   return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
 }
 
+// ── Beta feedback ────────────────────────────────────────────────────────
+// Needs, once: CREATE TABLE public.user_feedback (
+//   id SERIAL PRIMARY KEY, clerk_user_id TEXT NOT NULL, email TEXT,
+//   message TEXT NOT NULL, page TEXT, created_at TIMESTAMPTZ NOT NULL);
+async function handleFeedback(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  let body;
+  try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
+  const message = (body.message || '').trim().slice(0, 5000);
+  if (!message) return corsResponse({ error: 'Feedback message is required' }, 400, origin, env);
+  const page = (body.page || '').slice(0, 100);
+
+  // Pull email the same way other routes do — not required to store
+  // feedback, but makes following up with someone about their own report
+  // far easier than matching by user ID alone.
+  let email = null;
+  if (env.CLERK_SECRET_KEY) {
+    try {
+      const r = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
+        headers: { 'Authorization': `Bearer ${env.CLERK_SECRET_KEY}` },
+      });
+      const u = await r.json();
+      const primaryId = u.primary_email_address_id;
+      email = u.email_addresses?.find(e => e.id === primaryId)?.email_address
+           || u.email_addresses?.[0]?.email_address || null;
+    } catch (e) {
+      console.error('[Worker] Failed to fetch email for feedback (non-fatal):', e.message);
+    }
+  }
+
+  try {
+    await neonFetch(env, `
+      INSERT INTO public.user_feedback (clerk_user_id, email, message, page, created_at)
+      VALUES (${sqlVal(clerkUserId)}, ${sqlVal(email)}, ${sqlVal(message)}, ${sqlVal(page)}, now())
+    `);
+    return corsResponse({ ok: true }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] Failed to store feedback:', e.message);
+    return corsResponse({ error: 'Could not save your feedback — try again in a moment.' }, 500, origin, env);
+  }
+}
+
 
 // ── SnapTrade — real per-user portfolio linking ─────────────────────────────
 //
@@ -1271,8 +1404,21 @@ async function handleSnapTradePositions(request, env, origin) {
       })
     );
 
+    const tickerSet = new Set();
+    for (const h of holdingsByAccount) {
+      const list = Array.isArray(h.positions) ? h.positions
+        : (h.positions && typeof h.positions === 'object')
+          ? (Array.isArray(h.positions.results) ? h.positions.results : Object.values(h.positions).filter(Array.isArray).flat())
+          : [];
+      for (const p of list) {
+        const ticker = p.instrument?.symbol || p.instrument?.raw_symbol;
+        if (ticker) tickerSet.add(ticker);
+      }
+    }
+
     await neonFetch(env, `
-      UPDATE public.portfolio_connections SET last_synced_at = now()
+      UPDATE public.portfolio_connections
+      SET last_synced_at = now(), cached_tickers = ${sqlVal(JSON.stringify([...tickerSet]))}
       WHERE clerk_user_id = ${sqlVal(clerkUserId)}
     `);
 
@@ -1305,7 +1451,7 @@ async function handlePortfolioTickersBatch(request, env, origin) {
 
   try {
     const rows = await neonFetch(env, `
-      SELECT pc.clerk_user_id
+      SELECT pc.clerk_user_id, pc.last_synced_at, pc.cached_tickers
       FROM public.portfolio_connections pc
       JOIN public.subscriptions s ON s.clerk_user_id = pc.clerk_user_id
       WHERE pc.status = 'active' AND s.status IN ('active','trialing')
@@ -1320,6 +1466,25 @@ async function handlePortfolioTickersBatch(request, env, origin) {
     for (const row of (rows.rows || [])) {
       const clerkUserId = row.clerk_user_id;
       try {
+        // Cache check first — this is the actual fix for the polling
+        // violation. SnapTrade's own pre-launch checklist caps holdings
+        // calls at 4/user/day; this endpoint used to hit their live
+        // positions endpoint on every ~15-minute ingest cycle, which
+        // worked out to 20+ calls/day/user, five times over their limit.
+        // An 8-hour freshness window caps THIS endpoint's own
+        // contribution at 3 calls/day/user, leaving real margin — and
+        // since the cache is shared with handleSnapTradePositions, a
+        // user manually checking their own portfolio also refreshes it,
+        // so the two paths draw from the same budget instead of each
+        // separately hitting the ceiling.
+        const cacheAge = row.last_synced_at ? (Date.now() - new Date(row.last_synced_at).getTime()) : Infinity;
+        const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
+        if (cacheAge < EIGHT_HOURS_MS && row.cached_tickers) {
+          const cached = JSON.parse(row.cached_tickers);
+          if (cached.length > 0) result[clerkUserId] = cached;
+          continue; // skip the live SnapTrade call entirely
+        }
+
         const conn = await getSnapTradeConnection(env, clerkUserId);
         if (!conn) continue;
         const accounts = await signSnapTradeRequest(env, 'GET', '/api/v1/accounts', {
@@ -1340,6 +1505,14 @@ async function handlePortfolioTickersBatch(request, env, origin) {
           }
         }
         if (tickers.size > 0) result[clerkUserId] = [...tickers];
+
+        // Refresh the cache so the NEXT run (and any concurrent user page
+        // view) can reuse this instead of hitting SnapTrade again.
+        await neonFetch(env, `
+          UPDATE public.portfolio_connections
+          SET last_synced_at = now(), cached_tickers = ${sqlVal(JSON.stringify([...tickers]))}
+          WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+        `).catch(e => console.error(`[Worker] Failed to cache tickers for ${clerkUserId} (non-fatal):`, e.message));
       } catch (e) {
         console.error(`[Worker] portfolio-tickers-batch: skipping ${clerkUserId} after error:`, e.message);
         // Continue to the next user rather than fail the whole batch over

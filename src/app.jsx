@@ -980,6 +980,7 @@ function IconBuyTri(p)     { return <svg viewBox="0 0 24 24" {...p}><polygon poi
 function IconSellTri(p)    { return <svg viewBox="0 0 24 24" {...p}><polygon points="12 20 3 5 21 5" fill="currentColor"/></svg>; }
 function IconEmpty(p)      { return <svg {...ICON_PROPS} {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>; }
 function IconMail(p)       { return <svg {...ICON_PROPS} {...p}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>; }
+function IconMessage(p)    { return <svg {...ICON_PROPS} {...p}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>; }
 function IconLink(p)       { return <svg {...ICON_PROPS} {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>; }
 function IconZap(p)        { return <svg {...ICON_PROPS} {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>; }
 
@@ -1247,9 +1248,7 @@ const GUIDE_SECTIONS = [
           <li><strong>Congress.</strong> Periodic transaction reports required under the STOCK Act, filed by senators and representatives.</li>
         </ul>
         <p>Seli checks for new filings on a recurring basis throughout the trading day, so a disclosure typically shows up here within minutes of becoming public, not the next morning.</p>
-        <div className="guide-placeholder-box" aria-hidden="true">
-          <span className="guide-placeholder-box__label">Placeholder: short animation of a new filing landing in the feed</span>
-        </div>
+        <EnvPreview type="dashboard"/>
       </>
     ),
   },
@@ -1261,9 +1260,7 @@ const GUIDE_SECTIONS = [
       <>
         <p>Every filing is also available on its own, unscored and unfiltered, on the Data page. Search by ticker or insider name, filter by date range or transaction type, and see exactly what was filed, with a direct link back to the original SEC document.</p>
         <p>If you'd rather draw your own conclusions than trust anyone's scoring, including ours, this is where to work.</p>
-        <div className="guide-placeholder-box" aria-hidden="true">
-          <span className="guide-placeholder-box__label">Placeholder: screenshot of the Data page table</span>
-        </div>
+        <EnvPreview type="data"/>
       </>
     ),
   },
@@ -1287,9 +1284,7 @@ const GUIDE_SECTIONS = [
           <li>A trade that represents a large share of someone's existing position counts for more than a routine top-up.</li>
         </ul>
         <p>Only <strong>open-market</strong> trades count toward this. Option exercises, RSU vests, and grants are left out entirely, since they don't reflect someone choosing to put their own money in.</p>
-        <div className="guide-placeholder-box" aria-hidden="true">
-          <span className="guide-placeholder-box__label">Placeholder: icon showing the conviction score badge</span>
-        </div>
+        <EnvPreview type="insights"/>
         <p style={{ marginTop: 4 }}>Insiders themselves are ranked separately, by real track record, not trade volume:</p>
         <div className="guide-trust-demo" aria-hidden="true">
           <TrustStars score={4.5}/>
@@ -1335,6 +1330,91 @@ const GuideContext = createContext(null);
 const GUIDE_ICON_MAP = {
   IconHome, IconData, IconInsights, IconZap, IconSettings,
 };
+
+// Compact, abstracted mockups of each of the five app environments, used
+// in place of static placeholder screenshots in both the Guide modal and
+// the landing page. Built from real divs and the app's own CSS variables
+// rather than image files, so they render correctly in both light and
+// dark theme automatically and never need to be re-captured when the
+// real UI changes. Intentionally simplified, not a pixel clone of the
+// real pages — the point is "recognize what this section looks like at
+// a glance," not a literal screenshot.
+function EnvPreview({ type }) {
+  if (type === 'dashboard') return (
+    <div className="env-preview">
+      <div className="env-preview__stats">
+        {['Sentiment', 'SPY', 'QQQ', 'Flow'].map(l => (
+          <div key={l} className="env-preview__stat">
+            <span className="env-preview__stat-label">{l}</span>
+            <span className="env-preview__stat-val"/>
+          </div>
+        ))}
+      </div>
+      {[0,1,2].map(i => (
+        <div key={i} className="env-preview__row">
+          <span className="env-preview__ticker"/>
+          <span className="env-preview__bar" style={{width:`${60-i*12}%`}}/>
+          <span className="env-preview__num env-preview__num--pos"/>
+        </div>
+      ))}
+    </div>
+  );
+  if (type === 'insights') return (
+    <div className="env-preview">
+      <div className="env-preview__pills">
+        {[0,1,2,3].map(i => <span key={i} className={`env-preview__pill${i===1?' env-preview__pill--active':''}`}/>)}
+      </div>
+      {[0,1,2,3].map(i => (
+        <div key={i} className="env-preview__row env-preview__row--grid">
+          <span className="env-preview__ticker"/>
+          <span className="env-preview__tag"/>
+          <span className="env-preview__bar" style={{width:`${70-i*15}%`}}/>
+          <span className="env-preview__num env-preview__num--pos"/>
+        </div>
+      ))}
+    </div>
+  );
+  if (type === 'data') return (
+    <div className="env-preview">
+      <div className="env-preview__toolbar">
+        <span className="env-preview__search"/>
+        <span className="env-preview__pill env-preview__pill--sm"/>
+        <span className="env-preview__pill env-preview__pill--sm"/>
+      </div>
+      <div className="env-preview__table">
+        {[0,1,2,3,4].map(i => (
+          <div key={i} className="env-preview__trow">
+            <span/><span/><span/><span/><span/>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  if (type === 'watchlist') return (
+    <div className="env-preview">
+      {[0,1,2].map(i => (
+        <div key={i} className="env-preview__chip-row">
+          <span className="env-preview__star">★</span>
+          <span className="env-preview__ticker env-preview__ticker--lg"/>
+          <span className="env-preview__badge"/>
+        </div>
+      ))}
+    </div>
+  );
+  if (type === 'settings') return (
+    <div className="env-preview env-preview--split">
+      <div className="env-preview__nav">
+        {[0,1,2,3].map(i => <span key={i} className={`env-preview__nav-item${i===0?' env-preview__nav-item--active':''}`}/>)}
+      </div>
+      <div className="env-preview__panel">
+        <span className="env-preview__panel-title"/>
+        <div className="env-preview__toggle-row"><span/><span className="env-preview__toggle"/></div>
+        <div className="env-preview__toggle-row"><span/><span className="env-preview__toggle env-preview__toggle--on"/></div>
+      </div>
+    </div>
+  );
+  return null;
+}
 
 // Same resolution pattern as GUIDE_ICON_MAP, for the landing page's What's
 // Inside section — kept as a separate map rather than reused directly,
@@ -1470,6 +1550,83 @@ function TileInfoButton({ section, title }) {
 // specific tile's answer. Previously this lived alongside a separate "?"
 // icon that linked out to /about — two adjacent help-shaped icons doing
 // different things. Consolidated into one: this is now the "?" itself.
+function FeedbackButton({ page }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        className="status-bar__icon-btn"
+        onClick={() => setOpen(true)}
+        title="Send feedback"
+        aria-label="Send feedback"
+      >
+        <IconMessage style={{ width: 16, height: 16 }} />
+      </button>
+      {open && <FeedbackModal page={page} onClose={() => setOpen(false)}/>}
+    </>
+  );
+}
+
+function FeedbackModal({ page, onClose }) {
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [sent, setSent] = useState(false);
+
+  async function submit() {
+    if (!message.trim()) return;
+    setSending(true); setError(null);
+    try {
+      const r = await fetch(`${cfg.NEON_PROXY_URL}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
+        body: JSON.stringify({ message: message.trim(), page }),
+      });
+      if (!r.ok) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Something went wrong sending this — try again in a moment.'); }
+      setSent(true);
+    } catch (e) {
+      setError(e.message);
+    }
+    setSending(false);
+  }
+
+  if (sent) {
+    return (
+      <StatusModal
+        title="Thanks — got it"
+        message="Every piece of feedback during beta directly shapes what gets built next. Appreciate you taking the time."
+        onClose={onClose}
+      />
+    );
+  }
+
+  return (
+    <div className="upgrade-overlay" onClick={onClose}>
+      <div className="upgrade-modal" style={{maxWidth:440}} onClick={e=>e.stopPropagation()}>
+        <div className="upgrade-modal__title" style={{marginBottom:4}}>Send feedback</div>
+        <p style={{fontSize:13,color:'var(--text-2)',margin:'0 0 14px'}}>
+          Bug, confusing moment, something you wish existed — all of it helps during beta.
+        </p>
+        <textarea
+          className="feedback-textarea"
+          value={message}
+          onChange={e=>setMessage(e.target.value)}
+          placeholder="What's on your mind?"
+          rows={5}
+          autoFocus
+        />
+        {error && <div className="checkout-error" style={{marginTop:10}}>{error}</div>}
+        <div style={{display:'flex',gap:8,marginTop:14,justifyContent:'flex-end'}}>
+          <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn--primary" disabled={!message.trim()||sending} onClick={submit}>
+            {sending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GuideStatusBarButton() {
   const guide = useContext(GuideContext);
   return (
@@ -5920,14 +6077,19 @@ const HELP_SECTIONS = [
         <p>Seli has five sections, each doing a different job. Here's what each one is actually for.</p>
         <h3>Dashboard</h3>
         <p>Your daily overview: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news. Start here if you just want to know what's happening today.</p>
+        <EnvPreview type="dashboard"/>
         <h3>Insights</h3>
         <p>The full, filterable signal feed. Every conviction-scored trade, filterable by window, strength, type (corporate vs. congressional), and sector. This is where to dig into "what's actually worth paying attention to right now."</p>
+        <EnvPreview type="insights"/>
         <h3>Data</h3>
         <p>The raw, unscored filings. Every trade, searchable and filterable, with a link back to the original government filing. No ranking or opinion applied. If you want to draw your own conclusions, this is where to work.</p>
+        <EnvPreview type="data"/>
         <h3>Watchlist</h3>
         <p>Tickers and insiders you've chosen to follow (Pro). Their activity surfaces ahead of everything else, and it's what instant alerts and personalized digests are built from.</p>
+        <EnvPreview type="watchlist"/>
         <h3>Settings</h3>
         <p>Your plan, billing, notification preferences, risk appetite for signal ranking, and brokerage connection all live here.</p>
+        <EnvPreview type="settings"/>
       </>
     ),
   },
@@ -6923,28 +7085,28 @@ function LandingPage({ onEnter, dark, setDark }) {
       eyebrow: 'Portfolio',
       title: 'Watch your own holdings, and theirs',
       body: 'Link your brokerage and see insider activity on stocks you already own. Or skip that and just follow specific tickers and people you want to keep an eye on.',
-      snippetLabel: 'Placeholder — Portfolio tile with a matched insider trade',
+      env: 'watchlist',
     },
     {
       icon: 'IconZap',
       eyebrow: 'Alerts',
       title: 'Get notified the moment it happens',
       body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you find out right away, not the next time you happen to check.',
-      snippetLabel: 'Placeholder — instant alert email',
+      env: 'settings',
     },
     {
       icon: 'IconData',
       eyebrow: 'Data',
       title: `Every filing since ${dataSinceYear}`,
       body: `House, Senate, and corporate insider trades, all pulled straight from public SEC and STOCK Act disclosures. Nothing here is a rumor or a paid data feed. It's what was actually filed, going back to ${dataSinceYear}.`,
-      snippetLabel: 'Placeholder — Data page table, filtered to a ticker',
+      env: 'data',
     },
     {
       icon: 'IconInsights',
       eyebrow: 'Signals',
       title: 'See who\'s actually good at this',
       body: 'Insiders and members of Congress ranked by their real track record, not by how much they traded. When someone with a strong history makes a big move, it shows up fast.',
-      snippetLabel: 'Placeholder — Top insiders leaderboard row with hit rate',
+      env: 'insights',
     },
   ];
   useEffect(() => {
@@ -7141,7 +7303,7 @@ function LandingPage({ onEnter, dark, setDark }) {
                 </div>
                 <div className="lp-benefit-row__snippet">
                   <div className="lp-benefit-snippet-box" aria-hidden="true">
-                    <span className="lp-benefit-snippet-box__label">{f.snippetLabel}</span>
+                    <EnvPreview type={f.env}/>
                   </div>
                 </div>
               </div>
@@ -7636,6 +7798,7 @@ function AppInner() {
           <span className="status-bar__info">
             {page==='settings'?'Settings':NAV.find(n=>n.id===page)?.label||'Seli'}
           </span>
+          <span className="beta-badge" title="Seli is in private beta — thanks for helping shape it">Private Beta</span>
           <div className="status-bar__meta">
             {/* Data freshness */}
             {lastFilingDate&&(
@@ -7645,6 +7808,11 @@ function AppInner() {
               </span>
             )}
             {!lastFilingDate&&<span title={loading?'Syncing…':'Ready'}><span className="status-bar__dot"/>{loading?'Syncing…':'Ready'}</span>}
+            {/* Feedback — real destination (Worker endpoint, stored in a
+                table), not a mailto link that's easy to lose track of.
+                Placed alongside Guide since both are "get help / weigh
+                in" actions. */}
+            <FeedbackButton page={page}/>
             {/* Guide — reachable anytime, not just on first sign-in or via a
                 tile's "?". Opens in-app rather than a new tab, since it's
                 part of using the product, not a separate reference page. */}

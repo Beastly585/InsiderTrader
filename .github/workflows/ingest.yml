@@ -114,14 +114,14 @@ jobs:
           python fetch_filings_neon.py
 
       - name: Send instant alerts
-        # Runs every cycle — cheap no-op if there's nothing new to alert on
-        # (checks alerted_at IS NULL, most runs will just log "Nothing to do").
         if: success()
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           ALERTS_FROM_EMAIL: ${{ secrets.ALERTS_FROM_EMAIL }}
           APP_URL: ${{ secrets.APP_URL }}
+          WORKER_API_KEY: ${{ secrets.WORKER_API_KEY }}
+          NEON_PROXY_URL: ${{ secrets.NEON_PROXY_URL }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           cd db

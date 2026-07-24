@@ -241,6 +241,19 @@ pre {
   font-size: 0.9375rem; font-weight: 700; letter-spacing: -0.1px;
   color: var(--text);
 }
+.beta-badge {
+  font-size: 0.625rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--accent-strong); background: var(--accent-50);
+  border: 0.5px solid var(--accent-50); border-radius: 999px;
+  padding: 3px 9px; margin-left: 10px; flex-shrink: 0;
+}
+.feedback-textarea {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 100px;
+  padding: 10px 12px; border-radius: var(--radius-md); border: 0.5px solid var(--border-md);
+  background: var(--surface-2); color: var(--text); font-family: var(--font); font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.feedback-textarea:focus { outline: none; border-color: var(--accent); }
 .status-bar__meta {
   display: flex; align-items: center; gap: 16px;
   font-size: 0.7188rem; color: var(--text-3);
