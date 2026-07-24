@@ -352,7 +352,7 @@ function CheckoutModal({ product, onClose, onSuccess }) {
           body: JSON.stringify({ email: user?.primaryEmailAddress?.emailAddress }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Could not start checkout');
+        if (!res.ok) throw new Error(data.message || data.error || 'Could not start checkout');
         if (data.reactivated) {
           // An existing subscription was resumed server-side instead of a
           // new one being created (see handleCreateSubscription's

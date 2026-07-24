@@ -2041,10 +2041,30 @@ async function handleCreateSubscription(request, env, origin) {
     const row = existing.rows?.[0];
     let customerId = row?.stripe_customer_id;
 
-    // Anything Stripe still considers live must be reactivated or rejected
-    // here — never silently duplicated by falling through to creation below.
-    const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due']);
-    if (row?.stripe_subscription_id && LIVE_STATUSES.has(row.status)) {
+    // A card that's failing on renewal (status:'past_due') is its own case,
+    // not a duplicate-subscription case — Stripe is actively retrying the
+    // existing invoice, so creating a second subscription here would mean
+    // paying for two once the card issue resolves, but "reactivate" doesn't
+    // help either (it only flips cancel_at_period_end, it doesn't fix a bad
+    // card). This used to fall into the same bucket as a genuine duplicate
+    // below, which was the actual bug reported: Settings > Billing computes
+    // Pro-or-not as `plan==='pro' && (status==='active'||status==='trialing')`
+    // — past_due isn't in that list, so it correctly shows Free — while this
+    // endpoint's LIVE_STATUSES set *did* include past_due, so it blocked
+    // upgrading with "you already have one." Two different definitions of
+    // "live" that could disagree, landing someone on Free with no way back.
+    if (row?.stripe_subscription_id && row.status === 'past_due') {
+      return corsResponse({
+        error: 'past_due',
+        message: "Your last payment didn't go through. Update your payment method to keep Pro active.",
+      }, 409, origin, env);
+    }
+
+    // Everything else Stripe still considers live must be reactivated or
+    // rejected here — never silently duplicated by falling through to
+    // creation below. Deliberately the exact same active/trialing check
+    // Settings > Billing uses for isProPlan, so the two can't disagree.
+    if (row?.stripe_subscription_id && (row.status === 'active' || row.status === 'trialing')) {
       if (row.cancel_at_period_end) {
         // Same Stripe call handleReactivateSubscription makes — resumes the
         // existing subscription on its current cycle. No new charge; the
