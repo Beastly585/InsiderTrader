@@ -1759,8 +1759,17 @@ async function syncClerkMetadata(env, clerkUserId, metadataPatch) {
   }
 }
 
+// Two prices both grant Pro access: STRIPE_PRICE_PRO (the standard $11.99
+// price) and STRIPE_PRICE_BETA (the $6.99 first-25-users price). They map
+// to the same 'pro' plan — no separate feature tier, just different prices
+// for the same access. Founder/family comped access is handled entirely
+// outside Stripe (a manual row in public.subscriptions with no
+// stripe_subscription_id), not a third $0 price — see the guard in
+// handleCreateSubscription below for why that's still safe against a
+// comped account accidentally paying anyway.
 function planFromPriceId(env, priceId) {
-  return priceId === env.STRIPE_PRICE_PRO ? 'pro' : 'free';
+  const proPrices = [env.STRIPE_PRICE_PRO, env.STRIPE_PRICE_BETA].filter(Boolean);
+  return proPrices.includes(priceId) ? 'pro' : 'free';
 }
 
 // ── Stripe webhook ───────────────────────────────────────────────────────────
@@ -2015,7 +2024,17 @@ async function handleCreateSubscription(request, env, origin) {
   let body;
   try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
   const { email } = body; // only one recurring plan now — Pro
-  const priceId = env.STRIPE_PRICE_PRO;
+  // Beta period: every public signup through this endpoint gets the $6.99
+  // beta price, not the standard $11.99 PRO price — matches the landing
+  // page's "first 25 BETA users get half-off forever" pricing. No
+  // automatic counter to flip this back to STRIPE_PRICE_PRO once 25
+  // signups are hit — that's still a manual swap for later.
+  // Founder/family comped access doesn't go through this endpoint at all —
+  // it's a manually-inserted public.subscriptions row with plan:'pro',
+  // status:'active', and no stripe_subscription_id, set up directly rather
+  // than through any price/checkout. The guard below still protects those
+  // accounts from accidentally paying anyway (see the comment there).
+  const priceId = env.STRIPE_PRICE_BETA;
 
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
@@ -2053,7 +2072,7 @@ async function handleCreateSubscription(request, env, origin) {
     // endpoint's LIVE_STATUSES set *did* include past_due, so it blocked
     // upgrading with "you already have one." Two different definitions of
     // "live" that could disagree, landing someone on Free with no way back.
-    if (row?.stripe_subscription_id && row.status === 'past_due') {
+    if (row?.status === 'past_due') {
       return corsResponse({
         error: 'past_due',
         message: "Your last payment didn't go through. Update your payment method to keep Pro active.",
@@ -2064,8 +2083,14 @@ async function handleCreateSubscription(request, env, origin) {
     // rejected here — never silently duplicated by falling through to
     // creation below. Deliberately the exact same active/trialing check
     // Settings > Billing uses for isProPlan, so the two can't disagree.
-    if (row?.stripe_subscription_id && (row.status === 'active' || row.status === 'trialing')) {
-      if (row.cancel_at_period_end) {
+    // Checking row.status alone (not requiring a real stripe_subscription_id)
+    // is what also covers comped founder/family rows — those are manually
+    // inserted with status:'active' and no stripe_subscription_id at all,
+    // since there's no real Stripe subscription behind them. Without this,
+    // a comped account could still click Upgrade and end up paying for a
+    // subscription they already have for free.
+    if (row?.status === 'active' || row?.status === 'trialing') {
+      if (row.stripe_subscription_id && row.cancel_at_period_end) {
         // Same Stripe call handleReactivateSubscription makes — resumes the
         // existing subscription on its current cycle. No new charge; the
         // webhook's customer.subscription.updated handler syncs status/plan
@@ -2073,7 +2098,8 @@ async function handleCreateSubscription(request, env, origin) {
         await stripe.subscriptions.update(row.stripe_subscription_id, { cancel_at_period_end: false });
         return corsResponse({ reactivated: true }, 200, origin, env);
       }
-      // Fully active, not scheduled to cancel — they're already Pro.
+      // Fully active, not scheduled to cancel (or comped, with nothing to
+      // reactivate) — they're already Pro.
       return corsResponse({ error: 'You already have an active Pro subscription.' }, 409, origin, env);
     }
 
