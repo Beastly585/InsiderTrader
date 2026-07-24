@@ -241,12 +241,17 @@ pre {
   font-size: 0.9375rem; font-weight: 700; letter-spacing: -0.1px;
   color: var(--text);
 }
-.beta-badge {
+/* Beta tag — appears next to the Seli logo/wordmark (nav and footer,
+   every page) and as a tiny standalone chip under the icon-only in-app
+   sidebar logo, where there's no room for a wordmark-adjacent version. */
+.beta-tag {
   font-size: 0.625rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--accent-strong); background: var(--accent-50);
   border: 0.5px solid var(--accent-50); border-radius: 999px;
-  padding: 3px 9px; margin-left: 10px; flex-shrink: 0;
+  padding: 3px 8px; flex-shrink: 0;
 }
+.beta-tag--nav { margin-left: 8px; }
+.sidebar .beta-tag { margin: 8px 0 4px; }
 .feedback-textarea {
   width: 100%; box-sizing: border-box; resize: vertical; min-height: 100px;
   padding: 10px 12px; border-radius: var(--radius-md); border: 0.5px solid var(--border-md);
@@ -3044,6 +3049,8 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .lp-price-card__name  { font-size: 0.8125rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-2); }
 .lp-price-card__price { font-size: 2.5rem; font-weight: 800; letter-spacing: -2px; line-height: 1; }
+.lp-price-card__price-strike { font-size: 1.5rem; font-weight: 600; color: var(--text-3); text-decoration: line-through; letter-spacing: -0.5px; margin-right: 6px; }
+.lp-price-card__beta-note { font-size: 0.75rem; font-weight: 600; color: var(--accent-strong); margin-top: 4px; }
 .lp-price-card__price span { font-size: 1rem; font-weight: 400; color: var(--text-3); letter-spacing: 0; }
 .lp-price-card__desc  { font-size: 0.8125rem; color: var(--text-2); line-height: 1.55; }
 .lp-price-card__spacer { flex: 1; }

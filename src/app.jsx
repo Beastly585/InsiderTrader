@@ -1000,6 +1000,7 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
           <img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
         </div>
       </div>
+      <span className="beta-tag" title="Seli is in private beta">BETA</span>
 
       {/* Primary nav — main pages only */}
       <div className="sidebar__nav">
@@ -5847,6 +5848,7 @@ function TermsPage() {
           <a className="lp-nav__logo" href="/">
             <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
             <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </a>
           <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
             {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
@@ -5904,6 +5906,7 @@ function TermsPage() {
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
+          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
         </div>
         <div className="lp-footer__links">
           <a href="/">Home</a>
@@ -5926,6 +5929,7 @@ function PrivacyPage() {
           <a className="lp-nav__logo" href="/">
             <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
             <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </a>
           <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
             {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
@@ -5990,6 +5994,7 @@ function PrivacyPage() {
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
+          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
         </div>
         <div className="lp-footer__links">
           <a href="/">Home</a>
@@ -6012,6 +6017,7 @@ function CookiePage() {
           <a className="lp-nav__logo" href="/">
             <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
             <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </a>
           <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
             {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
@@ -6051,6 +6057,7 @@ function CookiePage() {
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
+          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
         </div>
         <div className="lp-footer__links">
           <a href="/">Home</a>
@@ -6177,6 +6184,7 @@ function HelpCenterPage() {
           <a className="lp-nav__logo" href="/">
             <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
             <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </a>
           <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
             {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
@@ -6207,6 +6215,7 @@ function HelpCenterPage() {
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
+          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
         </div>
         <div className="lp-footer__links">
           <a href="/">Home</a>
@@ -7154,6 +7163,7 @@ function LandingPage({ onEnter, dark, setDark }) {
         <a href="/" onClick={goHome} className="lp-nav__logo">
           <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
+          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
         </a>
         <div className="lp-nav__links">
           <a href="#features" onClick={(e)=>goToSection(e,'#features')} className="lp-nav__link">Features</a>
@@ -7341,7 +7351,10 @@ function LandingPage({ onEnter, dark, setDark }) {
           <div className="lp-price-card lp-price-card--featured reveal reveal--delay-2">
             <div className="lp-price-card__badge">Most popular</div>
             <div className="lp-price-card__name">Pro</div>
-            <div className="lp-price-card__price">$11.99<span>/mo</span></div>
+            <div className="lp-price-card__price">
+              <span className="lp-price-card__price-strike">$11.99</span> $6.99<span>/mo</span>
+            </div>
+            <div className="lp-price-card__beta-note">Half off, forever — for the first 25 Beta users</div>
             <div className="lp-price-card__desc">For investors who need to act before the market catches up.</div>
             <ul className="lp-price-card__features">
               {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Email alerts — instant or digest','Custom alert filters (conviction, sector)','Position-relative signal weighting','Connect your brokerage (SnapTrade)','Deep-dive explorer'].map(f=>(
@@ -7431,6 +7444,7 @@ function LandingPage({ onEnter, dark, setDark }) {
         <div className="lp-footer__logo">
           <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <span className="lp-wordmark">Seli</span>
+          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
         </div>
         <div className="lp-footer__links">
           <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
@@ -7798,7 +7812,6 @@ function AppInner() {
           <span className="status-bar__info">
             {page==='settings'?'Settings':NAV.find(n=>n.id===page)?.label||'Seli'}
           </span>
-          <span className="beta-badge" title="Seli is in private beta — thanks for helping shape it">Private Beta</span>
           <div className="status-bar__meta">
             {/* Data freshness */}
             {lastFilingDate&&(
@@ -7856,7 +7869,7 @@ function AppInner() {
           {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow}/>}
         </div>
         <footer className="footer">
-          <span className="footer__center">Not financial advice.</span>
+          <span className="footer__center">Private Beta · Not financial advice.</span>
           <a href="/help" target="_blank" rel="noreferrer" className="footer__right">Help</a>
         </footer>
       </main>
