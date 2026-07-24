@@ -7203,35 +7203,41 @@ function InfoTrustPage({ onBack, onEnter }) {
   );
 }
 
-// Landing-page-only feature mockups — built from the same .dash-tile
-// markup/classes the real dashboard tiles use (see .dash-tile, .dash-tile__hdr
-// etc. in the CSS), populated with clearly-labeled mock data instead of the
-// abstract gray-bar shapes EnvPreview uses elsewhere (Guide modal, empty
-// states). The point here is different: this is the one place on the site
-// making a "here's what it actually looks like" promise, so it should look
-// like a real tile, not a wireframe of one.
+// Landing-page-only feature mockups. Portfolio, Data, and Top Insiders reuse
+// the real app's own classes/components verbatim (.port-mini-tile, the
+// Data page's bare <table>/Badge markup, .ins-lb-card + ConvictionBar) so
+// what's shown here is styled identically to the actual tiles, not a
+// look-alike built from scratch — only the data is mock. Alerts still uses
+// a hand-built card (see lp-mock-email below) pending the real instant-alert
+// email template to match against.
 function LPFeatureMock({ type }) {
   if (type === 'watchlist') return (
-    <div className="dash-tile lp-mock-tile">
-      <div className="dash-tile__hdr">
-        <span className="dash-tile__title">Portfolio</span>
-        <span className="dash-tile__sub val-buy">+4.8% · 30d</span>
-      </div>
-      <div className="dash-tile__body lp-mock-portfolio">
-        <svg className="lp-mock-graph" viewBox="0 0 240 56" preserveAspectRatio="none" aria-hidden="true">
-          <polygon points="0,45 30,42 60,44 90,36 120,38 150,26 180,28 210,14 240,10 240,56 0,56" className="lp-mock-graph__fill"/>
-          <polyline points="0,45 30,42 60,44 90,36 120,38 150,26 180,28 210,14 240,10" className="lp-mock-graph__line"/>
-        </svg>
-        <div className="lp-mock-portfolio__rows">
+    <div className="port-mini-tile lp-mock-tile">
+      <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
+      <div className="port-mini-tile__body">
+        <div className="port-mini-tile__stats">
+          <span className="port-mini-tile__val">$32,194</span>
+          <span className="port-mini-tile__growth val-buy">+$1,482 (+4.8%)</span>
+        </div>
+        <div className="port-mini-tile__chart">
+          <svg viewBox="0 0 240 70" width="100%" height="70" preserveAspectRatio="none" aria-hidden="true">
+            <line x1="0" y1="12" x2="240" y2="12" stroke="var(--border)" strokeWidth="0.5"/>
+            <line x1="0" y1="35" x2="240" y2="35" stroke="var(--border)" strokeWidth="0.5"/>
+            <line x1="0" y1="58" x2="240" y2="58" stroke="var(--border)" strokeWidth="0.5"/>
+            <path d="M0,50 L30,46 L60,48 L90,38 L120,40 L150,26 L180,28 L210,12 L240,8" fill="none" stroke="var(--green-600)" strokeWidth="2"/>
+          </svg>
+        </div>
+        <div className="port-mini-tile__list">
           {[
-            {t:'NVDA', v:'$18,204', sig:'buy'},
-            {t:'AAPL', v:'$9,880',  sig:'buy'},
-            {t:'TSLA', v:'$4,110',  sig:'sell'},
+            {t:'NVDA', v:'$18,204', pnl:'+6.2%', sig:true},
+            {t:'AAPL', v:'$9,880',  pnl:'+2.1%', sig:false},
+            {t:'TSLA', v:'$4,110',  pnl:'-3.4%', sig:true},
           ].map(r => (
-            <div key={r.t} className="lp-mock-portfolio__row">
-              <span className="lp-mock-ticker">{r.t}</span>
-              <span className="lp-mock-val">{r.v}</span>
-              <span className={`lp-mock-sig lp-mock-sig--${r.sig}`}>{r.sig==='buy'?'▲ Insider buying':'▼ Insider selling'}</span>
+            <div key={r.t} className="port-mini-row">
+              <span className="ticker" style={{fontSize:12,minWidth:50}}>{r.t}</span>
+              {r.sig && <span className="ins-port-chip__signal-badge" style={{fontSize:'0.5rem'}}>activity</span>}
+              <span className="td-muted" style={{fontSize:10,flex:1,textAlign:'right'}}>{r.v}</span>
+              <span className={parseFloat(r.pnl)>=0?'val-buy':'val-sell'} style={{fontSize:10,fontFamily:'var(--font-mono)',minWidth:50,textAlign:'right'}}>{r.pnl}</span>
             </div>
           ))}
         </div>
@@ -7264,50 +7270,70 @@ function LPFeatureMock({ type }) {
         <span className="dash-tile__title">Data</span>
         <span className="dash-tile__sub">Filings</span>
       </div>
-      <div className="dash-tile__body">
-        <table className="lp-mock-table">
-          <thead>
-            <tr><th>Ticker</th><th>B/S</th><th>Shares</th><th>Price</th><th>% Ptfl</th></tr>
-          </thead>
-          <tbody>
-            {[
-              {t:'NVDA', bs:'B', sh:'1,200', px:'$118.42', pf:'12.4%'},
-              {t:'MSFT', bs:'B', sh:'340',   px:'$421.10', pf:'8.1%'},
-              {t:'TSLA', bs:'S', sh:'610',   px:'$248.55', pf:'3.6%'},
-              {t:'ADSK', bs:'B', sh:'95',    px:'$289.77', pf:'1.9%'},
-            ].map(r => (
-              <tr key={r.t}>
-                <td className="lp-mock-ticker">{r.t}</td>
-                <td><span className={`lp-mock-code${r.bs==='B'?' lp-mock-code--buy':' lp-mock-code--sell'}`}>{r.bs}</span></td>
-                <td>{r.sh}</td>
-                <td>{r.px}</td>
-                <td>{r.pf}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="dash-tile__body" style={{padding:0}}>
+        <div className="table-wrap" style={{border:'none',borderRadius:0,boxShadow:'none'}}>
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Ticker</th><th>Type</th>
+              <th className="th--right">Shares</th><th className="th--right">Price</th><th className="th--right">Value</th>
+            </tr></thead>
+            <tbody>
+              {[
+                {d:'Jul 22', t:'NVDA', tt:'buy',  sh:'1,200', px:'$118.42', val:'$142,104'},
+                {d:'Jul 21', t:'MSFT', tt:'buy',  sh:'340',   px:'$421.10', val:'$143,174'},
+                {d:'Jul 21', t:'TSLA', tt:'sell', sh:'610',   px:'$248.55', val:'$151,616'},
+                {d:'Jul 19', t:'ADSK', tt:'buy',  sh:'95',    px:'$289.77', val:'$27,528'},
+              ].map((r,i) => (
+                <tr key={i} className={`row-${r.tt}`}>
+                  <td className="td-date"><span className="td-date-main">{r.d}</span></td>
+                  <td><span className="ticker">{r.t}</span></td>
+                  <td>
+                    <Badge type={r.tt}>
+                      {r.tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>}
+                    </Badge>
+                  </td>
+                  <td className="td-right td-mono td-secondary">{r.sh}</td>
+                  <td className="td-right td-mono td-secondary">{r.px}</td>
+                  <td className="td-right td-mono"><span className={r.tt==='buy'?'val-buy':'val-sell'}>{r.val}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
   if (type === 'insights') return (
     <div className="dash-tile lp-mock-tile">
       <div className="dash-tile__hdr">
-        <span className="dash-tile__title">Top Insiders</span>
+        <span className="dash-tile__title">Top insiders</span>
         <span className="dash-tile__sub">All-time</span>
       </div>
-      <div className="dash-tile__body lp-mock-insiders">
-        {[
-          {n:'A.L. Sarroff Fund', score:4.8, hit:'94%'},
-          {n:'Jason T. Adelman',  score:4.2, hit:'87%'},
-          {n:'325 Capital LLC',   score:3.6, hit:'71%'},
-          {n:'AC Nordic ApS',     score:2.1, hit:'52%'},
-        ].map(r => (
-          <div key={r.n} className="lp-mock-insider-row">
-            <span className="lp-mock-insider-name">{r.n}</span>
-            <div className="lp-mock-score-bar"><div className="lp-mock-score-bar__fill" style={{width:`${r.score/5*100}%`}}/></div>
-            <span className="lp-mock-hit">{r.hit}</span>
-          </div>
-        ))}
+      <div className="dash-tile__body" style={{padding:0}}>
+        <div className="ins-lb-list">
+          {[
+            {n:'A.L. Sarroff Fund', title:'10% Owner',    rel:'weak',   buys:'48 buys', val:'$4.2M', rate:94, score:4.8},
+            {n:'Jason T. Adelman',  title:'Chief Exec.',  rel:'strong', buys:'3 buys',  val:'$820K', rate:87, score:4.2},
+            {n:'325 Capital LLC',   title:'10% Owner',    rel:'weak',   buys:'2 buys',  val:'$610K', rate:71, score:3.6},
+            {n:'AC Nordic ApS',     title:'Director',     rel:'medium', buys:'6 buys',  val:'$390K', rate:52, score:2.1},
+          ].map((r,i) => (
+            <div key={r.n} className="ins-lb-card">
+              <div className="ins-lb-card__rank">{i+1}</div>
+              <div className="ins-lb-card__body">
+                <div className="ins-lb-card__name">{r.n}</div>
+                <div className="td-muted" style={{fontSize:11}}>{r.title}</div>
+                <div className="ins-lb-card__meta">
+                  <Badge type={`rel-${r.rel}`}>{r.rel==='strong'?'C-Suite':r.rel==='medium'?'Officer':'Dir'}</Badge>
+                  <span className="td-muted" style={{fontSize:11}}>{r.buys} · {r.val}</span>
+                </div>
+              </div>
+              <div className="ins-lb-card__score">
+                <div className={`ins-lb-card__rate ${r.rate>=70?'val-buy':r.rate>=50?'':'val-sell'}`}>{r.rate}%</div>
+                <ConvictionBar score={r.score} max={4}/>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -8065,6 +8091,7 @@ function AppInner() {
           {/* Page title — left */}
           <span className="status-bar__info">
             {page==='settings'?'Settings':NAV.find(n=>n.id===page)?.label||'Seli'}
+            <span className="beta-tag beta-tag--status" title="Seli is in private beta">BETA</span>
           </span>
           <div className="status-bar__meta">
             {/* Data freshness */}

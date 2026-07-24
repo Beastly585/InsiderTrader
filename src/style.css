@@ -250,15 +250,15 @@ pre {
   position: sticky; top: 0; z-index: 50;
 }
 .status-bar__info {
+  display: inline-flex; align-items: center; gap: 8px;
   font-size: 0.9375rem; font-weight: 700; letter-spacing: -0.1px;
   color: var(--text);
 }
 /* Beta tag — appears next to the Seli logo/wordmark everywhere on the
    marketing site (nav and footer, every page). In the app itself, the
    equivalent lives as an ::after ribbon across the bottom third of the
-   icon-only sidebar logo mark (see .logo-mark--beta below) instead of a
-   separate chip, since there's no room for a wordmark-adjacent version
-   in a 56px-wide icon rail. */
+   icon-only sidebar logo mark (see .logo-mark--beta below), plus a small
+   purple chip next to the page title in the status bar. */
 .beta-tag {
   font-size: 0.625rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--accent-strong); background: var(--accent-50);
@@ -266,6 +266,15 @@ pre {
   padding: 3px 8px; flex-shrink: 0;
 }
 .beta-tag--nav { margin-left: 8px; }
+/* Status-bar variant — purple (the same --purple-600/50 tokens used for
+   the C-suite relationship badge elsewhere) rather than the accent color,
+   so it reads as its own distinct "beta" marker next to the page title
+   instead of blending in with accent-colored UI. */
+.beta-tag--status {
+  color: var(--purple-600); background: var(--purple-50);
+  border-color: var(--purple-50);
+  font-size: 0.5625rem; padding: 2px 7px; font-weight: 700;
+}
 /* In-app sidebar logo — BETA rendered as an overlay ribbon across the
    bottom third of the round mark itself, clipped to the same circle via
    overflow:hidden + border-radius, rather than a separate chip stacked
@@ -3102,27 +3111,15 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-benefit-snippet-box .env-preview { width: 100%; margin: 0; }
 .lp-mock-tile { width: 100%; }
 .lp-mock-tile .dash-tile__body { padding: 12px 14px; }
-
-/* Portfolio mockup — sparkline area chart + holding rows with a live
-   insider-activity read on each, so "watch your own holdings, and theirs"
-   is visible at a glance rather than just implied. */
-.lp-mock-graph { width: 100%; height: 56px; display: block; margin-bottom: 10px; }
-.lp-mock-graph__fill { fill: var(--green-600); opacity: 0.12; }
-.lp-mock-graph__line { fill: none; stroke: var(--green-600); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.lp-mock-portfolio__rows { display: flex; flex-direction: column; }
-.lp-mock-portfolio__row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 0; border-top: 0.5px solid var(--border);
-}
-.lp-mock-portfolio__row:first-child { border-top: none; }
-.lp-mock-val { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-2); }
-.lp-mock-sig { margin-left: auto; font-size: 0.6875rem; font-weight: 700; white-space: nowrap; }
-.lp-mock-sig--buy { color: var(--green-600); }
-.lp-mock-sig--sell { color: var(--red-600); }
+.lp-mock-tile.port-mini-tile { max-height: none; }
 
 /* Alerts mockup — a real email-notification card (from/time header,
    subject, body, CTA) rather than a settings panel, matching "get
-   notified the moment it happens". */
+   notified the moment it happens". Portfolio, Data, and Top Insiders
+   mockups reuse the real app's own classes/components directly (see
+   LPFeatureMock in app.jsx) instead of parallel lp-mock-* styling, so
+   this is the only feature block still styled independently, pending
+   a real instant-alert email template to match against instead. */
 .lp-mock-email { display: flex; flex-direction: column; gap: 6px; }
 .lp-mock-email__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .lp-mock-email__from { display: flex; align-items: center; gap: 5px; font-size: 0.6875rem; font-weight: 600; color: var(--text-2); }
@@ -3131,40 +3128,6 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-mock-email__body { font-size: 0.75rem; line-height: 1.55; color: var(--text-2); margin: 0; }
 .lp-mock-email__body strong { color: var(--text); }
 .lp-mock-email__cta { font-size: 0.75rem; font-weight: 600; color: var(--accent-strong); margin-top: 2px; }
-
-/* Data mockup — a real filings table (Ticker / B-S / Shares / Price /
-   % of portfolio) instead of abstract gray bars. */
-.lp-mock-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
-.lp-mock-table th {
-  text-align: left; font-size: 0.5938rem; font-weight: 600; color: var(--text-3);
-  text-transform: uppercase; letter-spacing: 0.04em; padding: 0 8px 6px 0;
-}
-.lp-mock-table th:last-child, .lp-mock-table td:last-child { text-align: right; padding-right: 0; }
-.lp-mock-table td { padding: 6px 8px 6px 0; border-top: 0.5px solid var(--border); color: var(--text-2); }
-.lp-mock-table tr:first-child td { border-top: none; }
-.lp-mock-code {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; border-radius: 4px; font-size: 0.625rem; font-weight: 700;
-}
-.lp-mock-code--buy { color: var(--green-600); background: var(--green-50); }
-.lp-mock-code--sell { color: var(--red-600); background: var(--red-50); }
-
-/* Signals mockup — top-insiders leaderboard with a real conviction/score
-   bar per row, matching "see who's actually good at this". */
-.lp-mock-insiders { display: flex; flex-direction: column; }
-.lp-mock-insider-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 0; border-top: 0.5px solid var(--border);
-}
-.lp-mock-insider-row:first-child { border-top: none; }
-.lp-mock-insider-name { font-size: 0.75rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
-.lp-mock-score-bar { flex: 1; height: 5px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
-.lp-mock-score-bar__fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--green-600)); }
-.lp-mock-hit { font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 600; color: var(--text-2); width: 32px; text-align: right; }
-
-/* .lp-mock-ticker matches the mono/bold ticker treatment used throughout
-   the real app tiles. */
-.lp-mock-ticker { font-family: var(--font-mono); font-weight: 700; font-size: 0.75rem; color: var(--text); }
 
 
 /* Pricing section */
