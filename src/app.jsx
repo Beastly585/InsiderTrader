@@ -1003,12 +1003,11 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
   return (
     <nav className="sidebar sidebar--compact">
       {/* Logo */}
-      <div className="sidebar__logo" title="Seli">
-        <div className="logo-mark">
+      <div className="sidebar__logo" title="Seli — private beta">
+        <div className="logo-mark logo-mark--beta">
           <img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
         </div>
       </div>
-      <span className="beta-tag" title="Seli is in private beta">BETA</span>
 
       {/* Primary nav — main pages only */}
       <div className="sidebar__nav">
@@ -1240,8 +1239,8 @@ const GUIDE_SECTIONS = [
             <span className="guide-hero__wordmark">Seli</span>
           </div>
         </div>
-        <p>Seli watches every SEC Form 4 filing and every congressional stock disclosure as they're published, and surfaces the ones worth actually paying attention to.</p>
-        <p>This is a quick walkthrough of where the data comes from, how the scoring works, and what's behind each part of the app. Five short stops, or skip straight to the dashboard whenever you want.</p>
+        <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as they're published, and surfaces the ones worth actually paying attention to.</p>
+        <p>This is a quick walkthrough of where the <strong>data</strong> comes from, how the <strong>scoring</strong> works, and what's behind each part of the app. Five short stops, or skip straight to the dashboard whenever you want.</p>
       </>
     ),
   },
@@ -1251,12 +1250,12 @@ const GUIDE_SECTIONS = [
     icon: 'IconData',
     render: () => (
       <>
-        <p>Every trade in Seli comes from a public government filing. Nothing here is estimated, scraped from a rumor, or licensed from a third party.</p>
+        <p>Every trade in Seli comes from a <strong>public government filing</strong>. Nothing here is estimated, scraped from a rumor, or licensed from a third party.</p>
         <ul>
           <li><strong>Corporate insiders.</strong> Form 4, filed with the SEC by executives, directors, and major shareholders within two business days of a trade.</li>
           <li><strong>Congress.</strong> Periodic transaction reports required under the STOCK Act, filed by senators and representatives.</li>
         </ul>
-        <p>Seli checks for new filings on a recurring basis throughout the trading day, so a disclosure typically shows up here within minutes of becoming public, not the next morning.</p>
+        <p>Seli checks for new filings on a recurring basis throughout the trading day, so a disclosure typically shows up here <strong>within minutes</strong> of becoming public, not the next morning.</p>
         <EnvPreview type="dashboard"/>
       </>
     ),
@@ -1267,7 +1266,7 @@ const GUIDE_SECTIONS = [
     icon: 'IconList',
     render: () => (
       <>
-        <p>Every filing is also available on its own, unscored and unfiltered, on the Data page. Search by ticker or insider name, filter by date range or transaction type, and see exactly what was filed, with a direct link back to the original SEC document.</p>
+        <p>Every filing is also available on its own, unscored and unfiltered, on the <strong>Data page</strong>. Search by ticker or insider name, filter by date range or transaction type, and see exactly what was filed, with a <strong>direct link back to the original SEC document</strong>.</p>
         <p>If you'd rather draw your own conclusions than trust anyone's scoring, including ours, this is where to work.</p>
         <EnvPreview type="data"/>
       </>
@@ -1287,14 +1286,14 @@ const GUIDE_SECTIONS = [
       <>
         <p>Not every trade is worth the same attention. Seli ranks activity by <strong>conviction</strong>, a score built from a few real factors, not just dollar amount:</p>
         <ul>
-          <li>A C-suite executive or member of Congress buying counts for more than a director or 10%-owner trading the same amount.</li>
-          <li>More buys than sells on the same ticker adds to the score. More sells than buys works against it.</li>
-          <li>Dollar value matters, but on a diminishing scale. A $50M buy isn't fifty times more meaningful than a $1M one.</li>
-          <li>A trade that represents a large share of someone's existing position counts for more than a routine top-up.</li>
+          <li>A <strong>C-suite executive or member of Congress</strong> buying counts for more than a director or 10%-owner trading the same amount.</li>
+          <li><strong>More buys than sells</strong> on the same ticker adds to the score. More sells than buys works against it.</li>
+          <li>Dollar value matters, but on a <strong>diminishing scale</strong>. A $50M buy isn't fifty times more meaningful than a $1M one.</li>
+          <li>A trade that represents a <strong>large share of someone's existing position</strong> counts for more than a routine top-up.</li>
         </ul>
         <p>Only <strong>open-market</strong> trades count toward this. Option exercises, RSU vests, and grants are left out entirely, since they don't reflect someone choosing to put their own money in.</p>
         <EnvPreview type="insights"/>
-        <p style={{ marginTop: 4 }}>Insiders themselves are ranked separately, by real track record, not trade volume:</p>
+        <p style={{ marginTop: 4 }}>Insiders themselves are ranked separately, by <strong>real track record</strong>, not trade volume:</p>
         <div className="guide-trust-demo" aria-hidden="true">
           <TrustStars score={4.5}/>
           <span className="td-muted" style={{ fontSize: '0.75rem' }}>Built from hit rate on past open-market buys, once there's enough history to mean something (5+ priced trades).</span>
@@ -1310,7 +1309,6 @@ const GUIDE_SECTIONS = [
       <>
         <p>Free tracks the last 7 days and covers the dashboard, leaderboard, and full filing data. Pro unlocks the parts built for actually acting on this:</p>
         <ul>
-          <li><strong>Download the data.</strong> Full historical CSV export, no subscription required if that's all you want.</li>
           <li><strong>Follow specific insiders or tickers.</strong> Build a watchlist and see their activity surfaced ahead of everything else.</li>
           <li><strong>Link your portfolio.</strong> Connect a brokerage account (read-only, never able to place trades) and see insider activity on what you actually hold.</li>
           <li><strong>Get notified.</strong> Instant alerts the moment something you're watching moves, or a daily and weekly digest by email instead.</li>
@@ -1612,20 +1610,76 @@ function FeedbackButton({ page }) {
   );
 }
 
+// Max screenshots and per-image size match the server's own caps
+// (FEEDBACK_MAX_SCREENSHOTS / FEEDBACK_MAX_SCREENSHOT_BYTES in
+// neon-proxy.js) — kept in sync by hand since the client needs to reject
+// oversized/excess images before spending a POST on them, not just rely
+// on the server to say no after the fact.
+const FEEDBACK_MAX_SCREENSHOTS = 4;
+const FEEDBACK_MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024; // 5MB
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function FeedbackModal({ page, onClose }) {
+  const [summary, setSummary] = useState('');
   const [message, setMessage] = useState('');
+  const [screenshots, setScreenshots] = useState([]); // [{dataUrl, name}]
+  const [shotError, setShotError] = useState(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [sent, setSent] = useState(false);
+  const fileInputRef = useRef(null);
+
+  async function addFiles(files) {
+    setShotError(null);
+    const incoming = Array.from(files || []).filter(f => f.type.startsWith('image/'));
+    if (!incoming.length) return;
+    const room = FEEDBACK_MAX_SCREENSHOTS - screenshots.length;
+    if (room <= 0) { setShotError(`Up to ${FEEDBACK_MAX_SCREENSHOTS} screenshots per report.`); return; }
+    const toAdd = incoming.slice(0, room);
+    if (incoming.length > toAdd.length) setShotError(`Only added ${toAdd.length} — up to ${FEEDBACK_MAX_SCREENSHOTS} screenshots per report.`);
+    const oversized = toAdd.some(f => f.size > FEEDBACK_MAX_SCREENSHOT_BYTES);
+    if (oversized) { setShotError('One of those is over 5MB — try a smaller image.'); }
+    const ok = toAdd.filter(f => f.size <= FEEDBACK_MAX_SCREENSHOT_BYTES);
+    try {
+      const dataUrls = await Promise.all(ok.map(fileToDataUrl));
+      setScreenshots(prev => [...prev, ...ok.map((f, i) => ({ dataUrl: dataUrls[i], name: f.name || 'pasted-image.png' }))]);
+    } catch {
+      setShotError('Could not read one of those images — try again.');
+    }
+  }
+
+  function onPaste(e) {
+    const items = Array.from(e.clipboardData?.items || []).filter(it => it.type.startsWith('image/'));
+    if (!items.length) return; // let normal text paste through untouched
+    e.preventDefault();
+    addFiles(items.map(it => it.getAsFile()).filter(Boolean));
+  }
+
+  function removeShot(i) {
+    setScreenshots(prev => prev.filter((_, idx) => idx !== i));
+  }
 
   async function submit() {
-    if (!message.trim()) return;
+    if (!summary.trim() || !message.trim()) return;
     setSending(true); setError(null);
     try {
       const r = await fetch(`${cfg.NEON_PROXY_URL}/feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
-        body: JSON.stringify({ message: message.trim(), page }),
+        body: JSON.stringify({
+          summary: summary.trim(),
+          message: message.trim(),
+          page,
+          screenshots: screenshots.map(s => ({ data: s.dataUrl })),
+        }),
       });
       if (!r.ok) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Something went wrong sending this — try again in a moment.'); }
       setSent(true);
@@ -1647,23 +1701,63 @@ function FeedbackModal({ page, onClose }) {
 
   return (
     <div className="upgrade-overlay" onClick={onClose}>
-      <div className="upgrade-modal" style={{maxWidth:440}} onClick={e=>e.stopPropagation()}>
+      <div className="upgrade-modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
         <div className="upgrade-modal__title" style={{marginBottom:4}}>Send feedback</div>
         <p style={{fontSize:13,color:'var(--text-2)',margin:'0 0 14px'}}>
           Bug, confusing moment, something you wish existed — all of it helps during beta.
         </p>
-        <textarea
-          className="feedback-textarea"
-          value={message}
-          onChange={e=>setMessage(e.target.value)}
-          placeholder="What's on your mind?"
-          rows={5}
+        <input
+          className="feedback-input"
+          value={summary}
+          onChange={e=>setSummary(e.target.value)}
+          placeholder="Summary — one line"
+          maxLength={200}
           autoFocus
         />
+        <textarea
+          className="feedback-textarea"
+          style={{marginTop:8}}
+          value={message}
+          onChange={e=>setMessage(e.target.value)}
+          onPaste={onPaste}
+          placeholder="What's on your mind? (you can paste a screenshot directly in here)"
+          rows={5}
+        />
+        {screenshots.length > 0 && (
+          <div className="feedback-shots">
+            {screenshots.map((s, i) => (
+              <div key={i} className="feedback-shot">
+                <img src={s.dataUrl} alt={s.name}/>
+                <button className="feedback-shot__remove" onClick={()=>removeShot(i)} title="Remove" aria-label="Remove screenshot">
+                  <IconClose style={{width:10,height:10}}/>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{display:'flex',alignItems:'center',gap:10,marginTop:8}}>
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={()=>fileInputRef.current?.click()}
+            disabled={screenshots.length >= FEEDBACK_MAX_SCREENSHOTS}
+          >
+            Attach screenshot
+          </button>
+          <span className="td-muted" style={{fontSize:11}}>or paste one into the text box</span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{display:'none'}}
+            onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+          />
+        </div>
+        {shotError && <div className="checkout-error" style={{marginTop:10}}>{shotError}</div>}
         {error && <div className="checkout-error" style={{marginTop:10}}>{error}</div>}
         <div style={{display:'flex',gap:8,marginTop:14,justifyContent:'flex-end'}}>
           <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn--primary" disabled={!message.trim()||sending} onClick={submit}>
+          <button className="btn btn--primary" disabled={!summary.trim()||!message.trim()||sending} onClick={submit}>
             {sending ? 'Sending…' : 'Send'}
           </button>
         </div>
@@ -6127,16 +6221,16 @@ const HELP_SECTIONS = [
       <>
         <p>Seli has five sections, each doing a different job. Here's what each one is actually for.</p>
         <h3>Dashboard</h3>
-        <p>Your daily overview: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news. Start here if you just want to know what's happening today.</p>
+        <p>Your <strong>daily overview</strong>: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news. Start here if you just want to know what's happening today.</p>
         <EnvPreview type="dashboard"/>
         <h3>Insights</h3>
-        <p>The full, filterable signal feed. Every conviction-scored trade, filterable by window, strength, type (corporate vs. congressional), and sector. This is where to dig into "what's actually worth paying attention to right now."</p>
+        <p>The full, filterable signal feed. Every <strong>conviction-scored trade</strong>, filterable by window, strength, type (corporate vs. congressional), and sector. This is where to dig into "what's actually worth paying attention to right now."</p>
         <EnvPreview type="insights"/>
         <h3>Data</h3>
-        <p>The raw, unscored filings. Every trade, searchable and filterable, with a link back to the original government filing. No ranking or opinion applied. If you want to draw your own conclusions, this is where to work.</p>
+        <p>The <strong>raw, unscored filings</strong>. Every trade, searchable and filterable, with a link back to the original government filing. No ranking or opinion applied. If you want to draw your own conclusions, this is where to work.</p>
         <EnvPreview type="data"/>
         <h3>Watchlist</h3>
-        <p>Tickers and insiders you've chosen to follow (Pro). Their activity surfaces ahead of everything else, and it's what instant alerts and personalized digests are built from.</p>
+        <p>Tickers and insiders you've chosen to follow (Pro). Their activity surfaces ahead of everything else, and it's what <strong>instant alerts and personalized digests</strong> are built from.</p>
         <EnvPreview type="watchlist"/>
         <h3>Settings</h3>
         <p>Your plan, billing, notification preferences, risk appetite for signal ranking, and brokerage connection all live here.</p>
@@ -6868,12 +6962,17 @@ function SettingsPage({ user, onUpgrade }) {
             </div>
           )}
 
-          <div className="settings-content__legal">
-            <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
-            <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
-            <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
-          </div>
         </div>
+      </div>
+
+      {/* Fixed bar, independent of whichever tab's content is showing above it
+          (and however tall that content is) — sits right above the app
+          footer instead of scrolling with the active tab's content, which
+          is what put it at wildly different heights depending on section. */}
+      <div className="settings-legal-bar">
+        <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
+        <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+        <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
       </div>
     </div>
   );
@@ -7102,6 +7201,117 @@ function InfoTrustPage({ onBack, onEnter }) {
       </div>
     </div>
   );
+}
+
+// Landing-page-only feature mockups — built from the same .dash-tile
+// markup/classes the real dashboard tiles use (see .dash-tile, .dash-tile__hdr
+// etc. in the CSS), populated with clearly-labeled mock data instead of the
+// abstract gray-bar shapes EnvPreview uses elsewhere (Guide modal, empty
+// states). The point here is different: this is the one place on the site
+// making a "here's what it actually looks like" promise, so it should look
+// like a real tile, not a wireframe of one.
+function LPFeatureMock({ type }) {
+  if (type === 'watchlist') return (
+    <div className="dash-tile lp-mock-tile">
+      <div className="dash-tile__hdr">
+        <span className="dash-tile__title">Portfolio</span>
+        <span className="dash-tile__sub val-buy">+4.8% · 30d</span>
+      </div>
+      <div className="dash-tile__body lp-mock-portfolio">
+        <svg className="lp-mock-graph" viewBox="0 0 240 56" preserveAspectRatio="none" aria-hidden="true">
+          <polygon points="0,45 30,42 60,44 90,36 120,38 150,26 180,28 210,14 240,10 240,56 0,56" className="lp-mock-graph__fill"/>
+          <polyline points="0,45 30,42 60,44 90,36 120,38 150,26 180,28 210,14 240,10" className="lp-mock-graph__line"/>
+        </svg>
+        <div className="lp-mock-portfolio__rows">
+          {[
+            {t:'NVDA', v:'$18,204', sig:'buy'},
+            {t:'AAPL', v:'$9,880',  sig:'buy'},
+            {t:'TSLA', v:'$4,110',  sig:'sell'},
+          ].map(r => (
+            <div key={r.t} className="lp-mock-portfolio__row">
+              <span className="lp-mock-ticker">{r.t}</span>
+              <span className="lp-mock-val">{r.v}</span>
+              <span className={`lp-mock-sig lp-mock-sig--${r.sig}`}>{r.sig==='buy'?'▲ Insider buying':'▼ Insider selling'}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+  if (type === 'settings') return (
+    <div className="dash-tile lp-mock-tile">
+      <div className="dash-tile__hdr">
+        <span className="dash-tile__title">Alerts</span>
+        <span className="dash-tile__sub">Instant</span>
+      </div>
+      <div className="dash-tile__body lp-mock-email">
+        <div className="lp-mock-email__meta">
+          <span className="lp-mock-email__from"><IconMail style={{width:11,height:11}}/> Seli Alerts &lt;alerts@seli.app&gt;</span>
+          <span className="lp-mock-email__time">9:41 AM</span>
+        </div>
+        <div className="lp-mock-email__subject">🟢 Insider buy: NVDA</div>
+        <p className="lp-mock-email__body">
+          3 executives bought a combined <strong>$2.1M</strong> in the past 24 hours, the largest
+          cluster on this ticker in six months.
+        </p>
+        <div className="lp-mock-email__cta">View filing →</div>
+      </div>
+    </div>
+  );
+  if (type === 'data') return (
+    <div className="dash-tile lp-mock-tile">
+      <div className="dash-tile__hdr">
+        <span className="dash-tile__title">Data</span>
+        <span className="dash-tile__sub">Filings</span>
+      </div>
+      <div className="dash-tile__body">
+        <table className="lp-mock-table">
+          <thead>
+            <tr><th>Ticker</th><th>B/S</th><th>Shares</th><th>Price</th><th>% Ptfl</th></tr>
+          </thead>
+          <tbody>
+            {[
+              {t:'NVDA', bs:'B', sh:'1,200', px:'$118.42', pf:'12.4%'},
+              {t:'MSFT', bs:'B', sh:'340',   px:'$421.10', pf:'8.1%'},
+              {t:'TSLA', bs:'S', sh:'610',   px:'$248.55', pf:'3.6%'},
+              {t:'ADSK', bs:'B', sh:'95',    px:'$289.77', pf:'1.9%'},
+            ].map(r => (
+              <tr key={r.t}>
+                <td className="lp-mock-ticker">{r.t}</td>
+                <td><span className={`lp-mock-code${r.bs==='B'?' lp-mock-code--buy':' lp-mock-code--sell'}`}>{r.bs}</span></td>
+                <td>{r.sh}</td>
+                <td>{r.px}</td>
+                <td>{r.pf}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+  if (type === 'insights') return (
+    <div className="dash-tile lp-mock-tile">
+      <div className="dash-tile__hdr">
+        <span className="dash-tile__title">Top Insiders</span>
+        <span className="dash-tile__sub">All-time</span>
+      </div>
+      <div className="dash-tile__body lp-mock-insiders">
+        {[
+          {n:'A.L. Sarroff Fund', score:4.8, hit:'94%'},
+          {n:'Jason T. Adelman',  score:4.2, hit:'87%'},
+          {n:'325 Capital LLC',   score:3.6, hit:'71%'},
+          {n:'AC Nordic ApS',     score:2.1, hit:'52%'},
+        ].map(r => (
+          <div key={r.n} className="lp-mock-insider-row">
+            <span className="lp-mock-insider-name">{r.n}</span>
+            <div className="lp-mock-score-bar"><div className="lp-mock-score-bar__fill" style={{width:`${r.score/5*100}%`}}/></div>
+            <span className="lp-mock-hit">{r.hit}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  return null;
 }
 
 function LandingPage({ onEnter, dark, setDark }) {
@@ -7357,7 +7567,7 @@ function LandingPage({ onEnter, dark, setDark }) {
                 </div>
                 <div className="lp-benefit-row__snippet">
                   <div className="lp-benefit-snippet-box" aria-hidden="true">
-                    <EnvPreview type={f.env}/>
+                    <LPFeatureMock type={f.env}/>
                   </div>
                 </div>
               </div>

@@ -1115,18 +1115,32 @@ async function handleWatchlist(request, env, origin) {
 }
 
 // ── Beta feedback ────────────────────────────────────────────────────────
-// Needs, once: CREATE TABLE public.user_feedback (
-//   id SERIAL PRIMARY KEY, clerk_user_id TEXT NOT NULL, email TEXT,
-//   message TEXT NOT NULL, page TEXT, created_at TIMESTAMPTZ NOT NULL);
+// Needs, once:
+//   ALTER TABLE public.user_feedback
+//     ADD COLUMN IF NOT EXISTS summary TEXT,
+//     ADD COLUMN IF NOT EXISTS screenshot_keys JSONB;
+// Screenshots ride along in the same JSON POST as base64 data URLs (pasted
+// or attached client-side — see FeedbackModal) and land in the same
+// EXPORT_SNAPSHOTS R2 bucket already bound for CSV exports, under a
+// feedback/ prefix, rather than provisioning a second bucket just for a
+// beta feedback form. Only the R2 keys go into Postgres, never the image
+// bytes themselves — pull the actual images from the R2 dashboard by key.
+const FEEDBACK_MAX_SCREENSHOTS = 4;
+const FEEDBACK_MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024; // 5MB, matches the client-side cap
+const FEEDBACK_ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+
 async function handleFeedback(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
   let body;
   try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
+  const summary = (body.summary || '').trim().slice(0, 200);
   const message = (body.message || '').trim().slice(0, 5000);
-  if (!message) return corsResponse({ error: 'Feedback message is required' }, 400, origin, env);
+  if (!summary) return corsResponse({ error: 'A short summary is required' }, 400, origin, env);
+  if (!message) return corsResponse({ error: 'Feedback details are required' }, 400, origin, env);
   const page = (body.page || '').slice(0, 100);
+  const screenshotsIn = Array.isArray(body.screenshots) ? body.screenshots.slice(0, FEEDBACK_MAX_SCREENSHOTS) : [];
 
   // Pull email the same way other routes do — not required to store
   // feedback, but makes following up with someone about their own report
@@ -1146,10 +1160,39 @@ async function handleFeedback(request, env, origin) {
     }
   }
 
+  // Screenshots are best-effort — a bad/oversized image or a missing R2
+  // binding should never block the text feedback from saving.
+  const feedbackId = crypto.randomUUID();
+  const screenshotKeys = [];
+  if (screenshotsIn.length && !env.EXPORT_SNAPSHOTS) {
+    console.error('[Worker] Feedback screenshots submitted but EXPORT_SNAPSHOTS R2 binding is not configured — dropping them, keeping the text feedback.');
+  }
+  if (env.EXPORT_SNAPSHOTS) {
+    for (let i = 0; i < screenshotsIn.length; i++) {
+      const shot = screenshotsIn[i] || {};
+      const dataUrl = typeof shot.data === 'string' ? shot.data : '';
+      const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+      if (!match) continue;
+      const [, mime, b64] = match;
+      if (!FEEDBACK_ALLOWED_MIME.has(mime)) continue;
+      let bytes;
+      try { bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); } catch { continue; }
+      if (!bytes.byteLength || bytes.byteLength > FEEDBACK_MAX_SCREENSHOT_BYTES) continue;
+      const ext = mime.split('/')[1] || 'png';
+      const key = `feedback/${feedbackId}/${i}.${ext}`;
+      try {
+        await env.EXPORT_SNAPSHOTS.put(key, bytes, { httpMetadata: { contentType: mime } });
+        screenshotKeys.push(key);
+      } catch (e) {
+        console.error('[Worker] Failed to store feedback screenshot (non-fatal):', e.message);
+      }
+    }
+  }
+
   try {
     await neonFetch(env, `
-      INSERT INTO public.user_feedback (clerk_user_id, email, message, page, created_at)
-      VALUES (${sqlVal(clerkUserId)}, ${sqlVal(email)}, ${sqlVal(message)}, ${sqlVal(page)}, now())
+      INSERT INTO public.user_feedback (clerk_user_id, email, summary, message, page, screenshot_keys, created_at)
+      VALUES (${sqlVal(clerkUserId)}, ${sqlVal(email)}, ${sqlVal(summary)}, ${sqlVal(message)}, ${sqlVal(page)}, ${sqlVal(JSON.stringify(screenshotKeys))}::jsonb, now())
     `);
     return corsResponse({ ok: true }, 200, origin, env);
   } catch (e) {
