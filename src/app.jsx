@@ -336,6 +336,9 @@ function CheckoutModal({ product, onClose, onSuccess }) {
   const { user } = useUser();
   const [clientSecret, setClientSecret] = useState(null);
   const [error, setError] = useState(null);
+  // True only for the reactivation path below — there's no payment step,
+  // just a wait for Stripe's webhook to land.
+  const [reactivating, setReactivating] = useState(false);
   const copy = PRODUCT_COPY[product];
 
   useEffect(() => {
@@ -350,13 +353,33 @@ function CheckoutModal({ product, onClose, onSuccess }) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not start checkout');
-        // An existing subscription was resumed server-side instead of a new
-        // one being created (see handleCreateSubscription's reactivation
-        // path) — there's no payment to confirm, so skip the Elements/card
-        // form entirely and go straight to the same success flow a
-        // completed checkout would hit. Without this, the modal would just
-        // spin forever waiting on a clientSecret that was never coming.
-        if (data.reactivated) { if (!cancelled) onSuccess && onSuccess(); return; }
+        if (data.reactivated) {
+          // An existing subscription was resumed server-side instead of a
+          // new one being created (see handleCreateSubscription's
+          // reactivation path) — there's no payment to confirm, so this
+          // skips the Elements/card form entirely. But it still has to wait
+          // out the same webhook race CheckoutForm.handleConfirm() below
+          // already handles for a normal payment: Stripe's API call
+          // returning doesn't mean Clerk's publicMetadata (what the rest of
+          // the app reads to know someone's Pro) is updated yet — only the
+          // async customer.subscription.updated webhook does that. Calling
+          // onSuccess() immediately here, as an earlier version of this fix
+          // did, meant "You're a Pro member!" could show before the backend
+          // had actually caught up — leaving Settings > Billing still
+          // showing Free/Upgrade right after, and a second click correctly
+          // (but confusingly) hitting the "already have one" guard.
+          if (cancelled) return;
+          setReactivating(true);
+          for (let attempt = 0; attempt < 6; attempt++) {
+            await new Promise(r => setTimeout(r, 1500));
+            const fresh = await user?.reload().catch(() => null);
+            if (fresh?.publicMetadata?.plan === 'pro') break;
+          }
+          if (cancelled) return;
+          setReactivating(false);
+          onSuccess && onSuccess();
+          return;
+        }
         if (!cancelled) setClientSecret(data.clientSecret);
       } catch (e) {
         if (!cancelled) setError(e.message);
@@ -389,11 +412,18 @@ function CheckoutModal({ product, onClose, onSuccess }) {
         <div className="checkout-modal__pay">
           {error && <div className="checkout-error">{error} — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
 
-          {!error && !clientSecret && (
+          {!error && !reactivating && !clientSecret && (
             <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
           )}
 
-          {!error && clientSecret && (
+          {!error && reactivating && (
+            <div style={{padding:'2rem',display:'flex',flexDirection:'column',alignItems:'center',gap:10}}>
+              <Spinner/>
+              <p style={{fontSize:12,color:'var(--text-2)'}}>Reactivating your subscription…</p>
+            </div>
+          )}
+
+          {!error && !reactivating && clientSecret && (
             <Elements stripe={getStripePromise()} options={{ clientSecret }}>
               <CheckoutForm product={product} onSuccess={onSuccess} onClose={onClose} />
             </Elements>
@@ -735,13 +765,26 @@ function BillingSection({ user }) {
           onSuccess={async ()=>{
             const wasPro = checkoutProduct === 'pro';
             setProcessing(true);
-            load();
             if (wasPro) {
+              // Same webhook race as handleCancel/handleReactivate above —
+              // CheckoutModal already waits for Clerk's publicMetadata to
+              // flip before calling this, so Neon's row (written earlier in
+              // the same webhook) should be fresh by now too, but poll
+              // rather than assume: a single fire-and-forget load() here
+              // was the actual bug behind Billing still showing Free/Upgrade
+              // right after a successful reactivation.
+              let fresh = null;
+              for (let attempt = 0; attempt < 6; attempt++) {
+                fresh = await load();
+                if (fresh?.plan === 'pro') break;
+                await new Promise(r => setTimeout(r, 1500));
+              }
               setCheckoutProduct(null);
               setProcessing(false);
               setStatusModal({ title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' });
               return;
             }
+            load();
             try {
               const rowCount = await downloadFullExport('', undefined, 'consume', n => setProgressText(`${n.toLocaleString()} rows fetched so far…`));
               setCheckoutProduct(null);
