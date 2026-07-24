@@ -1812,16 +1812,38 @@ async function handleStripeWebhook(request, env) {
         // invalid SQL that Neon rejected. neonFetch() now throws on that
         // instead of swallowing it, but the real fix is reading the right field.
         const periodEnd = sub.items?.data?.[0]?.current_period_end || null;
+        const clerkUserId = sub.metadata?.clerk_user_id;
+        if (!clerkUserId) break; // shouldn't happen — we always set this on creation
+
         // Only 'active'/'trialing' actually grants Pro. Every other status —
         // 'incomplete' (checkout started but never paid), 'past_due' (card
         // failing on renewal), 'unpaid', 'incomplete_expired', 'canceled' —
-        // maps to 'free'. An earlier version only checked for 'canceled',
-        // which meant an abandoned checkout or a failing card kept Pro access.
-        const plan = (sub.status === 'active' || sub.status === 'trialing')
-          ? planFromPriceId(env, priceId)
-          : 'free';
-        const clerkUserId = sub.metadata?.clerk_user_id;
-        if (!clerkUserId) break; // shouldn't happen — we always set this on creation
+        // means no access right now.
+        const isLiveNow = sub.status === 'active' || sub.status === 'trialing';
+        let plan;
+        if (event.type === 'customer.subscription.deleted' || !isLiveNow) {
+          plan = 'free';
+        } else {
+          // Live right now — but don't blindly re-derive plan from the
+          // *current* STRIPE_PRICE_PRO/STRIPE_PRICE_BETA secrets on every
+          // single event. That was the actual bug: a subscription created
+          // under an old price kept firing routine 'updated' events (a
+          // renewal, a cancel_at_period_end toggle, anything), and each one
+          // re-checked the price against whatever the secrets happen to be
+          // *today* — so rotating a price ID retroactively downgraded an
+          // already-active paying subscriber to 'free' the moment any
+          // unrelated event fired for them, with no actual change to what
+          // they were paying for. Only derive fresh from the price mapping
+          // when they aren't already locked in as pro — i.e. the moment
+          // they're actually gaining access for the first time (or coming
+          // back as a genuinely new subscription after a prior one ended).
+          // Once locked in, only a real cancellation moves them off it,
+          // never a later price-secret rotation.
+          const existing = await neonFetch(env,
+            `SELECT plan FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+          );
+          plan = existing.rows?.[0]?.plan === 'pro' ? 'pro' : planFromPriceId(env, priceId);
+        }
 
         await neonFetch(env, `
           INSERT INTO public.subscriptions
