@@ -857,9 +857,10 @@ function useWatchlist(user) {
 function useTheme() {
   const [dark, setDark] = useState(() => {
     try { const s = localStorage.getItem('theme'); if (s) return s==='dark'; } catch(_){}
-    // Default new visitors to dark — Seli's primary identity — unless
-    // their system explicitly prefers light.
-    return !window.matchMedia('(prefers-color-scheme: light)').matches;
+    // Default every new visitor to dark — Seli's primary identity — instead
+    // of following the OS-level color-scheme preference. Only an explicit
+    // in-app toggle (saved to localStorage above) switches this.
+    return true;
   });
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', dark?'dark':'light');
@@ -983,6 +984,13 @@ function IconMail(p)       { return <svg {...ICON_PROPS} {...p}><path d="M4 4h16
 function IconMessage(p)    { return <svg {...ICON_PROPS} {...p}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>; }
 function IconLink(p)       { return <svg {...ICON_PROPS} {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>; }
 function IconZap(p)        { return <svg {...ICON_PROPS} {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>; }
+// Added for the Guide modal — 'raw-data' and 'using-seli' were previously
+// reusing IconData and IconHome (already used by 'data-source' and
+// 'welcome'), so two pairs of sections were visually identical in the nav,
+// especially on the mobile layout where the label text is hidden and the
+// icon is the only real way to tell sections apart.
+function IconList(p)       { return <svg {...ICON_PROPS} {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>; }
+function IconCompass(p)    { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>; }
 
 const NAV = [
   {id:'dashboard', Icon:IconHome,      label:'Dashboard'},
@@ -1256,7 +1264,7 @@ const GUIDE_SECTIONS = [
   {
     id: 'raw-data',
     label: 'The raw data',
-    icon: 'IconData',
+    icon: 'IconList',
     render: () => (
       <>
         <p>Every filing is also available on its own, unscored and unfiltered, on the Data page. Search by ticker or insider name, filter by date range or transaction type, and see exactly what was filed, with a direct link back to the original SEC document.</p>
@@ -1268,7 +1276,7 @@ const GUIDE_SECTIONS = [
   {
     id: 'using-seli',
     label: 'Using Seli',
-    icon: 'IconHome',
+    icon: 'IconCompass',
     render: () => HELP_SECTIONS.find(s => s.id === 'using-seli').render(),
   },
   {
@@ -1329,7 +1337,7 @@ const GuideContext = createContext(null);
 // icon components, kept as strings in the content array so that array
 // stays plain data, not a mix of data and component references.
 const GUIDE_ICON_MAP = {
-  IconHome, IconData, IconInsights, IconZap, IconSettings,
+  IconHome, IconData, IconInsights, IconZap, IconSettings, IconList, IconCompass,
 };
 
 // Compact, abstracted mockups of each of the five app environments, used
@@ -7385,7 +7393,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             </SignedIn>
           </div>
           <div className="lp-price-card lp-price-card--featured reveal reveal--delay-2">
-            <div className="lp-price-card__badge">Most popular</div>
+            <div className="lp-price-card__badge">Half-off</div>
             <div className="lp-price-card__name">Pro</div>
             <div className="lp-price-card__price">
               <span className="lp-price-card__price-strike">$11.99</span> $6.99<span>/mo</span>

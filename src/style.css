@@ -55,6 +55,12 @@
      its own recognizable tag color, not meant to match CTAs/links exactly. */
   --purple-600: #B794F6; --purple-50: #2A1F3D;
 
+  /* Hero accent gradient text stops — split from the raw hex values that
+     used to sit inline on .lp-hero__h1-accent so light mode can use darker,
+     readable stops instead of the pastel ones tuned for a dark background. */
+  --lp-hero-grad-2: #C4B8FF;
+  --lp-hero-grad-3: #8BE8CF;
+
   /* Spacing & shape */
   --sidebar-w: 56px;
   --panel-w:   390px;
@@ -93,6 +99,12 @@
   --blue-600:  #1A65C8;  --blue-50:   #DBEAFE;
   --amber-600: #8A4D00;  --amber-50:  #FEF3C7;
   --purple-600: #7C3AED; --purple-50: #EDE9FE;
+
+  /* Darker, higher-contrast stops for the hero gradient text — the dark-mode
+     pastel stops (#C4B8FF / #8BE8CF) were nearly unreadable against a white
+     background. */
+  --lp-hero-grad-2: #6D28D9;
+  --lp-hero-grad-3: #0F766E;
 
   --sidebar-w: 56px;
   --panel-w:   390px;
@@ -2878,8 +2890,10 @@ td { padding:7px 11px; vertical-align:middle; }
   color: var(--text); margin-bottom: 24px;
 }
 .lp-hero__h1-accent {
-  /* Gradient text — Linear's signature treatment */
-  background: linear-gradient(135deg, var(--accent-strong) 0%, #C4B8FF 50%, #8BE8CF 100%);
+  /* Gradient text — Linear's signature treatment. Stops are theme-aware
+     (see --lp-hero-grad-2/3) so light mode gets darker, readable colors
+     instead of the dark-mode pastel tuning. */
+  background: linear-gradient(135deg, var(--accent-strong) 0%, var(--lp-hero-grad-2) 50%, var(--lp-hero-grad-3) 100%);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
 }
