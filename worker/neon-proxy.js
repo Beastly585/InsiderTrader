@@ -2043,9 +2043,6 @@ async function handleCreateSubscription(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
-  let body;
-  try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
-  const { email } = body; // only one recurring plan now — Pro
   // Beta period: every public signup through this endpoint gets the $6.99
   // beta price, not the standard $11.99 PRO price — matches the landing
   // page's "first 25 BETA users get half-off forever" pricing. No
@@ -2058,8 +2055,69 @@ async function handleCreateSubscription(request, env, origin) {
   // accounts from accidentally paying anyway (see the comment there).
   const priceId = env.STRIPE_PRICE_BETA;
 
+  // Email comes from Clerk server-side, never from the request body. The
+  // client used to be trusted here (`const { email } = body`) — not a
+  // billing-fraud vector since payment still has to clear, but nothing
+  // stopped someone from pointing their own Stripe receipts and any future
+  // customer-facing emails at an arbitrary inbox that isn't even theirs.
+  // Same fetch pattern as handleFeedback below.
+  let email = null;
+  if (env.CLERK_SECRET_KEY) {
+    try {
+      const r = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
+        headers: { 'Authorization': `Bearer ${env.CLERK_SECRET_KEY}` },
+      });
+      const u = await r.json();
+      const primaryId = u.primary_email_address_id;
+      email = u.email_addresses?.find(e => e.id === primaryId)?.email_address
+           || u.email_addresses?.[0]?.email_address || null;
+    } catch (e) {
+      console.error('[Worker] Failed to fetch email for create-subscription (non-fatal — Stripe customer just won\'t have one set):', e.message);
+    }
+  }
+
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
+
+  // Atomically claim a short-lived lock on this user's row before doing
+  // anything else below. The old check-then-create pattern — SELECT the
+  // existing row, decide, then separately INSERT/create — has a real gap
+  // between the read and the write. Two requests close together (a fast
+  // double-click, a client retry, someone scripting parallel calls with a
+  // valid token) could both pass the "no existing live subscription" check
+  // before either write landed, reproducing the exact double-subscription
+  // bug this whole guard exists to prevent — just triggered by concurrency
+  // instead of cancel-then-resubscribe-same-day.
+  //
+  // This UPSERT is a single atomic statement: Postgres serializes any two
+  // concurrent writers targeting the same row, so only one request can ever
+  // successfully claim the lock (the WHERE clause only matches an unlocked
+  // or expired-lock row) — the loser gets zero rows back from RETURNING and
+  // is rejected outright rather than proceeding. No cross-request session
+  // or advisory lock needed; Neon's HTTP driver has no persistent session
+  // to hold one anyway, but a single statement doesn't need one.
+  // Needs, once: ALTER TABLE public.subscriptions
+  //   ADD COLUMN IF NOT EXISTS checkout_lock_until TIMESTAMPTZ;
+  let row;
+  try {
+    const claim = await neonFetch(env, `
+      INSERT INTO public.subscriptions (clerk_user_id, plan, status, checkout_lock_until, updated_at)
+      VALUES (${sqlVal(clerkUserId)}, 'free', 'none', now() + interval '2 minutes', now())
+      ON CONFLICT (clerk_user_id) DO UPDATE SET
+        checkout_lock_until = now() + interval '2 minutes',
+        updated_at = now()
+      WHERE public.subscriptions.checkout_lock_until IS NULL
+         OR public.subscriptions.checkout_lock_until < now()
+      RETURNING stripe_customer_id, stripe_subscription_id, plan, status, cancel_at_period_end
+    `);
+    row = claim.rows?.[0];
+  } catch (e) {
+    console.error('[Worker] checkout lock claim failed:', e.message);
+    return corsResponse({ error: 'Could not start checkout — try again in a moment.' }, 500, origin, env);
+  }
+  if (!row) {
+    return corsResponse({ error: 'A checkout is already in progress for this account — give it a moment and try again.' }, 409, origin, env);
+  }
 
   try {
     // Pull the full row, not just stripe_customer_id — this was the actual
@@ -2075,11 +2133,6 @@ async function handleCreateSubscription(request, env, origin) {
     // ID was gone from our DB — Settings > Billing (and this endpoint) had
     // no way to ever see or cancel it again, so it would've kept billing
     // every period indefinitely with nothing showing it existed.
-    const existing = await neonFetch(env,
-      `SELECT stripe_customer_id, stripe_subscription_id, status, cancel_at_period_end
-       FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
-    );
-    const row = existing.rows?.[0];
     let customerId = row?.stripe_customer_id;
 
     // A card that's failing on renewal (status:'past_due') is its own case,
@@ -2150,6 +2203,14 @@ async function handleCreateSubscription(request, env, origin) {
   } catch (e) {
     console.error('[Worker] create-subscription failed:', e.message);
     return corsResponse({ error: e.message }, 500, origin, env);
+  } finally {
+    // Always release, win or lose — a real completion doesn't need to wait
+    // out the full 2-minute expiry, and an error shouldn't lock someone out
+    // of retrying immediately. The expiry above is just the backstop for
+    // if this Worker instance dies mid-request without reaching here.
+    await neonFetch(env,
+      `UPDATE public.subscriptions SET checkout_lock_until = NULL WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+    ).catch(e => console.error('[Worker] Failed to release checkout lock (non-fatal — expires in 2m regardless):', e.message));
   }
 }
 
