@@ -1361,57 +1361,93 @@ function EnvPreview({ type }) {
     </div>
   );
   if (type === 'insights') return (
-    <div className="env-preview">
+    <div className="env-preview env-preview--signals">
       <div className="env-preview__pills">
-        {[0,1,2,3].map(i => <span key={i} className={`env-preview__pill${i===1?' env-preview__pill--active':''}`}/>)}
+        {['30d','90d','1y','All'].map((p,i) => (
+          <span key={p} className={`env-preview__pill env-preview__pill--label${i===1?' env-preview__pill--active':''}`}>{p}</span>
+        ))}
       </div>
-      {[0,1,2,3].map(i => (
-        <div key={i} className="env-preview__row env-preview__row--grid">
+      {[
+        {rank:1, rate:'94%', dir:'buy'},
+        {rank:2, rate:'87%', dir:'buy'},
+        {rank:3, rate:'61%', dir:'sell'},
+        {rank:4, rate:'52%', dir:'buy'},
+      ].map(r => (
+        <div key={r.rank} className="env-preview__lb-row">
+          <span className="env-preview__lb-rank">{r.rank}</span>
           <span className="env-preview__ticker"/>
-          <span className="env-preview__tag"/>
-          <span className="env-preview__bar" style={{width:`${70-i*15}%`}}/>
-          <span className="env-preview__num env-preview__num--pos"/>
+          <span className="env-preview__wl-name"/>
+          {r.dir==='buy'
+            ? <IconBuyTri className="env-preview__lb-dir env-preview__lb-dir--buy" style={{width:8,height:8}}/>
+            : <IconSellTri className="env-preview__lb-dir env-preview__lb-dir--sell" style={{width:8,height:8}}/>}
+          <span className={`env-preview__lb-rate${parseFloat(r.rate)>=70?' env-preview__lb-rate--hi':''}`}>{r.rate}</span>
         </div>
       ))}
     </div>
   );
   if (type === 'data') return (
-    <div className="env-preview">
+    <div className="env-preview env-preview--data">
       <div className="env-preview__toolbar">
         <span className="env-preview__search"/>
         <span className="env-preview__pill env-preview__pill--sm"/>
         <span className="env-preview__pill env-preview__pill--sm"/>
       </div>
+      <div className="env-preview__thead">
+        {['Date','Insider','Ticker','Type','Value'].map(h => (
+          <span key={h} className="env-preview__th">{h}</span>
+        ))}
+      </div>
       <div className="env-preview__table">
-        {[0,1,2,3,4].map(i => (
-          <div key={i} className="env-preview__trow">
-            <span/><span/><span/><span/><span/>
+        {[0,1,2,3].map(i => (
+          <div key={i} className="env-preview__trow env-preview__trow--data">
+            <span/>
+            <span/>
+            <span className="env-preview__ticker"/>
+            <span className={`env-preview__code${i%3===0?' env-preview__code--sell':' env-preview__code--buy'}`}>{i%3===0?'S':'P'}</span>
+            <span className="env-preview__num env-preview__num--pos"/>
           </div>
         ))}
       </div>
     </div>
   );
   if (type === 'watchlist') return (
-    <div className="env-preview">
-      {[0,1,2].map(i => (
-        <div key={i} className="env-preview__chip-row">
-          <span className="env-preview__star">★</span>
+    <div className="env-preview env-preview--watchlist">
+      <div className="env-preview__wl-head">
+        <span className="env-preview__wl-dot"/>
+        <span className="env-preview__wl-acct">Brokerage linked</span>
+      </div>
+      {[
+        {held:true,  buy:true},
+        {held:true,  buy:false},
+        {held:false, buy:true},
+      ].map((r,i) => (
+        <div key={i} className="env-preview__wl-row">
+          <span className={`env-preview__star${r.held?' env-preview__star--filled':''}`}>★</span>
           <span className="env-preview__ticker env-preview__ticker--lg"/>
-          <span className="env-preview__badge"/>
+          <span className="env-preview__wl-name"/>
+          <span className={`env-preview__wl-signal${r.buy?' env-preview__wl-signal--buy':' env-preview__wl-signal--sell'}`}>
+            {r.buy ? '▲ Buying' : '▼ Selling'}
+          </span>
         </div>
       ))}
     </div>
   );
   if (type === 'settings') return (
-    <div className="env-preview env-preview--split">
-      <div className="env-preview__nav">
-        {[0,1,2,3].map(i => <span key={i} className={`env-preview__nav-item${i===0?' env-preview__nav-item--active':''}`}/>)}
-      </div>
-      <div className="env-preview__panel">
-        <span className="env-preview__panel-title"/>
-        <div className="env-preview__toggle-row"><span/><span className="env-preview__toggle"/></div>
-        <div className="env-preview__toggle-row"><span/><span className="env-preview__toggle env-preview__toggle--on"/></div>
-      </div>
+    <div className="env-preview env-preview--alerts">
+      {[
+        {isNew:true,  buy:true},
+        {isNew:false, buy:true},
+        {isNew:false, buy:false},
+      ].map((r,i) => (
+        <div key={i} className="env-preview__alert-row">
+          <span className={`env-preview__alert-dot${r.buy?' env-preview__alert-dot--buy':' env-preview__alert-dot--sell'}`}/>
+          <div className="env-preview__alert-body">
+            <span className="env-preview__ticker"/>
+            <span className="env-preview__alert-text"/>
+          </div>
+          {r.isNew && <span className="env-preview__alert-new">New</span>}
+        </div>
+      ))}
     </div>
   );
   return null;
@@ -7093,28 +7129,28 @@ function LandingPage({ onEnter, dark, setDark }) {
       icon: 'IconLink',
       eyebrow: 'Portfolio',
       title: 'Watch your own holdings, and theirs',
-      body: 'Link your brokerage and see insider activity on stocks you already own. Or skip that and just follow specific tickers and people you want to keep an eye on.',
+      body: 'Link your brokerage and see insider activity on stocks you already own. Or skip that, and just follow the specific tickers and people you want to keep an eye on.',
       env: 'watchlist',
     },
     {
       icon: 'IconZap',
       eyebrow: 'Alerts',
       title: 'Get notified the moment it happens',
-      body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you find out right away, not the next time you happen to check.',
+      body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you get notified right away. Staying ahead of the curve is hard. This is as close as you can get without sitting in the board room.',
       env: 'settings',
     },
     {
       icon: 'IconData',
       eyebrow: 'Data',
       title: `Every filing since ${dataSinceYear}`,
-      body: `House, Senate, and corporate insider trades, all pulled straight from public SEC and STOCK Act disclosures. Nothing here is a rumor or a paid data feed. It's what was actually filed, going back to ${dataSinceYear}.`,
+      body: `House, Senate, and corporate insider trades, pulled straight from public SEC and STOCK Act disclosures. Nothing here is a rumor or a paid data feed. It's what was actually filed, going back to ${dataSinceYear}.`,
       env: 'data',
     },
     {
       icon: 'IconInsights',
       eyebrow: 'Signals',
       title: 'See who\'s actually good at this',
-      body: 'Insiders and members of Congress ranked by their real track record, not by how much they traded. When someone with a strong history makes a big move, it shows up fast.',
+      body: 'Quickly gauge how much weight to put on a move. Corporate and political insiders ranked by their real track record, not by how much they traded. When someone with a strong history makes a big move, it shows up fast.',
       env: 'insights',
     },
   ];
@@ -7193,14 +7229,14 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-hero">
         <div className="lp-hero-bg" aria-hidden="true"/>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Your portfolio, watched around the clock.<br/>
-          <span className="lp-hero__h1-accent">Seli tells you the moment it matters.</span>
+          Move before the market, with confidence.<br/>
+          <span className="lp-hero__h1-accent">Custom alerts. Insider insights. Seli pulls back the curtain.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          Connect your brokerage or follow the tickers you care about, and get an alert the
-          instant an executive, director, or member of Congress trades one of them.
-          Every signal traces back to a real SEC or STOCK Act filing, scored by conviction
-          so you know what actually deserves your attention.
+          Seli is the extra layer that keeps you confident in your portfolio. The moment an insider,
+          political or corporate, makes a move, you'll know. Time to pull out of a position, or time
+          to buy something you've had your eye on. Use it standalone too, as a research layer for
+          anything you're thinking about investing in.
         </p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
@@ -7334,7 +7370,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-price-card__price">$0<span>/mo</span></div>
             <div className="lp-price-card__desc">Start tracking insider moves today. No card required.</div>
             <ul className="lp-price-card__features">
-              {['Dashboard & sector heatmap','7-day signal window','Top insiders leaderboard','Corporate + congressional trades','Form 4 data table'].map(f=>(
+              {['Dashboard & sector heatmap','7-day signal window','Top insiders leaderboard','Corporate + congressional trades','All filed SEC transactions dating back 1 year'].map(f=>(
                 <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
@@ -7357,7 +7393,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-price-card__beta-note">Half off, forever — for the first 25 Beta users</div>
             <div className="lp-price-card__desc">For investors who need to act before the market catches up.</div>
             <ul className="lp-price-card__features">
-              {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Email alerts — instant or digest','Custom alert filters (conviction, sector)','Position-relative signal weighting','Connect your brokerage (SnapTrade)','Deep-dive explorer'].map(f=>(
+              {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Customizable email alerts, instant or digest','Signal weighting to gauge conviction fast','Connect your brokerage (SnapTrade)','Full insiders deep-dive'].map(f=>(
                 <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
@@ -7403,9 +7439,9 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-about-teaser reveal reveal--delay-1" id="about-teaser">
         <div className="lp-about-teaser__grid">
           <div className="lp-about-teaser__lead">
-            <h2 className="lp-section-h2">Insiders have a real, studied edge. Now you can see it too.</h2>
+            <h2 className="lp-section-h2">Insiders have a real, studied edge. You can have it too.</h2>
             <p className="lp-about-teaser__intro">
-              This isn't a hunch or a marketing angle — it's decades of financial economics research,
+              This isn't a hunch or a marketing angle. It's decades of financial economics research,
               hiding behind filings almost nobody reads. Federal law forces every insider to disclose their
               trades. Seli reads every single one, the moment it lands, so you don't have to.
             </p>

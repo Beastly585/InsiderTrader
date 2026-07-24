@@ -2210,6 +2210,65 @@ td { padding:7px 11px; vertical-align:middle; }
 .env-preview__toggle { width: 26px; height: 14px; border-radius: 999px; background: var(--border-md); position: relative; }
 .env-preview__toggle--on { background: var(--accent); opacity: 0.7; }
 
+/* Portfolio (watchlist) mockup — linked-account header + holding rows,
+   each showing a real buy/sell direction so the "watch your own holdings,
+   and theirs" claim is visible at a glance, not just implied by a star. */
+.env-preview__wl-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.env-preview__wl-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green-600); flex-shrink: 0; }
+.env-preview__wl-acct { font-size: 0.5625rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.env-preview__wl-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.env-preview__wl-name { flex: 1; height: 8px; border-radius: 3px; background: var(--surface-2); max-width: 70px; }
+.env-preview__star--filled { color: var(--accent); }
+.env-preview__wl-signal {
+  font-size: 0.5625rem; font-weight: 700; padding: 2px 6px; border-radius: 999px;
+  white-space: nowrap; margin-left: auto;
+}
+.env-preview__wl-signal--buy { color: var(--green-600); background: var(--green-50); }
+.env-preview__wl-signal--sell { color: var(--red-600); background: var(--red-50); }
+
+/* Alerts mockup — a real notification feed (dot + ticker + message line +
+   "New" badge on the freshest one) instead of a generic settings panel,
+   so it visually matches "get notified the moment it happens". */
+.env-preview__alert-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.env-preview__alert-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.env-preview__alert-dot--buy { background: var(--green-600); }
+.env-preview__alert-dot--sell { background: var(--red-600); }
+.env-preview__alert-body { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.env-preview__alert-text { display: block; height: 7px; width: 85%; border-radius: 3px; background: var(--surface-2); }
+.env-preview__alert-new {
+  font-size: 0.5rem; font-weight: 700; color: var(--accent-strong); background: var(--accent-50);
+  padding: 2px 6px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.03em; flex-shrink: 0;
+}
+
+/* Data mockup — labeled column headers over the filing rows, with a real
+   P/S transaction-code chip, so it reads as a filings table rather than
+   an abstract grid of bars. */
+.env-preview__thead { display: grid; grid-template-columns: 1fr 1fr 44px 22px 40px; gap: 6px; padding: 0 0 2px; }
+.env-preview__th { font-size: 0.5rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.env-preview__trow--data { grid-template-columns: 1fr 1fr 44px 22px 40px; align-items: center; }
+.env-preview__code {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 4px; font-size: 0.5625rem; font-weight: 700;
+}
+.env-preview__code--buy { color: var(--green-600); background: var(--green-50); }
+.env-preview__code--sell { color: var(--red-600); background: var(--red-50); }
+
+/* Signals mockup — leaderboard rows with rank, a buy/sell direction
+   triangle, and a hit-rate pill so "who's actually good at this" shows a
+   ranked track record, not just tickers with generic bars. */
+.env-preview__pill--label {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0 8px; font-size: 0.5625rem; font-weight: 600; color: var(--text-3);
+}
+.env-preview__pill--label.env-preview__pill--active { color: var(--accent-strong); }
+.env-preview__lb-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.env-preview__lb-rank { width: 12px; font-size: 0.625rem; font-weight: 700; color: var(--text-3); }
+.env-preview__lb-dir { margin-left: auto; }
+.env-preview__lb-dir--buy { color: var(--green-600); }
+.env-preview__lb-dir--sell { color: var(--red-600); }
+.env-preview__lb-rate { font-size: 0.625rem; font-weight: 700; color: var(--text-3); width: 30px; text-align: right; }
+.env-preview__lb-rate--hi { color: var(--green-600); }
+
 .guide-trust-demo {
   display: flex; align-items: center; gap: 10px; margin-top: 8px;
   padding: 10px 12px; background: var(--surface-2); border-radius: var(--radius-md);
