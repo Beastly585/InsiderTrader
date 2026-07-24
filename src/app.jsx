@@ -7205,11 +7205,10 @@ function InfoTrustPage({ onBack, onEnter }) {
 
 // Landing-page-only feature mockups. Portfolio, Data, and Top Insiders reuse
 // the real app's own classes/components verbatim (.port-mini-tile, the
-// Data page's bare <table>/Badge markup, .ins-lb-card + ConvictionBar) so
-// what's shown here is styled identically to the actual tiles, not a
-// look-alike built from scratch — only the data is mock. Alerts still uses
-// a hand-built card (see lp-mock-email below) pending the real instant-alert
-// email template to match against.
+// Data page's bare <table>/Badge markup, .ins-lb-card + ConvictionBar).
+// Alerts reproduces send_instant_alerts.py's actual email markup and colors
+// (see .lp-mock-alert-email in the CSS). All four are styled identically to
+// the real thing they're representing — only the data is mock.
 function LPFeatureMock({ type }) {
   if (type === 'watchlist') return (
     <div className="port-mini-tile lp-mock-tile">
@@ -7250,17 +7249,46 @@ function LPFeatureMock({ type }) {
         <span className="dash-tile__title">Alerts</span>
         <span className="dash-tile__sub">Instant</span>
       </div>
-      <div className="dash-tile__body lp-mock-email">
-        <div className="lp-mock-email__meta">
-          <span className="lp-mock-email__from"><IconMail style={{width:11,height:11}}/> Seli Alerts &lt;alerts@seli.app&gt;</span>
-          <span className="lp-mock-email__time">9:41 AM</span>
+      <div className="dash-tile__body" style={{padding:0}}>
+        {/* Reproduces send_instant_alerts.py's build_email() output — same
+            gradient header, colors (C_ACCENT/C_ACCENT_STR/C_AQUA/C_GREEN/
+            C_RED etc.), and row layout, as fixed hex values rather than the
+            app's CSS variables. That's deliberate: a real email always
+            renders with the colors baked into its HTML, regardless of
+            anyone's light/dark theme — matching it means matching that. */}
+        <div className="lp-mock-alert-email">
+          <div className="lp-mock-alert-email__hdr">
+            <span className="lp-mock-alert-email__brand">Seli</span>
+            <span className="lp-mock-alert-email__kind">Instant alert</span>
+          </div>
+          <div className="lp-mock-alert-email__body">
+            <p className="lp-mock-alert-email__intro">2 of your instant alerts were triggered:</p>
+            <table className="lp-mock-alert-email__table"><tbody>
+              {[
+                {t:'NVDA', co:'NVIDIA Corp', reason:'Watched ticker traded', who:'Jensen Huang', date:'Jul 22, 2026', action:'Buy', detail:'12,000 sh @ $118.42', val:'$1.42M', buy:true},
+                {t:'TSLA', co:'Tesla Inc',   reason:'High conviction signal', who:'Elon Musk',    date:'Jul 21, 2026', action:'Sell', detail:'610 sh @ $248.55', val:'$151,616', buy:false},
+              ].map(r => (
+                <tr key={r.t}>
+                  <td>
+                    <span className="lp-mock-alert-email__ticker">{r.t}</span><br/>
+                    <span className="lp-mock-alert-email__muted">{r.co}</span>
+                  </td>
+                  <td className="lp-mock-alert-email__muted">{r.reason}</td>
+                  <td>
+                    <span className="lp-mock-alert-email__muted">{r.who}</span><br/>
+                    <span className="lp-mock-alert-email__faint">{r.date}</span>
+                  </td>
+                  <td>
+                    <span className={r.buy?'lp-mock-alert-email__buy':'lp-mock-alert-email__sell'}>{r.action}</span><br/>
+                    <span className="lp-mock-alert-email__muted">{r.detail}</span>
+                  </td>
+                  <td className={`lp-mock-alert-email__val ${r.buy?'lp-mock-alert-email__buy':'lp-mock-alert-email__sell'}`}>{r.val}</td>
+                </tr>
+              ))}
+            </tbody></table>
+            <div className="lp-mock-alert-email__cta">Open Seli →</div>
+          </div>
         </div>
-        <div className="lp-mock-email__subject">🟢 Insider buy: NVDA</div>
-        <p className="lp-mock-email__body">
-          3 executives bought a combined <strong>$2.1M</strong> in the past 24 hours, the largest
-          cluster on this ticker in six months.
-        </p>
-        <div className="lp-mock-email__cta">View filing →</div>
       </div>
     </div>
   );

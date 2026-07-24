@@ -3109,25 +3109,53 @@ td { padding:7px 11px; vertical-align:middle; }
   padding: 20px;
 }
 .lp-benefit-snippet-box .env-preview { width: 100%; margin: 0; }
-.lp-mock-tile { width: 100%; }
-.lp-mock-tile .dash-tile__body { padding: 12px 14px; }
-.lp-mock-tile.port-mini-tile { max-height: none; }
+/* These mocks sit in a fixed 4:3 box (.lp-benefit-snippet-box) that's
+   almost always taller than the few rows of sample data needs — without
+   this, the tile itself stretched to fill the box (correct), but its
+   content stayed top-aligned inside it, leaving dead blank space below
+   the last row/card. Centering the body's content vertically fills the
+   box properly instead. */
+.lp-mock-tile { width: 100%; height: 100%; }
+.lp-mock-tile .dash-tile__body {
+  padding: 12px 14px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.lp-mock-tile .dash-tile__body > * { flex-shrink: 0; }
+.lp-mock-tile.port-mini-tile { max-height: none; height: 100%; }
+.lp-mock-tile.port-mini-tile .port-mini-tile__body { flex: 1; justify-content: center; }
 
-/* Alerts mockup — a real email-notification card (from/time header,
-   subject, body, CTA) rather than a settings panel, matching "get
-   notified the moment it happens". Portfolio, Data, and Top Insiders
-   mockups reuse the real app's own classes/components directly (see
-   LPFeatureMock in app.jsx) instead of parallel lp-mock-* styling, so
-   this is the only feature block still styled independently, pending
-   a real instant-alert email template to match against instead. */
-.lp-mock-email { display: flex; flex-direction: column; gap: 6px; }
-.lp-mock-email__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.lp-mock-email__from { display: flex; align-items: center; gap: 5px; font-size: 0.6875rem; font-weight: 600; color: var(--text-2); }
-.lp-mock-email__time { font-size: 0.6875rem; color: var(--text-3); flex-shrink: 0; }
-.lp-mock-email__subject { font-size: 0.875rem; font-weight: 700; color: var(--text); }
-.lp-mock-email__body { font-size: 0.75rem; line-height: 1.55; color: var(--text-2); margin: 0; }
-.lp-mock-email__body strong { color: var(--text); }
-.lp-mock-email__cta { font-size: 0.75rem; font-weight: 600; color: var(--accent-strong); margin-top: 2px; }
+/* Alerts mockup — reproduces send_instant_alerts.py's actual email markup
+   and colors (C_ACCENT #5A4FE8, C_ACCENT_STR #4338C9, C_AQUA #3FBFA0,
+   C_GREEN #15803D, C_RED #C0392B, C_TEXT #111827, C_TEXT_MUTED #6B7280,
+   C_TEXT_FAINT #9CA3AF, C_BORDER #E5E7EB, C_BG #FFFFFF) as fixed hex
+   values rather than the app's CSS variables — a real email always
+   renders with its colors baked in, independent of anyone's theme, so
+   matching it means matching that, not re-deriving it from --accent etc.
+   Portfolio, Data, and Top Insiders mockups reuse the real app's own
+   classes/components directly (see LPFeatureMock in app.jsx) instead of
+   parallel lp-mock-* styling. */
+.lp-mock-alert-email { background: #FFFFFF; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.lp-mock-alert-email__hdr {
+  background: linear-gradient(135deg, #5A4FE8 0%, #4338C9 60%, #3FBFA0 100%);
+  padding: 10px 12px;
+}
+.lp-mock-alert-email__brand { color: #ffffff; font-size: 0.8125rem; font-weight: 800; letter-spacing: -0.02em; }
+.lp-mock-alert-email__kind { color: rgba(255,255,255,0.85); font-size: 0.625rem; margin-left: 6px; }
+.lp-mock-alert-email__body { padding: 10px 12px 12px; }
+.lp-mock-alert-email__intro { font-size: 0.6875rem; color: #111827; margin: 0 0 8px; }
+.lp-mock-alert-email__table { width: 100%; border-collapse: collapse; }
+.lp-mock-alert-email__table td { padding: 6px 4px; border-bottom: 1px solid #E5E7EB; font-size: 0.625rem; vertical-align: top; line-height: 1.5; }
+.lp-mock-alert-email__table tr:last-child td { border-bottom: none; }
+.lp-mock-alert-email__ticker { color: #5A4FE8; font-weight: 700; font-size: 0.6875rem; }
+.lp-mock-alert-email__muted { color: #6B7280; font-size: 0.625rem; }
+.lp-mock-alert-email__faint { color: #9CA3AF; font-size: 0.5625rem; }
+.lp-mock-alert-email__buy { color: #15803D; font-weight: 700; }
+.lp-mock-alert-email__sell { color: #C0392B; font-weight: 700; }
+.lp-mock-alert-email__val { text-align: right; font-weight: 700; white-space: nowrap; }
+.lp-mock-alert-email__cta {
+  display: inline-block; margin-top: 10px; background: #5A4FE8; color: #ffffff;
+  font-weight: 700; font-size: 0.625rem; padding: 6px 12px; border-radius: 6px;
+}
 
 
 /* Pricing section */
