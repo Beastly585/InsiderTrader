@@ -919,36 +919,22 @@ function useTheme() {
   return [dark, setDark];
 }
 
-// ── Risk appetite ────────────────────────────────────────────────────────────
-// A display-only threshold preference — how hard it should be for a signal to
-// read as "high"/green. Same localStorage-only pattern as theme: no server
-// sync needed, since nothing outside the browser (email digests, alerts)
-// needs to know this — it only changes how existing scores are LABELED, not
-// what data qualifies as a signal in the first place.
-//
-// Context (not prop-drilling) because ConvictionBar and the tier computation
-// it mirrors are used in dozens of places across Dashboard/Insights/Watchlist —
-// threading a new prop through every intermediate component between App and
-// each of those call sites would be a much larger, higher-risk change than
-// the feature itself warrants.
+// ── Signal tier threshold ─────────────────────────────────────────────────────
+// Used to be a per-user "risk appetite" preference (1-5, adjustable in
+// Settings) controlling how hard it was for a signal to read as "high"/green.
+// Removed deliberately: the same underlying score rendering as "High" for
+// one subscriber and "Medium" for another — based on a personal setting
+// they chose — is exactly the kind of individualized, tailored-to-the-
+// subscriber presentation that risks stepping outside the "impersonal"
+// requirement of the Investment Advisers Act publisher's exclusion. Every
+// user now sees the identical thresholds (level 3, "Balanced" — matches
+// what the neutral/default setting always was), via the same Context so
+// ConvictionBar and every other consumer needed no changes beyond this.
+// (RISK_APPETITE_THRESHOLDS / RISK_APPETITE_LABELS / tierFromPct still live
+// in src/lib/scoring.js, untouched — only the ability for a user to change
+// which level applies to them has been removed, not the underlying,
+// already-tested tiering math.)
 const RiskAppetiteContext = React.createContext([3, ()=>{}]);
-
-// 1 = very conservative (hardest to earn green) … 5 = very aggressive (easiest).
-// 3 is neutral and matches today's existing thresholds exactly, so nobody's
-// current experience changes unless they actually touch the slider.
-// (RISK_APPETITE_THRESHOLDS / RISK_APPETITE_LABELS / tierFromPct now live in
-// src/lib/scoring.js — imported above.)
-
-function useRiskAppetite() {
-  const [appetite, setAppetite] = useState(() => {
-    try { const s = localStorage.getItem('risk_appetite'); if (s) return Number(s); } catch(_){}
-    return 3;
-  });
-  useEffect(() => {
-    try { localStorage.setItem('risk_appetite', String(appetite)); } catch(_){}
-  }, [appetite]);
-  return [appetite, setAppetite];
-}
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 function Badge({ type, children }) {
@@ -1289,8 +1275,8 @@ const GUIDE_SECTIONS = [
             <span className="guide-hero__wordmark">Seli</span>
           </div>
         </div>
-        <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as they're published, and surfaces the ones worth actually paying attention to.</p>
-        <p>This is a quick walkthrough of where the <strong>data</strong> comes from, how the <strong>scoring</strong> works, and what's behind each part of the app. Five short stops, or skip straight to the dashboard whenever you want.</p>
+        <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as they're published, and organizes them using its own scoring methodology.</p>
+        <p>This is a quick walkthrough of where the <strong>data</strong> comes from, how the <strong>scoring</strong> works, and what's behind each part of the app — all informational, none of it personalized to you or a recommendation to act. Five short stops, or skip straight to the dashboard whenever you want.</p>
       </>
     ),
   },
@@ -1334,7 +1320,7 @@ const GUIDE_SECTIONS = [
     icon: 'IconInsights',
     render: () => (
       <>
-        <p>Not every trade is worth the same attention. Seli ranks activity by <strong>conviction</strong>, a score built from a few real factors, not just dollar amount:</p>
+        <p>Every trade isn't scored the same way. Seli calculates a <strong>conviction</strong> score for each one, a number built from a few real factors, not just dollar amount:</p>
         <ul>
           <li>A <strong>C-suite executive or member of Congress</strong> buying counts for more than a director or 10%-owner trading the same amount.</li>
           <li><strong>More buys than sells</strong> on the same ticker adds to the score. More sells than buys works against it.</li>
@@ -1348,6 +1334,7 @@ const GUIDE_SECTIONS = [
           <TrustStars score={4.5}/>
           <span className="td-muted" style={{ fontSize: '0.75rem' }}>Built from hit rate on past open-market buys, once there's enough history to mean something (5+ priced trades).</span>
         </div>
+        <p style={{ marginTop: 12 }}><strong>This scoring is the same for every user.</strong> It's Seli's own methodology, applied identically to everyone and to every trade — not tailored to you, your holdings, or your risk tolerance. It's informational, not a recommendation to buy, sell, or hold anything. See <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
       </>
     ),
   },
@@ -1357,7 +1344,7 @@ const GUIDE_SECTIONS = [
     icon: 'IconZap',
     render: () => (
       <>
-        <p>Free tracks the last 7 days and covers the dashboard, leaderboard, and full filing data. Pro unlocks the parts built for actually acting on this:</p>
+        <p>Free tracks the last 7 days and covers the dashboard, leaderboard, and full filing data. Pro unlocks more ways to follow it:</p>
         <ul>
           <li><strong>Follow specific insiders or tickers.</strong> Build a watchlist and see their activity surfaced ahead of everything else.</li>
           <li><strong>Link your portfolio.</strong> Connect a brokerage account (read-only, never able to place trades) and see insider activity on what you actually hold.</li>
@@ -1522,7 +1509,7 @@ function GuideProvider({ children }) {
 
   // Auto-open once per browser, on first real visit to the app (not the
   // marketing/landing page) — localStorage only, same pattern already used
-  // for theme and risk_appetite elsewhere in this file. Not tied to a Neon
+  // for theme elsewhere in this file. Not tied to a Neon
   // column: losing this flag on a new device just means seeing the guide
   // again, which is a low-stakes outcome, not one worth a server round trip.
   useEffect(() => {
@@ -3271,7 +3258,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                       <div className="dash-sig-item__left">
                         <div className="dash-sig-item__row1">
                           <span className="ticker" style={{fontSize:13,fontWeight:700}}>{s.ticker}</span>
-                          {hasReversal&&<span className="reversal-badge" title="An insider on this ticker recently changed direction — previously buying, now selling (or vice versa). May signal a shift in insider sentiment."><IconReversal className="reversal-badge__icon"/>reversal</span>}
+                          {hasReversal&&<span className="reversal-badge" title="An insider on this ticker recently traded in the opposite direction of their prior trade — previously buying, now selling (or vice versa)."><IconReversal className="reversal-badge__icon"/>reversal</span>}
                           <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                         </div>
                         <div className="dash-sig-item__row2">
@@ -3604,7 +3591,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                       <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
                         <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
                         {s.isPolitical&&<span className="badge badge--src-congress">Congress</span>}
-                        {hasReversal&&<span className="reversal-badge" title="Insider recently changed direction — may signal shift in sentiment"><IconReversal className="reversal-badge__icon"/></span>}
+                        {hasReversal&&<span className="reversal-badge" title="Insider recently traded in the opposite direction of their prior trade"><IconReversal className="reversal-badge__icon"/></span>}
                         <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                       </div>
                       <div className="ins-sig-row__co">{s.company}</div>
@@ -6223,7 +6210,7 @@ function CookiePage() {
         <p>Signing in and staying signed in requires a session cookie, set by Seli's authentication provider, Clerk (clerk.com). It's strictly necessary. Without it, Seli can't tell you're signed in, so there's no opt-out for it while still using an account.</p>
 
         <h2>3. Local Storage (Not a Cookie, But Similar)</h2>
-        <p>Seli also uses your browser's localStorage (data that stays on your device, never sent to our servers) for a few small preferences: whether you've already seen the welcome guide, your light/dark theme choice, and your risk-appetite setting on the Signal Ranking slider. Clearing your browser's site data resets these to their defaults, and your account itself is untouched.</p>
+        <p>Seli also uses your browser's localStorage (data that stays on your device, never sent to our servers) for a couple of small preferences: whether you've already seen the welcome guide, and your light/dark theme choice. Clearing your browser's site data resets these to their defaults, and your account itself is untouched.</p>
 
         <h2>4. What Seli Doesn't Use</h2>
         <p>No advertising cookies. No third-party tracking or analytics cookies. No cross-site tracking. No cookie-based fingerprinting.</p>
@@ -6274,16 +6261,16 @@ const HELP_SECTIONS = [
         <p>Your <strong>daily overview</strong>: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news. Start here if you just want to know what's happening today.</p>
         <EnvPreview type="dashboard"/>
         <h3>Insights</h3>
-        <p>The full, filterable signal feed. Every <strong>conviction-scored trade</strong>, filterable by window, strength, type (corporate vs. congressional), and sector. This is where to dig into "what's actually worth paying attention to right now."</p>
+        <p>The full, filterable signal feed. Every trade Seli has scored, filterable by window, score, type (corporate vs. congressional), and sector — the complete, raw feed behind the Dashboard's highlights.</p>
         <EnvPreview type="insights"/>
         <h3>Data</h3>
         <p>The <strong>raw, unscored filings</strong>. Every trade, searchable and filterable, with a link back to the original government filing. No ranking or opinion applied. If you want to draw your own conclusions, this is where to work.</p>
         <EnvPreview type="data"/>
         <h3>Watchlist</h3>
-        <p>Tickers and insiders you've chosen to follow (Pro). Their activity surfaces ahead of everything else, and it's what <strong>instant alerts and personalized digests</strong> are built from.</p>
+        <p>Tickers and insiders you've chosen to follow (Pro). Their activity surfaces ahead of everything else, and it's what <strong>instant alerts and email digests</strong> are built from.</p>
         <EnvPreview type="watchlist"/>
         <h3>Settings</h3>
-        <p>Your plan, billing, notification preferences, risk appetite for signal ranking, and brokerage connection all live here.</p>
+        <p>Your plan, billing, notification preferences, and brokerage connection all live here.</p>
         <EnvPreview type="settings"/>
       </>
     ),
@@ -6298,7 +6285,7 @@ const HELP_SECTIONS = [
         <h3>How current is it?</h3>
         <p>Seli checks for new filings on a recurring basis throughout the trading day. A disclosure typically appears within minutes of becoming public, not the next morning.</p>
         <h3>Is this financial advice?</h3>
-        <p>No. Seli is informational only. Nothing here is a recommendation to buy or sell anything. See our <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
+        <p>No. Seli is informational and educational only. Every trade shown, every score, and every alert is generated the exact same way for every user — nothing is personalized to your holdings, goals, or risk tolerance, even where a setting lets you filter or follow specific tickers. Conviction scores are Seli's own methodology for organizing public filings, not a signal about what to do with that information. Nothing here is a recommendation to buy, sell, or hold anything. See our <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
         <h3>Can Seli place trades for me?</h3>
         <p>No. Brokerage connections are read-only. Seli can see your positions to show relevant signals, but it can never place a trade.</p>
         <h3>Why don't option exercises or RSU vests count toward conviction scores?</h3>
@@ -6333,9 +6320,9 @@ const HELP_SECTIONS = [
       <>
         <p>Two separate systems, both configured in Settings &gt; Notifications, both Pro features.</p>
         <h3>Instant alerts</h3>
-        <p>Fire as soon as a qualifying trade is detected: a ticker or insider on your watchlist trading, a stock you actually hold in a connected brokerage account, a high-conviction signal, or a reversal (an insider trading opposite their recent pattern). Each trigger can be turned on or off independently.</p>
+        <p>Fire as soon as a qualifying trade is detected: a ticker or insider on your watchlist trading, a stock you actually hold in a connected brokerage account, a large executive buy above your threshold, or a reversal (an insider trading opposite their recent pattern). Each trigger can be turned on or off independently.</p>
         <h3>Digests</h3>
-        <p>A daily or weekly email summary instead of, or alongside, instant alerts. Top signals, filtered by minimum conviction, source (corporate or congressional), and whether it's limited to your watchlist.</p>
+        <p>A daily or weekly email summary instead of, or alongside, instant alerts. Top-scoring trades, filtered by minimum score, source (corporate or congressional), and whether it's limited to your watchlist.</p>
         <h3>Not receiving alerts you expect?</h3>
         <p>First check Settings &gt; Notifications to confirm the specific trigger is switched on. A common cause is a trigger being off by default. There's also a test-email button there to confirm delivery is working at all. If it's still not arriving, email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </>
@@ -6567,7 +6554,6 @@ function useSnapTrade(pro) {
 
 function SettingsPage({ user, onUpgrade }) {
   const pro   = isPro(user);
-  const [appetite, setAppetite] = React.useContext(RiskAppetiteContext);
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
   const snaptrade = useSnapTrade(pro);
   const portfolio = usePortfolio();
@@ -6599,7 +6585,6 @@ function SettingsPage({ user, onUpgrade }) {
 
   const SECTIONS = [
     {id:'billing',       label:'Billing',          icon:'$'},
-    {id:'ranking',       label:'Risk Management',  Icon:IconInsights},
     {id:'notifications', label:'Notifications',    Icon:IconMail},
     {id:'brokers',       label:'Link Portfolio',   Icon:IconLink},
   ];
@@ -6632,45 +6617,6 @@ function SettingsPage({ user, onUpgrade }) {
               <div className="settings-section__title">Billing</div>
               <div className="settings-section__desc">Manage your plan, payment, and data export purchases.</div>
               <BillingSection user={user} />
-            </div>
-          )}
-
-          {/* SIGNAL RANKING */}
-          {section==='ranking'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">Signal ranking</div>
-              <div className="settings-section__desc">
-                Controls how hard it is for a signal to show as High conviction (green). This only shifts
-                where the color thresholds sit — it doesn't hide or filter any data, so the same signals
-                stay visible and browsable at every setting.
-              </div>
-
-              <div className="settings-group">
-                <div className="settings-group__label">Conviction threshold</div>
-                <div className="risk-slider-panel">
-                  <div className={`risk-slider-current risk-slider-current--${appetite<=2?'low':appetite===3?'mid':'high'}`}>
-                    {RISK_APPETITE_LABELS[appetite]}
-                  </div>
-                  <input
-                    type="range" min="1" max="5" step="1" value={appetite}
-                    onChange={e=>setAppetite(Number(e.target.value))}
-                    className="risk-slider"
-                  />
-                  <div className="risk-slider-ticks">
-                    <span>Very conservative</span>
-                    <span>Very aggressive</span>
-                  </div>
-                </div>
-                <div className="risk-slider-preview">
-                  <div className="risk-slider-preview__label">Preview</div>
-                  <div className="risk-slider-preview__desc">
-                    A signal scoring 10/15 — same underlying score, shown at your current setting:
-                  </div>
-                  <div style={{marginTop:10,maxWidth:280}}>
-                    <ConvictionBar score={10} showLabel={true}/>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
@@ -6719,7 +6665,7 @@ function SettingsPage({ user, onUpgrade }) {
                   <div className="settings-group__label">What to include</div>
                   <SettingsToggle
                     label="Top insider signals"
-                    sub="Highest-conviction buys from the selected window"
+                    sub="Highest-scoring buys from the selected window"
                     checked={local.digest_top_signals}
                     onChange={e=>upd('digest_top_signals', e.target.checked)}
                     pro={pro}
@@ -6751,10 +6697,10 @@ function SettingsPage({ user, onUpgrade }) {
                   />
                 </div>
 
-                {/* Conviction filter */}
+                {/* Score filter */}
                 <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
                   <div className="settings-group__label">Minimum signal strength</div>
-                  <div className="settings-group__desc">Only include signals above this conviction level</div>
+                  <div className="settings-group__desc">Only include trades scoring above this level</div>
                   <div className="settings-pills" style={{marginTop:10}}>
                     {[
                       {v:'any',    l:'Any signal',  d:'All open-market trades'},
@@ -6868,16 +6814,16 @@ function SettingsPage({ user, onUpgrade }) {
                 <div className="settings-group">
                   <div className="settings-group__label">Signal triggers</div>
                   <SettingsToggle
-                    label="High conviction signal"
-                    sub="C-suite buy at or above your threshold below — regardless of watchlist"
+                    label="Large executive buy"
+                    sub="C-suite open-market buy at or above the threshold below — regardless of watchlist"
                     checked={local.instant_high_conviction}
                     onChange={e=>upd('instant_high_conviction', e.target.checked)}
                     pro={pro}
                   />
                   <div className="settings-row">
                     <div style={{flex:1}}>
-                      <div className="settings-row__label">High conviction threshold</div>
-                      <div className="settings-row__sub">Minimum single-trade size to count as high conviction</div>
+                      <div className="settings-row__label">Minimum trade size</div>
+                      <div className="settings-row__sub">Single-trade size required to trigger this alert</div>
                     </div>
                     <select className="settings-select" value={local.instant_high_conviction_threshold} disabled={!pro}
                       onChange={e=>upd('instant_high_conviction_threshold', Number(e.target.value))}>
@@ -7068,7 +7014,7 @@ function InfoTrustPage({ onBack, onEnter }) {
 
         {/* ── Title + brief intro ──────────────────────────────────────── */}
         <div className="lp-info__eyebrow">About Seli</div>
-        <h1 className="lp-info__h1">Why insider trades are worth tracking</h1>
+        <h1 className="lp-info__h1">Why insider trades are public record</h1>
         <p className="lp-info__lede">
           Every year, corporate insiders and members of Congress disclose thousands of stock trades —
           not because they want to, but because federal law requires it. That disclosure creates a genuinely
@@ -7318,7 +7264,7 @@ function LPFeatureMock({ type }) {
             <table className="lp-mock-alert-email__table"><tbody>
               {[
                 {t:'NVDA', co:'NVIDIA Corp',    reason:'Watched ticker traded',  who:'Jensen Huang',   date:'Jul 22, 2026', action:'Buy',  detail:'12,000 sh @ $118.42', val:'$1.42M',    buy:true},
-                {t:'TSLA', co:'Tesla Inc',      reason:'High conviction signal', who:'Elon Musk',       date:'Jul 21, 2026', action:'Sell', detail:'610 sh @ $248.55',    val:'$151,616',  buy:false},
+                {t:'TSLA', co:'Tesla Inc',      reason:'Large executive sale',   who:'Elon Musk',       date:'Jul 21, 2026', action:'Sell', detail:'610 sh @ $248.55',    val:'$151,616',  buy:false},
                 {t:'MSFT', co:'Microsoft Corp', reason:'Followed insider filed', who:'Satya Nadella',   date:'Jul 21, 2026', action:'Buy',  detail:'340 sh @ $421.10',    val:'$143,174',  buy:true},
                 {t:'ADSK', co:'Autodesk Inc',   reason:'You hold this stock',    who:'Andrew Anagnost', date:'Jul 19, 2026', action:'Buy',  detail:'95 sh @ $289.77',     val:'$27,528',   buy:true},
               ].map(r => (
@@ -7462,7 +7408,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       icon: 'IconZap',
       eyebrow: 'Alerts',
       title: 'Get notified the moment it happens',
-      body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you get notified right away. Staying ahead of the curve is hard. This is as close as you can get without sitting in the board room.',
+      body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you\'ll see it here — as close to real time as public filings allow.',
       env: 'settings',
     },
     {
@@ -7475,8 +7421,8 @@ function LandingPage({ onEnter, dark, setDark }) {
     {
       icon: 'IconInsights',
       eyebrow: 'Signals',
-      title: 'See who\'s actually good at this',
-      body: 'Quickly gauge how much weight to put on a move. Corporate and political insiders ranked by their real track record, not by how much they traded. When someone with a strong history makes a big move, it shows up fast.',
+      title: 'A ranked history, not a hot take',
+      body: 'Corporate and political insiders ranked by their factual trading history: how often they traded, in what direction, and how large. It\'s a transparent scoring methodology applied the same way to everyone, not a recommendation to follow anyone specific.',
       env: 'insights',
     },
   ];
@@ -7555,14 +7501,14 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-hero">
         <div className="lp-hero-bg" aria-hidden="true"/>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Move before the market, with confidence.<br/>
-          <span className="lp-hero__h1-accent">Custom alerts. Insider insights. Seli pulls back the curtain.</span>
+          Public data from the people who beat the market.<br/>
+          <span className="lp-hero__h1-accent">Legible. Instant. At your fingertips.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          Seli is the extra layer that keeps you confident in your portfolio. The moment an insider,
-          political or corporate, makes a move, you'll know. Time to pull out of a position, or time
-          to buy something you've had your eye on. Use it standalone too, as a research layer for
-          anything you're thinking about investing in.
+          Every SEC Form 4 filing and congressional stock disclosure, the moment it's public.
+          No rumors, no paid data feeds, nothing personalized to you — just what corporate
+          executives, directors, and members of Congress actually filed, organized so you can
+          actually read it. Track specific tickers or people, or browse the full record.
         </p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
@@ -7717,9 +7663,9 @@ function LandingPage({ onEnter, dark, setDark }) {
               <span className="lp-price-card__price-strike">$11.99</span> $6.99<span>/mo</span>
             </div>
             <div className="lp-price-card__beta-note">Half off, forever — for the first 25 Beta users</div>
-            <div className="lp-price-card__desc">For investors who need to act before the market catches up.</div>
+            <div className="lp-price-card__desc">Full history, every alert, every score — for serious research.</div>
             <ul className="lp-price-card__features">
-              {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Customizable email alerts, instant or digest','Signal weighting to gauge conviction fast','Connect your brokerage (SnapTrade)','Full insiders deep-dive'].map(f=>(
+              {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Customizable email alerts, instant or digest','Full score breakdown on every trade','Connect your brokerage (SnapTrade)','Full insiders deep-dive'].map(f=>(
                 <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
               ))}
             </ul>
@@ -7765,7 +7711,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-about-teaser reveal reveal--delay-1" id="about-teaser">
         <div className="lp-about-teaser__grid">
           <div className="lp-about-teaser__lead">
-            <h2 className="lp-section-h2">Insiders have a real, studied edge. You can have it too.</h2>
+            <h2 className="lp-section-h2">The research is real. The filings are public.</h2>
             <p className="lp-about-teaser__intro">
               This isn't a hunch or a marketing angle. It's decades of financial economics research,
               hiding behind filings almost nobody reads. Federal law forces every insider to disclose their
@@ -7893,7 +7839,6 @@ import * as Sentry from '@sentry/react';
 // wouldn't catch a crash in this component's own body.
 function AppInner() {
   const [dark,setDark] = useTheme();
-  const riskAppetite = useRiskAppetite();
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
 
@@ -8164,7 +8109,6 @@ function AppInner() {
         </div>
       </div>
     )}
-    <RiskAppetiteContext.Provider value={riskAppetite}>
     <GuideProvider>
     <div className={`app-shell${panelOpen?' app-shell--panel-open':''}${page==='settings'?' app-shell--settings':''}`}>
       <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>
@@ -8272,7 +8216,6 @@ function AppInner() {
       )}
     </div>
     </GuideProvider>
-    </RiskAppetiteContext.Provider>
     </>
   );
 }

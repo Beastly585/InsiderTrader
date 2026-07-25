@@ -362,7 +362,7 @@ async function handleQuery(request, env, origin) {
         const result = await neonFetch(env,
           `SELECT status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
         );
-        isPro = result.rows?.[0]?.status === 'active' || result.rows?.[0]?.status === 'trialing';
+        isPro = isLiveStatus(result.rows?.[0]?.status);
       } catch (e) {
         console.error('[Worker] Plan check failed, defaulting to free-tier restrictions:', e.message);
       }
@@ -972,8 +972,7 @@ async function isProServerSide(env, clerkUserId) {
   const subResult = await neonFetch(env,
     `SELECT status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
   );
-  const status = subResult.rows?.[0]?.status;
-  return status === 'active' || status === 'trialing';
+  return isLiveStatus(subResult.rows?.[0]?.status);
 }
 
 async function handleTestEmail(request, env, origin) {
@@ -1772,6 +1771,19 @@ function planFromPriceId(env, priceId) {
   return proPrices.includes(priceId) ? 'pro' : 'free';
 }
 
+// Single definition of "this subscription currently grants Pro access" —
+// every status check in this file should call this, not re-list
+// 'active'/'trialing' inline. Four separate places used to each hardcode
+// this comparison independently (isProServerSide, handleQuery's date-floor
+// clamp, the webhook's isLiveNow, and the create-subscription duplicate
+// guard) — all four happened to agree, right up until they didn't: that's
+// exactly the shape of the past_due bug earlier, where Settings and the
+// duplicate-guard silently disagreed about what "live" meant. One set,
+// referenced everywhere, means a status added later (or a typo) can't
+// quietly diverge between call sites again.
+const LIVE_STATUSES = new Set(['active', 'trialing']);
+function isLiveStatus(status) { return LIVE_STATUSES.has(status); }
+
 // ── Stripe webhook ───────────────────────────────────────────────────────────
 // Verifies Stripe's signature against the RAW body (never JSON.parse before
 // verifying) and upserts subscription state. This is the ONLY writer of
@@ -1819,7 +1831,7 @@ async function handleStripeWebhook(request, env) {
         // 'incomplete' (checkout started but never paid), 'past_due' (card
         // failing on renewal), 'unpaid', 'incomplete_expired', 'canceled' —
         // means no access right now.
-        const isLiveNow = sub.status === 'active' || sub.status === 'trialing';
+        const isLiveNow = isLiveStatus(sub.status);
         let plan;
         if (event.type === 'customer.subscription.deleted' || !isLiveNow) {
           plan = 'free';
@@ -2164,7 +2176,7 @@ async function handleCreateSubscription(request, env, origin) {
     // since there's no real Stripe subscription behind them. Without this,
     // a comped account could still click Upgrade and end up paying for a
     // subscription they already have for free.
-    if (row?.status === 'active' || row?.status === 'trialing') {
+    if (isLiveStatus(row?.status)) {
       if (row.stripe_subscription_id && row.cancel_at_period_end) {
         // Same Stripe call handleReactivateSubscription makes — resumes the
         // existing subscription on its current cycle. No new charge; the
@@ -2184,6 +2196,17 @@ async function handleCreateSubscription(request, env, origin) {
         metadata: { clerk_user_id: clerkUserId },
       });
       customerId = customer.id;
+      // Persist this immediately rather than waiting for the subscription
+      // webhook to write it as part of its own full upsert. Without this,
+      // any failure between here and a successful stripe.subscriptions.create()
+      // below (a network blip, a Stripe-side error) leaves stripe_customer_id
+      // still null on the row — so the next attempt finds nothing to reuse
+      // and creates yet another orphaned customer, repeating indefinitely.
+      // This was very likely the real driver behind the 27 duplicate Stripe
+      // customers seen earlier for one account.
+      await neonFetch(env,
+        `UPDATE public.subscriptions SET stripe_customer_id = ${sqlVal(customerId)}, updated_at = now() WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+      ).catch(e => console.error('[Worker] Failed to persist stripe_customer_id early (non-fatal — webhook still sets it on subscription success):', e.message));
     }
 
     const subscription = await stripe.subscriptions.create({

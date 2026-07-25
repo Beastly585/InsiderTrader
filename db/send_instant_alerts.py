@@ -21,7 +21,14 @@ Four trigger types, matching the Settings > Instant alerts UI exactly:
                                regardless of watchlist — this is a simplified
                                single-buy threshold, not true multi-insider
                                cluster detection, which would need a heavier
-                               query
+                               query. Internal field name kept as-is to avoid
+                               a schema/preferences migration; the reason
+                               label shown in the actual email is "Large
+                               executive buy" (see reason_label below) —
+                               purely factual/descriptive rather than
+                               evaluative language like "high conviction",
+                               to stay clearly informational rather than
+                               reading as a recommendation.
   - instant_reversal         : an insider on a watched ticker changes
                                direction from their immediately prior trade
                                (subject to their instant_min_value floor)
@@ -165,7 +172,7 @@ def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
         reason_label = {
             "watchlist_ticker":   "Watched ticker traded",
             "followed_insider":   "Followed insider filed",
-            "high_conviction":    "High conviction signal",
+            "high_conviction":    "Large executive buy",
             "reversal":           "Reversal detected",
             "portfolio_holding":  "You hold this stock",
         }[m["reason"]]
@@ -218,7 +225,7 @@ def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
   </td></tr>
   <tr><td style="padding:0 20px 20px;">
     <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0;">
-      You're getting this because you enabled instant alerts in Settings. Not financial advice.
+      You're getting this because you enabled instant alerts in Settings. Informational only, not financial advice or a recommendation to buy or sell anything.
     </p>
   </td></tr>
 </table>
