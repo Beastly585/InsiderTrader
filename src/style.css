@@ -893,26 +893,113 @@ td { padding:7px 11px; vertical-align:middle; }
   .sidebar {
     position: fixed; top: auto; bottom: 0; left: 0; right: 0;
     width: 100%; height: 58px;
-    flex-direction: row; align-items: center; justify-content: space-around;
+    flex-direction: row; align-items: center; justify-content: space-evenly;
     border-right: none; border-top: 1px solid var(--border);
     padding: 0 4px;
   }
   /* The logo isn't a navigation affordance and a horizontal bar has no
      natural place to put it without crowding out actual nav items. */
   .sidebar__logo { display: none; }
-  .sidebar__nav {
-    flex-direction: row; flex: 1; height: 100%;
-    justify-content: space-around; align-items: center;
+  /* .sidebar__nav and .sidebar__footer used to stay two separate flex
+     groups (nav items evenly spaced within themselves, footer items
+     evenly spaced within themselves) — two independent space-around
+     calculations butted up against each other, which is what made the
+     row read as unevenly spaced rather than one clean set of icons.
+     display:contents removes both as layout boxes entirely, promoting
+     every button inside them to be a direct child of .sidebar's own flex
+     row — one distribution across all icons (dashboard/insights/data/
+     watchlist/upgrade/settings) instead of two competing ones. */
+  .sidebar__nav, .sidebar__footer { display: contents; }
+  /* Active indicator — the desktop version is a vertical bar on the left
+     edge, which only makes sense for a vertical list where "active" items
+     stack top-to-bottom. Repositioned to a horizontal bar centered under
+     the icon, matching how a row of tabs actually reads left-to-right. */
+  .nav-item--active::before {
+    left: 50%; top: auto; bottom: -2px; transform: translateX(-50%);
+    width: 20px; height: 3px; border-radius: 2px 2px 0 0;
   }
-  /* Footer items (upgrade, settings, sign out) join the same horizontal
-     row rather than staying a visually separate "footer" section — top
-     vs. bottom only means something in a vertical rail. */
-  .sidebar__footer {
-    flex-direction: row; align-items: center; gap: 2px;
-    border-top: none;
+  .main-area { margin-left: 0; padding-bottom: 84px; }
+  /* Docked directly above the fixed bottom bar instead of sitting in
+     .main-area's normal document flow — previously that meant it rendered
+     as its own full-width row stacked above the nav, reading as two
+     separate bars. Fixed here as a slim second row attached to the same
+     bottom edge, so visually it's one cohesive bottom stack. */
+  .footer {
+    position: fixed; left: 0; right: 0; bottom: 58px;
+    padding: 6px 14px; min-height: 0; font-size: 0.6875rem;
+    background: var(--surface); border-top: 0.5px solid var(--border);
+    justify-content: center;
   }
-  .main-area { margin-left: 0; padding-bottom: 58px; }
+  .footer__right { display: none; } /* "Help" — still one tap away via the ? icon in the status bar, not worth the width here */
+  .footer__center { position: static; transform: none; }
 }
+
+/* ── More sheet (mobile nav overflow) ────────────────────────────────────────
+   Only ever rendered when Sidebar's mobile branch is active, so no media
+   query needed to scope it — it simply doesn't exist in the DOM on desktop. */
+.more-sheet-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 300;
+  display: flex; align-items: flex-end;
+}
+.more-sheet {
+  width: 100%; background: var(--surface); border-radius: 16px 16px 0 0;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 2px;
+}
+.more-sheet__handle {
+  width: 36px; height: 4px; border-radius: 2px; background: var(--border-md);
+  margin: 6px auto 10px;
+}
+.more-sheet__item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 12px 14px; border-radius: var(--radius-md); border: none;
+  background: none; color: var(--text-2); font-size: 0.9375rem; font-family: var(--font);
+  text-align: left; cursor: pointer;
+}
+.more-sheet__item:hover { background: var(--surface-2); }
+.more-sheet__item--active { color: var(--accent-strong); background: var(--accent-50); font-weight: 600; }
+
+/* ── Home breadcrumb ──────────────────────────────────────────────────────────
+   Only shown on mobile, and only when the page was reached via a Home
+   tile's "See all" (see cameFromHome in AppInner) — hidden entirely on
+   desktop since Home itself is a mobile-only concept. */
+.home-breadcrumb {
+  display: none;
+  align-items: center; gap: 6px; width: 100%; margin-bottom: 12px;
+  padding: 8px 2px; border: none; background: none; cursor: pointer;
+  font-size: 0.8125rem; color: var(--text-2); font-family: var(--font);
+}
+.home-breadcrumb__arrow { font-size: 1rem; color: var(--text); }
+.home-breadcrumb__sep { color: var(--text-3); }
+@media (max-width: 640px) {
+  .home-breadcrumb { display: flex; }
+}
+
+/* ── Home page (mobile-only consolidated view) ───────────────────────────────
+   Four fixed-height peek tiles. Deliberately NOT display:none on desktop —
+   the 'home' page id is only ever reachable via the mobile nav/routing, so
+   this never renders there in practice, but the tile sizing itself is
+   still written mobile-first since that's its only real audience. */
+.home-page { display: flex; flex-direction: column; gap: 14px; padding-bottom: 8px; }
+.home-tile {
+  background: var(--surface); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg); padding: 14px 16px;
+  max-height: 260px; display: flex; flex-direction: column;
+}
+.home-tile__hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-shrink: 0; }
+.home-tile__title { font-size: 0.8125rem; font-weight: 700; letter-spacing: -0.1px; color: var(--text); }
+.home-tile__see-all { background: none; border: none; color: var(--accent-strong); font-size: 0.75rem; font-weight: 600; font-family: var(--font); cursor: pointer; padding: 4px; }
+.home-tile__body { overflow-y: auto; flex: 1; min-height: 0; }
+.home-tile__stat { font-size: 1.375rem; font-weight: 700; font-family: var(--font-mono); margin-bottom: 8px; }
+.home-tile__row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-top: 0.5px solid var(--border);
+  cursor: pointer;
+}
+.home-tile__row:first-child { border-top: none; }
+.home-tile__row:active { background: var(--surface-2); }
+.home-tile__empty { font-size: 0.8125rem; color: var(--text-3); margin: 0; padding: 4px 0; }
+.home-tile__link { background: none; border: none; padding: 0; color: var(--accent-strong); font-weight: 600; font-size: inherit; font-family: inherit; cursor: pointer; text-decoration: underline; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    DASHBOARD — bento grid layout

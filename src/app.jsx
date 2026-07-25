@@ -919,6 +919,30 @@ function useTheme() {
   return [dark, setDark];
 }
 
+// ── Mobile detection ──────────────────────────────────────────────────────────
+// Matches the same 640px breakpoint style.css already uses for the bottom
+// tab bar — this is the one place the actual set of navigable destinations
+// differs by device (mobile: Home + More; desktop: the full nav), not just
+// layout, so it needs a real JS check alongside the CSS media queries,
+// not instead of them.
+const MOBILE_BREAKPOINT = '(max-width: 640px)';
+function isMobileViewport() {
+  // Raw, synchronous — safe to call from a useState lazy initializer
+  // (before any effect has run) or from route-parsing helpers that live
+  // outside any component at all.
+  return typeof window !== 'undefined' && window.matchMedia(MOBILE_BREAKPOINT).matches;
+}
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(isMobileViewport);
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_BREAKPOINT);
+    const onChange = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isMobile;
+}
+
 // ── Signal tier threshold ─────────────────────────────────────────────────────
 // Used to be a per-user "risk appetite" preference (1-5, adjustable in
 // Settings) controlling how hard it was for a signal to read as "high"/green.
@@ -1006,6 +1030,10 @@ function IconInsights(p)  { return <svg {...ICON_PROPS} {...p}><polyline points=
 function IconData(p)      { return <svg {...ICON_PROPS} {...p}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>; }
 function IconFavorites(p) { return <svg {...ICON_PROPS} {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>; }
 function IconSettings(p)  { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>; }
+// "More" — mobile-only nav icon, opens the sheet holding everything that
+// doesn't fit in the 2-icon mobile bar (Dashboard/Insights/Data/Watchlist/
+// Settings). Standard horizontal-ellipsis "more" glyph.
+function IconMore(p) { return <svg {...ICON_PROPS} {...p}><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>; }
 function IconHelp(p)      { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }
 function IconSun(p)       { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>; }
 function IconMoon(p)      { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>; }
@@ -1036,6 +1064,67 @@ const NAV = [
 ];
 function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
   const pro = isPro(user);
+  const isMobile = useIsMobile();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  if (isMobile) {
+    // Mobile collapses to two destinations: Home (the new consolidated
+    // peek-tiles page) and More (everything else, in a small sheet) —
+    // down from five icons competing for a 375px-wide row. Data and
+    // Settings are still exactly one tap away, just behind one icon
+    // instead of their own, per the mobile IA discussion.
+    return (
+      <>
+        <nav className="sidebar sidebar--compact">
+          <button
+            className={`nav-item nav-item--icon-only${page==='home'?' nav-item--active':''}`}
+            onClick={()=>setPage('home')}
+            title="Home" aria-label="Home">
+            <IconHome className="nav-icon nav-icon--svg"/>
+          </button>
+          <button
+            className={`nav-item nav-item--icon-only${moreOpen?' nav-item--active':''}`}
+            onClick={()=>setMoreOpen(o=>!o)}
+            title="More" aria-label="More">
+            <IconMore className="nav-icon nav-icon--svg"/>
+          </button>
+        </nav>
+        {moreOpen && (
+          <div className="more-sheet-overlay" onClick={()=>setMoreOpen(false)}>
+            <div className="more-sheet" onClick={e=>e.stopPropagation()}>
+              <div className="more-sheet__handle"/>
+              {!pro && (
+                <button className="more-sheet__item" onClick={()=>{setMoreOpen(false); onUpgrade();}}>
+                  <span className="nav-icon">$</span> Upgrade to Pro
+                </button>
+              )}
+              <button className={`more-sheet__item${page==='dashboard'?' more-sheet__item--active':''}`}
+                onClick={()=>{setMoreOpen(false); setPage('dashboard');}}>
+                <IconHome className="nav-icon nav-icon--svg"/> Dashboard
+              </button>
+              <button className={`more-sheet__item${page==='signals'?' more-sheet__item--active':''}`}
+                onClick={()=>{setMoreOpen(false); setPage('signals');}}>
+                <IconInsights className="nav-icon nav-icon--svg"/> Insights
+              </button>
+              <button className={`more-sheet__item${page==='data'?' more-sheet__item--active':''}`}
+                onClick={()=>{setMoreOpen(false); setPage('data');}}>
+                <IconData className="nav-icon nav-icon--svg"/> Data
+              </button>
+              <button className={`more-sheet__item${page==='watchlist'?' more-sheet__item--active':''}`}
+                onClick={()=>{setMoreOpen(false); setPage('watchlist');}}>
+                <IconFavorites className="nav-icon nav-icon--svg"/> Watchlist
+              </button>
+              <button className={`more-sheet__item${page==='settings'?' more-sheet__item--active':''}`}
+                onClick={()=>{setMoreOpen(false); setPage('settings');}}>
+                <IconSettings className="nav-icon nav-icon--svg"/> Settings
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <nav className="sidebar sidebar--compact">
       {/* Logo */}
@@ -3199,6 +3288,119 @@ function NewsDrawer({ watchlist, filings, onClose }) {
 // Tabbed signals workspace — the primary daily research surface.
 // Each tab gets full tile width so rows are actually readable, unlike
 // the three-column cramped layout. Tabs: Corporate | Congressional | Movers.
+
+// ─── Home (mobile-only consolidated view) ─────────────────────────────────────
+// Four fixed-height peek tiles — Portfolio, Recent Signals, Watchlist, Raw
+// Data — each showing a handful of rows with sensible defaults, not the
+// full filter controls those pages expose. "See all" hands off to the real
+// page via seeAllFromHome, which is what powers the Home › Section
+// breadcrumb back in AppInner. Reuses the exact same hooks/pipeline every
+// other page already uses (usePortfolio, filterAndScoreSignals) rather
+// than a parallel, simplified data path that could quietly drift from
+// what the full pages actually show.
+function HomeTile({ title, onSeeAll, children }) {
+  return (
+    <div className="home-tile">
+      <div className="home-tile__hdr">
+        <span className="home-tile__title">{title}</span>
+        {onSeeAll && <button className="home-tile__see-all" onClick={onSeeAll}>See all →</button>}
+      </div>
+      <div className="home-tile__body">{children}</div>
+    </div>
+  );
+}
+
+function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll }) {
+  const pro = isPro(user);
+  const portfolio = usePortfolio(pro);
+
+  const recentSignals = useMemo(() => {
+    if (!filings.length) return [];
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+    return filterAndScoreSignals(filings, { cutoff: cutoffStr })
+      .sort((a,b) => b.conviction - a.conviction)
+      .slice(0, 4);
+  }, [filings]);
+
+  const watchlistFilings = useMemo(() => {
+    if (!filings.length || (!watchlist.tickers.length && !watchlist.insiders.length)) return [];
+    return filings
+      .filter(f => watchlist.tickers.includes(f.ticker) || watchlist.insiders.includes(f.insiderName))
+      .sort((a,b) => (b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
+      .slice(0, 4);
+  }, [filings, watchlist.tickers, watchlist.insiders]);
+
+  const recentFilings = useMemo(() => {
+    return [...filings]
+      .sort((a,b) => (b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
+      .slice(0, 4);
+  }, [filings]);
+
+  return (
+    <div className="home-page">
+      <HomeTile title="Portfolio" onSeeAll={pro && portfolio.connected ? () => onSeeAll('signals') : null}>
+        {!pro && <p className="home-tile__empty">Portfolio linking is a Pro feature.</p>}
+        {pro && portfolio.connected === false && (
+          <p className="home-tile__empty">No brokerage connected — <button className="home-tile__link" onClick={()=>onSeeAll('settings')}>link your account</button> to see your real holdings.</p>
+        )}
+        {pro && portfolio.connected === null && <p className="home-tile__empty">Checking connection…</p>}
+        {pro && portfolio.connected && portfolio.port && (
+          <>
+            <div className="home-tile__stat">{fmt.money(portfolio.port.totalValue)}</div>
+            {portfolio.port.positions.slice(0, 3).map(p => (
+              <div key={p.symbol} className="home-tile__row" onClick={()=>onOpenDetail({type:'ticker', ticker:p.symbol, company:p.company})}>
+                <span className="ticker">{p.symbol}</span>
+                <span className="td-muted" style={{flex:1}}>{fmt.money(p.marketValue)}</span>
+                {p.openPnlPct != null && <span className={p.openPnlPct >= 0 ? 'val-buy' : 'val-sell'}>{fmt.pct(p.openPnlPct)}</span>}
+              </div>
+            ))}
+            {!portfolio.port.positions.length && <p className="home-tile__empty">Connected, no positions found.</p>}
+          </>
+        )}
+      </HomeTile>
+
+      <HomeTile title="Recent Signals" onSeeAll={()=>onSeeAll('signals')}>
+        {loading && <p className="home-tile__empty">Loading…</p>}
+        {!loading && !recentSignals.length && <p className="home-tile__empty">No signals in the last 7 days.</p>}
+        {recentSignals.map(s => (
+          <div key={s.ticker} className="home-tile__row" onClick={()=>onOpenDetail({type:'ticker', ticker:s.ticker, company:s.company})}>
+            <span className="ticker">{s.ticker}</span>
+            <span className="td-muted" style={{flex:1}}>{s.company}</span>
+            <ConvictionBar score={s.conviction} max={15}/>
+          </div>
+        ))}
+      </HomeTile>
+
+      <HomeTile title="Watchlist" onSeeAll={()=>onSeeAll('watchlist')}>
+        {!watchlist.tickers.length && !watchlist.insiders.length && (
+          <p className="home-tile__empty">No tickers or insiders followed yet.</p>
+        )}
+        {(watchlist.tickers.length > 0 || watchlist.insiders.length > 0) && !loading && !watchlistFilings.length && (
+          <p className="home-tile__empty">Nothing new from your watchlist recently.</p>
+        )}
+        {watchlistFilings.map((f,i) => (
+          <div key={i} className="home-tile__row" onClick={()=>onOpenDetail({type:'ticker', ticker:f.ticker, company:f.company})}>
+            <span className="ticker">{f.ticker}</span>
+            <span className="td-muted" style={{flex:1}}>{f.insiderName}</span>
+            <span className={f.transactionType==='buy' ? 'val-buy' : 'val-sell'}>{f.transactionType==='buy' ? 'Buy' : 'Sell'}</span>
+          </div>
+        ))}
+      </HomeTile>
+
+      <HomeTile title="Raw Data" onSeeAll={()=>onSeeAll('data')}>
+        {loading && <p className="home-tile__empty">Loading…</p>}
+        {!loading && recentFilings.map((f,i) => (
+          <div key={i} className="home-tile__row" onClick={()=>onOpenDetail({type:'ticker', ticker:f.ticker, company:f.company})}>
+            <span className="td-date-main">{fmt.dateShort(f.transactionDate||f.date)}</span>
+            <span className="ticker">{f.ticker}</span>
+            <span className={f.transactionType==='buy' ? 'val-buy' : 'val-sell'} style={{marginLeft:'auto'}}>{fmt.money(f.value)}</span>
+          </div>
+        ))}
+      </HomeTile>
+    </div>
+  );
+}
 
 function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist }) {
   const [days, setDays] = useState(7);
@@ -6009,10 +6211,9 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 
 // ─── TERMS OF SERVICE ─────────────────────────────────────────────────────────
-// One place to change when a professional support address replaces this —
-// referenced by Terms, Privacy, Cookie Policy, and the Help Center rather
-// than repeated as a literal in each.
-const SUPPORT_EMAIL = '7withak@gmail.com';
+// Referenced by Terms, Privacy, Cookie Policy, and the Help Center rather
+// than repeated as a literal in each — one place to change going forward.
+const SUPPORT_EMAIL = 'admin@seli.app';
 
 function TermsPage() {
   const [dark, setDark] = useTheme();
@@ -7790,8 +7991,8 @@ function LandingPage({ onEnter, dark, setDark }) {
 // External paths are deliberately friendlier than internal page ids
 // (page id 'signals' -> path 'insights') so shared/indexed URLs read well
 // without renaming the internal id everywhere it's already used.
-const PAGE_TO_PATH = { dashboard:'', signals:'insights', data:'data', watchlist:'watchlist', settings:'settings' };
-const PATH_TO_PAGE = { '':'dashboard', insights:'signals', data:'data', watchlist:'watchlist', settings:'settings' };
+const PAGE_TO_PATH = { home:'home', dashboard:'', signals:'insights', data:'data', watchlist:'watchlist', settings:'settings' };
+const PATH_TO_PAGE = { '':'dashboard', home:'home', insights:'signals', data:'data', watchlist:'watchlist', settings:'settings' };
 
 function pathFromAppState(page, detail) {
   // Detail deep-link takes priority — the panel overlays whatever page is
@@ -7814,11 +8015,17 @@ function appStateFromPath(pathname) {
   if (parts[0] === 'insider' && parts[1]) {
     return { page: 'dashboard', detail: { type: 'trader', name: decodeURIComponent(parts[1]), title: '' } };
   }
+  // Root path ('') has no explicit page name to look up — on mobile this
+  // should land on the new consolidated Home rather than the desktop
+  // Dashboard, since Home is what "quick check on my phone" now means.
+  // A URL that explicitly said /insights, /data, etc. is respected as-is
+  // on any device; this default only applies to a bare '/'.
+  if (!parts[0] && isMobileViewport()) return { page: 'home', detail: null };
   const page = PATH_TO_PAGE[parts[0] || ''];
   return { page: page || 'dashboard', detail: null };
 }
 
-const PAGE_TITLES = { dashboard:'Dashboard', signals:'Insights', data:'Data', watchlist:'Watchlist', settings:'Settings' };
+const PAGE_TITLES = { home:'Home', dashboard:'Dashboard', signals:'Insights', data:'Data', watchlist:'Watchlist', settings:'Settings' };
 
 function titleFromAppState(page, detail) {
   if (detail?.type === 'ticker' && detail.ticker) {
@@ -8049,7 +8256,14 @@ function AppInner() {
   }
   function expandDetail(){setDetailFull(true);}
   function closeDetail(){setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);}
-  function navTo(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);}
+  // cameFromHome powers the "Home › Section" breadcrumb bar on mobile —
+  // any *other* way of reaching a page (bottom nav, a shared link, the
+  // desktop sidebar) should not show a breadcrumb back to a Home the
+  // person never actually came from, so plain navTo() always clears it.
+  // Only seeAllFromHome (used by Home's own "See all →" links) sets it.
+  const [cameFromHome, setCameFromHome] = useState(false);
+  function navTo(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);setCameFromHome(false);}
+  function seeAllFromHome(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);setCameFromHome(true);}
 
   // Sort state for the shared full-drawer explorer — independent from
   // InsightsPage's own internal sort state, since this instance is opened
@@ -8116,7 +8330,7 @@ function AppInner() {
         <div className="status-bar">
           {/* Page title — left */}
           <span className="status-bar__info">
-            {page==='settings'?'Settings':NAV.find(n=>n.id===page)?.label||'Seli'}
+            {PAGE_TITLES[page] || 'Seli'}
             <span className="beta-tag beta-tag--status" title="Seli is in private beta">BETA</span>
           </span>
           <div className="status-bar__meta">
@@ -8165,6 +8379,17 @@ function AppInner() {
           </div>
         </div>
         <div className="content-area">
+          {cameFromHome && page !== 'home' && (
+            // Mobile-only via CSS (see .home-breadcrumb) — a person who
+            // reached this page any other way (bottom nav, a shared link)
+            // never set cameFromHome, so this simply doesn't render for them.
+            <button className="home-breadcrumb" onClick={()=>navTo('home')}>
+              <span className="home-breadcrumb__arrow">←</span>
+              Home <span className="home-breadcrumb__sep">›</span> {PAGE_TITLES[page]}
+            </button>
+          )}
+          {page==='home'     &&<HomePage filings={filings} loading={loading} watchlist={watchlist} user={user}
+            onOpenDetail={openDetail} onSeeAll={seeAllFromHome}/>}
           {page==='dashboard'&&<DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist}/>}
           {page==='signals'  &&<InsightsPage   filings={filings} loading={loading}
             highlightTicker={hlTicker} setHighlightTicker={setHlTick}
