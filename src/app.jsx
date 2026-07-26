@@ -170,11 +170,11 @@ function UpgradeModal({ feature, pro, onClose }) {
           // file, not being told where to go click a different button for
           // it. Start the download immediately, then confirm what happened.
           try {
-            const rowCount = await downloadFullExport('', undefined, 'consume', n => setProgressText(`${n.toLocaleString()} rows fetched so far…`));
+            await downloadCSVFromR2('consume', msg => setProgressText(msg));
             setCheckoutProduct(null);
             setProcessing(false);
             setProgressText(null);
-            setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.` });
+            setStatusModal({ title: 'Export started', message: 'Your download should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.' });
           } catch (e) {
             setCheckoutProduct(null);
             setProcessing(false);
@@ -548,7 +548,7 @@ function BillingSection({ user }) {
   async function handleRedownload(idx) {
     setRedownloadingIdx(idx); setRedownloadErr(null); setProgressText(null);
     try {
-      await downloadFullExport('', undefined, 'redownload', n => setProgressText(`${n.toLocaleString()} rows…`));
+      await downloadCSVFromR2('redownload', msg => setProgressText(msg));
     } catch (e) {
       setRedownloadErr(e.message);
     }
@@ -786,11 +786,11 @@ function BillingSection({ user }) {
             }
             load();
             try {
-              const rowCount = await downloadFullExport('', undefined, 'consume', n => setProgressText(`${n.toLocaleString()} rows fetched so far…`));
+              await downloadCSVFromR2('consume', msg => setProgressText(msg));
               setCheckoutProduct(null);
               setProcessing(false);
               setProgressText(null);
-              setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.` });
+              setStatusModal({ title: 'Export started', message: 'Your download should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.' });
             } catch (e) {
               setCheckoutProduct(null);
               setProcessing(false);
@@ -5163,6 +5163,59 @@ async function proxySQL(sql) {
 // thrown error) specifically when no snapshot exists yet, since that's an
 // expected, recoverable state the caller should fall back from — not
 // something to bail out of the whole export over.
+// ── CSV download (pre-built in R2) ──────────────────────────────────────────
+// The production export path for full-database purchases: download a single
+// pre-built CSV file directly. No NDJSON parsing, no XLSX building, no
+// multi-GB browser heap. The old NDJSON→XLSX pipeline (fetchExportViaSnapshot
+// + downloadFullExport) stays for the Data page's filtered in-app export
+// where the dataset is small enough to build client-side.
+async function downloadCSVFromR2(mode = 'consume', onProgress = null) {
+  const r = await fetch(`${cfg.NEON_PROXY_URL}/export/csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
+    body: JSON.stringify({ mode }),
+  });
+
+  if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
+  if (r.status === 403) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error || 'Full data export requires a one-time purchase.');
+  }
+  if (r.status === 202) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error || 'Your export is being prepared — try again in a few minutes.');
+  }
+  if (!r.ok) throw new Error(`Export failed (status ${r.status})`);
+
+  // Stream the response into a Blob with progress tracking
+  const contentLength = Number(r.headers.get('Content-Length') || 0);
+  const reader = r.body.getReader();
+  const chunks = [];
+  let received = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (onProgress) {
+      const mb = Math.round(received / 1024 / 1024);
+      const pct = contentLength ? Math.round((received / contentLength) * 100) : 0;
+      onProgress(contentLength ? `${mb} MB (${pct}%)` : `${mb} MB downloaded…`);
+    }
+  }
+
+  const blob = new Blob(chunks, { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `seli_insider_trades_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+  return received;
+}
+
 async function fetchExportViaSnapshot(mode, onProgress) {
   const r = await fetch(`${cfg.NEON_PROXY_URL}/export/snapshot`, {
     method: 'POST',

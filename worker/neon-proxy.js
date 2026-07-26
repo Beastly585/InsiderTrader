@@ -63,6 +63,10 @@ const workerHandler = {
   // once the snapshot is caught up. No browser is waiting on any of this.
   async scheduled(event, env, ctx) {
     await continueSnapshotBuild(env);
+    // Build the downloadable CSV once the NDJSON snapshot is caught up.
+    // buildExportCSV is a no-op if the CSV is already current, so calling
+    // it every tick is safe and cheap.
+    await buildExportCSV(env);
   },
 
   async fetch(request, env) {
@@ -281,6 +285,13 @@ async function handleFetchInner(request, env, origin) {
     if (url.pathname === '/export/snapshot') {
       return handleExportSnapshot(request, env, origin);
     }
+    // Pre-built CSV download — the production export path. Serves a single
+    // file from R2 instead of streaming NDJSON parts through a TransformStream
+    // and rebuilding XLSX client-side (which OOMs on any real device at this
+    // dataset size).
+    if (url.pathname === '/export/csv') {
+      return handleCSVDownload(request, env, origin);
+    }
     // TEMPORARY (again) — brought back specifically to burst through the
     // one-time initial historical catch-up faster than the 1-minute cron
     // floor allows. Remove once the first full build finishes (watch for
@@ -298,6 +309,18 @@ async function handleFetchInner(request, env, origin) {
       const result = await continueSnapshotBuild(env);
       return corsResponse(result, result.ok ? 200 : 500, origin, env);
     }
+    // Manual CSV build trigger — same auth as build-snapshot-now.
+    if (url.pathname === '/internal/build-csv-now') {
+      const apiKey = request.headers.get('X-API-Key') || '';
+      const expected = env.WORKER_API_KEY || '';
+      let diff = (!expected || apiKey.length !== expected.length) ? 1 : 0;
+      for (let i = 0; i < Math.max(apiKey.length, expected.length); i++) {
+        diff |= (apiKey.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
+      }
+      if (diff !== 0) return corsResponse({ error: 'Unauthorized' }, 401, origin, env);
+      const result = await buildExportCSV(env);
+      return corsResponse(result, result.ok ? 200 : 500, origin, env);
+    }
 
     return handleQuery(request, env, origin);
 }
@@ -308,6 +331,225 @@ async function handleFetchInner(request, env, origin) {
 // Wrangler secret, not a value known at build time. If SENTRY_DSN isn't set
 // yet, Sentry's own SDK no-ops rather than throwing — this doesn't need to
 // be conditional on our end.
+// ── CSV export builder ───────────────────────────────────────────────────────
+// Pre-builds a single downloadable CSV in R2 from the NDJSON snapshot parts.
+// Runs in the scheduled handler after the NDJSON snapshot is caught up.
+// Streams the output via TransformStream → R2 put, so only one NDJSON part
+// (~39MB) is in memory at a time regardless of total dataset size.
+//
+// The old export flow streamed ~780MB of NDJSON through the Worker, then the
+// browser parsed every line, accumulated millions of rows in an array, and
+// built an XLSX workbook in memory — easily 2-4GB of browser heap. This
+// replaces all of that: the CSV is built once server-side, and the download
+// endpoint just passes the R2 object's body straight through.
+
+const CSV_EXPORT_KEY = 'filings-export.csv';
+const CSV_META_KEY   = 'filings-csv.meta.json';
+
+const CSV_COLUMNS = [
+  'transaction_date','filing_date','ticker','company_name',
+  'insider_name','insider_title','transaction_type','transaction_code',
+  'is_open_market','shares','price_per_share','value',
+  'pct_owned_change','relationship','sector','footnotes',
+];
+const CSV_HEADERS = [
+  'Transaction Date','Filing Date','Ticker','Company',
+  'Insider Name','Insider Title','Buy/Sell','Transaction Code',
+  'Open Market?','Shares','Price / Share','Value ($)',
+  '% Owned Change','Relationship','Sector','Footnotes',
+];
+
+function escapeCSV(val) {
+  if (val == null || val === '') return '';
+  const s = String(val);
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function ndjsonRowToCSV(row) {
+  return CSV_COLUMNS.map(col => {
+    let v = row[col];
+    if (col === 'is_open_market') v = v === true ? 'Yes' : v === false ? 'No' : '';
+    return escapeCSV(v);
+  }).join(',');
+}
+
+async function buildExportCSV(env) {
+  if (!env.EXPORT_SNAPSHOTS) return { ok: false, error: 'R2 not configured' };
+
+  // Is there a finished NDJSON snapshot?
+  const metaObj = await env.EXPORT_SNAPSHOTS.get('filings-snapshot.meta.json');
+  if (!metaObj) return { ok: true, idle: true, reason: 'no snapshot yet' };
+  const snapshotMeta = JSON.parse(await metaObj.text());
+  if (!snapshotMeta.partCount) return { ok: true, idle: true, reason: 'empty snapshot' };
+
+  // Is the CSV already current?
+  const csvMetaObj = await env.EXPORT_SNAPSHOTS.get(CSV_META_KEY);
+  if (csvMetaObj) {
+    const csvMeta = JSON.parse(await csvMetaObj.text());
+    if (csvMeta.builtThrough >= snapshotMeta.builtThrough) {
+      return { ok: true, idle: true, reason: 'CSV already current' };
+    }
+  }
+
+  const encoder = new TextEncoder();
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  let totalRows = 0;
+
+  // R2 accepts ReadableStream as put body — starts consuming while we write
+  const uploadPromise = env.EXPORT_SNAPSHOTS.put(CSV_EXPORT_KEY, readable, {
+    httpMetadata: { contentType: 'text/csv' },
+  });
+
+  try {
+    // Header row
+    await writer.write(encoder.encode(CSV_HEADERS.map(h => escapeCSV(h)).join(',') + '\n'));
+
+    // Process each NDJSON part — one at a time, so memory stays bounded
+    for (let i = 0; i < snapshotMeta.partCount; i++) {
+      const partKey = `filings-snapshot-parts/${String(i).padStart(6, '0')}.ndjson`;
+      const partObj = await env.EXPORT_SNAPSHOTS.get(partKey);
+      if (!partObj) { console.warn(`[Worker] CSV build: missing ${partKey}`); continue; }
+
+      const text = await partObj.text();
+      if (!text || text.length < 10) {
+        console.warn(`[Worker] CSV build: empty/corrupt ${partKey} (${text?.length || 0} bytes), skipping`);
+        continue;
+      }
+
+      const lines = text.split('\n');
+      // Flush every 10k lines to avoid building a huge string
+      let csvChunk = '';
+      let lineCount = 0;
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          csvChunk += ndjsonRowToCSV(JSON.parse(line)) + '\n';
+          totalRows++;
+          lineCount++;
+          if (lineCount % 10000 === 0) {
+            await writer.write(encoder.encode(csvChunk));
+            csvChunk = '';
+          }
+        } catch {
+          // Skip corrupt JSON lines
+        }
+      }
+      if (csvChunk) await writer.write(encoder.encode(csvChunk));
+    }
+
+    // Live delta — filings since the snapshot cutoff
+    const today = new Date().toISOString().split('T')[0];
+    try {
+      const deltaResult = await neonFetch(env, `
+        SELECT ${exportSelectCols(today)}
+        FROM public.filings
+        WHERE COALESCE(transaction_date,filing_date)::date > '${snapshotMeta.builtThrough}'::date
+        ORDER BY COALESCE(transaction_date,filing_date) DESC
+      `);
+      let deltaCsv = '';
+      for (const row of (deltaResult.rows || [])) {
+        deltaCsv += ndjsonRowToCSV(row) + '\n';
+        totalRows++;
+      }
+      if (deltaCsv) await writer.write(encoder.encode(deltaCsv));
+    } catch (e) {
+      console.error('[Worker] CSV build: delta query failed (non-fatal):', e.message);
+      // Snapshot data alone is still valuable — degrade to slightly stale
+    }
+
+    await writer.close();
+    await uploadPromise;
+
+    // Write CSV meta so we know when this was built
+    await env.EXPORT_SNAPSHOTS.put(CSV_META_KEY, JSON.stringify({
+      builtThrough: snapshotMeta.builtThrough,
+      totalRows,
+      updatedAt: new Date().toISOString(),
+    }));
+
+    console.log(`[Worker] CSV export built: ${totalRows.toLocaleString()} rows, through ${snapshotMeta.builtThrough}`);
+    return { ok: true, done: true, totalRows };
+  } catch (e) {
+    try { await writer.close(); } catch {}
+    try { await uploadPromise; } catch {}
+    console.error('[Worker] CSV build failed:', e.message, e.stack?.slice(0, 500));
+    return { ok: false, error: e.message };
+  }
+}
+
+
+// ── CSV download endpoint ────────────────────────────────────────────────────
+// Auth check + purchase gate, then stream the pre-built CSV straight from R2.
+// The Worker does zero parsing/transformation — just a thin proxy.
+async function handleCSVDownload(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  let body = {};
+  try { body = JSON.parse(await request.text()); } catch {}
+  const mode = body.mode === 'redownload' ? 'redownload' : 'consume';
+
+  // ── Purchase gate (same logic as handleExport) ──
+  let purchaseKey;
+  try {
+    if (mode === 'consume') {
+      const result = await neonFetch(env,
+        `SELECT stripe_payment_intent_id FROM public.data_purchases
+         WHERE clerk_user_id = ${sqlVal(clerkUserId)} AND downloaded_at IS NULL
+         ORDER BY purchased_at DESC LIMIT 1`
+      );
+      purchaseKey = result.rows?.[0]?.stripe_payment_intent_id;
+      if (!purchaseKey) {
+        return corsResponse({
+          error: "You've already used this purchase's one-time download — buy again for a fresh export, or use Re-download in Settings > Billing."
+        }, 403, origin, env);
+      }
+    } else {
+      const result = await neonFetch(env,
+        `SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)} LIMIT 1`
+      );
+      if (!(result.rows || []).length) {
+        return corsResponse({ error: 'Full data export requires a one-time purchase.' }, 403, origin, env);
+      }
+    }
+  } catch (e) {
+    console.error('[Worker] CSV download purchase check failed:', e.message);
+    return corsResponse({ error: 'Could not verify export access — try again in a moment.' }, 500, origin, env);
+  }
+
+  // ── Serve the pre-built CSV from R2 ──
+  const csvObj = await env.EXPORT_SNAPSHOTS.get(CSV_EXPORT_KEY);
+  if (!csvObj) {
+    return corsResponse({
+      error: 'Export is being prepared — try again in a few minutes.'
+    }, 202, origin, env);
+  }
+
+  // Mark purchase consumed only after confirming the file exists
+  if (mode === 'consume' && purchaseKey) {
+    await neonFetch(env,
+      `UPDATE public.data_purchases SET downloaded_at = now()
+       WHERE stripe_payment_intent_id = ${sqlVal(purchaseKey)}`
+    ).catch(e => console.error('[Worker] Failed to mark export consumed:', e.message));
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  return new Response(csvObj.body, {
+    status: 200,
+    headers: {
+      ...corsHeaders(origin, env),
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="seli_insider_trades_${today}.csv"`,
+      'Content-Length': String(csvObj.size),
+    },
+  });
+}
+
+
 export default Sentry.withSentry(
   (env) => ({
     dsn: env.SENTRY_DSN,
@@ -702,15 +944,27 @@ async function continueSnapshotBuild(env) {
     const shouldCompact = state.pendingRawKeys.length >= COMPACT_GROUP_SIZE || (reachedEnd && state.pendingRawKeys.length > 0);
 
     if (shouldCompact) {
-      // Cheap — just concatenating already-serialized text from a handful
-      // of small objects, no re-stringify, no re-touching Postgres.
-      let combined = '';
+      // Stream raw parts into R2 via TransformStream instead of accumulating
+      // a ~40MB string in memory — the old += approach is what caused 1101s
+      // and the corrupted 0-byte / partial compacted parts (000004, 000016).
+      const compactedKey = `filings-snapshot-parts/${String(state.nextCompactedIndex).padStart(6, '0')}.ndjson`;
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      const putPromise = env.EXPORT_SNAPSHOTS.put(compactedKey, readable);
       for (const key of state.pendingRawKeys) {
         const obj = await env.EXPORT_SNAPSHOTS.get(key);
-        if (obj) combined += await obj.text();
+        if (obj) {
+          const reader = obj.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            await writer.write(value);
+          }
+        }
       }
-      const compactedKey = `filings-snapshot-parts/${String(state.nextCompactedIndex).padStart(6, '0')}.ndjson`;
-      await env.EXPORT_SNAPSHOTS.put(compactedKey, combined);
+      await writer.close();
+      await putPromise;
+
       for (const key of state.pendingRawKeys) {
         await env.EXPORT_SNAPSHOTS.delete(key).catch(()=>{});
       }
