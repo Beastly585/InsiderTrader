@@ -300,6 +300,14 @@ pre {
   background: var(--surface-2); color: var(--text); font-family: var(--font); font-size: 0.8125rem;
 }
 .feedback-input:focus { outline: none; border-color: var(--accent); }
+@media (max-width: 640px) {
+  /* iOS Safari auto-zooms the whole page in when a focused input's
+     font-size is under 16px — that's the entire mechanism behind "pulling
+     up feedback zooms the site," not a bug in the modal itself. 16px is
+     the documented threshold; anything at or above it and Safari leaves
+     the zoom level alone. */
+  .feedback-textarea, .feedback-input { font-size: 16px; }
+}
 .feedback-shots { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .feedback-shot {
   position: relative; width: 64px; height: 64px; border-radius: var(--radius-sm);
@@ -617,6 +625,19 @@ input[type="checkbox"] { height:auto; width:auto; }
   overflow-x:auto; border:0.5px solid var(--border);
   border-radius:var(--radius-lg); background:var(--surface); box-shadow:var(--shadow-sm);
 }
+
+/* Mobile-only Data page card list — the real table has 10 columns, no
+   phone width fits that, so this is a genuinely separate rendering path
+   (see DataPage's isMobile branch) rather than a squeezed table. */
+.data-mobile-list { display: flex; flex-direction: column; border: 0.5px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
+.data-mobile-card { padding: 12px 14px; border-bottom: 0.5px solid var(--border); cursor: pointer; }
+.data-mobile-card:last-child { border-bottom: none; }
+.data-mobile-card__top { display: flex; align-items: center; gap: 8px; }
+.data-mobile-card__sub { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 0.75rem; color: var(--text-2); }
+.data-mobile-card__sub .td-overflow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.data-mobile-card__expanded { margin-top: 10px; padding-top: 10px; border-top: 0.5px dashed var(--border); cursor: default; }
+.data-mobile-card__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; font-size: 0.8125rem; }
+
 table { width:100%; border-collapse:collapse; font-size: 0.8125rem; }
 thead tr { border-bottom:0.5px solid var(--border-md); }
 th {
@@ -934,31 +955,6 @@ td { padding:7px 11px; vertical-align:middle; }
   .footer__center { position: static; transform: none; }
 }
 
-/* ── More sheet (mobile nav overflow) ────────────────────────────────────────
-   Only ever rendered when Sidebar's mobile branch is active, so no media
-   query needed to scope it — it simply doesn't exist in the DOM on desktop. */
-.more-sheet-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 300;
-  display: flex; align-items: flex-end;
-}
-.more-sheet {
-  width: 100%; background: var(--surface); border-radius: 16px 16px 0 0;
-  padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0px));
-  display: flex; flex-direction: column; gap: 2px;
-}
-.more-sheet__handle {
-  width: 36px; height: 4px; border-radius: 2px; background: var(--border-md);
-  margin: 6px auto 10px;
-}
-.more-sheet__item {
-  display: flex; align-items: center; gap: 12px; width: 100%;
-  padding: 12px 14px; border-radius: var(--radius-md); border: none;
-  background: none; color: var(--text-2); font-size: 0.9375rem; font-family: var(--font);
-  text-align: left; cursor: pointer;
-}
-.more-sheet__item:hover { background: var(--surface-2); }
-.more-sheet__item--active { color: var(--accent-strong); background: var(--accent-50); font-weight: 600; }
-
 /* ── Home breadcrumb ──────────────────────────────────────────────────────────
    Only shown on mobile, and only when the page was reached via a Home
    tile's "See all" (see cameFromHome in AppInner) — hidden entirely on
@@ -980,7 +976,7 @@ td { padding:7px 11px; vertical-align:middle; }
    the 'home' page id is only ever reachable via the mobile nav/routing, so
    this never renders there in practice, but the tile sizing itself is
    still written mobile-first since that's its only real audience. */
-.home-page { display: flex; flex-direction: column; gap: 14px; padding-bottom: 8px; }
+.home-page { display: flex; flex-direction: column; gap: 14px; padding-top: 16px; padding-bottom: 8px; }
 .home-tile {
   background: var(--surface); border: 0.5px solid var(--border);
   border-radius: var(--radius-lg); padding: 14px 16px;
@@ -1594,6 +1590,21 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-filter-count {
   font-size: 0.6875rem; margin-left: auto; align-self: center;
 }
+@media (max-width: 640px) {
+  /* .dash-tile-pills has no wrap and no scroll of its own, so a group with
+     several pills (Window: 1d/3d/7d/30d/90d/All) simply ran off the edge
+     of the screen with no way to reach the rest — "cut off," not just
+     visually cramped. Horizontal scroll on the row as a whole keeps the
+     vertical footprint small (wrapping every group onto its own line
+     would take much more vertical space) while making every pill reachable
+     with a swipe. */
+  .ins-filter-row {
+    flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    gap: 14px; padding: 10px 14px;
+  }
+  .ins-filter-group { flex-shrink: 0; }
+  .ins-filter-count { margin-left: 14px; flex-shrink: 0; }
+}
 .free-tier-note {
   font-size: 0.7188rem; color: var(--amber-600); padding: 8px 14px;
   background: var(--amber-50, rgba(217,158,44,0.08));
@@ -1624,16 +1635,15 @@ td { padding:7px 11px; vertical-align:middle; }
 /* 2-column layout: signals (wide) | insiders — portfolio is a bar above */
 .ins-3col {
   display: grid;
-  grid-template-columns: 3fr 1.6fr;
+  grid-template-columns: 1fr;
   flex: 1; min-height: 500px;
   gap: 12px;
 }
 .ins-3col__signals   { grid-column: 1; display: flex; flex-direction: column; min-height: 0; }
-.ins-3col__insiders  { grid-column: 2; display: flex; flex-direction: column; min-height: 0; }
 
 @media (max-width: 1000px) {
-  .ins-3col { grid-template-columns: 1fr; height: auto; }
-  .ins-3col__signals, .ins-3col__insiders { grid-column: 1; max-height: 500px; }
+  .ins-3col { height: auto; }
+  .ins-3col__signals { max-height: none; }
 }
 
 /* Signal panel in 3col — fills column height, body scrolls */
@@ -1765,6 +1775,35 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-sig-row__exec { display: flex; align-items: center; justify-content: center; }
 .ins-sig-row__right  { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
 .ins-sig-row__net { font-size: 0.875rem; font-weight: 700; font-family: var(--font-mono); letter-spacing: -0.3px; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  /* This fixed 5-column grid (1fr 100px 60px 130px 110px, ~450px minimum)
+     never had a mobile layout at all — on a 375px phone it simply
+     overflowed past the container's right edge, which was the actual
+     mechanism behind the "padding disappears after signals load" bug.
+     Collapsed to a compact 2-line summary (ticker/badges + company on one
+     row, conviction + net flow on the next) with the rest available via
+     tap-to-expand instead of trying to cram five columns into one line. */
+  .ins-sig-row {
+    display: flex; flex-wrap: wrap; gap: 6px 10px;
+    padding: 10px 14px;
+  }
+  .ins-sig-row__left  { flex: 1 1 100%; order: 1; }
+  .ins-sig-row__signal { flex: 1 1 auto; order: 2; flex-direction: row; align-items: center; gap: 8px; }
+  .ins-sig-row__right  { order: 3; flex: 0 0 auto; }
+  .ins-sig-row__type, .ins-sig-row__exec { display: none; } /* covered by .ins-sig-row__expanded instead */
+  .ins-sig-row__expand-chevron {
+    order: 4; flex: 1 1 100%; text-align: center;
+    font-size: 0.6875rem; color: var(--text-3); padding-top: 2px;
+  }
+  .ins-sig-row__expanded {
+    order: 5; flex: 1 1 100%; margin-top: 6px; padding-top: 10px;
+    border-top: 0.5px dashed var(--border); cursor: default;
+  }
+  .ins-sig-row__expanded-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; font-size: 0.8125rem;
+  }
+}
 @media (max-width: 900px) {
   .ins-sig-col-hdrs { display: none; }
   .ins-sig-row { grid-template-columns: 160px 1fr auto; }
@@ -2271,10 +2310,12 @@ td { padding:7px 11px; vertical-align:middle; }
 .guide-modal__footer > span { flex: 1; text-align: center; }
 
 @media (max-width: 640px) {
-  /* Near-fullscreen on mobile, same reasoning as the detail panel's own
-     mobile treatment — a fixed-width two-pane modal has no room to
-     compromise on a phone, so it stops trying to and takes the screen. */
-  .guide-modal { width: 100vw; height: 100vh; max-width: none; max-height: none; border-radius: 0; }
+  /* Previously near-fullscreen (100vw/100vh, no radius) — reverted per
+     direct feedback after actual use: it read as too tall and lost the
+     modal's card treatment entirely. A properly-sized, rounded modal with
+     a bit of surrounding space reads as a modal on a phone just as well
+     as it does on desktop; it didn't need to take over the whole screen. */
+  .guide-modal { width: 92vw; height: 82vh; max-width: none; max-height: 600px; border-radius: var(--radius-lg); }
   .guide-modal__body { flex-direction: column; }
   /* The 200px-wide text nav becomes a horizontal, icon+number row — full
      labels ("How signals are scored") don't fit six-across on a phone
@@ -2609,6 +2650,18 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .drawer__detail::-webkit-scrollbar { width: 3px; }
 .drawer__detail::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 3px; }
+
+@media (max-width: 640px) {
+  /* Watchlist's own local split view has nowhere to put a second column on
+     a phone — selectRow() already routes taps to the shared full-screen
+     detail panel on mobile instead of populating this local one (see
+     WatchlistPage), so the local detail pane is always empty here and can
+     just be hidden rather than showing a permanent "select something"
+     placeholder next to the list. */
+  .drawer__body, .wl-drawer-body { grid-template-columns: 1fr; }
+  .drawer__detail { display: none; }
+  .ins-sig-col-hdrs { display: none; }
+}
 
 .wl-breadcrumb {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
@@ -3652,6 +3705,31 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 @media (max-width: 640px) {
   .lp-features-grid--2col { grid-template-columns: 1fr; }
+}
+
+/* ── Landing page — mobile side padding + nav/footer overflow fix ───────────
+   Nearly every section here used a flat 48px side padding with no mobile
+   override at all — reasonable on a 1120px desktop layout, way too much on
+   a 375px phone (96px total, roughly a quarter of the screen, just for
+   padding). Reduced across the board on mobile. Separately, .lp-nav__links
+   and .lp-footer__links never wrapped/hid anything on narrow screens, so
+   the nav and footer rows were simply wider than the viewport — since
+   nothing inside them could shrink to fit, the browser had to widen the
+   whole page's layout viewport to accommodate them, which is what let
+   someone pinch-zoom out to a page visibly wider than their screen. Fixed
+   at the source (hide the same-page anchor links on mobile — they're a
+   convenience for a page you'd otherwise scroll anyway; let the footer's
+   legal links wrap onto a second line instead of forcing one wide row). */
+@media (max-width: 640px) {
+  .lp-nav__frame     { padding: 0 16px; gap: 12px; }
+  .lp-nav__links     { display: none; }
+  .lp-hero           { padding: 56px 16px 40px; }
+  .lp-marquee__frame { padding: 0 16px; }
+  .lp-features       { padding: 56px 16px; }
+  .lp-about-teaser   { padding: 32px 16px 56px; }
+  .lp-pricing        { padding: 40px 16px 64px; }
+  .lp-footer__frame  { padding: 16px; gap: 10px; }
+  .lp-footer__links  { flex-wrap: wrap; row-gap: 4px; font-size: 0.6875rem; }
 }
 
 /* Data export price styling */

@@ -1065,63 +1065,47 @@ const NAV = [
 function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
   const pro = isPro(user);
   const isMobile = useIsMobile();
-  const [moreOpen, setMoreOpen] = useState(false);
 
   if (isMobile) {
-    // Mobile collapses to two destinations: Home (the new consolidated
-    // peek-tiles page) and More (everything else, in a small sheet) —
-    // down from five icons competing for a 375px-wide row. Data and
-    // Settings are still exactly one tap away, just behind one icon
-    // instead of their own, per the mobile IA discussion.
+    // All five real destinations shown directly — Home (replacing
+    // Dashboard as the mobile landing page) plus Insights/Data/Watchlist/
+    // Settings. A "More" sheet collapsing this to 2 icons was tried and
+    // reverted after actual use — every destination here gets reached
+    // often enough that hiding four of them behind an extra tap was a
+    // net loss, not a win.
     return (
-      <>
-        <nav className="sidebar sidebar--compact">
-          <button
-            className={`nav-item nav-item--icon-only${page==='home'?' nav-item--active':''}`}
-            onClick={()=>setPage('home')}
-            title="Home" aria-label="Home">
-            <IconHome className="nav-icon nav-icon--svg"/>
-          </button>
-          <button
-            className={`nav-item nav-item--icon-only${moreOpen?' nav-item--active':''}`}
-            onClick={()=>setMoreOpen(o=>!o)}
-            title="More" aria-label="More">
-            <IconMore className="nav-icon nav-icon--svg"/>
-          </button>
-        </nav>
-        {moreOpen && (
-          <div className="more-sheet-overlay" onClick={()=>setMoreOpen(false)}>
-            <div className="more-sheet" onClick={e=>e.stopPropagation()}>
-              <div className="more-sheet__handle"/>
-              {!pro && (
-                <button className="more-sheet__item" onClick={()=>{setMoreOpen(false); onUpgrade();}}>
-                  <span className="nav-icon">$</span> Upgrade to Pro
-                </button>
-              )}
-              <button className={`more-sheet__item${page==='dashboard'?' more-sheet__item--active':''}`}
-                onClick={()=>{setMoreOpen(false); setPage('dashboard');}}>
-                <IconHome className="nav-icon nav-icon--svg"/> Dashboard
-              </button>
-              <button className={`more-sheet__item${page==='signals'?' more-sheet__item--active':''}`}
-                onClick={()=>{setMoreOpen(false); setPage('signals');}}>
-                <IconInsights className="nav-icon nav-icon--svg"/> Insights
-              </button>
-              <button className={`more-sheet__item${page==='data'?' more-sheet__item--active':''}`}
-                onClick={()=>{setMoreOpen(false); setPage('data');}}>
-                <IconData className="nav-icon nav-icon--svg"/> Data
-              </button>
-              <button className={`more-sheet__item${page==='watchlist'?' more-sheet__item--active':''}`}
-                onClick={()=>{setMoreOpen(false); setPage('watchlist');}}>
-                <IconFavorites className="nav-icon nav-icon--svg"/> Watchlist
-              </button>
-              <button className={`more-sheet__item${page==='settings'?' more-sheet__item--active':''}`}
-                onClick={()=>{setMoreOpen(false); setPage('settings');}}>
-                <IconSettings className="nav-icon nav-icon--svg"/> Settings
-              </button>
-            </div>
-          </div>
-        )}
-      </>
+      <nav className="sidebar sidebar--compact">
+        <button
+          className={`nav-item nav-item--icon-only${page==='home'?' nav-item--active':''}`}
+          onClick={()=>setPage('home')}
+          title="Home" aria-label="Home">
+          <IconHome className="nav-icon nav-icon--svg"/>
+        </button>
+        <button
+          className={`nav-item nav-item--icon-only${page==='signals'?' nav-item--active':''}`}
+          onClick={()=>setPage('signals')}
+          title="Insights" aria-label="Insights">
+          <IconInsights className="nav-icon nav-icon--svg"/>
+        </button>
+        <button
+          className={`nav-item nav-item--icon-only${page==='data'?' nav-item--active':''}`}
+          onClick={()=>setPage('data')}
+          title="Data" aria-label="Data">
+          <IconData className="nav-icon nav-icon--svg"/>
+        </button>
+        <button
+          className={`nav-item nav-item--icon-only${page==='watchlist'?' nav-item--active':''}`}
+          onClick={()=>setPage('watchlist')}
+          title="Watchlist" aria-label="Watchlist">
+          <IconFavorites className="nav-icon nav-icon--svg"/>
+        </button>
+        <button
+          className={`nav-item nav-item--icon-only${page==='settings'?' nav-item--active':''}`}
+          onClick={()=>setPage('settings')}
+          title="Settings" aria-label="Settings">
+          <IconSettings className="nav-icon nav-icon--svg"/>
+        </button>
+      </nav>
     );
   }
 
@@ -3339,6 +3323,29 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
 
   return (
     <div className="home-page">
+      <HomeTile title="Recent Signals" onSeeAll={()=>onSeeAll('signals')}>
+        {loading && <p className="home-tile__empty">Loading…</p>}
+        {!loading && !recentSignals.length && <p className="home-tile__empty">No signals in the last 7 days.</p>}
+        {recentSignals.map(s => (
+          <div key={s.ticker} className="home-tile__row" onClick={()=>onOpenDetail({type:'ticker', ticker:s.ticker, company:s.company})}>
+            <span className="ticker">{s.ticker}</span>
+            <span className="td-muted" style={{flex:1}}>{s.company}</span>
+            <ConvictionBar score={s.conviction} max={15}/>
+          </div>
+        ))}
+      </HomeTile>
+
+      <HomeTile title="Raw Data" onSeeAll={()=>onSeeAll('data')}>
+        {loading && <p className="home-tile__empty">Loading…</p>}
+        {!loading && recentFilings.map((f,i) => (
+          <div key={i} className="home-tile__row" onClick={()=>onOpenDetail({type:'ticker', ticker:f.ticker, company:f.company})}>
+            <span className="td-date-main">{fmt.dateShort(f.transactionDate||f.date)}</span>
+            <span className="ticker">{f.ticker}</span>
+            <span className={f.transactionType==='buy' ? 'val-buy' : 'val-sell'} style={{marginLeft:'auto'}}>{fmt.money(f.value)}</span>
+          </div>
+        ))}
+      </HomeTile>
+
       <HomeTile title="Portfolio" onSeeAll={pro && portfolio.connected ? () => onSeeAll('signals') : null}>
         {!pro && <p className="home-tile__empty">Portfolio linking is a Pro feature.</p>}
         {pro && portfolio.connected === false && (
@@ -3360,18 +3367,6 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
         )}
       </HomeTile>
 
-      <HomeTile title="Recent Signals" onSeeAll={()=>onSeeAll('signals')}>
-        {loading && <p className="home-tile__empty">Loading…</p>}
-        {!loading && !recentSignals.length && <p className="home-tile__empty">No signals in the last 7 days.</p>}
-        {recentSignals.map(s => (
-          <div key={s.ticker} className="home-tile__row" onClick={()=>onOpenDetail({type:'ticker', ticker:s.ticker, company:s.company})}>
-            <span className="ticker">{s.ticker}</span>
-            <span className="td-muted" style={{flex:1}}>{s.company}</span>
-            <ConvictionBar score={s.conviction} max={15}/>
-          </div>
-        ))}
-      </HomeTile>
-
       <HomeTile title="Watchlist" onSeeAll={()=>onSeeAll('watchlist')}>
         {!watchlist.tickers.length && !watchlist.insiders.length && (
           <p className="home-tile__empty">No tickers or insiders followed yet.</p>
@@ -3388,15 +3383,13 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
         ))}
       </HomeTile>
 
-      <HomeTile title="Raw Data" onSeeAll={()=>onSeeAll('data')}>
-        {loading && <p className="home-tile__empty">Loading…</p>}
-        {!loading && recentFilings.map((f,i) => (
-          <div key={i} className="home-tile__row" onClick={()=>onOpenDetail({type:'ticker', ticker:f.ticker, company:f.company})}>
-            <span className="td-date-main">{fmt.dateShort(f.transactionDate||f.date)}</span>
-            <span className="ticker">{f.ticker}</span>
-            <span className={f.transactionType==='buy' ? 'val-buy' : 'val-sell'} style={{marginLeft:'auto'}}>{fmt.money(f.value)}</span>
-          </div>
-        ))}
+      {/* Reuses the real leaderboard component wholesale (same data fetch,
+          same filter pills, same rows) rather than a simplified parallel
+          version — "See all" goes to Dashboard, which is where this same
+          component already lives full-size; there's no separate dedicated
+          Top Insiders page to link to instead. */}
+      <HomeTile title="Top Insiders" onSeeAll={()=>onSeeAll('dashboard')}>
+        <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
       </HomeTile>
     </div>
   );
@@ -3635,6 +3628,15 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const [modal, setModal] = useState(null); // 'signals' | 'insiders' | null
   const [modalInitial, setModalInitial] = useState(null); // pre-selected item when opening
   const hlRef = useRef(null);
+  const isMobile = useIsMobile();
+  // Mobile-only: tapping a row expands it in place instead of opening the
+  // right-side drawer — there's no room for a side panel on a phone, and
+  // this was the actual cause of the "padding disappears after load" bug
+  // too (the row's 5-column desktop grid has no mobile layout at all, so
+  // once signals populated and rows rendered, the fixed-width columns
+  // simply didn't fit and overflowed past the right edge). Desktop is
+  // unaffected — same drawer, same click behavior as always.
+  const [expandedTicker, setExpandedTicker] = useState(null);
 
   // Opens the Explore drawer pre-selected to whatever was clicked, instead of
   // the small centered quick-info modal — keeps this page's detail-viewing
@@ -3670,8 +3672,6 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   function sigOnSort(col){if(sigSort===col)setSigDir(d=>-d);else{setSigSort(col);setSigDir(-1);}}
   function resetFilters(){setDays(7);setMinStrength(1);setSourceF('');setSectorF('');}
   const filtersAreDefault = days===7 && minStrength===1 && !sourceF && !sectorF;
-
-  const [portModal, setPortModal] = useState(false);
 
   return (
     <div className="page-content">
@@ -3787,8 +3787,11 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 const tier=tierFromPct(convPct, appetite);
                 return (
                   <div key={s.ticker} ref={isHL?hlRef:null}
-                    className={`ins-sig-row ins-sig-row--${tier}${isSel?' ins-sig-row--selected':''}`}
-                    onClick={()=>{setHighlightTicker(s.ticker);onSelectSignal(s);openInDrawer({type:'signal',...s});}}>
+                    className={`ins-sig-row ins-sig-row--${tier}${isSel?' ins-sig-row--selected':''}${isMobile&&expandedTicker===s.ticker?' ins-sig-row--expanded':''}`}
+                    onClick={()=>{
+                      if (isMobile) { setExpandedTicker(k => k===s.ticker ? null : s.ticker); return; }
+                      setHighlightTicker(s.ticker);onSelectSignal(s);openInDrawer({type:'signal',...s});
+                    }}>
                     <div className="ins-sig-row__left">
                       <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
                         <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
@@ -3821,33 +3824,33 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     <div className="ins-sig-row__right">
                       <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
                     </div>
+                    {/* Mobile-only — everything above hidden by default via CSS
+                        (see .ins-sig-row--expanded), shown here as a proper
+                        expanded block instead. Tapping the row again, or the
+                        ticker itself, still opens the full drawer for anyone
+                        who wants the deeper multi-trade history/chart view. */}
+                    {isMobile && (
+                      <div className="ins-sig-row__expand-chevron">{expandedTicker===s.ticker ? '▴ Less' : '▾ More'}</div>
+                    )}
+                    {isMobile && expandedTicker===s.ticker && (
+                      <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
+                        <div className="ins-sig-row__expanded-grid">
+                          <div><span className="td-muted">Type</span><br/>{typeLabel}</div>
+                          <div><span className="td-muted">Insiders</span><br/>{s.insiderCount} · {fmt.ago(s.lastTradeDate)}</div>
+                          <div><span className="td-muted">Exec buys</span><br/>{s.cSuiteBuys>0?`${s.cSuiteBuys}×`:'—'}</div>
+                          <div><span className="td-muted">Net flow</span><br/><span className={s.netValue>=0?'val-buy':'val-sell'}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span></div>
+                        </div>
+                        <button className="btn btn--ghost btn--sm" style={{marginTop:10,width:'100%'}}
+                          onClick={()=>{setHighlightTicker(s.ticker);onSelectSignal(s);openInDrawer({type:'signal',...s});}}>
+                          Full history →
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>}
           </div>
-        </div>
-
-        {/* MIDDLE: Portfolio (compact, stacked above Top insiders) + Top insiders leaderboard */}
-        <div className="ins-3col__insiders" style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
-          <InsightsPortfolioBar
-            filings={filings} cutoff={cutoff} days={days}
-            onOpenDetail={openInDrawer}
-            onExpand={()=>{onCloseDetail&&onCloseDetail();setPortModal(true);}}
-            pro={pro}
-          />
-        <div className="ins-lb-panel-wrap" style={{flex:1,minHeight:0}}>
-          <div className="ins-sig-panel__hdr">
-            <span className="ins-sig-panel__title">Top insiders</span>
-            <TileInfoButton section="insights-formula" title="Top insiders"/>
-            <div className="dash-tile__hdr-controls">
-              <button className="btn btn--ghost btn--icon" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('insiders');}} title="Open full Explore view">⤢</button>
-            </div>
-          </div>
-          <div className="ins-lb-panel__body">
-            <InsiderLeaderboardSidebar onOpenDetail={openInDrawer} watchlist={watchlist}/>
-          </div>
-        </div>
         </div>
 
       </div>
@@ -3862,15 +3865,6 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading}
           watchlist={watchlist}
           initialFilters={{days, sourceF, sectorF, minStrength}}
-        />
-      )}
-      {portModal&&(
-        <PortfolioDrawer
-          filings={filings} cutoff={cutoff} days={days}
-          onOpenDetail={onOpenDetail}
-          onClose={()=>setPortModal(false)}
-          watchlist={watchlist}
-          pro={pro}
         />
       )}
     </div>
@@ -5771,6 +5765,12 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
 
   const [sortKey, setSortKey] = useState('transaction_date');
   const [sortDir, setSortDir] = useState(-1);
+  const isMobile = useIsMobile();
+  // Mobile-only — the real table has 10 columns, no reasonable phone width
+  // fits that, so mobile gets a separate compact card list instead of a
+  // squeezed/overflowing version of the same table. Tapping a card expands
+  // it in place for the columns that don't fit in the compact view.
+  const [expandedRow, setExpandedRow] = useState(null);
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
@@ -5893,6 +5893,60 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           {error?<div className="state-box state-box--error"><p><IconWarning style={{width:14,height:14,marginRight:4,verticalAlign:"-2px"}}/>{error}</p></div>
           :loading?<div className="state-box"><Spinner/><p>Loading…</p></div>
           :rows.length===0?<div className="state-box"><IconEmpty style={{width:28,height:28,color:"var(--text-3)"}}/><p>No filings match these filters.</p></div>
+          :isMobile?<div className="data-mobile-list">
+            {rows.map((r,i)=>{
+              const rel=r.relationship||'weak';
+              const rl=rel==='strong'?'C-Suite':rel==='medium'?'Officer':'Dir';
+              const tt=r.transaction_type;
+              const rowKey = `${r.ticker}-${r.transaction_date||r.filing_date}-${i}`;
+              const isOpen = expandedRow===rowKey;
+              return (
+                <div key={rowKey} className={`data-mobile-card row-${tt}${isOpen?' data-mobile-card--expanded':''}`}
+                  onClick={()=>setExpandedRow(k=>k===rowKey?null:rowKey)}>
+                  <div className="data-mobile-card__top">
+                    <span className="ticker">{r.ticker||'—'}</span>
+                    <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>
+                      {tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆ Other'}
+                    </Badge>
+                    <span className={`td-mono ${tt==='buy'?'val-buy':tt==='sell'?'val-sell':''}`} style={{marginLeft:'auto'}}>{fmt.money(r.value)}</span>
+                  </div>
+                  <div className="data-mobile-card__sub">
+                    <span className="td-overflow">{r.company_name}</span>
+                    <span className="td-muted">{fmt.dateShort(r.transaction_date||r.filing_date)}</span>
+                  </div>
+                  {isOpen && (
+                    <div className="data-mobile-card__expanded" onClick={e=>e.stopPropagation()}>
+                      <div className="data-mobile-card__grid">
+                        <div><span className="td-muted">Insider</span><br/>{r.insider_name||'—'}<br/><span className="td-muted" style={{fontSize:11}}>{r.insider_title||'—'}</span></div>
+                        <div><span className="td-muted">Relationship</span><br/><Badge type={`rel-${rel}`}>{rl}</Badge></div>
+                        <div><span className="td-muted">Shares</span><br/>{fmt.number(r.shares)}</div>
+                        <div><span className="td-muted">Price</span><br/>{fmt.price(r.price_per_share)}</div>
+                        <div><span className="td-muted">Sector</span><br/>{r.sector!=='Other'?r.sector:'—'}</div>
+                        <div><span className="td-muted">% owned change</span><br/>{r.pct_owned_change!=null?<span className="val-buy">+{parseFloat(r.pct_owned_change).toFixed(1)}%</span>:'—'}</div>
+                      </div>
+                      <button className="btn btn--ghost btn--sm" style={{marginTop:10,width:'100%'}}
+                        onClick={()=>onOpenDetail&&onOpenDetail({type:'transaction',dataFilters,trade:{
+                          ticker:r.ticker,company:r.company_name,company_name:r.company_name,
+                          insiderName:r.insider_name,insider_name:r.insider_name,
+                          title:r.insider_title,insider_title:r.insider_title,
+                          transactionType:tt,transaction_type:tt,
+                          transactionCode:r.transaction_code,transaction_code:r.transaction_code,
+                          isOpenMarket:r.is_open_market,is_open_market:r.is_open_market,
+                          price:r.price_per_share,price_per_share:r.price_per_share,
+                          shares:r.shares,value:r.value,
+                          pctOwnedChange:r.pct_owned_change,pct_owned_change:r.pct_owned_change,
+                          transactionDate:r.transaction_date,transaction_date:r.transaction_date,
+                          date:r.filing_date,filing_date:r.filing_date,
+                          relationship:r.relationship,sector:r.sector,
+                        }})}>
+                        Full details →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
           :<div className="table-wrap">
             <table>
               <thead><tr>
@@ -5998,13 +6052,19 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   const [detail, setDetail] = useState(null);
   const [detailStack, setDetailStack] = useState([]);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
+  const isMobile = useIsMobile();
 
   const watchedTickers  = watchlist.tickers;
   const watchedInsiders = watchlist.insiders || [];
 
   function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
   function goBack() { setDetailStack(s=>{ const next=[...s]; const prev=next.pop(); setDetail(prev||null); return next; }); }
-  function selectRow(d) { setDetailStack([]); setDetail(d); }
+  // On mobile there's no side-by-side room for the list + detail split this
+  // page normally uses, so a row tap goes through the same shared
+  // full-screen detail panel every other page already opens (onOpenDetail)
+  // instead of populating a local inline pane that has nowhere to go.
+  // Desktop is unchanged — same split view, same local state.
+  function selectRow(d) { if (isMobile) { onOpenDetail&&onOpenDetail(d); return; } setDetailStack([]); setDetail(d); }
   function jumpTo(i) { setDetail(detailStack[i]); setDetailStack(s=>s.slice(0,i)); }
   const crumbLabel = (d) => d.type==='ticker' ? d.ticker : d.name;
 
@@ -6143,26 +6203,26 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
               {tab==='tickers' ? sortedTickerRows.map(s=>{
                 const isSel = detail?.type==='ticker' && detail.ticker===s.ticker;
                 return (
-                  <div key={s.ticker} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={{gridTemplateColumns:'1fr 100px 90px'}}
+                  <div key={s.ticker} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={isMobile?undefined:{gridTemplateColumns:'1fr 100px 90px'}}
                     onClick={()=>selectRow({type:'ticker', ticker:s.ticker, company:s.company})}>
                     <div className="ins-sig-row__left">
                       <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
                       <div className="ins-sig-row__co">{s.company}</div>
                     </div>
-                    <ConvictionBar score={s.conviction}/>
-                    <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
+                    <div className="ins-sig-row__signal"><ConvictionBar score={s.conviction}/></div>
+                    <div className="ins-sig-row__right"><span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span></div>
                   </div>
                 );
               }) : sortedInsiderRows.map(r=>{
                 const isSel = detail?.type==='trader' && detail.name===r.name;
                 return (
-                  <div key={r.name} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={{gridTemplateColumns:'1fr 70px 90px'}}
+                  <div key={r.name} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={isMobile?undefined:{gridTemplateColumns:'1fr 70px 90px'}}
                     onClick={()=>selectRow({type:'trader', name:r.name, title:r.title})}>
                     <div className="ins-sig-row__left">
                       <span className="ins-sig-row__ticker" style={{fontSize:13}}>{r.name}</span>
                       {r.title&&<div className="ins-sig-row__co">{r.title}</div>}
                     </div>
-                    <span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''}</span>
+                    <div className="ins-sig-row__right"><span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''}</span></div>
                   </div>
                 );
               })}
