@@ -353,7 +353,7 @@ pre {
 }
 
 .content-area {
-  flex: 1; padding: 0 18px 20px; overflow: hidden;
+  flex: 1; padding: 16px 18px 20px; overflow: hidden;
   display: flex; flex-direction: column;
   position: relative; /* scopes the gradient below to strictly this area — not the status bar, not the footer */
 }
@@ -376,7 +376,7 @@ pre {
   z-index: 0;
 }
 .content-area > * { position: relative; }
-.page-content  { padding-top: 16px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.page-content  { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .page-header   { margin-bottom: 20px; }
 
 /* ── Visual hierarchy ────────────────────────────────────────────────────────
@@ -976,7 +976,7 @@ td { padding:7px 11px; vertical-align:middle; }
    the 'home' page id is only ever reachable via the mobile nav/routing, so
    this never renders there in practice, but the tile sizing itself is
    still written mobile-first since that's its only real audience. */
-.home-page { display: flex; flex-direction: column; gap: 14px; padding-top: 16px; padding-bottom: 8px; }
+.home-page { display: flex; flex-direction: column; gap: 14px; padding-bottom: 8px; }
 .home-tile {
   background: var(--surface); border: 0.5px solid var(--border);
   border-radius: var(--radius-lg); padding: 14px 16px;
@@ -1213,6 +1213,7 @@ td { padding:7px 11px; vertical-align:middle; }
 .data-layout { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .data-main { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .data-main .table-wrap { flex: 1; overflow-y: auto; }
+.data-main .data-mobile-list { flex: 1; overflow-y: auto; }
 
 .fp-toggle {
   display: flex; align-items: center; gap: 6px;
@@ -1910,6 +1911,12 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-lb-card__score { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .ins-lb-card__rate { font-size: 0.875rem; font-weight: 700; font-family: var(--font-mono); letter-spacing: -0.3px; }
 
+@media (max-width: 640px) {
+  .ins-lb-card { flex-wrap: wrap; }
+  .ins-lb-card .ins-sig-row__expand-chevron,
+  .ins-lb-card .ins-sig-row__expanded { flex: 1 1 100%; }
+}
+
 /* Sector squares chart */
 .ins-sector-chart {
   background: var(--surface); border: 0.5px solid var(--border);
@@ -2293,7 +2300,7 @@ td { padding:7px 11px; vertical-align:middle; }
 .guide-modal__nav-num {
   display: none; /* numbers are read via the icon + label already; kept in markup for a future compact/mobile layout, not rendered visually here to avoid redundant clutter next to the icon */
 }
-.guide-modal__content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.guide-modal__content { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .guide-modal__content-inner {
   flex: 1; overflow-y: auto; padding: 20px 28px; font-size: 0.8125rem;
   line-height: 1.65; color: var(--text-2);
@@ -3773,30 +3780,19 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 @media (max-width: 680px) {
   .settings-layout { grid-template-columns: 1fr; }
-  /* Sidenav becomes a horizontal, scrollable tab row instead of a tall
-     vertical list — a full-height vertical nav would push the actual
-     settings content (the thing someone came here for) below the fold
-     entirely on a phone screen. */
+  /* Three sections total (Billing/Notifications/Link Portfolio) fit
+     comfortably as plain centered buttons — the earlier scrollable
+     icon-row treatment was built for a longer list (back when there was
+     a 4th Risk Management section) and was overkill once that was cut
+     down to three. */
   .settings-sidenav {
-    flex-direction: row; overflow-x: auto; overflow-y: hidden;
+    flex-direction: row; justify-content: center;
+    overflow: visible;
     border-top: none; border-bottom: 0.5px solid var(--border);
-    -webkit-overflow-scrolling: touch;
+    padding: 10px 12px; gap: 6px;
   }
   .settings-sidenav__item { flex-shrink: 0; white-space: nowrap; }
-  .settings-sidenav__spacer { display: none; } /* a flex:1 spacer meant to push the plan badge to the "bottom" of a vertical list has no bottom to push toward once the layout is horizontal */
-  .settings-sidenav__plan { border-top: none; border-left: 0.5px solid var(--border); flex-shrink: 0; }
-}
-@media (max-width: 480px) {
-  /* Icon-only at true phone width — same technique as the Guide modal's
-     identically-structured nav items (icon in its own span, label as a
-     bare text node after it). A full-text scrollable tab row still works
-     at 680px, but each labeled tab ("Notifications", "Risk Management")
-     is wide enough that reaching a distant tab means a lot of swiping;
-     icon-only fits more tabs in view at once. */
-  .settings-sidenav__item {
-    font-size: 0; padding: 10px 12px; gap: 0;
-  }
-  .settings-sidenav__icon { font-size: initial; }
+  .settings-sidenav__spacer, .settings-sidenav__plan { display: none; } /* plan badge lived at the "bottom" of a vertical list — no bottom to anchor to once this is a centered horizontal row */
 }
 
 /* ── Sidenav ──────────────────────────────────────────────────────────────── */
