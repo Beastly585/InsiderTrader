@@ -5163,12 +5163,16 @@ async function proxySQL(sql) {
 // thrown error) specifically when no snapshot exists yet, since that's an
 // expected, recoverable state the caller should fall back from — not
 // something to bail out of the whole export over.
-// ── CSV download (pre-built in R2) ──────────────────────────────────────────
-// The production export path for full-database purchases: download a single
-// pre-built CSV file directly. No NDJSON parsing, no XLSX building, no
-// multi-GB browser heap. The old NDJSON→XLSX pipeline (fetchExportViaSnapshot
-// + downloadFullExport) stays for the Data page's filtered in-app export
-// where the dataset is small enough to build client-side.
+// ── CSV download (per-year files, zipped, in R2) ────────────────────────────
+// The production export path for full-database purchases: downloads a ZIP
+// of one CSV per calendar year — Excel and Numbers both cap out at 1,048,576
+// rows (the old .xls limit both inherited), which this dataset blows past as
+// a single file. The server scopes the data to the PURCHASE DATE, not
+// today, so re-downloads never leak data bought later for free. No NDJSON
+// parsing, no XLSX building, no multi-GB browser heap. The old NDJSON→XLSX
+// pipeline (fetchExportViaSnapshot + downloadFullExport) stays for the Data
+// page's filtered in-app export where the dataset is small enough to build
+// client-side.
 async function downloadCSVFromR2(mode = 'consume', onProgress = null) {
   const r = await fetch(`${cfg.NEON_PROXY_URL}/export/csv`, {
     method: 'POST',
@@ -5205,10 +5209,10 @@ async function downloadCSVFromR2(mode = 'consume', onProgress = null) {
     }
   }
 
-  const blob = new Blob(chunks, { type: 'text/csv' });
+  const blob = new Blob(chunks, { type: 'application/zip' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `seli_insider_trades_${new Date().toISOString().split('T')[0]}.csv`;
+  a.download = `seli_insider_trades_${new Date().toISOString().split('T')[0]}.zip`;
   document.body.appendChild(a);
   a.click();
   a.remove();
