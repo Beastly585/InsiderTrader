@@ -5,8 +5,45 @@
 #   wrangler secret put WORKER_API_KEY
 #   wrangler secret put ALPACA_KEY
 #   wrangler secret put ALPACA_SECRET
+#   wrangler secret put NEON_API_KEY
+#   wrangler secret put STRIPE_SECRET_KEY
+#   wrangler secret put STRIPE_WEBHOOK_SECRET
+#   wrangler secret put STRIPE_PRICE_PRO
+#   wrangler secret put CLERK_SECRET_KEY
+#   wrangler secret put CLERK_JWKS_URL
+#   wrangler secret put CLERK_WEBHOOK_SECRET
 
 name = "neon-proxy"
 main = "neon-proxy.js"
 compatibility_date = "2024-09-23"
 workers_dev = true
+compatibility_flags = ["nodejs_compat"]
+
+# NOTE: usage_model is deprecated and no longer a valid wrangler.toml field
+# (Cloudflare merged "Unbound" into the standard Workers billing model).
+# The Workers Paid plan now grants up to 30 SECONDS of CPU time per
+# invocation automatically — no config needed here. The $5/mo upgrade
+# already took effect the moment the account was upgraded.
+
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+[ratelimits.simple]
+limit = 120
+period = 60
+
+[[r2_buckets]]
+binding = "EXPORT_SNAPSHOTS"
+bucket_name = "database"
+
+[triggers]
+# Once per minute was needed ONLY for the initial historical backfill, when
+# manual burst-calling wasn't yet an option. Left at that cadence, it was
+# racing concurrently with manual burst-loop calls to /internal/build-csv-now
+# — both hitting buildExportCSV's R2 state at the same time, occasionally
+# both deciding no upload existed yet for a given year and each creating one
+# independently (the duplicate csv-export/2026.csv uploads this caused).
+# Daily is correct for steady-state: new filings trickle in slowly, and the
+# manual endpoints remain available any time a faster rebuild is needed.
+crons = ["0 6 * * *"]

@@ -545,10 +545,10 @@ function BillingSection({ user }) {
   const [redownloadingIdx, setRedownloadingIdx] = useState(null); // index of the export-history row currently downloading, or null
   const [redownloadErr, setRedownloadErr] = useState(null);
 
-  async function handleRedownload(idx) {
+  async function handleRedownload(idx, purchaseId) {
     setRedownloadingIdx(idx); setRedownloadErr(null); setProgressText(null);
     try {
-      await downloadCSVFromR2('redownload', msg => setProgressText(msg));
+      await downloadCSVFromR2('redownload', msg => setProgressText(msg), purchaseId);
     } catch (e) {
       setRedownloadErr(e.message);
     }
@@ -725,14 +725,14 @@ function BillingSection({ user }) {
                   </div>
                   <div className="settings-row__sub">${(p.amount_cents/100).toFixed(2)}</div>
                 </div>
-                <button className="btn btn--ghost btn--sm" disabled={redownloadingIdx!=null} onClick={()=>handleRedownload(i)}>
+                <button className="btn btn--ghost btn--sm" disabled={redownloadingIdx!=null} onClick={()=>handleRedownload(i, p.stripe_payment_intent_id)}>
                   {redownloadingIdx===i ? (progressText || 'Downloading…') : 'Re-download'}
                 </button>
               </div>
             ))}
             {redownloadErr && <div className="checkout-error" style={{margin:'10px 16px'}}>{redownloadErr}</div>}
             <div className="td-muted" style={{fontSize:11,padding:'10px 16px'}}>
-              Re-download pulls your purchase's data fresh from the database right now — not a frozen copy of exactly what existed on the original purchase date.
+              Re-download gives you the data as it stood on this purchase's date — not anything newer added since.
             </div>
           </div>
         )}
@@ -5173,11 +5173,11 @@ async function proxySQL(sql) {
 // pipeline (fetchExportViaSnapshot + downloadFullExport) stays for the Data
 // page's filtered in-app export where the dataset is small enough to build
 // client-side.
-async function downloadCSVFromR2(mode = 'consume', onProgress = null) {
+async function downloadCSVFromR2(mode = 'consume', onProgress = null, purchaseId = null) {
   const r = await fetch(`${cfg.NEON_PROXY_URL}/export/csv`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
-    body: JSON.stringify({ mode }),
+    body: JSON.stringify({ mode, ...(purchaseId ? { purchaseId } : {}) }),
   });
 
   if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');

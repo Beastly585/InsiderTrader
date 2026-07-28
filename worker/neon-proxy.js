@@ -718,13 +718,24 @@ async function handleCSVDownload(request, env, origin) {
         }, 403, origin, env);
       }
     } else {
-      // Re-download always reflects the same cutoff as the most recent
-      // purchase that granted access — not "today" — otherwise a
-      // re-download would leak data the person hasn't paid for.
+      // Re-download reflects the cutoff of the SPECIFIC purchase being
+      // re-downloaded — passed from the UI as purchaseId — not just
+      // whichever purchase happens to be most recent overall. Without this,
+      // clicking "Re-download" next to an OLDER purchase in the history
+      // list would silently use a NEWER purchase's cutoff instead (if one
+      // existed), handing over data the person never paid for on that
+      // older purchase. Falls back to most-recent only if no id is given,
+      // for compatibility with any caller that predates this.
+      const purchaseId = typeof body.purchaseId === 'string' ? body.purchaseId : null;
       const result = await neonFetch(env,
-        `SELECT purchased_at FROM public.data_purchases
-         WHERE clerk_user_id = ${sqlVal(clerkUserId)}
-         ORDER BY purchased_at DESC LIMIT 1`
+        purchaseId
+          ? `SELECT purchased_at FROM public.data_purchases
+             WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+               AND stripe_payment_intent_id = ${sqlVal(purchaseId)}
+             LIMIT 1`
+          : `SELECT purchased_at FROM public.data_purchases
+             WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+             ORDER BY purchased_at DESC LIMIT 1`
       );
       purchasedAt = result.rows?.[0]?.purchased_at;
       if (!purchasedAt) {
@@ -1113,7 +1124,7 @@ async function handleExport(request, env, origin) {
 // server-side (the scheduled snapshot builder) where there's no client
 // request to supply selectCols the way handleExport's live path works.
 function exportSelectCols(todayStr) {
-  const dateExpr = col => `CASE WHEN ${col}::date >= '2020-01-01'::date AND ${col}::date <= '${todayStr}'::date THEN ${col} END AS ${col}`;
+  const dateExpr = col => `CASE WHEN ${col}::date >= '2015-01-01'::date AND ${col}::date <= '${todayStr}'::date THEN ${col} END AS ${col}`;
   const cols = ['transaction_date','filing_date','ticker','company_name','insider_name','insider_title',
     'transaction_type','transaction_code','is_open_market','shares','price_per_share',
     'value','pct_owned_change','relationship','sector','footnotes'];
@@ -2938,7 +2949,7 @@ async function handleBillingStatus(request, env, origin) {
     const subRow = subResult.rows?.[0];
 
     const purchaseResult = await neonFetch(env,
-      `SELECT amount_cents, purchased_at, downloaded_at
+      `SELECT stripe_payment_intent_id, amount_cents, purchased_at, downloaded_at
        FROM public.data_purchases
        WHERE clerk_user_id = ${sqlVal(clerkUserId)}
        ORDER BY purchased_at DESC`
