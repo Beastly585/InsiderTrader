@@ -137,7 +137,12 @@ body {
   font-family: var(--font); font-size: 0.8125rem; line-height: 1.55;
   background: var(--bg); color: var(--text);
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
+  overflow: hidden; /* the outer document itself never scrolls — .app-shell
+     owns the full viewport height and every real scroll happens inside
+     .content-area (or .settings-content). Without this, mobile Safari's
+     100vh quirk (see .app-shell below) leaves the outer page just tall
+     enough to become scrollable, dragging the whole header along with it. */
+  height: 100dvh;
 }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -152,7 +157,14 @@ pre {
 }
 
 /* ── App shell ────────────────────────────────────────────────────────────── */
-.app-shell { display: flex; height: 100vh; overflow: hidden; }
+/* 100vh on mobile Safari is measured against the LARGEST possible viewport
+   (as if the address bar were already hidden) — when the bar IS showing,
+   that's taller than what's actually visible, which is exactly what let
+   the whole page (header included) become draggable/scrollable. 100dvh
+   tracks the real visible height as the address bar shows/hides. The vh
+   value stays first as a fallback for any browser old enough not to know
+   dvh — dvh, where supported, simply overrides it. */
+.app-shell { display: flex; height: 100vh; height: 100dvh; overflow: hidden; }
 .app-shell--panel-open .main-area { margin-right: var(--panel-w); }
 
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
@@ -233,7 +245,7 @@ pre {
 /* ── Main area ────────────────────────────────────────────────────────────── */
 .main-area {
   flex: 1; margin-left: var(--sidebar-w);
-  display: flex; flex-direction: column; height: 100vh;
+  display: flex; flex-direction: column; height: 100vh; height: 100dvh;
   transition: margin-right .2s; min-width: 0;
   overflow: hidden; /* content-area scrolls internally, header/footer never move */
   position: relative;
@@ -3778,22 +3790,6 @@ td { padding:7px 11px; vertical-align:middle; }
   overflow: hidden;
   border-top: 0.5px solid var(--border);
 }
-@media (max-width: 680px) {
-  .settings-layout { grid-template-columns: 1fr; }
-  /* Three sections total (Billing/Notifications/Link Portfolio) fit
-     comfortably as plain centered buttons — the earlier scrollable
-     icon-row treatment was built for a longer list (back when there was
-     a 4th Risk Management section) and was overkill once that was cut
-     down to three. */
-  .settings-sidenav {
-    flex-direction: row; justify-content: center;
-    overflow: visible;
-    border-top: none; border-bottom: 0.5px solid var(--border);
-    padding: 10px 12px; gap: 6px;
-  }
-  .settings-sidenav__item { flex-shrink: 0; white-space: nowrap; }
-  .settings-sidenav__spacer, .settings-sidenav__plan { display: none; } /* plan badge lived at the "bottom" of a vertical list — no bottom to anchor to once this is a centered horizontal row */
-}
 
 /* ── Sidenav ──────────────────────────────────────────────────────────────── */
 .settings-sidenav {
@@ -3929,6 +3925,31 @@ td { padding:7px 11px; vertical-align:middle; }
 .settings-sidenav__signout:hover {
   background: rgba(229,90,85,0.08);
   color: var(--red-600);
+}
+
+@media (max-width: 680px) {
+  /* This block MUST come after every unconditional .settings-sidenav*
+     rule above — CSS applies same-specificity rules in source order
+     regardless of whether one's inside a media query, so a copy of this
+     block placed any earlier (as it previously was, right after
+     .settings-layout) gets silently overridden by the base
+     `.settings-sidenav { flex-direction: column; ... }` rule further
+     down the file on every screen size, mobile included. That's why the
+     nav rendered as a tall stacked list instead of a horizontal row. */
+  .settings-layout { grid-template-columns: 1fr; }
+  /* Three sections total (Billing/Notifications/Link Portfolio) fit
+     comfortably as plain centered buttons — the earlier scrollable
+     icon-row treatment was built for a longer list (back when there was
+     a 4th Risk Management section) and was overkill once that was cut
+     down to three. */
+  .settings-sidenav {
+    flex-direction: row; justify-content: center;
+    overflow: visible;
+    border-top: none; border-bottom: 0.5px solid var(--border);
+    padding: 10px 12px; gap: 6px;
+  }
+  .settings-sidenav__item { flex-shrink: 0; white-space: nowrap; width: auto; }
+  .settings-sidenav__spacer, .settings-sidenav__plan { display: none; } /* plan badge lived at the "bottom" of a vertical list — no bottom to anchor to once this is a centered horizontal row */
 }
 
 /* ── Content area ─────────────────────────────────────────────────────────── */
