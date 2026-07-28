@@ -968,19 +968,24 @@ function Spinner({ size=22 }) {
   return <div className="spinner" style={{width:size,height:size}}/>;
 }
 const TX_CODE_TOOLTIPS = {
-  P:'Open market purchase',  S:'Open market sale',
-  A:'Grant / award',         M:'Option exercise',
-  J:'Other / transfer',      G:'Gift',
-  F:'Tax withholding',       C:'Conversion of derivative',
-  D:'Sale to issuer',        E:'Expiration of derivative',
+  P:'Open market purchase',
+  S:'Open market sale',
+  A:'New shares granted to the insider as compensation — not purchased with their own money',
+  M:'Insider exercised stock options they already held — not a new open-market purchase',
+  J:'Shares moved between accounts or entities — not a market purchase or sale',
+  G:'Shares given or received as a gift — no cash changed hands',
+  F:'Shares withheld by the company to cover taxes owed when equity vested — not a discretionary sale',
+  C:'A derivative security (option/warrant) converted into common stock',
+  D:'Shares sold back to the company itself, not on the open market',
+  E:'An option or right expired unused — no shares bought or sold',
   // Congressional PTRs (STOCK Act filings) never had an entry here, so
   // every one fell through to the raw code (codeLabel = TX_CODE_TOOLTIPS[code]||code)
   // — that's what was rendering as a bare "CONGRESS_S"/"CONGRESS_P" string
   // with no label above it in the trade detail rows. These report a dollar
   // RANGE, not an exact price, which is exactly why there's no price to
   // show — the label now says that instead of leaving the raw code visible.
-  CONGRESS_P:'Congressional purchase (range-reported, no exact price)',
-  CONGRESS_S:'Congressional sale (range-reported, no exact price)',
+  CONGRESS_P:'Congressional purchase — reported as a dollar range, not an exact price',
+  CONGRESS_S:'Congressional sale — reported as a dollar range, not an exact price',
 };
 
 // Short, self-explanatory labels for the Data table — replaces the bare
@@ -2375,7 +2380,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             </div>
             <div className="dp-trade-left__bottom">
               <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-              <span className="code-pill" title={codeLabel}>{code}</span>
+              <span className="code-pill" title={codeLabel}>{isOM ? code : (TX_CODE_SHORT[code]||code)}</span>
               {isOM&&<span className="dp-trade-om-label">Open market</span>}
               {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:r.ticker,company:r.company_name})}>{r.ticker}</span>}
               {showInsider&&r.insider_name&&<span className="dp-clickable dp-trade-row2__name" onClick={()=>nav('trader',{name:r.insider_name,title:r.title})}>{r.insider_name}</span>}
@@ -2407,7 +2412,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                 <span className="dp-trade-detail__label">Now</span>
                 {hasRealPrice&&ret!=null
                   ? <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span>
-                  : <span className="dp-trade-detail__val td-muted">{hasRealPrice?'—':codeLabel}</span>}
+                  : <span className="dp-trade-detail__val td-muted">—</span>}
               </div>
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">% of position</span>
@@ -2437,12 +2442,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                     </span>
                   </div>
                 )}
-              </>) : (
-                <div className="dp-trade-detail">
-                  <span className="dp-trade-detail__label">Reporting</span>
-                  <span className="dp-trade-detail__val dp-trade-row2__noprice">{codeLabel}</span>
-                </div>
-              )}
+              </>) : null}
               {(r.pct_owned_change||r.pctOwnedChange)!=null && (
                 <div className="dp-trade-detail">
                   <span className="dp-trade-detail__label">% of position</span>

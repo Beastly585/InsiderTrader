@@ -502,7 +502,6 @@ pre {
 }
 .dp-trade-detail__val { font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; }
 .dp-trade-detail__val--total { font-weight: 700; color: var(--text); font-size: 0.8125rem; }
-.dp-trade-row2__noprice { font-style: italic; opacity: .75; }
 .dp-trade-om-label {
   font-size: 0.625rem; font-weight: 600; color: var(--blue-600);
   background: var(--blue-50); padding: 1px 6px; border-radius: 4px;
