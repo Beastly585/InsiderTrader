@@ -227,8 +227,12 @@ def build_digest_html(period_label: str, insights: list[dict], portfolio_movers:
     <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:13px;padding:10px 20px;border-radius:8px;text-decoration:none;">Open Seli →</a>
   </td></tr>
   <tr><td style="padding:0 20px 20px;">
-    <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0;">
+    <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0 0 6px;">
       You're getting this because you enabled the {period_label} digest in Settings. Not financial advice.
+    </p>
+    <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0;">
+      <a href="{APP_URL}/settings?section=notifications" style="color:{C_TEXT_MUTED};">Manage email preferences</a>
+      — turn off just this digest, or turn off every Seli email (digests and instant alerts) from the same page.
     </p>
   </td></tr>
 </table>

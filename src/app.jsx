@@ -973,6 +973,14 @@ const TX_CODE_TOOLTIPS = {
   J:'Other / transfer',      G:'Gift',
   F:'Tax withholding',       C:'Conversion of derivative',
   D:'Sale to issuer',        E:'Expiration of derivative',
+  // Congressional PTRs (STOCK Act filings) never had an entry here, so
+  // every one fell through to the raw code (codeLabel = TX_CODE_TOOLTIPS[code]||code)
+  // — that's what was rendering as a bare "CONGRESS_S"/"CONGRESS_P" string
+  // with no label above it in the trade detail rows. These report a dollar
+  // RANGE, not an exact price, which is exactly why there's no price to
+  // show — the label now says that instead of leaving the raw code visible.
+  CONGRESS_P:'Congressional purchase (range-reported, no exact price)',
+  CONGRESS_S:'Congressional sale (range-reported, no exact price)',
 };
 
 // Short, self-explanatory labels for the Data table — replaces the bare
@@ -985,6 +993,7 @@ const TX_CODE_SHORT = {
   J:'Transfer',    G:'Gift',
   F:'Tax w/h',      C:'Conversion',
   D:'To issuer',   E:'Expired',
+  CONGRESS_P:'Buy (range)', CONGRESS_S:'Sell (range)',
 };
 
 function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
@@ -2430,6 +2439,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                 )}
               </>) : (
                 <div className="dp-trade-detail">
+                  <span className="dp-trade-detail__label">Reporting</span>
                   <span className="dp-trade-detail__val dp-trade-row2__noprice">{codeLabel}</span>
                 </div>
               )}
