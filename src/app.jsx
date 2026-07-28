@@ -2368,25 +2368,68 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     const dt=r.transaction_date||r.transactionDate||r.date;
     const codeLabel = TX_CODE_TOOLTIPS[code]||code;
     const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
+    // Scopes the eventual "expand to full Explore view" to whatever this
+    // panel itself represents — DataDrawer already restores every filter
+    // from this object and scrolls to/highlights the exact row that opened
+    // it (see its own scrolledOnOpenRef effect), it just needed a caller
+    // that actually attaches a dataFilters payload. Ticker/trader panels
+    // are the two contexts this row list is used in with a real single
+    // subject to scope to; anywhere else (a compact signals widget with no
+    // one fixed subject) this stays null and expand falls back to the
+    // existing general Insights drawer, unchanged.
+    const rowDataFilters = d.type==='ticker' && d.ticker ? { search: d.ticker }
+                          : d.type==='trader' && d.name ? { search: d.name }
+                          : null;
+    const openTransaction = () => nav('transaction', { trade: r, dataFilters: rowDataFilters });
     return (
-      <div className={`dp-trade dp-trade--${tt}`}>
+      <div className={`dp-trade dp-trade--${tt} dp-clickable`}
+           role="button" tabIndex={0}
+           onClick={openTransaction}
+           onKeyDown={(e)=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); openTransaction(); } }}>
         <div className={`dp-trade-split${inline?'':' dp-trade-split--stacked'}`}>
           {/* LEFT — context: what kind of trade, when, who/what ticker, and
-              the transaction code / market type metadata */}
-          <div className="dp-trade-left">
-            <div className="dp-trade-left__top">
-              <span className="dp-trade-date">{dateLabel}</span>
-              {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+              the transaction code / market type metadata.
+
+              Two layouts share this slot. When an insider name is being
+              shown (the per-ticker activity list — every row here is a
+              different person, so who matters as much as when), name
+              leads and the badges move into their own stacked column on
+              the right, freeing the top line from competing for space
+              with 2-3 badges. Everywhere else (a trader's own page, where
+              the name is already the page's whole context; a signals
+              widget with its own compact needs) date still leads and
+              badges stay inline, unchanged. */}
+          {showInsider && r.insider_name ? (
+            <div className="dp-trade-toprow">
+              <div className="dp-trade-toprow__left">
+                <span className="dp-clickable dp-trade-row2__name" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
+                <div className="dp-trade-toprow__meta">
+                  <span className="dp-trade-date">{dateLabel}</span>
+                  {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+                  {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+                </div>
+              </div>
+              <div className="dp-trade-toprow__badges">
+                <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+                <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+                {isOM&&<span className="dp-trade-om-label">Open market</span>}
+              </div>
             </div>
-            <div className="dp-trade-left__bottom">
-              <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-              <span className="code-pill" title={codeLabel}>{isOM ? code : (TX_CODE_SHORT[code]||code)}</span>
-              {isOM&&<span className="dp-trade-om-label">Open market</span>}
-              {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:r.ticker,company:r.company_name})}>{r.ticker}</span>}
-              {showInsider&&r.insider_name&&<span className="dp-clickable dp-trade-row2__name" onClick={()=>nav('trader',{name:r.insider_name,title:r.title})}>{r.insider_name}</span>}
-              {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+          ) : (
+            <div className="dp-trade-left">
+              <div className="dp-trade-left__top">
+                <span className="dp-trade-date">{dateLabel}</span>
+                {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+              </div>
+              <div className="dp-trade-left__bottom">
+                <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+                <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+                {isOM&&<span className="dp-trade-om-label">Open market</span>}
+                {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
+                {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+              </div>
             </div>
-          </div>
+          )}
           {/* RIGHT — every number that describes the purchase itself, all
               grouped together and explicitly labeled: shares, price then,
               price now, position change, and the total dollar amount.
