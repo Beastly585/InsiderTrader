@@ -483,12 +483,14 @@ pre {
 .dp-trade-left__bottom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .dp-trade-date { font-size: 0.6875rem; color:var(--text-3); font-weight:600; white-space:nowrap; }
 .dp-trade-row2__name { font-size: 0.6875rem; }
+/* Promoted name size for the wide inline drawer's simpler name+date left
+   column (no stacked badges there — those live in the grid's own Type
+   column instead, see .dp-trade-detail__val--type below). */
+.dp-trade-row2__name--lg { font-size: 0.8125rem; font-weight: 600; color: var(--text); }
 
-/* Name-first row layout — used only where the row's insider varies per row
-   (the per-ticker activity list) and is worth leading with. Name+date sit
-   in their own left column; Buy/Sell + code + Open-market badges stack in
-   a separate right-aligned column instead of competing for space on one
-   crowded line. */
+/* Name-first row layout — used only in the narrow docked panel where the
+   row's insider varies per row (the per-ticker activity list) and is
+   worth leading with. Name+date sit in their own left column. */
 .dp-trade-toprow {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 10px; margin-bottom: 8px;
@@ -499,29 +501,32 @@ pre {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dp-trade-toprow__meta { display: flex; align-items: center; gap: 6px; }
+/* Buy/Sell + code + Open-market on ONE horizontal line (wrapping only if
+   they genuinely don't fit) — previously stacked as three forced vertical
+   lines, which made every row in the docked panel needlessly tall. */
 .dp-trade-toprow__badges {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
-  flex-shrink: 0;
+  display: flex; flex-direction: row; flex-wrap: wrap;
+  align-items: center; justify-content: flex-end; gap: 5px;
+  flex-shrink: 0; max-width: 55%;
 }
-/* Badges were designed for a horizontal run (margin/gap between siblings on
-   one line) — stacked vertically instead here, so each one sizes to its own
-   content rather than stretching to fill the column's width. */
-.dp-trade-toprow__badges > * { align-self: flex-end; }
 
 .dp-trade-right {
   display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap;
   justify-content: flex-end; min-width: 0;
 }
-/* Wide inline drawer only: fixed-width columns so Shares / Price / Now /
-   % of position / Total line up vertically across every transaction row,
-   instead of each row sizing its own columns to its own content. Every row
-   renders all five slots (missing values show "—"), so nothing shifts. */
+/* Wide inline drawer only: fixed-width columns so Type / Shares / Price /
+   Now / % of position / Total line up vertically across every transaction
+   row, instead of each row sizing its own columns to its own content.
+   Every row renders all six slots (missing values show "—"), so nothing
+   shifts. Type is its own column here rather than floating next to the
+   name — that's what wasn't lining up with the rest of the table before. */
 .dp-trade-right--grid {
   display: grid;
-  grid-template-columns: 92px 88px 132px 96px 92px;
+  grid-template-columns: 96px 92px 88px 132px 96px 92px;
   gap: 0 16px; flex-wrap: nowrap;
 }
 .dp-trade-right--grid .dp-trade-detail { align-items: flex-end; }
+.dp-trade-detail__val--type { display: flex; align-items: center; gap: 5px; }
 .dp-trade-detail { display: flex; flex-direction: column; gap: 1px; align-items: flex-end; }
 .dp-trade-detail__label {
   font-size: 0.5938rem; font-weight: 700; text-transform: uppercase;

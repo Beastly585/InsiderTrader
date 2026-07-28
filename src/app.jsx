@@ -2387,19 +2387,29 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
            onClick={openTransaction}
            onKeyDown={(e)=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); openTransaction(); } }}>
         <div className={`dp-trade-split${inline?'':' dp-trade-split--stacked'}`}>
-          {/* LEFT — context: what kind of trade, when, who/what ticker, and
-              the transaction code / market type metadata.
+          {/* LEFT — context: what kind of trade, when, who/what ticker.
 
-              Two layouts share this slot. When an insider name is being
-              shown (the per-ticker activity list — every row here is a
-              different person, so who matters as much as when), name
-              leads and the badges move into their own stacked column on
-              the right, freeing the top line from competing for space
-              with 2-3 badges. Everywhere else (a trader's own page, where
-              the name is already the page's whole context; a signals
-              widget with its own compact needs) date still leads and
-              badges stay inline, unchanged. */}
-          {showInsider && r.insider_name ? (
+              The wide inline drawer (Filings Explore) keeps this to just
+              name+date — Buy/Sell + code become their OWN column in the
+              grid below, aligned with Shares/Price/etc., instead of a
+              separate badge cluster floating next to the name that didn't
+              line up with anything. The narrow docked panel has room to
+              keep badges attached to the row's top line instead. */}
+          {inline ? (
+            <div className="dp-trade-left">
+              <div className="dp-trade-left__top">
+                {showInsider && r.insider_name
+                  ? <span className="dp-clickable dp-trade-row2__name dp-trade-row2__name--lg" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
+                  : <span className="dp-trade-date">{dateLabel}</span>}
+                {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+                {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+              </div>
+              <div className="dp-trade-left__bottom">
+                {showInsider && r.insider_name && <span className="dp-trade-date">{dateLabel}</span>}
+                {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
+              </div>
+            </div>
+          ) : showInsider && r.insider_name ? (
             <div className="dp-trade-toprow">
               <div className="dp-trade-toprow__left">
                 <span className="dp-clickable dp-trade-row2__name" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
@@ -2443,6 +2453,13 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               layout that only shows the cells that apply. */}
           {inline ? (
             <div className="dp-trade-right dp-trade-right--grid">
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Type</span>
+                <span className="dp-trade-detail__val dp-trade-detail__val--type">
+                  <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+                  <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+                </span>
+              </div>
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">Shares</span>
                 <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
@@ -5686,6 +5703,12 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [sortKey,  setSortKey]  = useState(f.sortKey || 'transaction_date');
   const [sortDir,  setSortDir]  = useState(f.sortDir ?? -1);
 
+  function resetFilters() {
+    setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
+    setOpenMkt(false); setFromPortfolio(false);
+    setDPreset(7); setDateFrom(''); setDateTo('');
+  }
+
   const [rows,    setRows]    = useState(null);
   const [sectors, setSectors] = useState([]);
   const [detailStack, setDetailStack] = useState(()=>initialDetailStack||[]);
@@ -5784,6 +5807,12 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               ))}
             </div>
           </div>
+          {(search||typeF||relF||sectorF||sourceF||openMkt||fromPortfolio||dPreset!==7||dateFrom||dateTo) && (
+            <>
+              <div className="drawer__toolbar-spacer"/>
+              <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
+            </>
+          )}
         </div>
 
         <FilterPanel
@@ -5903,6 +5932,13 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   const [sortKey, setSortKey] = useState('transaction_date');
   const [sortDir, setSortDir] = useState(-1);
   const isMobile = useIsMobile();
+
+  function resetFilters() {
+    setSearch(''); setSearchInput('');
+    setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
+    setOpenMkt(false); setFromPortfolio(false);
+    setDPreset(7); setDateFrom(''); setDateTo('');
+  }
   // Mobile-only — the real table has 10 columns, no reasonable phone width
   // fits that, so mobile gets a separate compact card list instead of a
   // squeezed/overflowing version of the same table. Tapping a card expands
@@ -5990,7 +6026,12 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           <div className="search-wrap">
             <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="search" placeholder="Ticker, insider, company… (Enter)"
-              value={searchInput} onChange={e=>setSearchInput(e.target.value)}
+              value={searchInput}
+              onChange={e=>{
+                const v = e.target.value;
+                setSearchInput(v);
+                if (v === '') setSearch(''); // clearing takes effect immediately — a NEW query still needs Enter
+              }}
               onKeyDown={e=>e.key==='Enter'&&setSearch(searchInput)}/>
           </div>
           <div className="drawer__toolbar-divider"/>
@@ -6012,6 +6053,9 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               </div>
             </>
           )}
+          {activeFilterCount > 0 || search || dPreset !== 7 || dateFrom || dateTo ? (
+            <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
+          ) : null}
           <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
             onClick={()=>onUpgrade('data_export')}>
             Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>
