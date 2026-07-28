@@ -2060,49 +2060,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     `).then(r=>{setTickerRows(r);setBusy(false);}).catch(()=>setBusy(false));
   },[d.type,d.ticker]);
 
-  const [relatedInsiders, setRelatedInsiders] = useState(null);
-
-  useEffect(()=>{
-    if (d.type!=='trader' || !traderRows?.length) { setRelatedInsiders(null); return; }
-    const sectors = [...new Set(traderRows.map(r=>r.sector).filter(Boolean))];
-    if (!sectors.length) { setRelatedInsiders([]); return; }
-    const sectorList = sectors.map(s=>`'${s.replace(/'/g,"''")}'`).join(',');
-    const selfName = d.name.replace(/'/g,"''");
-
-    // Pull other insiders active in the same sector(s). Simplified query —
-    // no LATERAL join (kept timing out / erroring on Neon's HTTP SQL endpoint
-    // at this table size) and bounded to the last 2 years to keep it fast.
-    // Hit-rate here is a rough proxy (buy volume + OM discipline), not the
-    // full trustScore calculation — good enough for ranking "related" people.
-    queryNeon(`
-      SELECT f.insider_name, f.insider_title, f.relationship,
-             COUNT(*) FILTER (WHERE f.transaction_type='buy' AND f.is_open_market) AS om_buys,
-             COUNT(*) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market) AS om_sells,
-             ARRAY_AGG(DISTINCT f.ticker) FILTER (WHERE f.ticker IS NOT NULL) AS tickers
-      FROM public.filings f
-      WHERE f.sector IN (${sectorList})
-        AND f.insider_name IS NOT NULL
-        AND f.insider_name != '${selfName}'
-        AND COALESCE(f.transaction_date, f.filing_date) >= (CURRENT_DATE - INTERVAL '2 years')
-      GROUP BY f.insider_name, f.insider_title, f.relationship
-      HAVING COUNT(*) FILTER (WHERE f.transaction_type='buy' AND f.is_open_market) >= 2
-      ORDER BY om_buys DESC
-      LIMIT 8
-    `).then(rows=>{
-      const withRate = rows.map(r=>({
-        ...r,
-        // Rough proxy: OM discipline ratio (buys+sells via real cash vs total activity)
-        hitRate: (r.om_buys+r.om_sells)>0 ? Math.round((r.om_buys/(r.om_buys+r.om_sells))*100) : null,
-        sharedTickers: (r.tickers||[]).filter(t=>traderRows.some(tr=>tr.ticker===t)),
-      })).sort((a,b)=>{
-        // Prioritize insiders who share an actual ticker, then by OM buy count
-        if (a.sharedTickers.length!==b.sharedTickers.length) return b.sharedTickers.length-a.sharedTickers.length;
-        return (b.om_buys||0)-(a.om_buys||0);
-      });
-      setRelatedInsiders(withRate.slice(0,5));
-    }).catch(()=>setRelatedInsiders([]));
-  },[d.type,d.name,traderRows]);
-
   const traderStats = useMemo(()=>{
     if (!traderRows?.length) return null;
     const buys=traderRows.filter(r=>r.transaction_type==='buy');
@@ -2698,7 +2655,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                 <details className="position-card__txns" open={perStockBreakdown.length===1}>
                   <summary>{displayRows.length} transaction{displayRows.length!==1?'s':''} for {s.ticker}{omOnly?' (open market only)':''}</summary>
                   <div className="position-card__txn-list">
-                    {(inline?displayRows:displayRows.slice(0,5)).map((r,j)=><TRow key={j} r={r} showTicker={false} showInsider={false}/>)}
+                    {(inline?displayRows:displayRows.slice(0,5)).map((r,j)=><TRow key={j} r={r} showTicker={true} showInsider={false}/>)}
                   </div>
                   {!inline&&displayRows.length>5&&(
                     <button className="btn btn--ghost btn--sm position-card__view-full" onClick={()=>onExpand&&onExpand()}>
@@ -2710,17 +2667,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             );})}
           </>)}
 
-          {relatedInsiders!==null&&relatedInsiders.length>0&&(<>
-            <div className="dp-section-label" style={{marginTop:14}}>Related Insiders <span className="trust-explain" title="Other insiders active in the same sector(s), ranked by shared tickers and approximate hit rate.">ⓘ</span></div>
-            {relatedInsiders.map((ri,i)=>(
-              <div key={i} className="related-insider-row" onClick={()=>nav('trader',{name:ri.insider_name,title:ri.insider_title})}>
-                <span className="dp-clickable" style={{fontWeight:500,fontSize:12}}>{ri.insider_name}</span>
-                <span className="td-muted" style={{fontSize:11,flex:1}}>{ri.insider_title}</span>
-                {ri.sharedTickers?.length>0&&<span className="shared-ticker-badge">{ri.sharedTickers.length} shared</span>}
-                {ri.hitRate!=null&&<span className={`td-mono ${ri.hitRate>=60?'val-buy':ri.hitRate<40?'val-sell':''}`} style={{fontSize:11}}>{ri.hitRate}%</span>}
-              </div>
-            ))}
-          </>)}
         </>))}
 
 
@@ -5918,6 +5864,16 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   const [sectors, setSectors] = useState([]);
   const [search,  setSearch]  = useState('');
   const [searchInput, setSearchInput] = useState('');
+  // Auto-commits searchInput → search (which the fetch effect below actually
+  // depends on) a moment after typing stops, rather than requiring Enter.
+  // Debounced rather than committing on every keystroke — this triggers a
+  // paired COUNT(*) + paginated SELECT, and firing that twice per letter
+  // while someone's mid-word would be wasteful; a short pause after the
+  // last keystroke is unnoticeable to a person typing but avoids that.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const [typeF,   setTypeF]   = useState('');
   const [relF,    setRelF]    = useState('');
@@ -6025,13 +5981,9 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
         <div className="filter-bar filter-bar--wrap">
           <div className="search-wrap">
             <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" placeholder="Ticker, insider, company… (Enter)"
+            <input type="search" placeholder="Ticker, insider, company…"
               value={searchInput}
-              onChange={e=>{
-                const v = e.target.value;
-                setSearchInput(v);
-                if (v === '') setSearch(''); // clearing takes effect immediately — a NEW query still needs Enter
-              }}
+              onChange={e=>setSearchInput(e.target.value)}
               onKeyDown={e=>e.key==='Enter'&&setSearch(searchInput)}/>
           </div>
           <div className="drawer__toolbar-divider"/>

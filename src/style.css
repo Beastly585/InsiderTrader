@@ -47,6 +47,11 @@
   --red-600:   #F06060;  --red-50:    #271010;
   --blue-600:  #5AABF0;  --blue-50:   #0D1E33;
   --amber-600: #E8A130;  --amber-50:  #281B06;
+  /* Dedicated star/watchlist color — was reusing --amber-600 (the shared
+     warning/badge color), but that's load-bearing in several other places
+     (reversal badges, medium-relationship tags) and shouldn't shift just
+     to make the star lighter. A proper warm gold, distinct from amber. */
+  --gold-star: #F5C518;
   /* Was referenced by .csuite-badge and .badge--rel-strong but never
      actually defined in either theme — found while building the brand kit
      reference. Both fell back to an undefined CSS variable this whole
@@ -98,6 +103,7 @@
   --red-600:   #C0392B;  --red-50:    #FEE2E2;
   --blue-600:  #1A65C8;  --blue-50:   #DBEAFE;
   --amber-600: #8A4D00;  --amber-50:  #FEF3C7;
+  --gold-star: #EAB308;
   --purple-600: #7C3AED; --purple-50: #EDE9FE;
 
   /* Darker, higher-contrast stops for the hero gradient text — the dark-mode
@@ -1444,21 +1450,6 @@ td { padding:7px 11px; vertical-align:middle; }
 .roundtrip-pnl { font-family: var(--font-mono); font-weight: 600; margin-left: auto; white-space: nowrap; }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   RELATED INSIDERS
-══════════════════════════════════════════════════════════════════════════ */
-.related-insider-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 0; border-bottom: 0.5px solid var(--border);
-  cursor: pointer; transition: background .07s;
-}
-.related-insider-row:last-child { border-bottom: none; }
-.related-insider-row:hover { background: var(--surface-2); }
-.shared-ticker-badge {
-  font-size: 0.6875rem; background: var(--green-50); color: var(--green-600);
-  padding: 1px 6px; border-radius: 999px; white-space: nowrap;
-}
-
-/* ══════════════════════════════════════════════════════════════════════════
    HOLDINGS — position source labeling
 ══════════════════════════════════════════════════════════════════════════ */
 .sb-stat-source {
@@ -2175,8 +2166,8 @@ td { padding:7px 11px; vertical-align:middle; }
   line-height: 1; transition: color .1s, transform .1s;
   flex-shrink: 0;
 }
-.star-btn:hover { color: var(--amber-600); transform: scale(1.2); }
-.star-btn--active { color: var(--amber-600); }
+.star-btn:hover { color: var(--gold-star); transform: scale(1.2); }
+.star-btn--active { color: var(--gold-star); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    WATCHLIST PAGE
