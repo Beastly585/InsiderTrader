@@ -45,6 +45,7 @@ import { verifyClerkWebhook } from './lib/clerk-webhook.js';
 import { encryptSecret, decryptSecret } from './lib/crypto.js';
 import { computeSignature } from './lib/snaptrade-sign.js';
 import * as Sentry from '@sentry/cloudflare';
+import { Zip, ZipPassThrough } from 'fflate';
 
 const ALLOWED_ORIGINS = new Set([
   'https://seli.app',
@@ -62,11 +63,20 @@ const workerHandler = {
   // as often as every minute on Workers Free, since it's a cheap no-op
   // once the snapshot is caught up. No browser is waiting on any of this.
   async scheduled(event, env, ctx) {
-    await continueSnapshotBuild(env);
-    // Build the downloadable CSV once the NDJSON snapshot is caught up.
-    // buildExportCSV is a no-op if the CSV is already current, so calling
-    // it every tick is safe and cheap.
-    await buildExportCSV(env);
+    console.log('[Scheduled] tick start');
+    try {
+      const snapResult = await continueSnapshotBuild(env);
+      console.log('[Scheduled] snapshot:', JSON.stringify(snapResult).slice(0, 300));
+    } catch (e) {
+      console.error('[Scheduled] snapshot threw:', String(e), e?.stack?.slice(0, 500));
+    }
+    try {
+      const csvResult = await buildExportCSV(env);
+      console.log('[Scheduled] csv:', JSON.stringify(csvResult).slice(0, 300));
+    } catch (e) {
+      console.error('[Scheduled] csv threw:', String(e), e?.stack?.slice(0, 500));
+    }
+    console.log('[Scheduled] tick done');
   },
 
   async fetch(request, env) {
@@ -343,8 +353,12 @@ async function handleFetchInner(request, env, origin) {
 // replaces all of that: the CSV is built once server-side, and the download
 // endpoint just passes the R2 object's body straight through.
 
-const CSV_EXPORT_KEY = 'filings-export.csv';
-const CSV_META_KEY   = 'filings-csv.meta.json';
+// Per-year files instead of one giant CSV — Excel and Numbers both cap out
+// at 1,048,576 rows (the old .xls limit both inherited), and this dataset
+// blows well past that as one file. Splitting by calendar year keeps every
+// individual file comfortably under that ceiling.
+const CSV_EXPORT_PREFIX = 'csv-export/';         // csv-export/2024.csv, etc.
+const CSV_MANIFEST_KEY = 'csv-export/manifest.json';
 
 const CSV_COLUMNS = [
   'transaction_date','filing_date','ticker','company_name',
@@ -376,115 +390,307 @@ function ndjsonRowToCSV(row) {
   }).join(',');
 }
 
+// A row's calendar year, from whichever date field is populated — same
+// COALESCE(transaction_date, filing_date) precedence used everywhere else
+// in this file. Since both the snapshot builder and the live delta query
+// order strictly by this same expression DESCENDING, years are visited in
+// a single unbroken run each (2026, then 2025, then 2024, ...) — never
+// revisited once we've moved past them. That's what makes it safe to
+// finalize and upload-complete one year's file the moment the next row
+// belongs to an different, older year.
+function rowYear(row) {
+  const d = row.transaction_date || row.filing_date;
+  return d ? String(d).slice(0, 4) : 'unknown';
+}
+
+const CSV_BUILD_STATE_KEY = 'filings-csv-build-state.json';
+// With Workers Paid's default CPU budget, processing a whole 20,000-row
+// NDJSON part in one tick is trivial — no need for a tight per-line bound.
+// Set well above RAW_CHUNK_ROWS so, in practice, one tick = one whole part.
+const CSV_LINES_PER_TICK = 25000;
+
+// R2's multipart upload requires every NON-FINAL part to be the exact same
+// byte length (not merely >=5MB — genuinely equal). Uploading whenever
+// accumulated text happened to cross a threshold produced parts of varying
+// size (8.1MB, 8.3MB, ...), which completeMultipartUpload rejects with
+// "All non-trailing parts must have the same length." This version instead
+// buffers bytes across ticks and slices off EXACTLY FIXED_PART_BYTES each
+// time — only the true last part (any size, including the small remainder)
+// is allowed to differ.
+const FIXED_PART_BYTES = 8 * 1024 * 1024; // exactly 8MB per non-final part
+
+const CSV_BUILD_LOCK_KEY = 'filings-csv-build-lock.json';
+const CSV_BUILD_LOCK_TTL_MS = 2 * 60 * 1000; // comfortably longer than any single tick should take
+
 async function buildExportCSV(env) {
   if (!env.EXPORT_SNAPSHOTS) return { ok: false, error: 'R2 not configured' };
 
-  // Is there a finished NDJSON snapshot?
-  const metaObj = await env.EXPORT_SNAPSHOTS.get('filings-snapshot.meta.json');
-  if (!metaObj) return { ok: true, idle: true, reason: 'no snapshot yet' };
-  const snapshotMeta = JSON.parse(await metaObj.text());
-  if (!snapshotMeta.partCount) return { ok: true, idle: true, reason: 'empty snapshot' };
-
-  // Is the CSV already current?
-  const csvMetaObj = await env.EXPORT_SNAPSHOTS.get(CSV_META_KEY);
-  if (csvMetaObj) {
-    const csvMeta = JSON.parse(await csvMetaObj.text());
-    if (csvMeta.builtThrough >= snapshotMeta.builtThrough) {
-      return { ok: true, idle: true, reason: 'CSV already current' };
+  // ── Concurrency guard ──
+  // The daily cron and any manual /internal/build-csv-now burst call both
+  // invoke this function — without a lock, two overlapping invocations can
+  // both read "no upload exists for year X yet" before either writes state
+  // back, and each independently create a multipart upload for the same
+  // year (exactly what produced duplicate csv-export/2026.csv uploads).
+  // A short-TTL lock makes overlap a no-op instead of a race, regardless of
+  // what's calling this — cron cadence, burst loops, or both at once.
+  const lockObj = await env.EXPORT_SNAPSHOTS.get(CSV_BUILD_LOCK_KEY);
+  if (lockObj) {
+    const lock = JSON.parse(await lockObj.text());
+    if (Date.now() - lock.at < CSV_BUILD_LOCK_TTL_MS) {
+      return { ok: true, idle: true, reason: 'another build tick is already in progress' };
     }
+    // Stale lock (older than TTL) — a previous invocation crashed or hung
+    // without clearing it. Proceed and overwrite rather than block forever.
   }
-
-  const encoder = new TextEncoder();
-  const { readable, writable } = new TransformStream();
-  const writer = writable.getWriter();
-  let totalRows = 0;
-
-  // R2 accepts ReadableStream as put body — starts consuming while we write
-  const uploadPromise = env.EXPORT_SNAPSHOTS.put(CSV_EXPORT_KEY, readable, {
-    httpMetadata: { contentType: 'text/csv' },
-  });
+  await env.EXPORT_SNAPSHOTS.put(CSV_BUILD_LOCK_KEY, JSON.stringify({ at: Date.now() }));
 
   try {
-    // Header row
-    await writer.write(encoder.encode(CSV_HEADERS.map(h => escapeCSV(h)).join(',') + '\n'));
+    // Is there a finished NDJSON snapshot?
+    const metaObj = await env.EXPORT_SNAPSHOTS.get('filings-snapshot.meta.json');
+    if (!metaObj) return { ok: true, idle: true, reason: 'no snapshot yet' };
+    const snapshotMeta = JSON.parse(await metaObj.text());
+    if (!snapshotMeta.partCount) return { ok: true, idle: true, reason: 'empty snapshot' };
 
-    // Process each NDJSON part — one at a time, so memory stays bounded
-    for (let i = 0; i < snapshotMeta.partCount; i++) {
-      const partKey = `filings-snapshot-parts/${String(i).padStart(6, '0')}.ndjson`;
-      const partObj = await env.EXPORT_SNAPSHOTS.get(partKey);
-      if (!partObj) { console.warn(`[Worker] CSV build: missing ${partKey}`); continue; }
-
-      const text = await partObj.text();
-      if (!text || text.length < 10) {
-        console.warn(`[Worker] CSV build: empty/corrupt ${partKey} (${text?.length || 0} bytes), skipping`);
-        continue;
-      }
-
-      const lines = text.split('\n');
-      // Flush every 10k lines to avoid building a huge string
-      let csvChunk = '';
-      let lineCount = 0;
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          csvChunk += ndjsonRowToCSV(JSON.parse(line)) + '\n';
-          totalRows++;
-          lineCount++;
-          if (lineCount % 10000 === 0) {
-            await writer.write(encoder.encode(csvChunk));
-            csvChunk = '';
-          }
-        } catch {
-          // Skip corrupt JSON lines
+    // Is the CSV already current, and is there no build in progress?
+    const stateObj = await env.EXPORT_SNAPSHOTS.get(CSV_BUILD_STATE_KEY);
+    if (!stateObj) {
+      const manifestObj = await env.EXPORT_SNAPSHOTS.get(CSV_MANIFEST_KEY);
+      if (manifestObj) {
+        const manifest = JSON.parse(await manifestObj.text());
+        if (manifest.builtThrough >= snapshotMeta.builtThrough) {
+          return { ok: true, idle: true, reason: 'CSV already current' };
         }
       }
-      if (csvChunk) await writer.write(encoder.encode(csvChunk));
     }
 
-    // Live delta — filings since the snapshot cutoff
-    const today = new Date().toISOString().split('T')[0];
-    try {
-      const deltaResult = await neonFetch(env, `
-        SELECT ${exportSelectCols(today)}
-        FROM public.filings
-        WHERE COALESCE(transaction_date,filing_date)::date > '${snapshotMeta.builtThrough}'::date
-        ORDER BY COALESCE(transaction_date,filing_date) DESC
-      `);
-      let deltaCsv = '';
-      for (const row of (deltaResult.rows || [])) {
-        deltaCsv += ndjsonRowToCSV(row) + '\n';
-        totalRows++;
+    const encoder = new TextEncoder();
+
+    // ── Load or start build state ──
+    let state;
+    if (stateObj) {
+      state = JSON.parse(await stateObj.text());
+      state.nextSnapshotPartIndex = state.nextSnapshotPartIndex || 0;
+      state.lineOffsetInPart = state.lineOffsetInPart || 0;
+      state.totalRows = state.totalRows || 0;
+      state.targetBuiltThrough = state.targetBuiltThrough || snapshotMeta.builtThrough;
+      state.deltaDone = state.deltaDone || false;
+      state.channels = state.channels || {}; // { [year]: { uploadId, uploadedParts, nextPartNumber, bufferB64, rows } }
+    } else {
+      state = {
+        nextSnapshotPartIndex: 0,
+        lineOffsetInPart: 0,
+        totalRows: 0,
+        targetBuiltThrough: snapshotMeta.builtThrough,
+        deltaDone: false,
+        channels: {},
+      };
+    }
+
+    // ── Restore live handles for every channel touched so far ──
+    // A "channel" is one calendar year's (or 'unknown''s) multipart upload.
+    // Every channel EVER opened during this build stays open until the very
+    // end — nothing is finalized early based on "the current row's year
+    // changed." That assumption turned out to be false for this data: a row
+    // can have an out-of-range transaction_date (nulled by the display
+    // clamp) but a valid, different-year filing_date, so rowYear() assigns
+    // it a real year that doesn't match its position in the raw-date-driven
+    // traversal order — a row can legitimately show up mid-sequence
+    // belonging to a year "already finished" pages ago. Keeping every
+    // year's upload open the whole time makes that a complete non-issue:
+    // a row just gets appended to whichever channel it belongs to,
+    // whenever it shows up, in any order.
+    const channels = {};
+    for (const [year, saved] of Object.entries(state.channels)) {
+      channels[year] = {
+        upload: await env.EXPORT_SNAPSHOTS.resumeMultipartUpload(`${CSV_EXPORT_PREFIX}${year}.csv`, saved.uploadId),
+        uploadedParts: saved.uploadedParts || [],
+        nextPartNumber: saved.nextPartNumber || 1,
+        buffer: saved.bufferB64 ? Buffer.from(saved.bufferB64, 'base64') : new Uint8Array(0),
+        pendingLines: [],
+        rows: saved.rows || 0,
+      };
+    }
+
+    function flushPendingLines(ch) {
+      if (ch.pendingLines.length === 0) return;
+      const chunkText = ch.pendingLines.join('\n') + '\n';
+      ch.pendingLines = [];
+      ch.buffer = Buffer.concat([ch.buffer, encoder.encode(chunkText)]);
+    }
+
+    async function flushFullParts(ch) {
+      while (ch.buffer.length >= FIXED_PART_BYTES) {
+        const slice = ch.buffer.slice(0, FIXED_PART_BYTES);
+        const uploaded = await ch.upload.uploadPart(ch.nextPartNumber, slice);
+        ch.uploadedParts.push({ partNumber: ch.nextPartNumber, etag: uploaded.etag });
+        ch.nextPartNumber++;
+        ch.buffer = ch.buffer.slice(FIXED_PART_BYTES);
       }
-      if (deltaCsv) await writer.write(encoder.encode(deltaCsv));
-    } catch (e) {
-      console.error('[Worker] CSV build: delta query failed (non-fatal):', e.message);
-      // Snapshot data alone is still valuable — degrade to slightly stale
     }
 
-    await writer.close();
-    await uploadPromise;
+    // Appends one row to whichever year's channel it belongs to, opening
+    // that channel's multipart upload on first use. Never closes a channel
+    // — that only happens once, at the very end of the whole build.
+    async function appendRow(row) {
+      const year = rowYear(row);
+      if (!channels[year]) {
+        const upload = await env.EXPORT_SNAPSHOTS.createMultipartUpload(
+          `${CSV_EXPORT_PREFIX}${year}.csv`, { httpMetadata: { contentType: 'text/csv' } }
+        );
+        channels[year] = {
+          upload,
+          uploadedParts: [],
+          nextPartNumber: 1,
+          buffer: encoder.encode(CSV_HEADERS.map(h => escapeCSV(h)).join(',') + '\n'),
+          pendingLines: [],
+          rows: 0,
+        };
+      }
+      channels[year].pendingLines.push(ndjsonRowToCSV(row));
+      channels[year].rows++;
+      state.totalRows++;
+    }
 
-    // Write CSV meta so we know when this was built
-    await env.EXPORT_SNAPSHOTS.put(CSV_META_KEY, JSON.stringify({
-      builtThrough: snapshotMeta.builtThrough,
-      totalRows,
+    // Merges pending lines + slices off full parts for every channel touched
+    // this tick, then serializes ALL channels back into state. A handful of
+    // extra resumeMultipartUpload calls per tick (one per year seen so far,
+    // capped at ~8) is trivial against the 30s CPU budget.
+    async function persistAllChannels() {
+      state.channels = {};
+      for (const [year, ch] of Object.entries(channels)) {
+        flushPendingLines(ch);
+        await flushFullParts(ch);
+        state.channels[year] = {
+          uploadId: ch.upload.uploadId,
+          uploadedParts: ch.uploadedParts,
+          nextPartNumber: ch.nextPartNumber,
+          bufferB64: Buffer.from(ch.buffer).toString('base64'),
+          rows: ch.rows,
+        };
+      }
+    }
+
+    // ── Step 0 (once, on a fresh build): the live delta is the NEWEST data
+    // — has to be processed before any snapshot part so state.channels
+    // reflects it too, though order no longer matters for correctness now
+    // that channels never close early — this is just about keeping the
+    // the live delta out of the (larger, slower) snapshot-part loop. ──
+    if (!state.deltaDone) {
+      const today = new Date().toISOString().split('T')[0];
+      try {
+        const deltaResult = await neonFetch(env, `
+          SELECT ${exportSelectCols(today)}
+          FROM public.filings
+          WHERE COALESCE(transaction_date,filing_date)::date > '${state.targetBuiltThrough}'::date
+          ORDER BY COALESCE(transaction_date,filing_date) DESC
+        `);
+        for (const row of (deltaResult.rows || [])) {
+          await appendRow(row);
+        }
+      } catch (e) {
+        console.error('[Worker] CSV build: delta query failed (non-fatal):', e.message);
+        // Snapshot data alone is still valuable — degrade to slightly stale
+      }
+      state.deltaDone = true;
+      await persistAllChannels();
+      await env.EXPORT_SNAPSHOTS.put(CSV_BUILD_STATE_KEY, JSON.stringify(state));
+      return { ok: true, done: false, phase: 'delta', totalRows: state.totalRows };
+    }
+
+    // ── Process a bounded number of lines from the current snapshot part ──
+    if (state.nextSnapshotPartIndex < snapshotMeta.partCount) {
+      const i = state.nextSnapshotPartIndex;
+      const partKey = `filings-snapshot-parts/${String(i).padStart(6, '0')}.ndjson`;
+      const partObj = await env.EXPORT_SNAPSHOTS.get(partKey);
+
+      let lines = [];
+      if (partObj) {
+        const text = await partObj.text();
+        if (text && text.length >= 10) lines = text.split('\n');
+        else console.warn(`[Worker] CSV build: empty/corrupt ${partKey} (${text?.length || 0} bytes), skipping`);
+      } else {
+        console.warn(`[Worker] CSV build: missing ${partKey}`);
+      }
+
+      const startAt = state.lineOffsetInPart;
+      const endAt = Math.min(startAt + CSV_LINES_PER_TICK, lines.length);
+      for (let li = startAt; li < endAt; li++) {
+        const line = lines[li];
+        if (!line || !line.trim()) continue;
+        try {
+          await appendRow(JSON.parse(line));
+        } catch { /* skip corrupt line */ }
+      }
+
+      if (endAt >= lines.length) {
+        state.nextSnapshotPartIndex++;
+        state.lineOffsetInPart = 0;
+      } else {
+        state.lineOffsetInPart = endAt;
+      }
+
+      await persistAllChannels();
+      await env.EXPORT_SNAPSHOTS.put(CSV_BUILD_STATE_KEY, JSON.stringify(state));
+      return {
+        ok: true, done: false,
+        partsProcessed: state.nextSnapshotPartIndex,
+        totalParts: snapshotMeta.partCount,
+        lineOffsetInCurrentPart: state.lineOffsetInPart,
+        totalRows: state.totalRows,
+      };
+    }
+
+    // ── All rows processed — finalize every channel, exactly once each ──
+    const finishedYears = [];
+    for (const [year, ch] of Object.entries(channels)) {
+      flushPendingLines(ch);
+      await flushFullParts(ch);
+      if (ch.buffer.length > 0) {
+        const uploaded = await ch.upload.uploadPart(ch.nextPartNumber, ch.buffer);
+        ch.uploadedParts.push({ partNumber: ch.nextPartNumber, etag: uploaded.etag });
+      }
+      await ch.upload.complete(ch.uploadedParts);
+      if (year !== 'unknown') finishedYears.push({ year, totalRows: ch.rows });
+    }
+    const undatedRows = channels['unknown'] ? channels['unknown'].rows : 0;
+
+    await env.EXPORT_SNAPSHOTS.put(CSV_MANIFEST_KEY, JSON.stringify({
+      builtThrough: state.targetBuiltThrough,
+      totalRows: state.totalRows,
+      years: finishedYears.sort((a, b) => Number(a.year) - Number(b.year)),
+      // Rows with no usable date — not part of `years`, so the download
+      // endpoint's cutoff-year filtering never touches this file. It has no
+      // date to be "before or after" a purchase, so it's included in every
+      // download unconditionally, same as any fully-past year would be.
+      undatedRows,
       updatedAt: new Date().toISOString(),
     }));
+    await env.EXPORT_SNAPSHOTS.delete(CSV_BUILD_STATE_KEY).catch(()=>{});
 
-    console.log(`[Worker] CSV export built: ${totalRows.toLocaleString()} rows, through ${snapshotMeta.builtThrough}`);
-    return { ok: true, done: true, totalRows };
+    console.log(`[Worker] CSV export built: ${state.totalRows.toLocaleString()} rows across ${finishedYears.length} years (+ ${undatedRows} undated), through ${state.targetBuiltThrough}`);
+    return { ok: true, done: true, totalRows: state.totalRows, years: finishedYears.length, undatedRows };
   } catch (e) {
-    try { await writer.close(); } catch {}
-    try { await uploadPromise; } catch {}
+    // State is only persisted after each step fully succeeds, so if this
+    // throws mid-tick, the next tick just re-reads the last-saved state and
+    // retries the same step — no partial/corrupt data, no cleanup needed
+    // here. Any in-progress multipart upload stays open on R2's side until
+    // completed or explicitly aborted, so nothing to abort on a transient
+    // failure we intend to retry.
     console.error('[Worker] CSV build failed:', e.message, e.stack?.slice(0, 500));
     return { ok: false, error: e.message };
+  } finally {
+    await env.EXPORT_SNAPSHOTS.delete(CSV_BUILD_LOCK_KEY).catch(()=>{});
   }
 }
 
 
 // ── CSV download endpoint ────────────────────────────────────────────────────
-// Auth check + purchase gate, then stream the pre-built CSV straight from R2.
-// The Worker does zero parsing/transformation — just a thin proxy.
+// Auth check + purchase gate, then bundle the per-year CSVs into a ZIP,
+// scoped to the DATE THE PURCHASE WAS MADE — not today. A re-download a
+// week later must not silently hand over a week of extra data the person
+// never paid for; it should show exactly what existed at purchase time,
+// same as the day they bought it.
+const csvDownloadEncoder = new TextEncoder();
 async function handleCSVDownload(request, env, origin) {
   const clerkUserId = await verifiedUserId(request, env);
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
@@ -493,26 +699,35 @@ async function handleCSVDownload(request, env, origin) {
   try { body = JSON.parse(await request.text()); } catch {}
   const mode = body.mode === 'redownload' ? 'redownload' : 'consume';
 
-  // ── Purchase gate (same logic as handleExport) ──
+  // ── Purchase gate — now also fetches purchased_at, since that's the
+  // cutoff the export gets scoped to, not "today" ──
   let purchaseKey;
+  let purchasedAt;
   try {
     if (mode === 'consume') {
       const result = await neonFetch(env,
-        `SELECT stripe_payment_intent_id FROM public.data_purchases
+        `SELECT stripe_payment_intent_id, purchased_at FROM public.data_purchases
          WHERE clerk_user_id = ${sqlVal(clerkUserId)} AND downloaded_at IS NULL
          ORDER BY purchased_at DESC LIMIT 1`
       );
       purchaseKey = result.rows?.[0]?.stripe_payment_intent_id;
+      purchasedAt = result.rows?.[0]?.purchased_at;
       if (!purchaseKey) {
         return corsResponse({
           error: "You've already used this purchase's one-time download — buy again for a fresh export, or use Re-download in Settings > Billing."
         }, 403, origin, env);
       }
     } else {
+      // Re-download always reflects the same cutoff as the most recent
+      // purchase that granted access — not "today" — otherwise a
+      // re-download would leak data the person hasn't paid for.
       const result = await neonFetch(env,
-        `SELECT 1 FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)} LIMIT 1`
+        `SELECT purchased_at FROM public.data_purchases
+         WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+         ORDER BY purchased_at DESC LIMIT 1`
       );
-      if (!(result.rows || []).length) {
+      purchasedAt = result.rows?.[0]?.purchased_at;
+      if (!purchasedAt) {
         return corsResponse({ error: 'Full data export requires a one-time purchase.' }, 403, origin, env);
       }
     }
@@ -521,15 +736,28 @@ async function handleCSVDownload(request, env, origin) {
     return corsResponse({ error: 'Could not verify export access — try again in a moment.' }, 500, origin, env);
   }
 
-  // ── Serve the pre-built CSV from R2 ──
-  const csvObj = await env.EXPORT_SNAPSHOTS.get(CSV_EXPORT_KEY);
-  if (!csvObj) {
+  const cutoffDate = String(purchasedAt).slice(0, 10);   // 'YYYY-MM-DD'
+  const cutoffYear = Number(cutoffDate.slice(0, 4));
+
+  // ── Load the manifest to know which per-year files exist ──
+  const manifestObj = await env.EXPORT_SNAPSHOTS.get(CSV_MANIFEST_KEY);
+  if (!manifestObj) {
     return corsResponse({
       error: 'Export is being prepared — try again in a few minutes.'
     }, 202, origin, env);
   }
+  const manifest = JSON.parse(await manifestObj.text());
+  const yearsToInclude = (manifest.years || [])
+    .filter(y => Number(y.year) <= cutoffYear)
+    .sort((a, b) => Number(a.year) - Number(b.year));
 
-  // Mark purchase consumed only after confirming the file exists
+  if (yearsToInclude.length === 0) {
+    return corsResponse({
+      error: 'No data available as of your purchase date yet — try again shortly.'
+    }, 202, origin, env);
+  }
+
+  // Mark purchase consumed only after we know there's real data to serve
   if (mode === 'consume' && purchaseKey) {
     await neonFetch(env,
       `UPDATE public.data_purchases SET downloaded_at = now()
@@ -537,17 +765,84 @@ async function handleCSVDownload(request, env, origin) {
     ).catch(e => console.error('[Worker] Failed to mark export consumed:', e.message));
   }
 
-  const today = new Date().toISOString().split('T')[0];
-  return new Response(csvObj.body, {
+  // ── Stream a ZIP of the qualifying year files back to the browser ──
+  // Years strictly before the cutoff year are used as-is (a full calendar
+  // year's data is always entirely <= any date in a later year). Only the
+  // cutoff year itself needs row-level filtering, since that file may since
+  // have grown to include dates past the purchase. STORE (no compression)
+  // keeps this fast and CPU-light — these are already just text.
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const zip = new Zip((err, chunk, final) => {
+    if (err) { writer.abort(err); return; }
+    writer.write(chunk);
+    if (final) writer.close();
+  });
+
+  (async () => {
+    try {
+      for (const y of yearsToInclude) {
+        const key = `${CSV_EXPORT_PREFIX}${y.year}.csv`;
+        const obj = await env.EXPORT_SNAPSHOTS.get(key);
+        if (!obj) continue;
+
+        let bytes;
+        if (Number(y.year) === cutoffYear) {
+          // The in-progress/current year — filter out rows newer than the
+          // purchase date. Date columns are never comma/quote-escaped, so a
+          // plain split is safe.
+          const text = await obj.text();
+          const lines = text.split('\n');
+          const kept = [lines[0]]; // header
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line) continue;
+            const comma1 = line.indexOf(',');
+            const comma2 = line.indexOf(',', comma1 + 1);
+            const txDate = line.slice(0, comma1);
+            const filingDate = line.slice(comma1 + 1, comma2);
+            const effectiveDate = txDate || filingDate;
+            if (!effectiveDate || effectiveDate <= cutoffDate) kept.push(line);
+          }
+          bytes = csvDownloadEncoder.encode(kept.join('\n'));
+        } else {
+          bytes = new Uint8Array(await obj.arrayBuffer());
+        }
+
+        const entry = new ZipPassThrough(`seli_insider_trades_${y.year}.csv`);
+        zip.add(entry);
+        entry.push(bytes, true);
+      }
+
+      // Undated rows (bad/missing source dates) — no date to filter on, so
+      // include unconditionally, same as any fully-past year would be.
+      if (manifest.undatedRows > 0) {
+        const undatedObj = await env.EXPORT_SNAPSHOTS.get(`${CSV_EXPORT_PREFIX}unknown.csv`);
+        if (undatedObj) {
+          const entry = new ZipPassThrough('seli_insider_trades_undated.csv');
+          zip.add(entry);
+          entry.push(new Uint8Array(await undatedObj.arrayBuffer()), true);
+        }
+      }
+
+      zip.end();
+    } catch (e) {
+      console.error('[Worker] CSV download zip build failed:', e.message);
+      writer.abort(e);
+    }
+  })();
+
+  return new Response(readable, {
     status: 200,
     headers: {
       ...corsHeaders(origin, env),
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="seli_insider_trades_${today}.csv"`,
-      'Content-Length': String(csvObj.size),
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="seli_insider_trades_through_${cutoffDate}.zip"`,
     },
   });
 }
+
+
 
 
 export default Sentry.withSentry(
@@ -853,16 +1148,18 @@ function exportSelectCols(todayStr) {
 // if invocations still fail, lower this first. If they consistently
 // succeed with room to spare, it can be raised to finish the initial
 // build faster.
-const RAW_CHUNK_ROWS = 5000;
-// How many small raw parts get merged into one final compacted part.
-// Compaction is cheap (concatenating already-serialized text, no
-// re-stringify), so this can stay conservative on the CPU side — the
-// real constraint it's balancing is the 50-subrequests-per-request limit
-// on the SERVING side, which has to read back every compacted part in
-// one HTTP request. 20 raw parts of ~5,000 rows each means one compacted
-// part covers ~100,000 rows, keeping the total part count well under 50
-// even for a multi-million-row table.
-const COMPACT_GROUP_SIZE = 20;
+// Now that wrangler.toml sets usage_model = "unbound" (30s CPU per
+// invocation instead of Bundled's 10ms/50ms), these no longer need to be
+// this conservative — raised back up so the rebuild finishes in far fewer
+// ticks. History: started at 5000, dropped to 2000 while still on Bundled
+// CPU limits, now raised well past the original value since 30s is orders
+// of magnitude more headroom than either Bundled tier ever offered.
+const RAW_CHUNK_ROWS = 20000;
+// Same reasoning — compacting 10 raw parts (~10 x 20000-row chunks) is
+// trivial CPU under Unbound. Kept modest rather than maximal since total
+// part count barely matters anymore (exports serve a single pre-built CSV,
+// not the individual parts), so there's no upside to pushing this further.
+const COMPACT_GROUP_SIZE = 10;
 
 // One small, bounded increment of the snapshot build. Meant to be called
 // repeatedly (by a frequent cron, or manually for testing) — each call
@@ -907,6 +1204,36 @@ async function continueSnapshotBuild(env) {
       };
     }
 
+    // ── Compaction check FIRST ──────────────────────────────────────────────
+    // If there are enough pending raw parts, compact them and return — don't
+    // ALSO do a Neon fetch in the same tick. Each operation alone fits within
+    // the Worker CPU budget; doing both in one invocation intermittently
+    // exceeds it (the "Exceeded CPU Limit" errors at ~every 5th tick).
+    const shouldCompactEarly = state.pendingRawKeys.length >= COMPACT_GROUP_SIZE;
+    if (shouldCompactEarly) {
+      const compactedKey = `filings-snapshot-parts/${String(state.nextCompactedIndex).padStart(6, '0')}.ndjson`;
+      let combined = '';
+      for (const key of state.pendingRawKeys) {
+        const obj = await env.EXPORT_SNAPSHOTS.get(key);
+        if (obj) combined += await obj.text();
+      }
+      await env.EXPORT_SNAPSHOTS.put(compactedKey, combined);
+
+      for (const key of state.pendingRawKeys) {
+        await env.EXPORT_SNAPSHOTS.delete(key).catch(()=>{});
+      }
+      state.nextCompactedIndex += 1;
+      state.pendingRawKeys = [];
+      await env.EXPORT_SNAPSHOTS.put('filings-snapshot-build-state.json', JSON.stringify(state));
+      return {
+        ok: true, done: false,
+        compactedThisTick: true,
+        rawPartsSoFar: state.nextRawIndex,
+        compactedPartsSoFar: state.nextCompactedIndex,
+      };
+    }
+
+    // ── Fetch next chunk from Neon ────────────────────────────────────────
     const selectCols = exportSelectCols(state.targetCutoff);
     const keysetCondition = state.cursor
       ? `AND (COALESCE(transaction_date,filing_date), ctid) < ('${state.cursor.date.replace(/'/g,"''")}', '${state.cursor.tid.replace(/'/g,"''")}'::tid)`
@@ -941,29 +1268,24 @@ async function continueSnapshotBuild(env) {
     }
 
     const reachedEnd = rows.length < RAW_CHUNK_ROWS;
-    const shouldCompact = state.pendingRawKeys.length >= COMPACT_GROUP_SIZE || (reachedEnd && state.pendingRawKeys.length > 0);
+    // Only compact here if we reached the end with leftover pending parts
+    // (fewer than COMPACT_GROUP_SIZE). Normal-count compaction is handled
+    // by the early check above on the NEXT tick.
+    const shouldCompact = reachedEnd && state.pendingRawKeys.length > 0;
 
     if (shouldCompact) {
-      // Stream raw parts into R2 via TransformStream instead of accumulating
-      // a ~40MB string in memory — the old += approach is what caused 1101s
-      // and the corrupted 0-byte / partial compacted parts (000004, 000016).
+      // With COMPACT_GROUP_SIZE = 5, this concatenates ~10MB — well within
+      // Worker memory limits. The TransformStream approach crashed the
+      // runtime (not a JS exception — our try/catch couldn't catch it),
+      // and at this size it's unnecessary. The original OOM was from
+      // concatenating 20 parts (~40MB); 5 parts is fine.
       const compactedKey = `filings-snapshot-parts/${String(state.nextCompactedIndex).padStart(6, '0')}.ndjson`;
-      const { readable, writable } = new TransformStream();
-      const writer = writable.getWriter();
-      const putPromise = env.EXPORT_SNAPSHOTS.put(compactedKey, readable);
+      let combined = '';
       for (const key of state.pendingRawKeys) {
         const obj = await env.EXPORT_SNAPSHOTS.get(key);
-        if (obj) {
-          const reader = obj.body.getReader();
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            await writer.write(value);
-          }
-        }
+        if (obj) combined += await obj.text();
       }
-      await writer.close();
-      await putPromise;
+      await env.EXPORT_SNAPSHOTS.put(compactedKey, combined);
 
       for (const key of state.pendingRawKeys) {
         await env.EXPORT_SNAPSHOTS.delete(key).catch(()=>{});
