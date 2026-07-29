@@ -1357,9 +1357,7 @@ const GUIDE_SECTIONS = [
       <>
         <div className="guide-hero">
           <div className="guide-hero__mark" aria-hidden="true">
-            {/* Placeholder for the animated/simple logo mark discussed in
-                the icon list below. A static wordmark stands in for now. */}
-            <span className="guide-hero__wordmark">Seli</span>
+            <img src={logoSimple} alt="" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
           </div>
         </div>
         <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as they're published, and organizes them using its own scoring methodology.</p>
@@ -7643,7 +7641,6 @@ function LPFeatureMock({ type }) {
             {t:'AAPL',  v:'$9,880',  pnl:'+2.1%', sig:false},
             {t:'MSFT',  v:'$6,340',  pnl:'+3.7%', sig:true},
             {t:'TSLA',  v:'$4,110',  pnl:'-3.4%', sig:true},
-            {t:'GOOGL', v:'$2,660',  pnl:'+1.4%', sig:false},
           ].map(r => (
             <div key={r.t} className="port-mini-row">
               <span className="ticker" style={{fontSize:12,minWidth:50}}>{r.t}</span>
@@ -7675,13 +7672,12 @@ function LPFeatureMock({ type }) {
             <span className="lp-mock-alert-email__kind">Instant alert</span>
           </div>
           <div className="lp-mock-alert-email__body">
-            <p className="lp-mock-alert-email__intro">4 of your instant alerts were triggered:</p>
+            <p className="lp-mock-alert-email__intro">3 of your instant alerts were triggered:</p>
             <table className="lp-mock-alert-email__table"><tbody>
               {[
                 {t:'NVDA', co:'NVIDIA Corp',    reason:'Watched ticker traded',  who:'Jensen Huang',   date:'Jul 22, 2026', action:'Buy',  detail:'12,000 sh @ $118.42', val:'$1.42M',    buy:true},
                 {t:'TSLA', co:'Tesla Inc',      reason:'Large executive sale',   who:'Elon Musk',       date:'Jul 21, 2026', action:'Sell', detail:'610 sh @ $248.55',    val:'$151,616',  buy:false},
                 {t:'MSFT', co:'Microsoft Corp', reason:'Followed insider filed', who:'Satya Nadella',   date:'Jul 21, 2026', action:'Buy',  detail:'340 sh @ $421.10',    val:'$143,174',  buy:true},
-                {t:'ADSK', co:'Autodesk Inc',   reason:'You hold this stock',    who:'Andrew Anagnost', date:'Jul 19, 2026', action:'Buy',  detail:'95 sh @ $289.77',     val:'$27,528',   buy:true},
               ].map(r => (
                 <tr key={r.t}>
                   <td>
@@ -7726,6 +7722,9 @@ function LPFeatureMock({ type }) {
                 {d:'Jul 21', t:'MSFT', tt:'buy',  sh:'340',   px:'$421.10', val:'$143,174'},
                 {d:'Jul 21', t:'TSLA', tt:'sell', sh:'610',   px:'$248.55', val:'$151,616'},
                 {d:'Jul 19', t:'ADSK', tt:'buy',  sh:'95',    px:'$289.77', val:'$27,528'},
+                {d:'Jul 18', t:'JPM',  tt:'sell', sh:'2,050', px:'$212.30', val:'$435,215'},
+                {d:'Jul 17', t:'AAPL', tt:'buy',  sh:'480',   px:'$196.88', val:'$94,502'},
+                {d:'Jul 16', t:'AMD',  tt:'buy',  sh:'3,100', px:'$142.05', val:'$440,355'},
               ].map((r,i) => (
                 <tr key={i} className={`row-${r.tt}`}>
                   <td className="td-date"><span className="td-date-main">{r.d}</span></td>

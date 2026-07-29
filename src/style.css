@@ -3302,10 +3302,14 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-mock-tile .dash-tile__body {
   padding: 12px 14px;
   display: flex; flex-direction: column; justify-content: center;
+  overflow: hidden; /* static marketing snapshot, not a real scrollable
+     widget — a scrollbar here goes nowhere useful, so any content that
+     runs long just clips cleanly instead */
 }
 .lp-mock-tile .dash-tile__body > * { flex-shrink: 0; }
 .lp-mock-tile.port-mini-tile { max-height: none; height: 100%; }
 .lp-mock-tile.port-mini-tile .port-mini-tile__body { flex: 1; justify-content: center; }
+.lp-mock-tile.port-mini-tile .port-mini-tile__list { overflow: hidden; max-height: none; }
 
 /* Alerts mockup — reproduces send_instant_alerts.py's actual email markup
    and colors (C_ACCENT #5A4FE8, C_ACCENT_STR #4338C9, C_AQUA #3FBFA0,
