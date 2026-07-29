@@ -143,12 +143,16 @@ body {
   font-family: var(--font); font-size: 0.8125rem; line-height: 1.55;
   background: var(--bg); color: var(--text);
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
-  overflow: hidden; /* the outer document itself never scrolls — .app-shell
-     owns the full viewport height and every real scroll happens inside
-     .content-area (or .settings-content). Without this, mobile Safari's
-     100vh quirk (see .app-shell below) leaves the outer page just tall
-     enough to become scrollable, dragging the whole header along with it. */
-  height: 100dvh;
+  overflow-x: hidden;
+  /* NOT locking overflow-y or height here (that was tried, then reverted —
+     see git history) — it fixed the mobile header-drift bug inside the
+     authenticated app, but body is shared with the marketing landing page
+     (.lp), which is a normal scrolling document with no .app-shell at all,
+     and the lock broke scrolling there entirely. .app-shell's own
+     `height:100dvh; overflow:hidden;` (below) already fully solves the
+     header-drift bug on its own — body naturally shrink-wraps to
+     .app-shell's height when that's its only content, so body never
+     actually needs its own lock for that page to behave correctly. */
 }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -2305,7 +2309,7 @@ td { padding:7px 11px; vertical-align:middle; }
    a wider version of a small explanation popup. Distinct enough from
    .modal-panel's default sizing that it gets its own width/height rules
    rather than fighting the base class with overrides. */
-.guide-modal { max-width: 760px; width: 92vw; height: 78vh; max-height: 640px; }
+.guide-modal { max-width: 900px; width: 92vw; height: 78vh; max-height: 640px; }
 .guide-modal__hdr { flex-shrink: 0; }
 .guide-modal__body { flex: 1; display: flex; min-height: 0; }
 .guide-modal__legal-bar {
@@ -2383,11 +2387,9 @@ td { padding:7px 11px; vertical-align:middle; }
 
 .guide-hero { display: flex; justify-content: center; margin-bottom: 18px; }
 .guide-hero__mark {
-  width: 64px; height: 64px; border-radius: var(--radius-lg);
+  width: 64px; height: 64px;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
 }
-.guide-hero__wordmark { color: #fff; font-weight: 800; font-size: 1.0625rem; letter-spacing: -0.02em; }
 
 /* Environment preview mockups — compact, abstracted stand-ins for the five
    app pages, built from real CSS variables so they theme correctly rather
