@@ -84,6 +84,7 @@ C_TEXT_MUTED   = "#6B7280"
 C_TEXT_FAINT   = "#9CA3AF"
 C_BORDER       = "#E5E7EB"
 C_BG           = "#FFFFFF"
+C_SECTION_BG   = "#F8F7FF"
 
 
 def get_connection():
@@ -166,36 +167,59 @@ def fetch_portfolio_tickers() -> dict[str, set[str]]:
 
 def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
     n = len(matches)
-    subject = f"{n} insider alert{'s' if n != 1 else ''} — {matches[0]['ticker']}" if n == 1 else f"{n} insider alerts triggered"
-    rows = ""
+    if n == 1:
+        m0 = matches[0]
+        action0 = "buy" if m0["transaction_type"] == "buy" else "sale"
+        subject = f"{m0['ticker']} — insider {action0} filed ({m0['insider_name']})"
+    else:
+        tickers = list(dict.fromkeys(m["ticker"] for m in matches))  # unique, order-preserving
+        ticker_preview = ", ".join(tickers[:3]) + (f" +{len(tickers)-3}" if len(tickers) > 3 else "")
+        subject = f"{n} insider filings — {ticker_preview}"
+
+    cards = ""
     for m in matches:
         reason_label = {
-            "watchlist_ticker":   "Watched ticker traded",
-            "followed_insider":   "Followed insider filed",
+            "watchlist_ticker":   "Watched ticker",
+            "followed_insider":   "Followed insider",
             "high_conviction":    "Large executive buy",
-            "reversal":           "Reversal detected",
-            "portfolio_holding":  "You hold this stock",
+            "reversal":           "Direction change",
+            "portfolio_holding":  "In your portfolio",
         }[m["reason"]]
         color = C_GREEN if m["transaction_type"] == "buy" else C_RED
         action = "Buy" if m["transaction_type"] == "buy" else "Sell"
-        # Filings only ever report a date, never a time of day — showing a
-        # fabricated timestamp here would be showing something the source
-        # filing itself doesn't contain.
         date_label = m["trade_date"].strftime("%b %d, %Y") if m["trade_date"] else "—"
-        shares_label = f"{m['shares']:,.0f} sh" if m["shares"] is not None else None
+        shares_label = f"{m['shares']:,.0f} shares" if m["shares"] is not None else None
         price_label = f"@ ${m['price_per_share']:,.2f}" if m["price_per_share"] else None
-        detail_bits = " ".join(b for b in (shares_label, price_label) if b) or "—"
-        rows += f"""
-        <tr>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};">
-            <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:700;text-decoration:none;font-size:14px;">{m['ticker']}</a><br>
-            <span style="color:{C_TEXT_MUTED};font-size:12px;">{m['company_name']}</span>
-          </td>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};color:{C_TEXT_MUTED};font-size:12px;">{reason_label}</td>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{C_TEXT_MUTED};">{m['insider_name']}{f'<br><span style="color:{C_TEXT_FAINT};">{m["insider_title"]}</span>' if m.get('insider_title') else ''}<br><span style="color:{C_TEXT_FAINT};">{date_label}</span></td>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{color};font-weight:700;">{action}<br><span style="color:{C_TEXT_MUTED};font-weight:400;">{detail_bits}</span></td>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};text-align:right;font-weight:700;color:{color};font-size:13px;white-space:nowrap;">{fmt_money(m['value'])}</td>
-        </tr>"""
+        detail_bits = " · ".join(b for b in (shares_label, price_label) if b)
+
+        cards += f"""
+    <tr><td style="padding:0 0 8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid {C_BORDER};border-radius:8px;overflow:hidden;">
+        <tr><td style="padding:14px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="vertical-align:top;">
+              <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:700;text-decoration:none;font-size:15px;line-height:1.3;">{m['ticker']}</a>
+              <div style="color:{C_TEXT_MUTED};font-size:12px;line-height:1.4;margin-top:2px;">{m['company_name']}</div>
+            </td>
+            <td style="vertical-align:top;text-align:right;">
+              <div style="color:{color};font-weight:700;font-size:15px;line-height:1.3;">{action} · {fmt_money(m['value'])}</div>
+            </td>
+          </tr></table>
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid {C_BORDER};">
+            <div style="font-size:13px;color:{C_TEXT};line-height:1.4;">{m['insider_name']}{f' · <span style="color:{C_TEXT_MUTED};">{m["insider_title"]}</span>' if m.get('insider_title') else ''}</div>
+            <div style="font-size:12px;color:{C_TEXT_MUTED};line-height:1.4;margin-top:4px;">
+              {date_label}{f' · {detail_bits}' if detail_bits else ''}
+            </div>
+          </div>
+          <div style="margin-top:8px;">
+            <span style="display:inline-block;background:{C_SECTION_BG};color:{C_ACCENT_STR};font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;line-height:1.3;">{reason_label}</span>
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>"""
+
+    preheader = f"{n} insider filing{'s' if n!=1 else ''} matched your alert settings."
+    preheader_pad = "&nbsp;&zwnj;" * 80
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -204,30 +228,33 @@ def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Seli — alert</title>
 </head>
-<body style="margin:0;padding:0;background:#F3F4F6;">
+<body style="margin:0;padding:0;background:#F3F4F6;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<!--[if mso]><style>table,td{{font-family:Arial,sans-serif;}}</style><![endif]-->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{preheader}{preheader_pad}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
 <tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:{C_BG};border-radius:12px;overflow:hidden;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:{C_BG};border-radius:12px;overflow:hidden;">
   <tr><td style="background:linear-gradient(135deg,{C_ACCENT} 0%,{C_ACCENT_STR} 60%,{C_AQUA} 100%);padding:20px 24px;">
     <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-0.02em;">Seli</span>
-    <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">Instant alert</span>
+    <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">Alert</span>
   </td></tr>
   <tr><td style="padding:20px 20px 8px;">
-    <p style="font-size:14px;color:{C_TEXT};margin:0;">{n} of your instant alert{'s were' if n != 1 else ' was'} triggered:</p>
+    <p style="font-size:14px;color:{C_TEXT};margin:0;">{n} insider filing{'s' if n!=1 else ''} matched your alert settings:</p>
   </td></tr>
   <tr><td style="padding:0 20px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-      {rows}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      {cards}
     </table>
   </td></tr>
   <tr><td style="padding:20px;">
-    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:13px;padding:10px 20px;border-radius:8px;text-decoration:none;">Open Seli →</a>
+    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none;">Open Seli →</a>
   </td></tr>
   <tr><td style="padding:0 20px 20px;">
-    <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0 0 6px;">
-      You're getting this because you enabled instant alerts in Settings. Informational only, not financial advice or a recommendation to buy or sell anything.
+    <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0 0 6px;">
+      You're getting this because you enabled instant alerts in Settings.
+      This is a factual notification of publicly filed insider trading disclosures, not financial advice or a recommendation to buy or sell any security.
     </p>
-    <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0;">
+    <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0;">
       <a href="{APP_URL}/settings?section=notifications" style="color:{C_TEXT_MUTED};">Manage email preferences</a>
       — turn off just instant alerts, or turn off every Seli email (digests and instant alerts) from the same page.
     </p>

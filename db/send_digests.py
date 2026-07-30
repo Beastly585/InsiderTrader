@@ -130,6 +130,16 @@ def conviction_tier(rows_for_ticker) -> str:
     has_med = any(r["value"] and r["value"] >= 100_000 for r in rows_for_ticker)
     return "medium" if has_med else "low"
 
+# Factual labels for the conviction proxy tiers — shown in the email body.
+# These describe *what happened* (executive + dollar size) rather than
+# implying a forward-looking assessment ("High conviction" reads as "this
+# is a confident bet" — which is investment advice language).
+TIER_LABELS = {
+    "high":   "Executive · $1M+",
+    "medium": "Open-market · $100K+",
+    "low":    "Open-market",
+}
+
 
 def fetch_portfolio_tickers_by_user() -> dict[str, set[str]]:
     """One batch call to the Worker's internal endpoint, covering every Pro
@@ -158,50 +168,67 @@ def fetch_portfolio_tickers_by_user() -> dict[str, set[str]]:
         return {}
 
 
-def build_section_rows(tickers: list[dict]) -> str:
-    rows = ""
-    for t in tickers:
-        color = C_GREEN if t["net_value"] >= 0 else C_RED
-        rows += f"""
-        <tr>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};">
-            <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:700;text-decoration:none;font-size:14px;">{t['ticker']}</a><br>
-            <span style="color:{C_TEXT_MUTED};font-size:12px;">{t['company']}</span>
-          </td>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};color:{C_TEXT_MUTED};font-size:12px;text-transform:capitalize;">{t['tier']}</td>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};font-size:12px;color:{C_TEXT_MUTED};">{t['insider_count']} insider{'s' if t['insider_count'] != 1 else ''}</td>
-          <td style="padding:12px 8px;border-bottom:1px solid {C_BORDER};text-align:right;font-weight:700;color:{color};font-size:13px;white-space:nowrap;">{fmt_money(t['net_value'])}</td>
-        </tr>"""
-    return rows
+def build_ticker_card(t: dict) -> str:
+    """Single-column stacked card per ticker — renders identically on any
+    viewport width. No multi-column table rows that squeeze on mobile."""
+    color = C_GREEN if t["net_value"] >= 0 else C_RED
+    tier_label = TIER_LABELS.get(t["tier"], "Open-market")
+    return f"""
+    <tr><td style="padding:0 0 8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid {C_BORDER};border-radius:8px;overflow:hidden;">
+        <tr><td style="padding:14px 16px;">
+          <!--[if mso]><table width="100%"><tr><td width="70%"><![endif]-->
+          <div style="display:inline-block;vertical-align:top;width:65%;">
+            <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:700;text-decoration:none;font-size:15px;line-height:1.3;">{t['ticker']}</a>
+            <div style="color:{C_TEXT_MUTED};font-size:12px;line-height:1.4;margin-top:2px;">{t['company']}</div>
+          </div>
+          <!--[if mso]></td><td width="30%" align="right"><![endif]-->
+          <div style="display:inline-block;vertical-align:top;width:30%;text-align:right;">
+            <div style="color:{color};font-weight:700;font-size:15px;line-height:1.3;">{fmt_money(t['net_value'])}</div>
+          </div>
+          <!--[if mso]></td></tr></table><![endif]-->
+          <div style="margin-top:8px;font-size:12px;color:{C_TEXT_MUTED};line-height:1.4;">
+            {tier_label} &middot; {t['insider_count']} insider{'s' if t['insider_count'] != 1 else ''}
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>"""
 
 
 def build_section(title: str, subtitle: str, tickers: list[dict]) -> str:
     if not tickers:
         return ""
+    cards = "".join(build_ticker_card(t) for t in tickers)
     return f"""
-    <tr><td style="padding:24px 0 8px;">
-      <div style="background:{C_SECTION_BG};border-radius:8px;padding:12px 16px;margin-bottom:2px;">
+    <tr><td style="padding:20px 0 8px;">
+      <div style="background:{C_SECTION_BG};border-radius:8px;padding:12px 16px;margin-bottom:8px;">
         <div style="font-size:13px;font-weight:700;color:{C_ACCENT_STR};text-transform:uppercase;letter-spacing:0.04em;">{title}</div>
         <div style="font-size:12px;color:{C_TEXT_MUTED};margin-top:2px;">{subtitle}</div>
       </div>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-        {build_section_rows(tickers)}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        {cards}
       </table>
     </td></tr>"""
 
 
 def build_digest_html(period_label: str, insights: list[dict], portfolio_movers: list[dict], watchlist_movers: list[dict], watchlist_only: bool) -> str:
     total = len(insights) + len(portfolio_movers) + len(watchlist_movers)
+    day_or_week = period_label.replace('daily','day').replace('weekly','week')
     sections = ""
     if not watchlist_only:
-        sections += build_section("Insights", f"Top signals from the {period_label} window", insights)
-        sections += build_section("Movers in your portfolio", "Insider activity on tickers you hold", portfolio_movers)
-    sections += build_section("Movers you follow", "Insider activity on your watchlist", watchlist_movers)
+        sections += build_section("Insider activity", f"Open-market trades filed in the past {day_or_week}", insights)
+        sections += build_section("In your portfolio", "Insider trades on tickers you hold", portfolio_movers)
+    sections += build_section("On your watchlist", "Insider trades on tickers you follow", watchlist_movers)
 
-    # Full HTML document, not a bare fragment — real DOCTYPE/head/viewport
-    # meta for better rendering consistency across clients, and specifically
-    # so mobile mail apps scale this correctly instead of rendering it at
-    # desktop width and forcing a pinch-zoom.
+    # Preheader — hidden text that appears in the inbox preview line (Gmail,
+    # Apple Mail, Outlook) before the user opens the email. Without this,
+    # clients fall back to the first visible body text, which is usually the
+    # section header ("INSIDER ACTIVITY") — not useful as a preview.
+    preheader = f"{total} ticker{'s' if total!=1 else ''} with insider activity this {day_or_week}."
+    # Pad with invisible whitespace so clients don't pull in body text after
+    # the preheader to fill the preview line.
+    preheader_pad = "&nbsp;&zwnj;" * 80
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -209,7 +236,9 @@ def build_digest_html(period_label: str, insights: list[dict], portfolio_movers:
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Seli — {period_label} digest</title>
 </head>
-<body style="margin:0;padding:0;background:#F3F4F6;">
+<body style="margin:0;padding:0;background:#F3F4F6;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<!--[if mso]><style>table,td{{font-family:Arial,sans-serif;}}</style><![endif]-->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{preheader}{preheader_pad}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
 <tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:{C_BG};border-radius:12px;overflow:hidden;">
@@ -218,19 +247,22 @@ def build_digest_html(period_label: str, insights: list[dict], portfolio_movers:
     <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">{period_label.capitalize()} digest</span>
   </td></tr>
   <tr><td style="padding:20px 20px 4px;">
-    <p style="font-size:14px;color:{C_TEXT};margin:0;">{total} ticker{'s' if total!=1 else ''} with notable activity this {period_label.replace('daily','day').replace('weekly','week')}:</p>
+    <p style="font-size:14px;color:{C_TEXT};margin:0;">{total} ticker{'s' if total!=1 else ''} with insider activity this {day_or_week}:</p>
   </td></tr>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:0 20px;">
-    {sections}
-  </table>
+  <tr><td style="padding:0 20px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+      {sections}
+    </table>
+  </td></tr>
   <tr><td style="padding:20px;">
-    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:13px;padding:10px 20px;border-radius:8px;text-decoration:none;">Open Seli →</a>
+    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none;">Open Seli →</a>
   </td></tr>
   <tr><td style="padding:0 20px 20px;">
-    <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0 0 6px;">
-      You're getting this because you enabled the {period_label} digest in Settings. Not financial advice.
+    <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0 0 6px;">
+      You're getting this because you enabled the {period_label} digest in Settings.
+      This is a factual summary of publicly filed insider trading disclosures, not financial advice or a recommendation to buy or sell any security.
     </p>
-    <p style="color:{C_TEXT_FAINT};font-size:11px;margin:0;">
+    <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0;">
       <a href="{APP_URL}/settings?section=notifications" style="color:{C_TEXT_MUTED};">Manage email preferences</a>
       — turn off just this digest, or turn off every Seli email (digests and instant alerts) from the same page.
     </p>
@@ -339,7 +371,7 @@ def main():
             continue
 
         html = build_digest_html(period_label, insights, portfolio_movers, watchlist_movers, u["digest_watchlist_only"])
-        subject = f"Your {period_label} digest — {total} ticker{'s' if total!=1 else ''} to know about"
+        subject = f"Your {period_label} digest — {total} ticker{'s' if total!=1 else ''} with insider activity"
         if send_email(u["email"], subject, html):
             sent += 1
 
