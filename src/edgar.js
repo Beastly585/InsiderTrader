@@ -21,7 +21,7 @@ const SECTOR_MAP = {
 const TICKER_SECTOR = {};
 for (const [s, ts] of Object.entries(SECTOR_MAP)) for (const t of ts) TICKER_SECTOR[t] = s;
 
-export const REL_LABELS = { strong: 'C-Suite', medium: 'Officer', weak: 'Director' };
+export const REL_LABELS = { strong: 'C-Suite', medium: 'Officer', weak: 'Director', congress: 'Congress' };
 const OPEN_MARKET = new Set(['P', 'S']);
 
 export function getSector(t) { return TICKER_SECTOR[(t||'').toUpperCase()] || 'Other'; }
@@ -39,7 +39,7 @@ export function enrich(raw) {
               : (raw.shares && raw.price ? Math.round(raw.shares * parseFloat(raw.price)) : null);
   let signal = 0;
   if (OPEN_MARKET.has(raw.transactionCode)) signal += 2;
-  if (rel === 'strong') signal += 3;
+  if (rel === 'strong' || rel === 'congress') signal += 3;
   if (rel === 'medium') signal += 1;
   if (value && value >= 1_000_000) signal += 3;
   else if (value && value >= 100_000) signal += 1;

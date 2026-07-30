@@ -2293,11 +2293,11 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     const trades=d.trades||[];
     for (const t of trades){const k=t.insiderName||'Unknown';if(!map[k])map[k]={name:k,title:t.title,rel:t.relationship,trades:[]};map[k].trades.push(t);}
     for (const v of Object.values(map))v.trades.sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''));
-    return Object.values(map).sort((a,b)=>{const ra=a.rel==='strong'?0:a.rel==='medium'?1:2,rb=b.rel==='strong'?0:b.rel==='medium'?1:2;if(ra!==rb)return ra-rb;return b.trades.reduce((s,t)=>s+(t.value||0),0)-a.trades.reduce((s,t)=>s+(t.value||0),0);});
+    return Object.values(map).sort((a,b)=>{const ra=a.rel==='strong'||a.rel==='congress'?0:a.rel==='medium'?1:2,rb=b.rel==='strong'||b.rel==='congress'?0:b.rel==='medium'?1:2;if(ra!==rb)return ra-rb;return b.trades.reduce((s,t)=>s+(t.value||0),0)-a.trades.reduce((s,t)=>s+(t.value||0),0);});
   },[d]);
 
   const score=traderStats?trustScore(traderStats):null;
-  const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{rel==='strong'?'C-Suite':rel==='medium'?'Officer':'Director'}</Badge>;
+  const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{REL_LABELS[rel]||'Director'}</Badge>;
 
   const TRow=({r,showTicker,showInsider})=>{
     const tt=r.transaction_type||r.transactionType;
@@ -4881,7 +4881,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
               <div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>
               <div className="td-muted" style={{fontSize:11}}>{r.insider_title||'Unknown'}</div>
               <div className="ins-lb-card__meta">
-                <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
+                <Badge type={`rel-${r.relationship||'weak'}`}>{REL_LABELS[r.relationship]||'Dir'}</Badge>
                 <span className="td-muted" style={{fontSize:11}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
               </div>
             </div>
@@ -5023,7 +5023,7 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
                WHEN agg.avg_return_pct>=5  THEN 0.5
                WHEN agg.avg_return_pct<0   THEN -0.5
                ELSE 0 END
-        + CASE WHEN agg.relationship='strong' THEN 1.5
+        + CASE WHEN agg.relationship IN ('strong','congress') THEN 1.5
                WHEN agg.relationship='medium' THEN 0.75
                ELSE 0 END
         + CASE WHEN (agg.om_buys+agg.om_sells)>=10 THEN 1
@@ -5362,7 +5362,7 @@ const COLUMN_LEGEND = [
   ['Price / Share','Price per share at the time of the trade, when disclosed.'],
   ['Value ($)','Total dollar value of the transaction, or the disclosed range midpoint for congressional trades.'],
   ['% Owned Change','Approximate percent change in the insider\'s total position this trade represents, when calculable.'],
-  ['Relationship','Insider\'s seniority tier: strong (C-suite), medium (officer), or weak (director/10% owner/other).'],
+  ['Relationship','Insider\'s seniority tier: strong (C-suite), medium (officer), weak (director/10% owner/other), or congress (House/Senate member).'],
   ['Sector','GICS-style sector classification for the company, when known.'],
   ['Footnotes','Any footnote text attached to the filing, verbatim.'],
 ];
@@ -5586,7 +5586,7 @@ function FilterPanel({
       <div className="ins-filter-group">
         <span className="ins-filter-group__label">Role</span>
         <div className="dash-tile-pills">
-          {[['','All'],['strong','C-Suite'],['medium','Officer'],['weak','Director']].map(([v,l])=>(
+          {[['','All'],['strong','C-Suite'],['congress','Congress'],['medium','Officer'],['weak','Director']].map(([v,l])=>(
             <button key={v} className={`dash-tile-pill${relF===v?' dash-tile-pill--active':''}`} onClick={()=>setRelF(v)}>{l}</button>
           ))}
         </div>
@@ -6031,7 +6031,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           :isMobile?<div className="data-mobile-list">
             {rows.map((r,i)=>{
               const rel=r.relationship||'weak';
-              const rl=rel==='strong'?'C-Suite':rel==='medium'?'Officer':'Dir';
+              const rl=REL_LABELS[rel]||'Dir';
               const tt=r.transaction_type;
               const rowKey = `${r.ticker}-${r.transaction_date||r.filing_date}-${i}`;
               const isOpen = expandedRow===rowKey;
@@ -6080,7 +6080,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               <tbody>
                 {rows.map((r,i)=>{
                   const rel=r.relationship||'weak';
-                  const rl=rel==='strong'?'C-Suite':rel==='medium'?'Officer':'Dir';
+                  const rl=REL_LABELS[rel]||'Dir';
                   const tt=r.transaction_type;
                   return (
                     <tr key={i} className={`row-${tt} row-clickable`}
@@ -7765,7 +7765,7 @@ function LPFeatureMock({ type }) {
                 <div className="ins-lb-card__name">{r.n}</div>
                 <div className="td-muted" style={{fontSize:11}}>{r.title}</div>
                 <div className="ins-lb-card__meta">
-                  <Badge type={`rel-${r.rel}`}>{r.rel==='strong'?'C-Suite':r.rel==='medium'?'Officer':'Dir'}</Badge>
+                  <Badge type={`rel-${r.rel}`}>{REL_LABELS[r.rel]||'Dir'}</Badge>
                   <span className="td-muted" style={{fontSize:11}}>{r.buys} · {r.val}</span>
                 </div>
               </div>

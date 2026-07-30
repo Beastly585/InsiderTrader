@@ -167,7 +167,7 @@ class CongressTrade:
     shares_owned_before: Optional[float] = None
     pct_owned_change: Optional[float]    = None
     direct_ownership: bool       = True
-    relationship: str            = "strong"
+    relationship: str            = "congress"
     sector: Optional[str]        = None
     footnotes: Optional[str]     = None
 

@@ -174,7 +174,7 @@ export function processLeaderboardRows(rows) {
     // below can't tell them apart on their own. This is the same principle
     // already stated on the About page and used in buildSignals' own
     // cSuiteBuys weighting — applied here too, not just described elsewhere.
-    if (r.relationship==='strong') s+=1.5;
+    if (r.relationship==='strong' || r.relationship==='congress') s+=1.5;
     else if (r.relationship==='medium') s+=0.75;
     if (omTotal>=10)s+=1;else if(omTotal>=5)s+=0.5;
     if (omDiscipline>=0.7)s+=0.5;

@@ -614,6 +614,7 @@ input[type="checkbox"] { height:auto; width:auto; }
 .badge--rel-strong   { background:var(--purple-50); color:var(--purple-600); }
 .badge--rel-medium   { background:var(--amber-50);  color:var(--amber-600); }
 .badge--rel-weak     { background:var(--teal-50);   color:var(--teal-600); }
+.badge--rel-congress { background:var(--blue-50);   color:var(--blue-600); }
 .badge--src-sec      { background:var(--blue-50);   color:var(--blue-600); font-size: 0.6875rem; }
 .badge--src-congress { background:var(--amber-50);  color:var(--amber-600); font-size: 0.6875rem; }
 
