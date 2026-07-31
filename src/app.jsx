@@ -6935,7 +6935,25 @@ function useSnapTrade(pro) {
     }
   }, [pro]);
 
-  useEffect(() => { refreshStatus(); }, [refreshStatus]);
+  useEffect(() => {
+    refreshStatus();
+    // If returning from SnapTrade's redirect (user completed or cancelled),
+    // the URL will have a snaptrade param. Re-check status after a short
+    // delay — SnapTrade's webhook to our backend may not have landed yet
+    // by the time the redirect completes, so the first refreshStatus() call
+    // above can return stale state. A second check 2s later catches the
+    // webhook-updated state. Clean the URL param either way so a manual
+    // page refresh doesn't re-trigger this.
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('snaptrade')) {
+      const tid = setTimeout(() => refreshStatus(), 2000);
+      // Clean URL without triggering a nav
+      params.delete('snaptrade');
+      const clean = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (clean ? '?' + clean : ''));
+      return () => clearTimeout(tid);
+    }
+  }, [refreshStatus]);
 
   async function connect() {
     setConnecting(true); setError(null);
