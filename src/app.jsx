@@ -480,7 +480,7 @@ function CheckoutForm({ product, onSuccess, onClose }) {
 
   return (
     <>
-      <PaymentElement />
+      <PaymentElement options={{ layout: { type: 'tabs', defaultCollapsed: true } }} />
       {formError && <div className="checkout-error">{formError}</div>}
       <button
         className="upgrade-modal__cta"

@@ -4224,12 +4224,17 @@ td { padding:7px 11px; vertical-align:middle; }
   border-top: 0.5px solid var(--border);
 }
 .checkout-modal__pay {
-  flex: 1; padding: 40px 28px 32px; min-width: 0;
+  flex: 1; padding: 24px 28px 24px; min-width: 0;
   max-height: 80vh; overflow-y: auto;
 }
 @media (max-width: 640px) {
   .checkout-modal--landscape { flex-direction: column; min-width: 0; max-height: 90vh; overflow-y: auto; }
-  .checkout-modal__info { flex: none; border-right: none; border-bottom: 0.5px solid var(--border); }
+  .checkout-modal__info { flex: none; border-right: none; border-bottom: 0.5px solid var(--border); padding: 20px 20px; }
+  .checkout-modal__info-price { font-size: 22px; margin-bottom: 6px; }
+  .checkout-modal__info-subtitle { margin-bottom: 12px; }
+  .checkout-modal__features { gap: 6px; }
+  .checkout-modal__trust { margin-top: 12px; padding-top: 10px; }
+  .checkout-modal__pay { padding: 20px 20px; }
 }
 
 .checkout-modal { min-width: 380px; }
