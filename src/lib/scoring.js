@@ -39,22 +39,32 @@ export function tierFromPct(pct, appetite) {
 }
 
 // ─── Signal building ──────────────────────────────────────────────────────────
+// Conviction formula grounded in the empirical insider-trading literature:
+//
+//   Cohen, Malloy & Pomorski (2012) — opportunistic vs routine is the
+//     single largest alpha factor. Routine trades → ~0% abnormal returns.
+//     Opportunistic trades → 82 bps/month (9.8% annualized).
+//
+//   Lakonishok & Lee (2001) — insider buys predict positive abnormal
+//     returns; sells do not predict negative returns. Multiple insiders
+//     buying the same stock amplifies the signal. Small-cap insider buys
+//     earn ~7.4% abnormal returns over 12 months vs ~2-3% for large-cap.
+//
+//   Seyhun (1986) — purchases are more informative than sales because
+//     litigation risk discourages selling on negative private information.
+//     Most insider selling is diversification, not a negative signal.
+//
 export function buildSignals(filings) {
   const map = {};
   for (const f of filings) {
     if (!f.ticker) continue;
-    // Structural fix: only genuine open-market personal-funds transactions
-    // (SEC codes P/S, or congressional trades which are always open-market)
-    // count toward a signal at all. This used to be the caller's job to
-    // pre-filter before calling buildSignals — three call sites forgot to,
-    // meaning grants, option exercises, gifts, and tax withholding could
-    // silently inflate conviction identically to a real cash purchase.
-    // Filtering here instead means no future caller can reintroduce that gap.
     if (!f.isOpenMarket) continue;
     const isPol = !!(f.transactionCode&&f.transactionCode.startsWith('CONGRESS'));
     if (!map[f.ticker]) map[f.ticker] = {
       ticker:f.ticker, company:f.company, sector:f.sector, isPolitical:isPol,
-      buys:0, sells:0, buyValue:0, sellValue:0, cSuiteBuys:0, politicalBuys:0, maxPositionSwing:0,
+      buys:0, sells:0, buyValue:0, sellValue:0,
+      cSuiteBuys:0, politicalBuys:0, opportunisticBuys:0,
+      maxPositionSwing:0,
       insiders:new Set(), lastTradeDate:'', trades:[],
     };
     const s = map[f.ticker];
@@ -65,19 +75,13 @@ export function buildSignals(filings) {
     if (f.transactionType==='buy') {
       s.buys++; s.buyValue+=f.value||0;
       if (f.relationship==='strong') s.cSuiteBuys++;
-      // A member of Congress buying carries its own kind of informational
-      // edge — access to policy and regulatory information ahead of the
-      // public — analogous to, not weaker than, a corporate executive's
-      // operational knowledge. Without this, congressional-only signals
-      // were structurally locked out of the cSuiteBuys term entirely
-      // (relationship is never 'strong' for a member of Congress), capping
-      // their conviction at buys-minus-sells plus a small log term — easily
-      // pushed to zero or negative by any modest sell imbalance, even with
-      // real dollar volume behind the activity.
       if (isPol) s.politicalBuys++;
-      // Missing pct_owned_change (e.g. an insider's first-ever disclosed
-      // holding, with no prior position to measure a % change from) is
-      // treated as neutral — no bonus, not a penalty defaulting to 0-looks-bad.
+      // Cohen et al. (2012): the opportunistic/routine distinction captures
+      // essentially all the predictive power. isRoutine===false means the
+      // insider broke their historical trading pattern — information-driven.
+      // isRoutine===null (not yet computed) is treated conservatively as
+      // unknown, not penalized.
+      if (f.isRoutine === false) s.opportunisticBuys++;
       if (f.pctOwnedChange!=null && f.pctOwnedChange>s.maxPositionSwing) {
         s.maxPositionSwing = f.pctOwnedChange;
       }
@@ -86,16 +90,35 @@ export function buildSignals(filings) {
     }
   }
   return Object.values(map).map(s => {
-    // A single move that represents a large fraction of the insider's
-    // existing stake is a materially stronger signal than the same dollar
-    // amount as a routine top-up on a huge existing position — tiered
-    // rather than continuous to keep it legible and avoid one enormous
-    // outlier swing dominating the whole score.
     const swingBonus = s.maxPositionSwing>=50 ? 4 : s.maxPositionSwing>=20 ? 2 : s.maxPositionSwing>=10 ? 1 : 0;
+    // Lakonishok & Lee (2001): multiple insiders buying the same stock
+    // is a stronger signal than any single insider buying.
+    const clusterBonus = s.insiders.size >= 4 ? 3 : s.insiders.size >= 2 ? 1 : 0;
     return {
       ...s, insiderCount:s.insiders.size,
       netValue: s.buyValue-s.sellValue,
-      conviction: (s.cSuiteBuys*5)+(s.politicalBuys*5)+(s.buys-s.sells)+Math.min(Math.log10(s.buyValue+1),5)+swingBonus,
+      // ── Conviction formula ──────────────────────────────────────────
+      // Each term maps to a specific finding in the literature:
+      //
+      //   opportunisticBuys × 5  — Cohen et al. (2012): the dominant factor
+      //   cSuiteBuys × 2         — Ravina & Sapienza (2010): executives earn
+      //                            abnormal returns, but less dominant than
+      //                            the routine/opportunistic distinction
+      //   politicalBuys × 4      — congressional info edge (policy, regulatory)
+      //   buys (no sell penalty)  — Seyhun (1986): sells are diversification
+      //                            noise, not a negative signal
+      //   log₁₀(buyValue)        — dollar value, diminishing (Lakonishok & Lee)
+      //   swingBonus              — position-size relative to existing holdings
+      //   clusterBonus            — Lakonishok & Lee (2001): multiple insiders
+      //
+      conviction:
+        (s.opportunisticBuys * 5) +
+        (s.cSuiteBuys * 2) +
+        (s.politicalBuys * 4) +
+        s.buys +
+        Math.min(Math.log10(s.buyValue+1), 5) +
+        swingBonus +
+        clusterBonus,
     };
   });
 }
@@ -124,7 +147,7 @@ export function filterAndScoreSignals(filings, { cutoff = '', sourceF = '', sect
     return true;
   });
   const built = buildSignals(base);
-  const afterGate = built.filter(s => s.cSuiteBuys>=1 || s.insiderCount>=2 || s.netValue>=100_000 || s.isPolitical);
+  const afterGate = built.filter(s => s.opportunisticBuys>=1 || s.cSuiteBuys>=1 || s.insiderCount>=2 || s.netValue>=100_000 || s.isPolitical);
   const afterStrength = afterGate.filter(s => s.conviction >= strengthThreshold);
   return afterStrength;
 }
@@ -174,7 +197,7 @@ export function processLeaderboardRows(rows) {
     // below can't tell them apart on their own. This is the same principle
     // already stated on the About page and used in buildSignals' own
     // cSuiteBuys weighting — applied here too, not just described elsewhere.
-    if (r.relationship==='strong' || r.relationship==='congress') s+=1.5;
+    if (r.relationship==='strong') s+=1.5;
     else if (r.relationship==='medium') s+=0.75;
     if (omTotal>=10)s+=1;else if(omTotal>=5)s+=0.5;
     if (omDiscipline>=0.7)s+=0.5;

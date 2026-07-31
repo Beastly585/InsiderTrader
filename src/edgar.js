@@ -21,7 +21,7 @@ const SECTOR_MAP = {
 const TICKER_SECTOR = {};
 for (const [s, ts] of Object.entries(SECTOR_MAP)) for (const t of ts) TICKER_SECTOR[t] = s;
 
-export const REL_LABELS = { strong: 'C-Suite', medium: 'Officer', weak: 'Director', congress: 'Congress' };
+export const REL_LABELS = { strong: 'C-Suite', medium: 'Officer', weak: 'Director' };
 const OPEN_MARKET = new Set(['P', 'S']);
 
 export function getSector(t) { return TICKER_SECTOR[(t||'').toUpperCase()] || 'Other'; }
@@ -39,8 +39,12 @@ export function enrich(raw) {
               : (raw.shares && raw.price ? Math.round(raw.shares * parseFloat(raw.price)) : null);
   let signal = 0;
   if (OPEN_MARKET.has(raw.transactionCode)) signal += 2;
-  if (rel === 'strong' || rel === 'congress') signal += 3;
+  if (rel === 'strong') signal += 2;
+  if (rel === 'congress') signal += 2;
   if (rel === 'medium') signal += 1;
+  // Cohen et al. (2012): opportunistic trades contain ALL the predictive
+  // power in insider trading. Routine trades yield ~0% abnormal returns.
+  if (raw.isRoutine === false) signal += 3;
   if (value && value >= 1_000_000) signal += 3;
   else if (value && value >= 100_000) signal += 1;
   if (raw.transactionType === 'buy') signal += 1;
@@ -140,6 +144,7 @@ async function fetchFromNeon(daysBack = 90) {
       is_derivative,
       sector,
       relationship,
+      is_routine,
       footnotes
     FROM public.filings
     WHERE COALESCE(transaction_date, filing_date) >= '${floorDate}'
@@ -185,6 +190,7 @@ async function fetchFromNeon(daysBack = 90) {
     isDerivative:         r.is_derivative,
     sector:               r.sector,
     relationship:         r.relationship,
+    isRoutine:            r.is_routine,
     footnotes:            r.footnotes,
     currentPrice:         null,
     dayChangePct:         null,

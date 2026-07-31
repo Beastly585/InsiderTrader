@@ -650,7 +650,7 @@ function BillingSection({ user }) {
       </div>
     );
   }
-  if (!status) return <div style={{padding:'2rem',display:'flex',justifyContent:'center',minHeight:200}}><Spinner/></div>;
+  if (!status) return <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>;
 
   const isProPlan = status.plan === 'pro' && (status.status === 'active' || status.status === 'trialing');
   const dataExports = status.dataExports || [];
@@ -1060,14 +1060,6 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
 
       {/* Footer — utility items + plan status (visible from every page, not just Settings) */}
       <div className="sidebar__footer">
-        {!pro && (
-          <button className="nav-item nav-item--icon-only nav-item--sm nav-item--upgrade"
-            onClick={onUpgrade}
-            title="Upgrade to Pro"
-            aria-label="Upgrade to Pro">
-            <span className="nav-icon">$</span>
-          </button>
-        )}
         {/* Settings — gear, separate from primary nav */}
         <button
           className={`nav-item nav-item--icon-only nav-item--sm${page==='settings'?' nav-item--active':''}`}
@@ -1076,8 +1068,14 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
           aria-label="Settings">
           <IconSettings className="nav-icon nav-icon--svg"/>
         </button>
-        {/* Sign out removed — redundant with Clerk's own UserButton dropdown
-            in the status bar, which already handles account/sign-out. */}
+        {!pro && (
+          <button className="nav-item nav-item--icon-only nav-item--sm nav-item--upgrade"
+            onClick={onUpgrade}
+            title="Upgrade to Pro"
+            aria-label="Upgrade to Pro">
+            <span className="nav-icon">$</span>
+          </button>
+        )}
       </div>
     </nav>
   );
@@ -3205,6 +3203,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [newsExpanded, setNewsExpanded] = useState(false);
   const [newsMyNewsOn, setNewsMyNewsOn] = useState(false);
   const [insidersExpanded, setInsidersExpanded] = useState(false);
+  const [expandedDashTicker, setExpandedDashTicker] = useState(null);
+  const isMobileDash = typeof window !== 'undefined' && window.innerWidth <= 640;
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
 
   const signals = useMemo(()=>{
@@ -3254,7 +3254,10 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                   const big=s.avgReturn!=null&&s.avgReturn>50;
                   const hasReversal=detectReversalForTicker(s.ticker,filings);
                   return (
-                    <div key={s.ticker} className="dash-sig-item" onClick={()=>onOpenDetail&&onOpenDetail({type:'signal',...s})}>
+                    <div key={s.ticker} className="dash-sig-item" onClick={()=>{
+                      if (isMobileDash) { setExpandedDashTicker(expandedDashTicker===s.ticker?null:s.ticker); }
+                      else { onOpenDetail&&onOpenDetail({type:'signal',...s}); }
+                    }}>
                       <div className="dash-sig-item__left">
                         <div className="dash-sig-item__row1">
                           <span className="ticker" style={{fontSize:13,fontWeight:700}}>{s.ticker}</span>
@@ -3282,6 +3285,16 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                         )}
                         <ConvictionBar score={s.conviction} showLabel={true}/>
                       </div>
+                      {expandedDashTicker===s.ticker&&(
+                        <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()} style={{flex:'1 1 100%'}}>
+                          <div className="ins-sig-row__expanded-grid">
+                            <div><span className="td-muted" style={{fontSize:11}}>Insiders</span><div style={{fontSize:13}}>{s.insiderCount}</div></div>
+                            <div><span className="td-muted" style={{fontSize:11}}>C-Suite buys</span><div style={{fontSize:13}}>{s.cSuiteBuys||'—'}</div></div>
+                            <div><span className="td-muted" style={{fontSize:11}}>Buy vol</span><div style={{fontSize:13}}>{fmt.money(s.buyValue)}</div></div>
+                            <div><span className="td-muted" style={{fontSize:11}}>Sell vol</span><div style={{fontSize:13}}>{fmt.money(s.sellValue)}</div></div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -3432,7 +3445,9 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const [minStrength, setMinStrength] = useState(1); // 1=any 2=medium+ 3=high only
   const [modal, setModal] = useState(null); // 'signals' | 'insiders' | null
   const [modalInitial, setModalInitial] = useState(null); // pre-selected item when opening
+  const [expandedTicker, setExpandedTicker] = useState(null); // mobile in-row expand
   const hlRef = useRef(null);
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 640;
 
   // Opens the Explore drawer pre-selected to whatever was clicked, instead of
   // the small centered quick-info modal — keeps this page's detail-viewing
@@ -3586,7 +3601,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 return (
                   <div key={s.ticker} ref={isHL?hlRef:null}
                     className={`ins-sig-row ins-sig-row--${tier}${isSel?' ins-sig-row--selected':''}`}
-                    onClick={()=>{setHighlightTicker(s.ticker);onSelectSignal(s);openInDrawer({type:'signal',...s});}}>
+                    onClick={()=>{
+                      if (isMobile) { setExpandedTicker(expandedTicker===s.ticker?null:s.ticker); }
+                      else { setHighlightTicker(s.ticker);onSelectSignal(s);openInDrawer({type:'signal',...s}); }
+                    }}>
                     <div className="ins-sig-row__left">
                       <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
                         <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
@@ -3619,6 +3637,18 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     <div className="ins-sig-row__right">
                       <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
                     </div>
+                    {expandedTicker===s.ticker&&(
+                      <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
+                        <div className="ins-sig-row__expanded-grid">
+                          <div><span className="td-muted" style={{fontSize:11}}>Type</span><div style={{fontSize:13}}>{typeLabel}</div></div>
+                          <div><span className="td-muted" style={{fontSize:11}}>Insiders</span><div style={{fontSize:13}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</div></div>
+                          <div><span className="td-muted" style={{fontSize:11}}>C-Suite buys</span><div style={{fontSize:13}}>{s.cSuiteBuys||'—'}</div></div>
+                          <div><span className="td-muted" style={{fontSize:11}}>Last trade</span><div style={{fontSize:13}}>{fmt.ago(s.lastTradeDate)}</div></div>
+                          <div><span className="td-muted" style={{fontSize:11}}>Buy vol</span><div style={{fontSize:13}}>{fmt.money(s.buyValue)}</div></div>
+                          <div><span className="td-muted" style={{fontSize:11}}>Sell vol</span><div style={{fontSize:13}}>{fmt.money(s.sellValue)}</div></div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -5647,12 +5677,6 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   return (
     <div className="page-content">
       <div className="data-toolbar">
-        <div className="data-toolbar__top-row">
-          <button className="btn btn--primary btn--sm"
-            onClick={()=>onUpgrade('data_export')}>
-            Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>
-          </button>
-        </div>
         <div className="filter-bar filter-bar--wrap">
           <div className="search-wrap">
             <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -5675,6 +5699,10 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
             <span style={{color:'var(--text-3)',fontSize:12}}>→</span>
             <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
           </div>
+          <button className="btn btn--primary btn--sm data-export-btn" style={{marginLeft:'auto',flexShrink:0}}
+            onClick={()=>onUpgrade('data_export')}>
+            Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>
+          </button>
         </div>
 
       <FilterPanel
