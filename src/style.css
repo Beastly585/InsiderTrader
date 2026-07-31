@@ -205,7 +205,7 @@ pre {
 /* Push footer to bottom */
 .sidebar__footer { margin-top: auto; }
 .sidebar__footer {
-  padding: 10px 0; border-top: 1px solid var(--border);
+  padding: 10px 0;
   width: 100%; display: flex; flex-direction: column;
   align-items: center; gap: 4px;
 }
@@ -1824,16 +1824,16 @@ td { padding:7px 11px; vertical-align:middle; }
      row, conviction + net flow on the next) with the rest available via
      tap-to-expand instead of trying to cram five columns into one line. */
   .ins-sig-row {
-    display: flex; flex-wrap: wrap; gap: 4px 10px;
+    display: flex; flex-wrap: wrap; gap: 6px 10px;
     padding: 10px 14px;
   }
-  .ins-sig-row__left  { flex: 1 1 auto; order: 1; }
-  .ins-sig-row__right  { order: 2; flex: 0 0 auto; align-self: flex-start; }
-  .ins-sig-row__signal { flex: 1 1 auto; order: 3; flex-direction: row; align-items: center; gap: 8px; }
-  .ins-sig-row__type, .ins-sig-row__exec { display: none; }
+  .ins-sig-row__left  { flex: 1 1 100%; order: 1; }
+  .ins-sig-row__signal { flex: 1 1 auto; order: 2; flex-direction: row; align-items: center; gap: 8px; }
+  .ins-sig-row__right  { order: 3; flex: 0 0 auto; }
+  .ins-sig-row__type, .ins-sig-row__exec { display: none; } /* covered by .ins-sig-row__expanded instead */
   .ins-sig-row__expand-chevron {
-    order: 4; flex: 0 0 auto; align-self: center;
-    font-size: 0.6875rem; color: var(--text-3); padding-left: 8px;
+    order: 4; flex: 1 1 100%; text-align: center;
+    font-size: 0.6875rem; color: var(--text-3); padding-top: 2px;
   }
   .ins-sig-row__expanded {
     order: 5; flex: 1 1 100%; margin-top: 6px; padding-top: 10px;
@@ -3979,7 +3979,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* ── Content area ─────────────────────────────────────────────────────────── */
 .settings-content {
   min-width: 0;
-  padding: 32px 36px 48px;
+  padding: 16px 36px 48px;
   overflow-y: auto;
   height: 100%;
 }
@@ -4041,6 +4041,7 @@ td { padding:7px 11px; vertical-align:middle; }
   margin-bottom: 14px;
   transition: opacity 0.15s;
 }
+.settings-group > :last-child { border-bottom: none; }
 .settings-group--dimmed { opacity: 0.4; pointer-events: none; }
 .settings-group__label {
   font-size: 0.6562rem;
@@ -4872,10 +4873,21 @@ td { padding:7px 11px; vertical-align:middle; }
   display: block !important;
 }
 
-/* ── Mobile tweaks (Jul 2026) ────────────────────────────────────────────── */
-@media (max-width: 640px) {
-  /* Dashboard tiles: taller defaults since page scrolls vertically */
-  .dash-tile--signals, .dash-tile--portfolio, .dash-tile--news, .dash-tile--top-insiders { min-height: 400px; }
-  /* Hide Top Insiders expand/see-all on mobile */
-  .dash-tile--top-insiders__expand { display: none; }
+/* ── Skeleton loading rows ───────────────────────────────────────────────── */
+.skeleton-rows { padding: 4px 0; }
+.skeleton-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 14px;
+  border-bottom: 0.5px solid var(--border);
+}
+.skeleton-bar {
+  height: 10px;
+  border-radius: 4px;
+  background: var(--surface-3, rgba(128,128,128,0.12));
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+.skeleton-bar--short { margin-left: auto; }
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
 }

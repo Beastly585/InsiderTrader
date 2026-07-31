@@ -967,6 +967,15 @@ function Badge({ type, children }) {
 function Spinner({ size=22 }) {
   return <div className="spinner" style={{width:size,height:size}}/>;
 }
+function SkeletonRows({ count=5, height=48 }) {
+  return <div className="skeleton-rows">{Array.from({length:count},(_,i)=>
+    <div key={i} className="skeleton-row" style={{height}}>
+      <div className="skeleton-bar" style={{width:'18%'}}/>
+      <div className="skeleton-bar" style={{width:'40%'}}/>
+      <div className="skeleton-bar skeleton-bar--short" style={{width:'15%'}}/>
+    </div>
+  )}</div>;
+}
 const TX_CODE_TOOLTIPS = {
   P:'Open market purchase',
   S:'Open market sale',
@@ -3456,7 +3465,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               </div>
             </div>
             <div className="dash-tile__body">
-              {loading?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+              {loading?<SkeletonRows count={4} height={56}/>
               :signals.length===0?<div className="dash-inner-empty">
                 <div style={{fontWeight:500,marginBottom:4}}>No signals in this window</div>
                 <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>Form 4s are filed 1–2 days after transactions. Try the 7d or 30d window.</div>
@@ -3510,7 +3519,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               <span className="dash-tile__title">Top insiders</span>
               <TileInfoButton section="insights-formula" title="Top insiders"/>
               <div className="dash-tile__hdr-controls">
-                <button className="btn btn--ghost btn--icon dash-tile--top-insiders__expand" onClick={()=>setInsidersExpanded(true)} title="Open full insiders view">⤢</button>
+                <button className="btn btn--ghost btn--icon" onClick={()=>setInsidersExpanded(true)} title="Open full insiders view">⤢</button>
               </div>
             </div>
             <div className="dash-tile__body">
@@ -3785,7 +3794,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>sigOnSort('netValue')}>Net flow{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
           </div>
           <div className="ins-sig-panel__body">
-            {loading?<div className="state-box"><Spinner/><p>Computing signals…</p></div>
+            {loading?<SkeletonRows count={6} height={52}/>
             :signals.length===0?<div className="ins-empty">
               <div style={{fontWeight:500,marginBottom:4}}>No qualifying signals</div>
               <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>
@@ -6935,30 +6944,7 @@ function useSnapTrade(pro) {
     }
   }, [pro]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('snaptrade')) {
-      // Returning from SnapTrade's portal — call /confirm to verify the user
-      // actually completed auth (not just cancelled). This is what flips the
-      // DB row from 'pending' to 'active'. If they cancelled, the row stays
-      // pending and /status won't return it as a connection.
-      (async () => {
-        try {
-          const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-          await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/confirm`, { method: 'POST', headers });
-        } catch (e) {
-          console.error('[useSnapTrade] confirm failed:', e.message);
-        }
-        refreshStatus();
-      })();
-      // Clean URL
-      params.delete('snaptrade');
-      const clean = params.toString();
-      window.history.replaceState({}, '', window.location.pathname + (clean ? '?' + clean : ''));
-    } else {
-      refreshStatus();
-    }
-  }, [refreshStatus]);
+  useEffect(() => { refreshStatus(); }, [refreshStatus]);
 
   async function connect() {
     setConnecting(true); setError(null);
