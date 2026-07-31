@@ -650,7 +650,7 @@ function BillingSection({ user }) {
       </div>
     );
   }
-  if (!status) return <div style={{padding:'2rem',display:'flex',justifyContent:'center',minHeight:200}}><Spinner/></div>;
+  if (!status) return <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>;
 
   const isProPlan = status.plan === 'pro' && (status.status === 'active' || status.status === 'trialing');
   const dataExports = status.dataExports || [];
@@ -1147,13 +1147,6 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
 
       {/* Footer — utility items + plan status (visible from every page, not just Settings) */}
       <div className="sidebar__footer">
-        <button
-          className={`nav-item nav-item--icon-only nav-item--sm${page==='settings'?' nav-item--active':''}`}
-          onClick={()=>setPage('settings')}
-          title="Settings"
-          aria-label="Settings">
-          <IconSettings className="nav-icon nav-icon--svg"/>
-        </button>
         {!pro && (
           <button className="nav-item nav-item--icon-only nav-item--sm nav-item--upgrade"
             onClick={onUpgrade}
@@ -1162,6 +1155,16 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
             <span className="nav-icon">$</span>
           </button>
         )}
+        {/* Settings — gear, separate from primary nav */}
+        <button
+          className={`nav-item nav-item--icon-only nav-item--sm${page==='settings'?' nav-item--active':''}`}
+          onClick={()=>setPage('settings')}
+          title="Settings"
+          aria-label="Settings">
+          <IconSettings className="nav-icon nav-icon--svg"/>
+        </button>
+        {/* Sign out removed — redundant with Clerk's own UserButton dropdown
+            in the status bar, which already handles account/sign-out. */}
       </div>
     </nav>
   );
@@ -3507,7 +3510,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               <span className="dash-tile__title">Top insiders</span>
               <TileInfoButton section="insights-formula" title="Top insiders"/>
               <div className="dash-tile__hdr-controls">
-                <button className="btn btn--ghost btn--icon" onClick={()=>setInsidersExpanded(true)} title="Open full insiders view">⤢</button>
+                <button className="btn btn--ghost btn--icon dash-tile--top-insiders__expand" onClick={()=>setInsidersExpanded(true)} title="Open full insiders view">⤢</button>
               </div>
             </div>
             <div className="dash-tile__body">
@@ -3817,10 +3820,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                         <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                       </div>
                       <div className="ins-sig-row__co">{s.company}</div>
-                      <div className="td-muted" style={{fontSize:11}}>
-                        {s.trades?.[0]?.insiderName||''}{s.insiderCount>1?` +${s.insiderCount-1}`:''}
-                        {s.sector&&s.sector!=='Other'?` · ${s.sector}`:''}
-                      </div>
+                      {s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:11}}>{s.sector}</div>}
                     </div>
                     <div className="ins-sig-row__type">
                       <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}`}>{typeLabel}</span>
@@ -6008,7 +6008,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           {activeFilterCount > 0 || search || dPreset !== 7 || dateFrom || dateTo ? (
             <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
           ) : null}
-          <button className="btn btn--primary btn--sm data-export-btn" style={{marginLeft:'auto',flexShrink:0}}
+          <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
             onClick={()=>onUpgrade('data_export')}>
             Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>
           </button>

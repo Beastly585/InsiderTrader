@@ -1824,16 +1824,16 @@ td { padding:7px 11px; vertical-align:middle; }
      row, conviction + net flow on the next) with the rest available via
      tap-to-expand instead of trying to cram five columns into one line. */
   .ins-sig-row {
-    display: flex; flex-wrap: wrap; gap: 6px 10px;
+    display: flex; flex-wrap: wrap; gap: 4px 10px;
     padding: 10px 14px;
   }
-  .ins-sig-row__left  { flex: 1 1 100%; order: 1; }
-  .ins-sig-row__signal { flex: 1 1 auto; order: 2; flex-direction: row; align-items: center; gap: 8px; }
-  .ins-sig-row__right  { order: 3; flex: 0 0 auto; }
-  .ins-sig-row__type, .ins-sig-row__exec { display: none; } /* covered by .ins-sig-row__expanded instead */
+  .ins-sig-row__left  { flex: 1 1 auto; order: 1; }
+  .ins-sig-row__right  { order: 2; flex: 0 0 auto; align-self: flex-start; }
+  .ins-sig-row__signal { flex: 1 1 auto; order: 3; flex-direction: row; align-items: center; gap: 8px; }
+  .ins-sig-row__type, .ins-sig-row__exec { display: none; }
   .ins-sig-row__expand-chevron {
-    order: 4; flex: 1 1 100%; text-align: center;
-    font-size: 0.6875rem; color: var(--text-3); padding-top: 2px;
+    order: 4; flex: 0 0 auto; align-self: center;
+    font-size: 0.6875rem; color: var(--text-3); padding-left: 8px;
   }
   .ins-sig-row__expanded {
     order: 5; flex: 1 1 100%; margin-top: 6px; padding-top: 10px;
@@ -4872,8 +4872,10 @@ td { padding:7px 11px; vertical-align:middle; }
   display: block !important;
 }
 
-/* ── Mobile: Data page tweaks ────────────────────────────────────────────── */
+/* ── Mobile tweaks (Jul 2026) ────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .page-content { padding-bottom: 4px; }
-  .data-export-btn { display: none; }
+  /* Dashboard tiles: taller defaults since page scrolls vertically */
+  .dash-tile--signals, .dash-tile--portfolio, .dash-tile--news, .dash-tile--top-insiders { min-height: 400px; }
+  /* Hide Top Insiders expand/see-all on mobile */
+  .dash-tile--top-insiders__expand { display: none; }
 }
