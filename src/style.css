@@ -4871,3 +4871,9 @@ td { padding:7px 11px; vertical-align:middle; }
   box-shadow: none !important;
   display: block !important;
 }
+
+/* ── Mobile: Data page tweaks ────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .page-content { padding-bottom: 4px; }
+  .data-export-btn { display: none; }
+}
