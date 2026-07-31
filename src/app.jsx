@@ -6936,22 +6936,27 @@ function useSnapTrade(pro) {
   }, [pro]);
 
   useEffect(() => {
-    refreshStatus();
-    // If returning from SnapTrade's redirect (user completed or cancelled),
-    // the URL will have a snaptrade param. Re-check status after a short
-    // delay — SnapTrade's webhook to our backend may not have landed yet
-    // by the time the redirect completes, so the first refreshStatus() call
-    // above can return stale state. A second check 2s later catches the
-    // webhook-updated state. Clean the URL param either way so a manual
-    // page refresh doesn't re-trigger this.
     const params = new URLSearchParams(window.location.search);
     if (params.has('snaptrade')) {
-      const tid = setTimeout(() => refreshStatus(), 2000);
-      // Clean URL without triggering a nav
+      // Returning from SnapTrade's portal — call /confirm to verify the user
+      // actually completed auth (not just cancelled). This is what flips the
+      // DB row from 'pending' to 'active'. If they cancelled, the row stays
+      // pending and /status won't return it as a connection.
+      (async () => {
+        try {
+          const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+          await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/confirm`, { method: 'POST', headers });
+        } catch (e) {
+          console.error('[useSnapTrade] confirm failed:', e.message);
+        }
+        refreshStatus();
+      })();
+      // Clean URL
       params.delete('snaptrade');
       const clean = params.toString();
       window.history.replaceState({}, '', window.location.pathname + (clean ? '?' + clean : ''));
-      return () => clearTimeout(tid);
+    } else {
+      refreshStatus();
     }
   }, [refreshStatus]);
 
