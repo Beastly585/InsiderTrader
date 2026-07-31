@@ -480,7 +480,7 @@ function CheckoutForm({ product, onSuccess, onClose }) {
 
   return (
     <>
-      <PaymentElement options={{ layout: { type: 'tabs', defaultCollapsed: true } }} />
+      <PaymentElement />
       {formError && <div className="checkout-error">{formError}</div>}
       <button
         className="upgrade-modal__cta"
@@ -4876,7 +4876,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
         <button className={`ins-lb-col-hdr__sort${sort==='hit_rate'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('hit_rate')}>Hit rate{sort==='hit_rate'&&(dir<0?' ↓':' ↑')}</button>
       </div>
       {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
-      :rows===null?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
+      :rows===null?<SkeletonRows count={5} height={52}/>
       :rows.length===0?<div className="ins-empty">Not enough data yet</div>
       :<div className="ins-lb-list">
         {sorted.slice(0,15).map((r,i)=>{
@@ -5786,7 +5786,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               <span>{rows==null?'Loading…':`${rows.length}${rows.length===300?'+':''} filing${rows.length===1?'':'s'}`}</span>
             </div>
             {rows===null
-              ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
+              ? <SkeletonRows count={8} height={44}/>
               : rows.length===0
                 ? <div className="drawer__empty">No filings match these filters</div>
                 : rows.map((r,i)=>{

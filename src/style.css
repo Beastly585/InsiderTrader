@@ -205,7 +205,7 @@ pre {
 /* Push footer to bottom */
 .sidebar__footer { margin-top: auto; }
 .sidebar__footer {
-  padding: 10px 0;
+  padding: 10px 0; border-top: 1px solid var(--border);
   width: 100%; display: flex; flex-direction: column;
   align-items: center; gap: 4px;
 }
@@ -430,7 +430,7 @@ pre {
    of content-area via align-items:stretch) ends flush against the footer
    for free. Settings' content column stretches the same way — harmless,
    its own scroll area just gets a little shorter. */
-.app-shell--settings .content-area { padding-bottom: 0; }
+.app-shell--settings .content-area { padding-bottom: 0; padding-top: 0; }
 .app-shell--settings .content-area::before { display: none; }
 
 /* ── Right detail panel ───────────────────────────────────────────────────── */
@@ -3979,7 +3979,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* ── Content area ─────────────────────────────────────────────────────────── */
 .settings-content {
   min-width: 0;
-  padding: 16px 36px 48px;
+  padding: 32px 36px 48px;
   overflow-y: auto;
   height: 100%;
 }
@@ -4041,7 +4041,6 @@ td { padding:7px 11px; vertical-align:middle; }
   margin-bottom: 14px;
   transition: opacity 0.15s;
 }
-.settings-group > :last-child { border-bottom: none; }
 .settings-group--dimmed { opacity: 0.4; pointer-events: none; }
 .settings-group__label {
   font-size: 0.6562rem;
@@ -4224,7 +4223,7 @@ td { padding:7px 11px; vertical-align:middle; }
   border-top: 0.5px solid var(--border);
 }
 .checkout-modal__pay {
-  flex: 1; padding: 24px 28px 24px; min-width: 0;
+  flex: 1; padding: 36px 28px 24px; min-width: 0;
   max-height: 80vh; overflow-y: auto;
 }
 @media (max-width: 640px) {
@@ -4895,4 +4894,12 @@ td { padding:7px 11px; vertical-align:middle; }
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 0.4; }
   50%      { opacity: 1; }
+}
+
+/* ── Watchlist drawer list: border radii on mobile ───────────────────────── */
+@media (max-width: 640px) {
+  .wl-drawer-body .drawer__list {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
 }

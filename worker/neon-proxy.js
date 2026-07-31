@@ -255,6 +255,9 @@ async function handleFetchInner(request, env, origin) {
     if (url.pathname === '/snaptrade/connect') {
       return handleSnapTradeConnect(request, env, origin);
     }
+    if (url.pathname === '/snaptrade/confirm') {
+      return handleSnapTradeConfirm(request, env, origin);
+    }
     if (url.pathname === '/snaptrade/status') {
       return handleSnapTradeStatus(request, env, origin);
     }
@@ -1914,12 +1917,12 @@ async function handleSnapTradeConnect(request, env, origin) {
     await neonFetch(env, `
       INSERT INTO public.portfolio_connections
         (clerk_user_id, snaptrade_user_id, secret_ciphertext, secret_iv, connection_type, status, updated_at)
-      VALUES (${sqlVal(clerkUserId)}, ${sqlVal(snapTradeUserId)}, ${sqlVal(ciphertext)}, ${sqlVal(iv)}, 'read', 'active', now())
+      VALUES (${sqlVal(clerkUserId)}, ${sqlVal(snapTradeUserId)}, ${sqlVal(ciphertext)}, ${sqlVal(iv)}, 'read', 'pending', now())
       ON CONFLICT (clerk_user_id) DO UPDATE SET
         snaptrade_user_id = EXCLUDED.snaptrade_user_id,
         secret_ciphertext = EXCLUDED.secret_ciphertext,
         secret_iv         = EXCLUDED.secret_iv,
-        status             = 'active',
+        status             = 'pending',
         updated_at         = now()
     `);
 
@@ -1953,15 +1956,57 @@ async function handleSnapTradeStatus(request, env, origin) {
   }
 
   try {
-    // Queries the view — structurally cannot return the secret columns,
-    // since they don't exist in what it's selecting from.
     const result = await neonFetch(env, `
       SELECT connection_type, status, broker, connected_at, last_synced_at
       FROM public.portfolio_connections_public
       WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+        AND status = 'active'
     `);
     return corsResponse({ connection: result.rows?.[0] || null }, 200, origin, env);
   } catch (e) {
+    return corsResponse({ error: e.message }, 500, origin, env);
+  }
+}
+
+// Called by the client after returning from SnapTrade's redirect portal.
+// Verifies the user actually completed authorization by checking SnapTrade's
+// API for real brokerage accounts. Only flips status from 'pending' to
+// 'active' if accounts exist — otherwise the user cancelled or failed auth,
+// and the row stays 'pending' (invisible to /status).
+async function handleSnapTradeConfirm(request, env, origin) {
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+
+  try {
+    const conn = await getSnapTradeConnection(env, clerkUserId);
+    if (!conn) return corsResponse({ confirmed: false, reason: 'no_connection' }, 200, origin, env);
+
+    // Ask SnapTrade whether this user actually has any linked brokerage accounts.
+    // If the user cancelled on SnapTrade's portal, this returns an empty array.
+    const accounts = await signSnapTradeRequest(env, 'GET', '/api/v1/accounts', {
+      query: { userId: conn.snapTradeUserId, userSecret: conn.userSecret },
+    });
+
+    const hasAccounts = Array.isArray(accounts) && accounts.length > 0;
+
+    if (hasAccounts) {
+      // User completed auth — activate the connection
+      const broker = accounts[0]?.brokerage_authorization?.brokerage?.name || null;
+      await neonFetch(env, `
+        UPDATE public.portfolio_connections
+        SET status = 'active',
+            broker = ${sqlVal(broker)},
+            connected_at = COALESCE(connected_at, now()),
+            updated_at = now()
+        WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+      `);
+      return corsResponse({ confirmed: true, broker }, 200, origin, env);
+    } else {
+      // User cancelled — leave as pending (invisible to /status)
+      return corsResponse({ confirmed: false, reason: 'no_accounts' }, 200, origin, env);
+    }
+  } catch (e) {
+    console.error('[Worker] SnapTrade confirm failed:', e.message);
     return corsResponse({ error: e.message }, 500, origin, env);
   }
 }
