@@ -614,7 +614,6 @@ input[type="checkbox"] { height:auto; width:auto; }
 .badge--rel-strong   { background:var(--purple-50); color:var(--purple-600); }
 .badge--rel-medium   { background:var(--amber-50);  color:var(--amber-600); }
 .badge--rel-weak     { background:var(--teal-50);   color:var(--teal-600); }
-.badge--rel-congress { background:var(--blue-50);   color:var(--blue-600); }
 .badge--src-sec      { background:var(--blue-50);   color:var(--blue-600); font-size: 0.6875rem; }
 .badge--src-congress { background:var(--amber-50);  color:var(--amber-600); font-size: 0.6875rem; }
 
@@ -656,6 +655,10 @@ input[type="checkbox"] { height:auto; width:auto; }
 .data-toolbar {
   background: var(--surface); border: 0.5px solid var(--border);
   border-radius: var(--radius-lg); margin-bottom: 16px; overflow: hidden;
+}
+.data-toolbar__top-row {
+  display: flex; justify-content: flex-end; padding: 8px 12px;
+  border-bottom: 0.5px solid var(--border);
 }
 .data-toolbar .filter-bar {
   border: none; border-radius: 0; margin-bottom: 0;
@@ -738,6 +741,13 @@ td { padding:7px 11px; vertical-align:middle; }
 .pagination__info    { font-size: 0.75rem; color:var(--text-3); }
 .pagination__btns    { display:flex; align-items:center; gap:5px; }
 .pagination__counter { font-size: 0.75rem; color:var(--text-2); min-width:56px; text-align:center; }
+@media (max-width: 640px) {
+  .pagination { margin-top:4px; gap:4px; padding:4px 0; }
+  .pagination__info { font-size: 0.6875rem; }
+  .pagination__btns { gap:3px; }
+  .pagination__btns .btn--sm { padding: 3px 8px; font-size: 0.75rem; min-width: 0; }
+  .pagination__counter { font-size: 0.6875rem; min-width:40px; }
+}
 
 /* ── Dashboard ────────────────────────────────────────────────────────────── */
 .dash-layout {
@@ -1824,20 +1834,42 @@ td { padding:7px 11px; vertical-align:middle; }
      Collapsed to a compact 2-line summary (ticker/badges + company on one
      row, conviction + net flow on the next) with the rest available via
      tap-to-expand instead of trying to cram five columns into one line. */
+  /* Row 1: ticker + conviction bar + net value (all one line)
+     Row 2: ▸ More (tap to expand)
+     Company name & sector hidden — visible in expanded detail. */
   .ins-sig-row {
-    display: flex; flex-wrap: wrap; gap: 6px 10px;
-    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 2px 10px;
+    padding: 8px 14px;
+    align-items: center;
   }
-  .ins-sig-row__left  { flex: 1 1 100%; order: 1; }
-  .ins-sig-row__signal { flex: 1 1 auto; order: 2; flex-direction: row; align-items: center; gap: 8px; }
-  .ins-sig-row__right  { order: 3; flex: 0 0 auto; }
-  .ins-sig-row__type, .ins-sig-row__exec { display: none; } /* covered by .ins-sig-row__expanded instead */
+  .ins-sig-row__left {
+    grid-column: 1; grid-row: 1;
+    flex-direction: row; align-items: center; gap: 6px;
+    min-width: 0;
+  }
+  .ins-sig-row__left .ins-sig-row__co { display: none; }
+  .ins-sig-row__left .td-muted { display: none; }
+  .ins-sig-row__signal {
+    grid-column: 2; grid-row: 1;
+    flex-direction: row; align-items: center; gap: 6px;
+    min-width: 0;
+  }
+  .ins-sig-row__signal .ins-spent-badge { display: none; }
+  .ins-sig-row__right {
+    grid-column: 3; grid-row: 1;
+    flex-direction: row; align-items: center; gap: 0;
+  }
+  .ins-sig-row__type, .ins-sig-row__exec { display: none; }
   .ins-sig-row__expand-chevron {
-    order: 4; flex: 1 1 100%; text-align: center;
-    font-size: 0.6875rem; color: var(--text-3); padding-top: 2px;
+    grid-column: 1 / -1; grid-row: 2;
+    font-size: 0.6875rem; color: var(--text-3); padding-top: 1px;
+    text-align: center;
   }
   .ins-sig-row__expanded {
-    order: 5; flex: 1 1 100%; margin-top: 6px; padding-top: 10px;
+    grid-column: 1 / -1; grid-row: 3;
+    margin-top: 6px; padding-top: 10px;
     border-top: 0.5px dashed var(--border); cursor: default;
   }
   .ins-sig-row__expanded-grid {
@@ -2855,6 +2887,7 @@ td { padding:7px 11px; vertical-align:middle; }
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   position: relative;
+  overflow-x: hidden;
 }
 /* Ambient edge gradients — fill the side whitespace outside the constrained
    content column with a hint of color throughout scrolling, not just in
