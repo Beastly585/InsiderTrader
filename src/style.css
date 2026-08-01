@@ -2544,7 +2544,6 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* ── Signal row visual tiers ──────────────────────────────────────────────── */
 /* High conviction: subtle left accent border to draw the eye */
-/* Very High: bright green, strongest accent */
 .ins-sig-row--vhigh {
   border-left: 3px solid var(--green-500);
   background: rgba(34,197,94,0.04);
@@ -2552,16 +2551,13 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-sig-row--high {
   border-left: 3px solid var(--green-600);
 }
-/* Medium: amber accent */
 .ins-sig-row--medium {
   border-left: 3px solid var(--amber-500);
 }
-/* Low: muted amber */
 .ins-sig-row--low {
   border-left: 3px solid var(--amber-600);
   opacity: 0.85;
 }
-/* Very Low: no accent, recedes */
 .ins-sig-row--vlow {
   opacity: 0.65;
 }
