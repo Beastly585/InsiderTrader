@@ -1101,7 +1101,6 @@ td { padding:7px 11px; vertical-align:middle; }
 .dash-tile__title {
   font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .08em; color: var(--text-3);
-  border-left: 2px solid var(--accent); padding-left: 8px;
 }
 .dash-tile__sub { font-size: 0.6875rem; color: var(--text-3); margin-left: auto; }
 
@@ -1166,7 +1165,7 @@ td { padding:7px 11px; vertical-align:middle; }
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 8px 14px 7px; border-bottom: 0.5px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 2;
 }
-.dash-inner-label { font-size: 0.5625rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--accent-strong); border-left: 2px solid var(--accent); padding-left: 6px; }
+.dash-inner-label { font-size: 0.5625rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--accent-strong); padding-left: 0; }
 .dash-inner-empty { padding: 16px 14px; font-size: 0.75rem; color: var(--text-3); }
 .dash-inner-section { border-top: 0.5px solid var(--border); }
 .dash-inner-section:first-child { border-top: none; }
@@ -3657,7 +3656,7 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .legal-page > .legal-content { flex: 1; }
 .legal-content {
-  max-width: 880px;
+  max-width: 720px;
   margin: 0 auto;
   padding: 60px 48px 80px;
 }
@@ -3825,7 +3824,7 @@ td { padding:7px 11px; vertical-align:middle; }
   overflow-y: auto;
 }
 .settings-legal-bar {
-  flex-shrink: 0; display: flex; gap: 14px; justify-content: flex-start;
+  flex-shrink: 0; display: flex; gap: 14px; justify-content: center;
   padding: 10px 16px; border-top: 0.5px solid var(--border);
   background: var(--surface-2);
 }
@@ -4870,14 +4869,4 @@ td { padding:7px 11px; vertical-align:middle; }
   border: none !important;
   box-shadow: none !important;
   display: block !important;
-}
-
-/* ── Guide section headings (Using Seli page) ────────────────────────────── */
-.guide-section-heading {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text);
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
 }
