@@ -976,6 +976,14 @@ function SkeletonRows({ count=5, height=48 }) {
     </div>
   )}</div>;
 }
+// 5-tier conviction: matches ConvictionBar's thresholds
+function convTier(pct) {
+  if (pct>=85) return 'vhigh';
+  if (pct>=60) return 'high';
+  if (pct>=40) return 'medium';
+  if (pct>=20) return 'low';
+  return 'vlow';
+}
 const TX_CODE_TOOLTIPS = {
   P:'Open market purchase',
   S:'Open market sale',
@@ -1020,21 +1028,26 @@ function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
     </th>
   );
 }
-function ConvictionBar({ score, max=15, showLabel=false }) {
-  const [appetite] = React.useContext(RiskAppetiteContext);
+function ConvictionBar({ score, max=20, showLabel=false }) {
   const pct = Math.min((score/max)*100, 100);
-  const tier = tierFromPct(pct, appetite);
-  const label = tier==='high'?'High':tier==='medium'?'Medium':'Low';
-  const color = tier==='high'?'var(--green-600)':tier==='medium'?'var(--amber-600)':'var(--text-3)';
-  const t = RISK_APPETITE_THRESHOLDS[appetite] || RISK_APPETITE_THRESHOLDS[3];
-  // Only show label text when it's NOT High — color already communicates High,
-  // but Low/Medium are warnings worth surfacing explicitly.
-  const showText = showLabel && label !== 'High';
+  // 5-tier system: Very Low < 20% < Low < 40% < Medium < 60% < High < 85% < Very High
+  // Very High (bright green) requires 85%+ which at max=20 means a score of 17+.
+  // That needs multiple C-suite opportunistic buys, cluster buying, large position
+  // swings, and real dollar volume all at once. Practically very rare.
+  let tier, label, color;
+  if (pct >= 85)      { tier='vhigh';  label='Very High'; color='var(--green-500)'; }
+  else if (pct >= 60) { tier='high';   label='High';      color='var(--green-600)'; }
+  else if (pct >= 40) { tier='medium'; label='Medium';    color='var(--amber-500)'; }
+  else if (pct >= 20) { tier='low';    label='Low';       color='var(--amber-600)'; }
+  else                { tier='vlow';   label='Very Low';  color='var(--text-3)'; }
+  const showText = showLabel && tier !== 'vhigh';
   return (
-    <div className="conv-bar-wrap" title={`Conviction: ${label} (${score.toFixed(1)}/${max}) — combines exec participation, position size, and insider clustering`}>
+    <div className="conv-bar-wrap" title={`Conviction: ${label} (${score.toFixed(1)}/${max})`}>
       <div className="conv-bar-track">
-        <div className="conv-bar-tick" style={{left:`${t.medium}%`}}/>
-        <div className="conv-bar-tick" style={{left:`${t.high}%`}}/>
+        <div className="conv-bar-tick" style={{left:'20%'}}/>
+        <div className="conv-bar-tick" style={{left:'40%'}}/>
+        <div className="conv-bar-tick" style={{left:'60%'}}/>
+        <div className="conv-bar-tick" style={{left:'85%'}}/>
         <div className="conv-bar" style={{width:`${pct}%`,background:color}}/>
       </div>
       {showText&&<span className="conv-bar-label" style={{color}}>{label}</span>}
@@ -3355,7 +3368,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
           <div key={s.ticker} className="home-tile__row" onClick={()=>onSeeAll('signals')}>
             <span className="ticker">{s.ticker}</span>
             <span className="td-muted" style={{flex:1}}>{s.company}</span>
-            <ConvictionBar score={s.conviction} max={15}/>
+            <ConvictionBar score={s.conviction} max={20}/>
           </div>
         ))}
       </HomeTile>
@@ -3465,7 +3478,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               </div>
             </div>
             <div className="dash-tile__body">
-              {loading?<SkeletonRows count={4} height={56}/>
+              {loading?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
               :signals.length===0?<div className="dash-inner-empty">
                 <div style={{fontWeight:500,marginBottom:4}}>No signals in this window</div>
                 <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>Form 4s are filed 1–2 days after transactions. Try the 7d or 30d window.</div>
@@ -3794,7 +3807,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>sigOnSort('netValue')}>Net flow{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
           </div>
           <div className="ins-sig-panel__body">
-            {loading?<SkeletonRows count={6} height={52}/>
+            {loading?<div className="state-box"><Spinner/><p>Computing signals…</p></div>
             :signals.length===0?<div className="ins-empty">
               <div style={{fontWeight:500,marginBottom:4}}>No qualifying signals</div>
               <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>
@@ -3812,8 +3825,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 const hasReversal=detectReversalForTicker(s.ticker,filings);
                 const isCongress=s.isPolitical;
                 const typeLabel=isCongress?'Congressional':'Corporate';
-                const convPct=Math.min((s.conviction/15)*100,100);
-                const tier=tierFromPct(convPct, appetite);
+                const convPct=Math.min((s.conviction/20)*100,100);
+                const tier=convTier(convPct);
                 return (
                   <div key={s.ticker} ref={isHL?hlRef:null}
                     className={`ins-sig-row ins-sig-row--${tier}${isSel?' ins-sig-row--selected':''}${isMobile&&expandedTicker===s.ticker?' ins-sig-row--expanded':''}`}
@@ -3869,7 +3882,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                           <div><span className="td-muted">Insiders</span><br/>{s.insiderCount} · {fmt.ago(s.lastTradeDate)}</div>
                           <div><span className="td-muted">Exec buys</span><br/>{s.cSuiteBuys>0?`${s.cSuiteBuys}×`:'—'}</div>
                           {s.isPolitical && <div><span className="td-muted">Political buys</span><br/>{s.politicalBuys>0?`${s.politicalBuys}×`:'—'}</div>}
-                          <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 15</div>
+                          <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 20</div>
                           <div><span className="td-muted">Net flow</span><br/><span className={s.netValue>=0?'val-buy':'val-sell'}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span></div>
                           {s.avgReturn!=null && (
                             <div><span className="td-muted">Since trade</span><br/><span className={spent?'ins-spent-badge--spent':'ins-spent-badge--fresh'}>{s.avgReturn>=0?'+':''}{s.avgReturn.toFixed(0)}% {big||spent?'spent':'fresh'}</span></div>
@@ -4223,8 +4236,8 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   ? <div className="drawer__empty">No signals match your filters</div>
                   : filteredSignals.map(s=>{
                     const isActive = detail?.ticker===s.ticker && detail?.type==='signal';
-                    const convPct  = Math.min((s.conviction/15)*100,100);
-                    const tier     = tierFromPct(convPct, appetite);
+                    const convPct  = Math.min((s.conviction/20)*100,100);
+                    const tier     = convTier(convPct);
                     return (
                       <div key={s.ticker}
                         data-row-key={s.ticker}
@@ -4876,7 +4889,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
         <button className={`ins-lb-col-hdr__sort${sort==='hit_rate'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('hit_rate')}>Hit rate{sort==='hit_rate'&&(dir<0?' ↓':' ↑')}</button>
       </div>
       {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
-      :rows===null?<SkeletonRows count={5} height={52}/>
+      :rows===null?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
       :rows.length===0?<div className="ins-empty">Not enough data yet</div>
       :<div className="ins-lb-list">
         {sorted.slice(0,15).map((r,i)=>{
@@ -6358,7 +6371,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                           <div><span className="td-muted">Buys / Sells</span><br/>{s.buys||0} / {s.sells||0}</div>
                           <div><span className="td-muted">Insiders</span><br/>{s.insiderCount||0}{s.lastTradeDate?` · ${fmt.ago(s.lastTradeDate)}`:''}</div>
                           <div><span className="td-muted">Exec buys</span><br/>{s.cSuiteBuys>0?`${s.cSuiteBuys}×`:'—'}</div>
-                          <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 15</div>
+                          <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 20</div>
                         </div>
                       </div>
                     )}

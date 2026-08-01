@@ -39,20 +39,12 @@ export function tierFromPct(pct, appetite) {
 }
 
 // ─── Signal building ──────────────────────────────────────────────────────────
-// Conviction formula grounded in the empirical insider-trading literature:
+// Conviction formula grounded in empirical insider-trading research:
 //
-//   Cohen, Malloy & Pomorski (2012) — opportunistic vs routine is the
-//     single largest alpha factor. Routine trades → ~0% abnormal returns.
-//     Opportunistic trades → 82 bps/month (9.8% annualized).
-//
-//   Lakonishok & Lee (2001) — insider buys predict positive abnormal
-//     returns; sells do not predict negative returns. Multiple insiders
-//     buying the same stock amplifies the signal. Small-cap insider buys
-//     earn ~7.4% abnormal returns over 12 months vs ~2-3% for large-cap.
-//
-//   Seyhun (1986) — purchases are more informative than sales because
-//     litigation risk discourages selling on negative private information.
-//     Most insider selling is diversification, not a negative signal.
+//   Cohen, Malloy & Pomorski (2012) — opportunistic vs routine trades
+//   Lakonishok & Lee (2001) — buys predict returns, sells don't; clusters matter
+//   Seyhun (1986) — purchases informative, sells are diversification noise
+//   Ravina & Sapienza (2010) — executive purchases earn abnormal returns
 //
 export function buildSignals(filings) {
   const map = {};
@@ -63,8 +55,7 @@ export function buildSignals(filings) {
     if (!map[f.ticker]) map[f.ticker] = {
       ticker:f.ticker, company:f.company, sector:f.sector, isPolitical:isPol,
       buys:0, sells:0, buyValue:0, sellValue:0,
-      cSuiteBuys:0, politicalBuys:0, opportunisticBuys:0,
-      maxPositionSwing:0,
+      cSuiteBuys:0, politicalBuys:0, opportunisticBuys:0, maxPositionSwing:0,
       insiders:new Set(), lastTradeDate:'', trades:[],
     };
     const s = map[f.ticker];
@@ -76,11 +67,8 @@ export function buildSignals(filings) {
       s.buys++; s.buyValue+=f.value||0;
       if (f.relationship==='strong') s.cSuiteBuys++;
       if (isPol) s.politicalBuys++;
-      // Cohen et al. (2012): the opportunistic/routine distinction captures
-      // essentially all the predictive power. isRoutine===false means the
-      // insider broke their historical trading pattern — information-driven.
-      // isRoutine===null (not yet computed) is treated conservatively as
-      // unknown, not penalized.
+      // Cohen et al. (2012): opportunistic trades (those breaking an insider's
+      // historical pattern) yield 82 bps/month. Routine trades yield ~0%.
       if (f.isRoutine === false) s.opportunisticBuys++;
       if (f.pctOwnedChange!=null && f.pctOwnedChange>s.maxPositionSwing) {
         s.maxPositionSwing = f.pctOwnedChange;
@@ -97,20 +85,6 @@ export function buildSignals(filings) {
     return {
       ...s, insiderCount:s.insiders.size,
       netValue: s.buyValue-s.sellValue,
-      // ── Conviction formula ──────────────────────────────────────────
-      // Each term maps to a specific finding in the literature:
-      //
-      //   opportunisticBuys × 5  — Cohen et al. (2012): the dominant factor
-      //   cSuiteBuys × 2         — Ravina & Sapienza (2010): executives earn
-      //                            abnormal returns, but less dominant than
-      //                            the routine/opportunistic distinction
-      //   politicalBuys × 4      — congressional info edge (policy, regulatory)
-      //   buys (no sell penalty)  — Seyhun (1986): sells are diversification
-      //                            noise, not a negative signal
-      //   log₁₀(buyValue)        — dollar value, diminishing (Lakonishok & Lee)
-      //   swingBonus              — position-size relative to existing holdings
-      //   clusterBonus            — Lakonishok & Lee (2001): multiple insiders
-      //
       conviction:
         (s.opportunisticBuys * 5) +
         (s.cSuiteBuys * 2) +

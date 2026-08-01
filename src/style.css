@@ -430,7 +430,7 @@ pre {
    of content-area via align-items:stretch) ends flush against the footer
    for free. Settings' content column stretches the same way — harmless,
    its own scroll area just gets a little shorter. */
-.app-shell--settings .content-area { padding-bottom: 0; padding-top: 0; }
+.app-shell--settings .content-area { padding-bottom: 0; }
 .app-shell--settings .content-area::before { display: none; }
 
 /* ── Right detail panel ───────────────────────────────────────────────────── */
@@ -2544,18 +2544,28 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* ── Signal row visual tiers ──────────────────────────────────────────────── */
 /* High conviction: subtle left accent border to draw the eye */
+/* Very High: bright green, strongest accent */
+.ins-sig-row--vhigh {
+  border-left: 3px solid var(--green-500);
+  background: rgba(34,197,94,0.04);
+}
 .ins-sig-row--high {
   border-left: 3px solid var(--green-600);
 }
 /* Medium: amber accent */
 .ins-sig-row--medium {
-  border-left: 3px solid var(--amber-600);
+  border-left: 3px solid var(--amber-500);
 }
-/* Low: no accent — grey, recedes visually */
+/* Low: muted amber */
 .ins-sig-row--low {
-  opacity: 0.75;
+  border-left: 3px solid var(--amber-600);
+  opacity: 0.85;
 }
-.ins-sig-row--low .ins-sig-row__ticker { color: var(--text-2) !important; font-weight: 500 !important; }
+/* Very Low: no accent, recedes */
+.ins-sig-row--vlow {
+  opacity: 0.65;
+}
+.ins-sig-row--vlow .ins-sig-row__ticker { color: var(--text-2) !important; font-weight: 500 !important; }
 
 /* ── Leaderboard panel wrap in insiders tab ─────────────────────────────── */
 .ins-lb-panel-wrap {
@@ -4223,17 +4233,12 @@ td { padding:7px 11px; vertical-align:middle; }
   border-top: 0.5px solid var(--border);
 }
 .checkout-modal__pay {
-  flex: 1; padding: 36px 28px 24px; min-width: 0;
+  flex: 1; padding: 40px 28px 32px; min-width: 0;
   max-height: 80vh; overflow-y: auto;
 }
 @media (max-width: 640px) {
   .checkout-modal--landscape { flex-direction: column; min-width: 0; max-height: 90vh; overflow-y: auto; }
-  .checkout-modal__info { flex: none; border-right: none; border-bottom: 0.5px solid var(--border); padding: 20px 20px; }
-  .checkout-modal__info-price { font-size: 22px; margin-bottom: 6px; }
-  .checkout-modal__info-subtitle { margin-bottom: 12px; }
-  .checkout-modal__features { gap: 6px; }
-  .checkout-modal__trust { margin-top: 12px; padding-top: 10px; }
-  .checkout-modal__pay { padding: 20px 20px; }
+  .checkout-modal__info { flex: none; border-right: none; border-bottom: 0.5px solid var(--border); }
 }
 
 .checkout-modal { min-width: 380px; }
@@ -4894,12 +4899,4 @@ td { padding:7px 11px; vertical-align:middle; }
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 0.4; }
   50%      { opacity: 1; }
-}
-
-/* ── Watchlist drawer list: border radii on mobile ───────────────────────── */
-@media (max-width: 640px) {
-  .wl-drawer-body .drawer__list {
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-  }
 }
