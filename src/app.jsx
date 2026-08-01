@@ -967,15 +967,6 @@ function Badge({ type, children }) {
 function Spinner({ size=22 }) {
   return <div className="spinner" style={{width:size,height:size}}/>;
 }
-function SkeletonRows({ count=5, height=48 }) {
-  return <div className="skeleton-rows">{Array.from({length:count},(_,i)=>
-    <div key={i} className="skeleton-row" style={{height}}>
-      <div className="skeleton-bar" style={{width:'18%'}}/>
-      <div className="skeleton-bar" style={{width:'40%'}}/>
-      <div className="skeleton-bar skeleton-bar--short" style={{width:'15%'}}/>
-    </div>
-  )}</div>;
-}
 const TX_CODE_TOOLTIPS = {
   P:'Open market purchase',
   S:'Open market sale',
@@ -1020,23 +1011,21 @@ function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
     </th>
   );
 }
-function ConvictionBar({ score, max=20, showLabel=false }) {
-  const s = score ?? 0;
-  const pct = Math.min((s/max)*100, 100);
-  let tier, label, color;
-  if (pct >= 85)      { tier='vhigh';  label='Very High'; color='var(--green-500)'; }
-  else if (pct >= 60) { tier='high';   label='High';      color='var(--green-600)'; }
-  else if (pct >= 40) { tier='medium'; label='Medium';    color='var(--amber-500)'; }
-  else if (pct >= 20) { tier='low';    label='Low';       color='var(--amber-600)'; }
-  else                { tier='vlow';   label='';          color='var(--text-3)'; }
-  const showText = showLabel && tier !== 'vhigh' && label;
+function ConvictionBar({ score, max=15, showLabel=false }) {
+  const [appetite] = React.useContext(RiskAppetiteContext);
+  const pct = Math.min((score/max)*100, 100);
+  const tier = tierFromPct(pct, appetite);
+  const label = tier==='high'?'High':tier==='medium'?'Medium':'Low';
+  const color = tier==='high'?'var(--green-600)':tier==='medium'?'var(--amber-600)':'var(--text-3)';
+  const t = RISK_APPETITE_THRESHOLDS[appetite] || RISK_APPETITE_THRESHOLDS[3];
+  // Only show label text when it's NOT High — color already communicates High,
+  // but Low/Medium are warnings worth surfacing explicitly.
+  const showText = showLabel && label !== 'High';
   return (
-    <div className="conv-bar-wrap" title={label ? `Conviction: ${label} (${s.toFixed(1)}/${max})` : ''}>
+    <div className="conv-bar-wrap" title={`Conviction: ${label} (${score.toFixed(1)}/${max}) — combines exec participation, position size, and insider clustering`}>
       <div className="conv-bar-track">
-        <div className="conv-bar-tick" style={{left:'20%'}}/>
-        <div className="conv-bar-tick" style={{left:'40%'}}/>
-        <div className="conv-bar-tick" style={{left:'60%'}}/>
-        <div className="conv-bar-tick" style={{left:'85%'}}/>
+        <div className="conv-bar-tick" style={{left:`${t.medium}%`}}/>
+        <div className="conv-bar-tick" style={{left:`${t.high}%`}}/>
         <div className="conv-bar" style={{width:`${pct}%`,background:color}}/>
       </div>
       {showText&&<span className="conv-bar-label" style={{color}}>{label}</span>}
@@ -1363,13 +1352,10 @@ const GUIDE_SECTIONS = [
   {
     id: 'welcome',
     label: 'Welcome',
-    icon: 'IconHome',
     render: () => (
       <>
         <div className="guide-hero">
           <div className="guide-hero__mark" aria-hidden="true">
-            {/* Placeholder for the animated/simple logo mark discussed in
-                the icon list below. A static wordmark stands in for now. */}
             <img src={logoSimple} alt="" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
           </div>
         </div>
@@ -1382,26 +1368,25 @@ const GUIDE_SECTIONS = [
   {
     id: 'using-seli',
     label: 'Using Seli',
-    icon: 'IconCompass',
     render: () => (
       <>
         <p>Seli has five sections, each serving a different purpose.</p>
-        <h3><IconHome style={{width:14,height:14,verticalAlign:'text-bottom'}}/> Dashboard</h3>
+        <h3 className="guide-section-heading">Dashboard</h3>
         <p>Your daily overview: market sentiment, sector performance, recent insider signals, top-ranked insiders, and market news.</p>
         <p className="td-muted" style={{fontSize:'0.8125rem'}}>Main use: quick snapshot of recent insider movement.</p>
         <EnvPreview type="dashboard"/>
-        <h3 style={{marginTop:16}}><IconInsights style={{width:14,height:14,verticalAlign:'text-bottom'}}/> Insights</h3>
+        <h3 className="guide-section-heading" style={{marginTop:20}}>Insights</h3>
         <p>The full, filterable signal feed. Thousands of trades are reported daily, and it can be hard to keep track of what's significant. Seli compares each trade against peer-reviewed research on how insiders beat the market and scores each insider based on how much they beat the market (SPY) by. Every trade is scored equally.</p>
         <p>Insights is also where you'll see your portfolio information and any insider trades related to assets you currently hold.</p>
         <p className="td-muted" style={{fontSize:'0.8125rem'}}>Main use: find historically successful trading patterns and the insiders behind them.</p>
         <EnvPreview type="insights"/>
-        <h3 style={{marginTop:16}}><IconData style={{width:14,height:14,verticalAlign:'text-bottom'}}/> Data</h3>
+        <h3 className="guide-section-heading" style={{marginTop:20}}>Data</h3>
         <p>Raw, legible filing data. Every trade, searchable and filterable. If you want to draw your own conclusions, this is where to work.</p>
         <p className="td-muted" style={{fontSize:'0.8125rem'}}>Main use: deep dive into raw data, make your own deductions.</p>
         <EnvPreview type="data"/>
-        <h3 style={{marginTop:16}}><IconZap style={{width:14,height:14,verticalAlign:'text-bottom'}}/> Watchlist</h3>
+        <h3 className="guide-section-heading" style={{marginTop:20}}>Watchlist</h3>
         <p>Tickers and insiders you've chosen to follow. Their activity surfaces ahead of everything else, and it's what instant alerts and email digests are built from.</p>
-        <h3 style={{marginTop:16}}><IconSettings style={{width:14,height:14,verticalAlign:'text-bottom'}}/> Settings</h3>
+        <h3 className="guide-section-heading" style={{marginTop:20}}>Settings</h3>
         <p>Your plan, billing, notification preferences, and brokerage connection all live here.</p>
       </>
     ),
@@ -1409,7 +1394,6 @@ const GUIDE_SECTIONS = [
   {
     id: 'data-source',
     label: 'Sourcing the Data',
-    icon: 'IconData',
     render: () => (
       <>
         <p>Seli tracks only <strong>official SEC data filed by insiders.</strong></p>
@@ -1424,7 +1408,6 @@ const GUIDE_SECTIONS = [
   {
     id: 'scoring',
     label: 'Data Scoring',
-    icon: 'IconInsights',
     render: () => (
       <>
         <p>Every trade is scored from a standardized approach based on peer-reviewed research. Seli calculates a <strong>conviction score</strong> for each trade, a number built from a few factors:</p>
@@ -1447,7 +1430,6 @@ const GUIDE_SECTIONS = [
   {
     id: 'pro-features',
     label: 'Pro Features',
-    icon: 'IconZap',
     render: () => (
       <>
         <p>Free covers the last 7 days: dashboard, leaderboard, and full filing data. Pro unlocks:</p>
@@ -1465,8 +1447,11 @@ const GUIDE_SECTIONS = [
 
 const GuideContext = createContext(null);
 
+// Resolves the string icon names stored in GUIDE_SECTIONS to the actual
+// icon components, kept as strings in the content array so that array
+// stays plain data, not a mix of data and component references.
 const GUIDE_ICON_MAP = {
-  IconHome, IconData, IconInsights, IconZap, IconSettings, IconCompass,
+  IconHome, IconData, IconInsights, IconZap, IconSettings, IconList, IconCompass,
 };
 
 // Compact, abstracted mockups of each of the five app environments, used
@@ -1649,7 +1634,6 @@ function GuideModal({ initialSection, onClose }) {
         <div className="guide-modal__body">
           <nav className="guide-modal__nav" aria-label="Guide sections">
             {GUIDE_SECTIONS.map((s, i) => {
-              const Icon = GUIDE_ICON_MAP[s.icon];
               return (
                 <button
                   key={s.id}
@@ -1658,7 +1642,6 @@ function GuideModal({ initialSection, onClose }) {
                   title={s.label}
                   aria-label={s.label}
                 >
-                  <span className="guide-modal__nav-icon">{Icon && <Icon style={{ width: 14, height: 14 }} />}</span>
                   <span className="guide-modal__nav-num">{i + 1}</span>
                   {s.label}
                 </button>
@@ -2941,7 +2924,7 @@ function HeatmapOnly() {
       <div className="mkt-heatmap-label">
         S&amp;P 500 sectors
         <span className="td-muted" style={{fontWeight:400,marginLeft:6}}>day return · by weight · ETF proxy</span>
-        <TileInfoButton section="insights-formula" title="S&P 500 sector heatmap"/>
+        <TileInfoButton section="scoring" title="S&P 500 sector heatmap"/>
         {Object.keys(sectors).length===0&&(
           <span className="td-muted" style={{marginLeft:'auto',fontSize:11}}>
             {mkt?.err?'unavailable':'loading…'}
@@ -3353,7 +3336,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
           <div key={s.ticker} className="home-tile__row" onClick={()=>onSeeAll('signals')}>
             <span className="ticker">{s.ticker}</span>
             <span className="td-muted" style={{flex:1}}>{s.company}</span>
-            <ConvictionBar score={s.conviction} max={20}/>
+            <ConvictionBar score={s.conviction} max={15}/>
           </div>
         ))}
       </HomeTile>
@@ -3452,7 +3435,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--signals">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Insider signals</span>
-              <TileInfoButton section="insights-formula" title="Insider signals"/>
+              <TileInfoButton section="scoring" title="Insider signals"/>
               <div className="dash-tile__hdr-controls">
                 <div className="dash-tile-pills">
                   {DASH_DATE_OPTS.map(o=>(
@@ -3515,7 +3498,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--top-insiders">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Top insiders</span>
-              <TileInfoButton section="insights-formula" title="Top insiders"/>
+              <TileInfoButton section="scoring" title="Top insiders"/>
               <div className="dash-tile__hdr-controls">
                 <button className="btn btn--ghost btn--icon" onClick={()=>setInsidersExpanded(true)} title="Open full insiders view">⤢</button>
               </div>
@@ -3708,7 +3691,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         <div className="ins-sig-panel ins-3col__signals">
           <div className="ins-sig-panel__hdr">
             <span className="ins-sig-panel__title">Insider signals</span>
-            <TileInfoButton section="insights-formula" title="Insider signals"/>
+            <TileInfoButton section="scoring" title="Insider signals"/>
             {!isMobile && (
               <div className="dash-tile__hdr-controls">
                 <button className="btn btn--ghost btn--icon" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('signals');}} title="Open full Explore view">⤢</button>
@@ -3810,8 +3793,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 const hasReversal=detectReversalForTicker(s.ticker,filings);
                 const isCongress=s.isPolitical;
                 const typeLabel=isCongress?'Congressional':'Corporate';
-                const convPct=Math.min((s.conviction/20)*100,100);
-                const tier=convPct>=85?'vhigh':convPct>=60?'high':convPct>=40?'medium':convPct>=20?'low':'vlow';
+                const convPct=Math.min((s.conviction/15)*100,100);
+                const tier=tierFromPct(convPct, appetite);
                 return (
                   <div key={s.ticker} ref={isHL?hlRef:null}
                     className={`ins-sig-row ins-sig-row--${tier}${isSel?' ins-sig-row--selected':''}${isMobile&&expandedTicker===s.ticker?' ins-sig-row--expanded':''}`}
@@ -3867,7 +3850,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                           <div><span className="td-muted">Insiders</span><br/>{s.insiderCount} · {fmt.ago(s.lastTradeDate)}</div>
                           <div><span className="td-muted">Exec buys</span><br/>{s.cSuiteBuys>0?`${s.cSuiteBuys}×`:'—'}</div>
                           {s.isPolitical && <div><span className="td-muted">Political buys</span><br/>{s.politicalBuys>0?`${s.politicalBuys}×`:'—'}</div>}
-                          <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 20</div>
+                          <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 15</div>
                           <div><span className="td-muted">Net flow</span><br/><span className={s.netValue>=0?'val-buy':'val-sell'}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span></div>
                           {s.avgReturn!=null && (
                             <div><span className="td-muted">Since trade</span><br/><span className={spent?'ins-spent-badge--spent':'ins-spent-badge--fresh'}>{s.avgReturn>=0?'+':''}{s.avgReturn.toFixed(0)}% {big||spent?'spent':'fresh'}</span></div>
@@ -4221,8 +4204,8 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   ? <div className="drawer__empty">No signals match your filters</div>
                   : filteredSignals.map(s=>{
                     const isActive = detail?.ticker===s.ticker && detail?.type==='signal';
-                    const convPct  = Math.min((s.conviction/20)*100,100);
-                    const tier     = convPct>=85?'vhigh':convPct>=60?'high':convPct>=40?'medium':convPct>=20?'low':'vlow';
+                    const convPct  = Math.min((s.conviction/15)*100,100);
+                    const tier     = tierFromPct(convPct, appetite);
                     return (
                       <div key={s.ticker}
                         data-row-key={s.ticker}
@@ -5784,7 +5767,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               <span>{rows==null?'Loading…':`${rows.length}${rows.length===300?'+':''} filing${rows.length===1?'':'s'}`}</span>
             </div>
             {rows===null
-              ? <SkeletonRows count={8} height={44}/>
+              ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
               : rows.length===0
                 ? <div className="drawer__empty">No filings match these filters</div>
                 : rows.map((r,i)=>{
@@ -6356,7 +6339,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                           <div><span className="td-muted">Buys / Sells</span><br/>{s.buys||0} / {s.sells||0}</div>
                           <div><span className="td-muted">Insiders</span><br/>{s.insiderCount||0}{s.lastTradeDate?` · ${fmt.ago(s.lastTradeDate)}`:''}</div>
                           <div><span className="td-muted">Exec buys</span><br/>{s.cSuiteBuys>0?`${s.cSuiteBuys}×`:'—'}</div>
-                          <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 20</div>
+                          <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 15</div>
                         </div>
                       </div>
                     )}

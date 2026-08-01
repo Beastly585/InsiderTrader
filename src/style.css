@@ -2544,24 +2544,18 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* ── Signal row visual tiers ──────────────────────────────────────────────── */
 /* High conviction: subtle left accent border to draw the eye */
-.ins-sig-row--vhigh {
-  border-left: 3px solid var(--green-500);
-  background: rgba(34,197,94,0.04);
-}
 .ins-sig-row--high {
   border-left: 3px solid var(--green-600);
 }
+/* Medium: amber accent */
 .ins-sig-row--medium {
-  border-left: 3px solid var(--amber-500);
-}
-.ins-sig-row--low {
   border-left: 3px solid var(--amber-600);
-  opacity: 0.85;
 }
-.ins-sig-row--vlow {
-  opacity: 0.65;
+/* Low: no accent — grey, recedes visually */
+.ins-sig-row--low {
+  opacity: 0.75;
 }
-.ins-sig-row--vlow .ins-sig-row__ticker { color: var(--text-2) !important; font-weight: 500 !important; }
+.ins-sig-row--low .ins-sig-row__ticker { color: var(--text-2) !important; font-weight: 500 !important; }
 
 /* ── Leaderboard panel wrap in insiders tab ─────────────────────────────── */
 .ins-lb-panel-wrap {
@@ -3663,7 +3657,7 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .legal-page > .legal-content { flex: 1; }
 .legal-content {
-  max-width: 720px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 60px 48px 80px;
 }
@@ -3831,7 +3825,7 @@ td { padding:7px 11px; vertical-align:middle; }
   overflow-y: auto;
 }
 .settings-legal-bar {
-  flex-shrink: 0; display: flex; gap: 14px; justify-content: center;
+  flex-shrink: 0; display: flex; gap: 14px; justify-content: flex-start;
   padding: 10px 16px; border-top: 0.5px solid var(--border);
   background: var(--surface-2);
 }
@@ -4878,21 +4872,12 @@ td { padding:7px 11px; vertical-align:middle; }
   display: block !important;
 }
 
-/* ── Skeleton loading rows ───────────────────────────────────────────────── */
-.skeleton-rows { padding: 4px 0; }
-.skeleton-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 0 14px;
-  border-bottom: 0.5px solid var(--border);
-}
-.skeleton-bar {
-  height: 10px;
-  border-radius: 4px;
-  background: var(--surface-3, rgba(128,128,128,0.12));
-  animation: skeleton-pulse 1.4s ease-in-out infinite;
-}
-.skeleton-bar--short { margin-left: auto; }
-@keyframes skeleton-pulse {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 1; }
+/* ── Guide section headings (Using Seli page) ────────────────────────────── */
+.guide-section-heading {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
 }
