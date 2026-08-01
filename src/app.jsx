@@ -6440,7 +6440,7 @@ function TermsPage() {
         <p className="legal-date">Last updated: June 26, 2025</p>
 
         <h2>1. Acceptance of Terms</h2>
-        <p>By accessing or using Seli ("the Service"), operated by Kevin Maresca ("we," "us," or "our"), you agree to be bound by these Terms of Service. If you don't agree, please don't use Seli.</p>
+        <p>By accessing or using Seli ("the Service"), operated by SELI LLC ("we," "us," or "our"), you agree to be bound by these Terms of Service. If you don't agree, please don't use Seli.</p>
 
         <h2>2. Description of Service</h2>
         <p>Seli aggregates and scores publicly available SEC Form 4 insider trading disclosures, congressional trading disclosures filed under the STOCK Act, and related market data. Every trade you see on Seli is sourced from public government databases, including the SEC's EDGAR system.</p>
@@ -6464,13 +6464,13 @@ function TermsPage() {
         <p>You may not: (a) use Seli for any unlawful purpose; (b) scrape, crawl, or otherwise systematically extract data from Seli; (c) resell or redistribute our data without written permission; (d) attempt to gain unauthorized access to any part of Seli; (e) use Seli to facilitate insider trading or securities fraud.</p>
 
         <h2>9. Intellectual Property</h2>
-        <p>Seli, including its design, algorithms, and conviction scoring methodology, is the property of Kevin Maresca. The underlying SEC filing data itself is public domain. You may not copy, modify, or distribute Seli's proprietary systems without permission.</p>
+        <p>Seli, including its design, algorithms, and conviction scoring methodology, is the property of SELI LLC. The underlying SEC filing data itself is public domain. You may not copy, modify, or distribute Seli's proprietary systems without permission.</p>
 
         <h2>10. Disclaimer of Warranties</h2>
         <p>Seli is provided "as is," without warranty of any kind. We disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, and non-infringement.</p>
 
         <h2>11. Limitation of Liability</h2>
-        <p>To the maximum extent permitted by law, Kevin Maresca isn't liable for indirect, incidental, special, consequential, or punitive damages arising from your use of Seli, including investment losses.</p>
+        <p>To the maximum extent permitted by law, SELI LLC isn't liable for indirect, incidental, special, consequential, or punitive damages arising from your use of Seli, including investment losses.</p>
 
         <h2>12. Governing Law</h2>
         <p>These Terms are governed by the laws of the State of New Mexico, United States, without regard to conflict of law principles.</p>
@@ -6521,7 +6521,7 @@ function PrivacyPage() {
         <p className="legal-date">Last updated: June 26, 2025</p>
 
         <h2>1. Overview</h2>
-        <p>Seli, operated by Kevin Maresca, takes your privacy seriously. Here's exactly what Seli collects, how it's used, and the rights you have over your own data.</p>
+        <p>Seli, operated by SELI LLC, takes your privacy seriously. Here's exactly what Seli collects, how it's used, and the rights you have over your own data.</p>
 
         <h2>2. Information We Collect</h2>
         <h3>Account Information</h3>

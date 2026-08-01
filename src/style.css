@@ -3657,7 +3657,7 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .legal-page > .legal-content { flex: 1; }
 .legal-content {
-  max-width: 1120px;
+  max-width: 880px;
   margin: 0 auto;
   padding: 60px 48px 80px;
 }
