@@ -205,7 +205,7 @@ pre {
 /* Push footer to bottom */
 .sidebar__footer { margin-top: auto; }
 .sidebar__footer {
-  padding: 10px 0; border-top: 1px solid var(--border);
+  padding: 10px 0;
   width: 100%; display: flex; flex-direction: column;
   align-items: center; gap: 4px;
 }
@@ -430,7 +430,7 @@ pre {
    of content-area via align-items:stretch) ends flush against the footer
    for free. Settings' content column stretches the same way — harmless,
    its own scroll area just gets a little shorter. */
-.app-shell--settings .content-area { padding-bottom: 0; }
+.app-shell--settings .content-area { padding-top: 0; padding-bottom: 0; }
 .app-shell--settings .content-area::before { display: none; }
 
 /* ── Right detail panel ───────────────────────────────────────────────────── */
@@ -3852,10 +3852,9 @@ td { padding:7px 11px; vertical-align:middle; }
   display: grid;
   grid-template-columns: 220px 1fr;
   gap: 0;
-  align-items: stretch; /* both columns same height */
+  align-items: stretch;
   flex: 1;
   overflow: hidden;
-  border-top: 0.5px solid var(--border);
 }
 
 /* ── Sidenav ──────────────────────────────────────────────────────────────── */
@@ -3880,16 +3879,17 @@ td { padding:7px 11px; vertical-align:middle; }
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 9px 11px;
-  border-radius: 8px;
+  padding: 9px 14px;
+  border-radius: 0;
   border: none;
+  border-left: 2px solid transparent;
   background: none;
   color: var(--text-3);
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
   font-family: var(--font);
   width: 100%;
 }
@@ -3898,9 +3898,10 @@ td { padding:7px 11px; vertical-align:middle; }
   color: var(--text-2);
 }
 .settings-sidenav__item--active {
-  background: var(--accent-50, rgba(124,111,255,0.12));
+  background: var(--surface-3);
   color: var(--accent-strong);
   font-weight: 600;
+  border-left-color: var(--accent-strong);
 }
 .settings-sidenav__icon {
   font-size: 0.8125rem;
@@ -4015,7 +4016,12 @@ td { padding:7px 11px; vertical-align:middle; }
     border-top: none; border-bottom: 0.5px solid var(--border);
     padding: 10px 12px; gap: 6px;
   }
-  .settings-sidenav__item { flex-shrink: 0; white-space: nowrap; width: auto; }
+  .settings-sidenav__item {
+    flex-shrink: 0; white-space: nowrap; width: auto;
+    border-left: none; border-bottom: 2px solid transparent;
+    border-radius: 0;
+  }
+  .settings-sidenav__item--active { border-left-color: transparent; border-bottom-color: var(--accent-strong); }
   .settings-sidenav__spacer, .settings-sidenav__plan { display: none; } /* plan badge lived at the "bottom" of a vertical list — no bottom to anchor to once this is a centered horizontal row */
 }
 
