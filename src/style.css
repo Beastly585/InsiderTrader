@@ -3145,6 +3145,13 @@ td { padding:7px 11px; vertical-align:middle; }
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+.lp-hero__h1-punch {
+  /* Solid accent color — breaks out of the gradient to land harder.
+     Aqua on dark, strong indigo on light — both high-contrast against
+     the rest of the heading. */
+  color: var(--aqua);
+  -webkit-text-fill-color: var(--aqua);
+}
 .lp-hero__sub {
   font-size: 1.125rem; line-height: 1.65; color: var(--text-2);
   max-width: 580px; margin: 0 auto 16px;

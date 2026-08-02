@@ -1369,102 +1369,94 @@ const GUIDE_SECTIONS = [
   {
     id: 'welcome',
     label: 'Welcome',
-    icon: 'IconHome',
     render: () => (
       <>
         <div className="guide-hero">
           <div className="guide-hero__mark" aria-hidden="true">
-            {/* Placeholder for the animated/simple logo mark discussed in
-                the icon list below. A static wordmark stands in for now. */}
             <span className="guide-hero__wordmark">Seli</span>
           </div>
         </div>
-        <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as they're published, and organizes them using its own scoring methodology.</p>
-        <p>This is a quick walkthrough of where the <strong>data</strong> comes from, how the <strong>scoring</strong> works, and what's behind each part of the app — all informational, none of it personalized to you or a recommendation to act. Five short stops, or skip straight to the dashboard whenever you want.</p>
-      </>
-    ),
-  },
-  {
-    id: 'data-source',
-    label: 'Where the data comes from',
-    icon: 'IconData',
-    render: () => (
-      <>
-        <p>Every trade in Seli comes from a <strong>public government filing</strong>. Nothing here is estimated, scraped from a rumor, or licensed from a third party.</p>
-        <ul>
-          <li><strong>Corporate insiders.</strong> Form 4, filed with the SEC by executives, directors, and major shareholders within two business days of a trade.</li>
-          <li><strong>Congress.</strong> Periodic transaction reports required under the STOCK Act, filed by senators and representatives.</li>
-        </ul>
-        <p>Seli checks for new filings on a recurring basis throughout the trading day, so a disclosure typically shows up here <strong>within minutes</strong> of becoming public, not the next morning.</p>
-        <EnvPreview type="dashboard"/>
-      </>
-    ),
-  },
-  {
-    id: 'raw-data',
-    label: 'The raw data',
-    icon: 'IconList',
-    render: () => (
-      <>
-        <p>Every filing is also available on its own, unscored and unfiltered, on the <strong>Data page</strong>. Search by ticker or insider name, filter by date range or transaction type, and see exactly what was filed, with a <strong>direct link back to the original SEC document</strong>.</p>
-        <p>If you'd rather draw your own conclusions than trust anyone's scoring, including ours, this is where to work.</p>
-        <EnvPreview type="data"/>
+        <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as it's published, parses it, and makes it easy to review.</p>
+        <p>This guide is a quick walkthrough of where the data comes from, how the scoring works, and the basics of each part of the website. All informational.</p>
+        <p>Remember, Seli isn't providing financial advice or personalized recommendations. It simply screens for insider movements, scores the trade based on peer-reviewed historical findings, and makes it available to you.</p>
       </>
     ),
   },
   {
     id: 'using-seli',
     label: 'Using Seli',
-    icon: 'IconCompass',
-    render: () => HELP_SECTIONS.find(s => s.id === 'using-seli').render(),
+    render: () => (
+      <>
+        <p>Seli has five sections, each serving a different purpose.</p>
+
+        <h4 className="guide-section-heading">Dashboard</h4>
+        <p>Your daily overview: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news.</p>
+        <p className="td-muted" style={{fontSize:12,marginTop:-4}}>Main use — quick snapshot of recent movement related to insiders.</p>
+
+        <h4 className="guide-section-heading">Insights</h4>
+        <p>The full, filterable signal feed. Thousands of trades are reported daily, and it can be hard to keep track of what's significant.</p>
+        <p>Seli compares each trade against peer-reviewed research on how insiders beat the market and scores each insider based on how much they beat the market (SPY) by. None of this is personalized, each trade is scored equally.</p>
+        <p>In insights is where you'll also see your portfolio information and any insider trades related to assets you currently hold.</p>
+        <p className="td-muted" style={{fontSize:12,marginTop:-4}}>Main use — get a feel on who's making money on trades and which trades have markers of historically successful trades.</p>
+
+        <h4 className="guide-section-heading">Data</h4>
+        <p>Raw, legible filing data. Every trade, searchable and filterable, with a link back to the original government filing. If you want to draw your own conclusions, this is where to work.</p>
+        <p className="td-muted" style={{fontSize:12,marginTop:-4}}>Main use — deep dive raw data, make your own deductions.</p>
+
+        <h4 className="guide-section-heading">Watchlist</h4>
+        <p>Tickers and insiders you've chosen to follow. Their activity surfaces ahead of everything else, and it's what instant alerts and email digests are built from.</p>
+
+        <h4 className="guide-section-heading">Settings</h4>
+        <p>Your plan, billing, notification preferences, and brokerage connection all live here.</p>
+      </>
+    ),
+  },
+  {
+    id: 'data-source',
+    label: 'Sourcing the Data',
+    render: () => (
+      <>
+        <p>Seli tracks only official SEC data filed by insiders.</p>
+        <ul>
+          <li><strong>Corporate insiders.</strong> Form 4, filed with the SEC by executives, directors, and major shareholders. Corporate trades are reported within 2 business days of a trade.</li>
+          <li><strong>Congress.</strong> Periodic transaction reports required under the STOCK Act, filed by senators and representatives. Congressional transactions must be filed within 45 days of a trade.</li>
+        </ul>
+        <p>Seli checks for new filings on a recurring basis throughout the trading day, so a disclosure typically shows up here <strong>within minutes</strong>.</p>
+      </>
+    ),
   },
   {
     id: 'insights-formula',
-    label: 'How signals are scored',
-    icon: 'IconInsights',
+    label: 'Data Scoring',
     render: () => (
       <>
-        <p>Every trade isn't scored the same way. Seli calculates a <strong>conviction</strong> score for each one, a number built from a few real factors, not just dollar amount:</p>
+        <p>Every trade is scored from a standardized approach based on peer-reviewed research:</p>
+        <p>Seli calculates a <strong>conviction score</strong> for each trade, a number built from a few factors. Below is a general breakdown of those factors:</p>
         <ul>
-          <li>A <strong>C-suite executive or member of Congress</strong> buying counts for more than a director or 10%-owner trading the same amount.</li>
-          <li><strong>More buys than sells</strong> on the same ticker adds to the score. More sells than buys works against it.</li>
-          <li>Dollar value matters, but on a <strong>diminishing scale</strong>. A $50M buy isn't fifty times more meaningful than a $1M one.</li>
+          <li><strong>Relationship</strong> between executor of the trade and the equity in question. Closer relationships are attributed to C-Suite execs, Congress members.</li>
+          <li><strong>Buys and sells aggregation</strong> within a time-window helps strengthen or dilute a signal.</li>
+          <li><strong>Dollar amounts</strong> play a small role in signal weighting.</li>
           <li>A trade that represents a <strong>large share of someone's existing position</strong> counts for more than a routine top-up.</li>
         </ul>
         <p>Only <strong>open-market</strong> trades count toward this. Option exercises, RSU vests, and grants are left out entirely, since they don't reflect someone choosing to put their own money in.</p>
-        <EnvPreview type="insights"/>
-        <p style={{ marginTop: 4 }}>Insiders themselves are ranked separately, by <strong>real track record</strong>, not trade volume:</p>
-        <div className="guide-trust-demo" aria-hidden="true">
-          <TrustStars score={4.5}/>
-          <span className="td-muted" style={{ fontSize: '0.75rem' }}>Built from hit rate on past open-market buys, once there's enough history to mean something (5+ priced trades).</span>
-        </div>
         <p style={{ marginTop: 12 }}><strong>This scoring is the same for every user.</strong> It's Seli's own methodology, applied identically to everyone and to every trade — not tailored to you, your holdings, or your risk tolerance. It's informational, not a recommendation to buy, sell, or hold anything. See <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
       </>
     ),
   },
   {
     id: 'pro-features',
-    label: 'Pro features',
-    icon: 'IconZap',
+    label: 'Pro Features',
     render: () => (
       <>
-        <p>Free tracks the last 7 days and covers the dashboard, leaderboard, and full filing data. Pro unlocks more ways to follow it:</p>
+        <p>Seli has two memberships: <strong>Free</strong> and <strong>Pro</strong>.</p>
+        <p>Free allows you to see top 10 insiders, signals from the last 7 days, and allows you to view up to a year back of raw data.</p>
+        <p>Pro allows you better access to the data:</p>
         <ul>
-          <li><strong>Follow specific insiders or tickers.</strong> Build a watchlist and see their activity surfaced ahead of everything else.</li>
+          <li><strong>Get notified immediately.</strong> Instant alerts the moment something you're watching moves, or a daily and weekly digest by email instead. Follow specific insiders or tickers you're interested in.</li>
           <li><strong>Link your portfolio.</strong> Connect a brokerage account (read-only, never able to place trades) and see insider activity on what you actually hold.</li>
-          <li><strong>Get notified.</strong> Instant alerts the moment something you're watching moves, or a daily and weekly digest by email instead.</li>
+          <li><strong>All the data.</strong> Gain access to both scored and raw data as far back as Seli is populated.</li>
         </ul>
-      </>
-    ),
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: 'IconSettings',
-    render: () => (
-      <>
-        <p>Everything above is adjustable. Settings is where to change how alerts fire, how often digests arrive, which sources count toward your feed, and the light or dark theme.</p>
-        <p>Nothing here is locked into a default forever. If a notification feels too frequent or a filter too narrow, that's a Settings change, not a support ticket.</p>
+        <p><strong>One-time Data Purchase</strong> — Seli also offers the purchase of the whole database up to the time of purchase, downloaded as CSV, for a one-time fee.</p>
       </>
     ),
   },
@@ -1659,7 +1651,6 @@ function GuideModal({ initialSection, onClose }) {
         <div className="guide-modal__body">
           <nav className="guide-modal__nav" aria-label="Guide sections">
             {GUIDE_SECTIONS.map((s, i) => {
-              const Icon = GUIDE_ICON_MAP[s.icon];
               return (
                 <button
                   key={s.id}
@@ -1668,7 +1659,6 @@ function GuideModal({ initialSection, onClose }) {
                   title={s.label}
                   aria-label={s.label}
                 >
-                  <span className="guide-modal__nav-icon">{Icon && <Icon style={{ width: 14, height: 14 }} />}</span>
                   <span className="guide-modal__nav-num">{i + 1}</span>
                   {s.label}
                 </button>
@@ -2028,7 +2018,17 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   const [busy,       setBusy]       = useState(false);
   const [bundleOn,   setBundleOn]   = useState(true);
   const [omOnly,     setOmOnly]     = useState(true);
-  const nav = (type,data) => onNavigate&&onNavigate({type,...data});
+  // When the current detail originated from the Data page (it has
+  // dataFilters), carry those filters forward to any sub-navigation so
+  // that expanding always opens the DataDrawer (filings explore), not the
+  // InsightsDrawer (signals explore). Without this, clicking "All SYBT
+  // trades →" from a Data-originated transaction would lose the dataFilters
+  // on the new detail, causing expand to fall through to InsightsDrawer.
+  const nav = (type,data) => {
+    if (!onNavigate) return;
+    const forwarded = d.dataFilters ? { dataFilters: d.dataFilters, ...data } : data;
+    onNavigate({type,...forwarded});
+  };
 
   useEffect(()=>{
     if (d.type!=='trader') return;
@@ -5580,7 +5580,7 @@ function FilterPanel({
         <div style={{display:'flex',gap:12}}>
           <label className="fp-check">
             <input type="checkbox" checked={openMkt} onChange={e=>setOpenMkt(e.target.checked)}/>
-            Open market
+            Open market only
           </label>
           <label className="fp-check">
             <input type="checkbox" checked={fromPortfolio} onChange={e=>setFromPortfolio(e.target.checked)}/>
@@ -7936,7 +7936,8 @@ function LandingPage({ onEnter, dark, setDark }) {
         <div className="lp-hero-bg" aria-hidden="true"/>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
           Insiders have an edge that beats the market,<br/>
-          <span className="lp-hero__h1-accent">which they have to publish. Use it.</span>
+          <span className="lp-hero__h1-accent">which they have to publish.</span>{' '}
+          <span className="lp-hero__h1-punch">Use it.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
           Seli tracks every SEC Form 4 and congressional trading disclosure within minutes
