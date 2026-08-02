@@ -625,6 +625,29 @@ input[type="checkbox"] { height:auto; width:auto; }
 }
 @keyframes spin { to{transform:rotate(360deg)} }
 
+/* ── Skeleton loading rows ────────────────────────────────────────────────── */
+.skel-wrap {
+  display:flex; flex-direction:column; gap:0; width:100%;
+}
+.skel-row {
+  display:flex; align-items:center; gap:12px;
+  padding:12px 16px;
+  border-bottom:0.5px solid var(--border);
+  animation:skel-fade 1.2s ease-in-out infinite alternate;
+}
+.skel-row:last-child { border-bottom:none; }
+.skel-bar {
+  display:block; height:12px; border-radius:6px;
+  background:var(--surface-3);
+}
+.skel-bar--sm { width:48px; flex-shrink:0; }
+.skel-bar--md { width:72px; flex-shrink:0; }
+.skel-bar--lg { flex:1; min-width:60px; }
+@keyframes skel-fade {
+  from { opacity:0.45; }
+  to   { opacity:1;    }
+}
+
 /* ── State boxes ──────────────────────────────────────────────────────────── */
 .state-box {
   display:flex; flex-direction:column; align-items:center;

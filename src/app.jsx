@@ -967,6 +967,22 @@ function Badge({ type, children }) {
 function Spinner({ size=22 }) {
   return <div className="spinner" style={{width:size,height:size}}/>;
 }
+// Skeleton loading rows — fills the available space with pulsing placeholder
+// rows instead of a centered spinner. Looks like content is about to appear
+// rather than "something is spinning in a void."
+function SkeletonRows({ count=6, style:extraStyle }) {
+  return (
+    <div className="skel-wrap" style={extraStyle}>
+      {Array.from({length:count},(_,i)=>(
+        <div key={i} className="skel-row" style={{animationDelay:`${i*60}ms`}}>
+          <span className="skel-bar skel-bar--sm"/>
+          <span className="skel-bar skel-bar--lg"/>
+          <span className="skel-bar skel-bar--md"/>
+        </div>
+      ))}
+    </div>
+  );
+}
 const TX_CODE_TOOLTIPS = {
   P:'Open market purchase',
   S:'Open market sale',
@@ -1011,21 +1027,22 @@ function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
     </th>
   );
 }
-function ConvictionBar({ score, max=15, showLabel=false }) {
-  const [appetite] = React.useContext(RiskAppetiteContext);
+function ConvictionBar({ score, max=20, showLabel=false }) {
   const pct = Math.min((score/max)*100, 100);
-  const tier = tierFromPct(pct, appetite);
-  const label = tier==='high'?'High':tier==='medium'?'Medium':'Low';
-  const color = tier==='high'?'var(--green-600)':tier==='medium'?'var(--amber-600)':'var(--text-3)';
-  const t = RISK_APPETITE_THRESHOLDS[appetite] || RISK_APPETITE_THRESHOLDS[3];
-  // Only show label text when it's NOT High — color already communicates High,
-  // but Low/Medium are warnings worth surfacing explicitly.
-  const showText = showLabel && label !== 'High';
+  // 5-tier system: Very Low → Low → Medium → High → Very High
+  // Thresholds at 20%/40%/60%/85% of max (scores 4/8/12/17 out of 20)
+  const tier = pct>=85?'very-high':pct>=60?'high':pct>=40?'medium':pct>=20?'low':'very-low';
+  const label = tier==='very-high'?'Very High':tier==='high'?'High':tier==='medium'?'Medium':tier==='low'?'Low':'Very Low';
+  const color = tier==='very-high'?'var(--green-600)':tier==='high'?'#5EC26A':tier==='medium'?'var(--amber-600)':tier==='low'?'var(--text-3)':'var(--text-3)';
+  // Show label for anything below High — green color already communicates strength
+  const showText = showLabel && tier!=='very-high' && tier!=='high';
   return (
     <div className="conv-bar-wrap" title={`Conviction: ${label} (${score.toFixed(1)}/${max}) — combines exec participation, position size, and insider clustering`}>
       <div className="conv-bar-track">
-        <div className="conv-bar-tick" style={{left:`${t.medium}%`}}/>
-        <div className="conv-bar-tick" style={{left:`${t.high}%`}}/>
+        <div className="conv-bar-tick" style={{left:'20%'}}/>
+        <div className="conv-bar-tick" style={{left:'40%'}}/>
+        <div className="conv-bar-tick" style={{left:'60%'}}/>
+        <div className="conv-bar-tick" style={{left:'85%'}}/>
         <div className="conv-bar" style={{width:`${pct}%`,background:color}}/>
       </div>
       {showText&&<span className="conv-bar-label" style={{color}}>{label}</span>}
@@ -2507,7 +2524,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       </div>
       <div className="detail-panel__body">
 
-        {d.type==='trader'&&(busy?<div className="state-box" style={{padding:'2rem'}}><Spinner/><p>Loading…</p></div>:!traderStats?<div className="state-box" style={{padding:'2rem'}}><p>No trades found.</p></div>:(<>
+        {d.type==='trader'&&(busy?<SkeletonRows count={6}/>:!traderStats?<div className="state-box" style={{padding:'2rem'}}><p>No trades found.</p></div>:(<>
 
           {/* HERO: previously showed only one of Realized P&L or Est.
               Position Value, with whichever wasn't primary buried in a
@@ -2670,7 +2687,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
         </>))}
 
 
-        {d.type==='ticker'&&(busy?<div className="state-box" style={{padding:'2rem'}}><Spinner/><p>Loading…</p></div>:!tickerStats?<div className="state-box" style={{padding:'2rem'}}><p>No data.</p></div>:(<>
+        {d.type==='ticker'&&(busy?<SkeletonRows count={6}/>:!tickerStats?<div className="state-box" style={{padding:'2rem'}}><p>No data.</p></div>:(<>
           {!hideProfileCard && <CompanyProfileCard ticker={d.ticker} cik={tickerRows?.[0]?.cik_issuer} company={d.company}/>}
           <div className="dp-summary">
             <div className="dp-sum-item"><span className="dp-sum-label">Buys</span><span className="val-buy dp-sum-val">{tickerStats.buys}</span></div>
@@ -2708,7 +2725,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                 <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:ins.name,title:ins.title})}>{ins.name}</span>
                 <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{ins.title}</span>
               </div>
-              {ins.trades.map((t,j)=><TRow key={j} r={{...t,transaction_type:t.transactionType,transaction_code:t.transactionCode,is_open_market:t.isOpenMarket,price:t.price,current_price:t.currentPrice,pct_owned_change:t.pctOwnedChange,transaction_date:t.transactionDate,is_foreign_price:t.isForeignPrice}} showTicker={false} showInsider={false}/>)}
+              {ins.trades.map((t,j)=><TRow key={j} r={{...t,insider_name:t.insiderName||ins.name,title:t.title||ins.title,transaction_type:t.transactionType,transaction_code:t.transactionCode,is_open_market:t.isOpenMarket,price:t.price,current_price:t.currentPrice,pct_owned_change:t.pctOwnedChange,transaction_date:t.transactionDate,is_foreign_price:t.isForeignPrice}} showTicker={false} showInsider={true}/>)}
             </div>
           ))}
         </>)}
@@ -3456,7 +3473,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               </div>
             </div>
             <div className="dash-tile__body">
-              {loading?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+              {loading?<SkeletonRows count={8}/>
               :signals.length===0?<div className="dash-inner-empty">
                 <div style={{fontWeight:500,marginBottom:4}}>No signals in this window</div>
                 <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>Form 4s are filed 1–2 days after transactions. Try the 7d or 30d window.</div>
@@ -3785,7 +3802,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>sigOnSort('netValue')}>Net flow{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
           </div>
           <div className="ins-sig-panel__body">
-            {loading?<div className="state-box"><Spinner/><p>Computing signals…</p></div>
+            {loading?<SkeletonRows count={12}/>
             :signals.length===0?<div className="ins-empty">
               <div style={{fontWeight:500,marginBottom:4}}>No qualifying signals</div>
               <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>
@@ -4702,7 +4719,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
             {/* POSITIONS TAB */}
             {tab==='positions' && (
               !port
-                ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
+                ? <SkeletonRows count={6}/>
                 : pos.length===0
                   ? <div className="drawer__empty">No open positions.<br/>Connect Alpaca to track your holdings here.</div>
                   : [...pos]
@@ -4867,7 +4884,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
         <button className={`ins-lb-col-hdr__sort${sort==='hit_rate'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('hit_rate')}>Hit rate{sort==='hit_rate'&&(dir<0?' ↓':' ↑')}</button>
       </div>
       {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
-      :rows===null?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
+      :rows===null?<SkeletonRows count={8}/>
       :rows.length===0?<div className="ins-empty">Not enough data yet</div>
       :<div className="ins-lb-list">
         {sorted.slice(0,15).map((r,i)=>{
@@ -6028,7 +6045,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
       <div className="data-layout">
         <div className="data-main">
           {error?<div className="state-box state-box--error"><p><IconWarning style={{width:14,height:14,marginRight:4,verticalAlign:"-2px"}}/>{error}</p></div>
-          :loading?<div className="state-box"><Spinner/><p>Loading…</p></div>
+          :loading?<SkeletonRows count={15}/>
           :rows.length===0?<div className="state-box"><IconEmpty style={{width:28,height:28,color:"var(--text-3)"}}/><p>No filings match these filters.</p></div>
           :isMobile?<div className="data-mobile-list">
             {rows.map((r,i)=>{
