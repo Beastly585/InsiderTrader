@@ -7448,43 +7448,41 @@ function InfoTrustPage({ onBack, onEnter }) {
         <div className="lp-info__eyebrow">About Seli</div>
         <h1 className="lp-info__h1">Why insider trades are public record</h1>
         <p className="lp-info__lede">
-          Every year, corporate insiders and members of Congress disclose thousands of stock trades —
-          not because they want to, but because federal law requires it. That disclosure creates a genuinely
-          rare thing in public markets: a legally mandated look at what the people closest to a company are
-          actually doing with their own money.
+          Every year, corporate insiders and members of Congress disclose thousands of stock trades
+          because federal law requires it. That disclosure creates a legally mandated look at what
+          the people closest to a company are actually doing with their own money.
         </p>
 
         {/* ── How insiders beat the market ─────────────────────────────── */}
         <section className="lp-info__section reveal">
           <h2>How insiders beat the market</h2>
           <p>
-            The idea that insider trades carry real predictive information isn't new, and it isn't a fintech
-            marketing claim either. It's decades of published financial economics research, summarized here
-            rather than buried in a wall of citations.
+            The predictive value of insider trades is backed by decades of published financial
+            economics research. Here's a summary of the key findings.
           </p>
           <div className="lp-findings-grid">
             <div className="lp-finding-card reveal reveal--delay-0">
               <div className="lp-finding-card__icon"><IconInsights style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">Buying beats selling as a signal</div>
-              <div className="lp-finding-card__body">Insiders face real legal exposure for selling on bad non-public information. That risk doesn't apply the same way to buying, which is why purchases carry more predictive weight than sales.</div>
+              <div className="lp-finding-card__body">Insiders face real legal exposure for selling on non-public information. That risk doesn't apply the same way to buying, which is why purchases carry more predictive weight than sales.</div>
               <div className="lp-finding-card__cite">Seyhun, 1980s–90s</div>
             </div>
             <div className="lp-finding-card reveal reveal--delay-1">
               <div className="lp-finding-card__icon"><IconFavorites style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">Clusters matter more than one trade</div>
-              <div className="lp-finding-card__body">Several insiders buying independently around the same time is a stronger signal than one person acting alone. Seli's own scoring is built around this directly.</div>
+              <div className="lp-finding-card__body">Several insiders buying independently around the same time is a stronger signal than one person acting alone. Seli's scoring is built around this directly.</div>
               <div className="lp-finding-card__cite">Lakonishok &amp; Lee, 2001</div>
             </div>
             <div className="lp-finding-card reveal reveal--delay-2">
               <div className="lp-finding-card__icon"><IconZap style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">Timing separates signal from noise</div>
-              <div className="lp-finding-card__body">Routine, calendar-driven insider trades carry little predictive value. Opportunistic, irregularly-timed ones carry almost all of it.</div>
+              <div className="lp-finding-card__body">Routine, calendar-driven insider trades carry little predictive value. Opportunistic, irregularly timed ones carry almost all of it.</div>
               <div className="lp-finding-card__cite">Cohen, Malloy &amp; Pomorski, 2012</div>
             </div>
             <div className="lp-finding-card reveal reveal--delay-3">
               <div className="lp-finding-card__icon"><IconData style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">The rules keep changing, and matter</div>
-              <div className="lp-finding-card__body">A 2023 SEC rule change to pre-scheduled 10b5-1 trading plans measurably shifted how insiders structure their disclosed sales. This is an active area of research, not a settled 1980s question.</div>
+              <div className="lp-finding-card__body">A 2023 SEC rule change to pre-scheduled 10b5-1 trading plans measurably shifted how insiders structure their disclosed sales. This is an active area of research.</div>
               <div className="lp-finding-card__cite">Avci, Schipani, Seyhun &amp; Verstein, 2025</div>
             </div>
           </div>
@@ -7504,8 +7502,8 @@ function InfoTrustPage({ onBack, onEnter }) {
             {[
               { label:'SEC EDGAR + Congress', desc:'Form 4 filings and STOCK Act disclosures, straight from the source.' },
               { label:'Ingested & parsed', desc:'New filings pulled and structured automatically, typically within minutes of publication.' },
-              { label:'Scored', desc:'Weighted by who\u2019s trading, how much relative to what they hold, and whether others are too.' },
-              { label:'Surfaced', desc:'Ranked and shown as a signal — not buried in a raw filing.' },
+              { label:'Scored', desc:'Weighted by who is trading, how much relative to what they hold, and whether others are too.' },
+              { label:'Surfaced', desc:'Ranked and shown as a signal, with the raw filing always accessible alongside it.' },
             ].map((step,i,arr)=>(
               <React.Fragment key={i}>
                 <div className="lp-pipeline__step">
@@ -7518,33 +7516,31 @@ function InfoTrustPage({ onBack, onEnter }) {
             ))}
           </div>
           <p>
-            You're never limited to just the ranked view. Every account can see the underlying raw filing
-            data — ticker, insider, shares, price, transaction type, date — the same information Seli's own
-            scoring is built from, not a black box on top of it. The scored, ranked signal view sits alongside
-            it for when you want the fast read instead of the raw feed. Both update automatically as new
-            filings arrive.
+            Every account can see the underlying raw filing data: ticker, insider, shares, price,
+            transaction type, date. The scored signal view sits alongside it for a faster read.
+            Both update automatically as new filings arrive.
           </p>
           <p>
-            Seli's conviction score is built directly around the same principles the research above
-            established, not invented from scratch:
+            Seli's conviction score is built directly around the principles the research above
+            established:
           </p>
           <ul className="lp-info__principles">
-            <li><strong>Who's buying matters.</strong> A purchase from a C-suite executive — someone with the
-              broadest view into the company — carries more weight than one from a director with narrower
+            <li><strong>Who's buying matters.</strong> A purchase from a C-suite executive, someone with the
+              broadest view into the company, carries more weight than one from a director with narrower
               visibility.</li>
             <li><strong>Size relative to what they already own matters more than raw dollars.</strong> A
               $500K purchase from someone materially growing their existing stake is a stronger signal than
               the same dollar amount as a routine top-up on a much larger position.</li>
             <li><strong>Multiple insiders acting together matters.</strong> Directly following Lakonishok and
-              Lee's finding — several insiders buying independently around the same time is treated as a
+              Lee's finding: several insiders buying independently around the same time is treated as a
               stronger signal than one person acting alone.</li>
-            <li><strong>Only real, personal-funds market transactions count at all.</strong> Stock grants,
-              option exercises, and other compensation-related transfers are structurally excluded before a
-              signal is ever scored — they don't reflect a personal bet the way an open-market purchase does.</li>
+            <li><strong>Only real, personal-funds market transactions count.</strong> Stock grants,
+              option exercises, and other compensation-related transfers are excluded before a
+              signal is ever scored. They don't reflect a personal bet the way an open-market purchase does.</li>
           </ul>
           <p>
-            We don't publish the exact formula or weights — that's the specific part of this that's ours —
-            but the underlying principles above are the actual mechanism, not a marketing simplification of it.
+            We don't publish the exact formula or weights, but the principles above are the actual
+            mechanism the scoring is built on.
           </p>
         </section>
 
@@ -7554,9 +7550,9 @@ function InfoTrustPage({ onBack, onEnter }) {
           <div className="lp-timeline">
             {[
               { year:'1934', label:'Securities Exchange Act', desc:'Establishes the requirement that corporate insiders disclose their own trades to the public.' },
-              { year:'2002', label:'Sarbanes-Oxley Act', desc:'Shortens the filing deadline from 10 days down to 2 business days — the modern Form 4 window.' },
+              { year:'2002', label:'Sarbanes-Oxley Act', desc:'Shortens the filing deadline from 10 days down to 2 business days, the modern Form 4 window.' },
               { year:'2012', label:'STOCK Act', desc:'Extends mandatory trade disclosure to members of Congress.' },
-              { year:'Today', label:'Seli', desc:'Ingests every new filing — corporate and congressional — within minutes of publication.' },
+              { year:'Today', label:'Seli', desc:'Ingests every new filing, corporate and congressional, within minutes of publication.' },
             ].map((t,i)=>(
               <div key={i} className="lp-timeline__item">
                 <div className="lp-timeline__year">{t.year}</div>
@@ -7591,39 +7587,37 @@ function InfoTrustPage({ onBack, onEnter }) {
           <h2>Disclosures</h2>
           <p>
             <strong>This is not a day-trading tool.</strong> Form 4 filings carry a mandatory disclosure
-            window — insiders can have up to two business days to report a trade after it happens. That's
-            actually faster than it used to be: Sarbanes-Oxley tightened the requirement from ten days down to
-            two specifically to make this data more useful. But two days is still real lag, and for someone
-            making decisions on minute-to-minute price action, this data is structurally too old to act on
-            that way. We'd rather tell you that directly than let you find out the hard way.
+            window. Insiders can have up to two business days to report a trade after it happens. Sarbanes-Oxley
+            tightened the requirement from ten days down to two specifically to make this data more useful, but
+            two days is still real lag. For someone making decisions on minute-to-minute price action, this data
+            is structurally too old to act on that way.
           </p>
           <p>
-            <strong>Scoring accuracy improves as more history is captured</strong>, not just as a matter of
-            more data being generally better — an insider's track record can only be evaluated against the
-            trades Seli has actually ingested. A newly backfilled period naturally starts thinner than one
-            with years of accumulated history behind it.
+            <strong>Scoring accuracy improves as more history is captured.</strong> An insider's track record
+            can only be evaluated against the trades Seli has actually ingested. A newly backfilled period
+            naturally starts thinner than one with years of accumulated history behind it.
           </p>
           <p>
-            <strong>Academic findings describe average, historical tendencies</strong> — not a guarantee about
-            any single trade, any single insider, or what happens next. Insiders are informed about their own
-            companies; they aren't infallible, and markets can move against even a well-timed, well-informed
-            trade.
+            <strong>Academic findings describe average, historical tendencies.</strong> They are not a guarantee
+            about any single trade, any single insider, or what happens next. Insiders are informed about their
+            own companies. They are not infallible, and markets can move against even a well-timed,
+            well-informed trade.
           </p>
           <p>
             <strong>Nothing on this page or in Seli is financial advice.</strong> Seli surfaces public
-            disclosure data and a scoring methodology built on published research — it does not recommend
-            any specific trade, and past patterns, academic or otherwise, don't guarantee future results.
+            disclosure data and a scoring methodology built on published research. It does not recommend
+            any specific trade, and past patterns do not guarantee future results.
           </p>
         </section>
 
         <div className="lp-info__cta">
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="lp-btn-primary lp-btn-primary--lg">Open Seli →</button>
+              <button className="lp-btn-primary lp-btn-primary--lg">Explore Seli →</button>
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Open Seli →</button>
+            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Explore Seli →</button>
           </SignedIn>
         </div>
       </div>
@@ -7814,7 +7808,7 @@ function LandingPage({ onEnter, dark, setDark }) {
   // (no auth path involved at all, unlike the generic query endpoint) since
   // this page renders before anyone has signed in. 2018 is the fallback if
   // the fetch hasn't resolved yet or fails outright, not the source of truth.
-  const [dataSinceYear, setDataSinceYear] = useState(2018);
+  const [dataSinceYear, setDataSinceYear] = useState(2015);
   useEffect(() => {
     fetch(`${cfg.NEON_PROXY_URL}/public/data-stats`)
       .then(r => r.ok ? r.json() : null)
@@ -7936,7 +7930,7 @@ function LandingPage({ onEnter, dark, setDark }) {
         <div className="lp-hero-bg" aria-hidden="true"/>
         <p className="lp-hero__eyebrow reveal reveal--delay-1">Insider Trade Intelligence</p>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Insiders have to disclose their trades.<br/>
+          Insiders disclose their trades.<br/>
           <span className="lp-hero__h1-accent">Most investors never see them.</span>{' '}
           <span className="lp-hero__h1-punch">Make sure you do.</span>
         </h1>
