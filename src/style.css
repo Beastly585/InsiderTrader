@@ -3132,6 +3132,11 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--accent-50); color: var(--accent-strong);
   border: 1px solid var(--accent); border-radius: 999px; letter-spacing: 0.02em;
 }
+.lp-hero__eyebrow {
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--accent-strong);
+  margin-bottom: 20px;
+}
 .lp-hero__h1 {
   font-size: clamp(38px, 6vw, 68px);
   font-weight: 800; letter-spacing: -2.5px; line-height: 1.05;
@@ -3162,9 +3167,13 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .lp-hero__cta {
   display: flex; align-items: center; justify-content: center; gap: 16px;
-  margin-bottom: 64px;
+  margin-bottom: 16px;
 }
 .lp-hero__cta-note { font-size: 0.75rem; color: var(--text-3); }
+.lp-hero__trust {
+  font-size: 0.8125rem; color: var(--text-3); letter-spacing: 0.02em;
+  margin: 0 auto 56px;
+}
 
 /* Product preview */
 .lp-preview {

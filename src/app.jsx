@@ -7835,28 +7835,28 @@ function LandingPage({ onEnter, dark, setDark }) {
       icon: 'IconLink',
       eyebrow: 'Portfolio',
       title: 'Keep up with what you own',
-      body: 'Link your brokerage and see insider activity on stocks in your portfolio. If people working behind the scenes act on something you own or want to own, you\'ll know.',
+      body: 'Link your brokerage and see insider buying and selling on stocks in your portfolio. When executives or directors trade something you hold, you\'ll know.',
       env: 'watchlist',
     },
     {
       icon: 'IconZap',
       eyebrow: 'Alerts',
       title: 'Get notified the moment it happens',
-      body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you\'ll get notified. Customizable alerts to keep you as updated as you want to be.',
+      body: 'When someone you follow files a Form 4, or a stock you hold gets a cluster of executive trades, you\'ll get notified. Customizable alerts to keep you as updated as you want to be.',
       env: 'settings',
     },
     {
       icon: 'IconData',
       eyebrow: 'Data',
       title: `Every filing since ${dataSinceYear}`,
-      body: `House, Senate, and corporate insider trades, pulled straight from public SEC and STOCK Act disclosures. All data available since ${dataSinceYear}; sorted, transparent, easy to read.`,
+      body: `House, Senate, and corporate insider trades — Form 4 filings, director trades, and congressional disclosures pulled straight from SEC EDGAR and STOCK Act reports. Sorted, transparent, easy to read.`,
       env: 'data',
     },
     {
       icon: 'IconInsights',
       eyebrow: 'Signals',
-      title: 'Built on patterns historically linked to successful trades',
-      body: 'Easily find trade clusters that have characteristics of historically lucrative trades. Corporate and political insiders ranked by their trading history. Standardized scoring based on peer-reviewed data.',
+      title: 'Conviction scoring built on real research',
+      body: 'Insider buying patterns scored against peer-reviewed data. Corporate and political insiders ranked by their actual trading history. See which executive trades have markers of historically successful positions.',
       env: 'insights',
     },
   ];
@@ -7934,28 +7934,28 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Hero */}
       <section className="lp-hero">
         <div className="lp-hero-bg" aria-hidden="true"/>
+        <p className="lp-hero__eyebrow reveal reveal--delay-1">Insider Trade Intelligence</p>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Insiders have an edge that beats the market,<br/>
-          <span className="lp-hero__h1-accent">which they have to publish.</span>{' '}
-          <span className="lp-hero__h1-punch">Use it.</span>
+          Insiders have to disclose their trades.<br/>
+          <span className="lp-hero__h1-accent">Most investors never see them.</span>{' '}
+          <span className="lp-hero__h1-punch">Make sure you do.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          Seli tracks every SEC Form 4 and congressional trading disclosure within minutes
-          of publication, transforming public filings into a fast, searchable research platform.
-          Follow successful companies, executives, and members of Congress, receive alerts,
-          and uncover insider trends before they disappear into thousands of filings.
+          Seli monitors every SEC Form 4 and congressional trading disclosure within minutes
+          of publication. Connect your portfolio, follow the executives and insiders you care about,
+          and get alerted when something moves.
         </p>
-        <p className="lp-hero__tagline reveal reveal--delay-2">Public data that works for you.</p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="lp-btn-primary lp-btn-primary--lg">Open Seli →</button>
+              <button className="lp-btn-primary lp-btn-primary--lg">Explore Seli →</button>
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Open Seli →</button>
+            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Explore Seli →</button>
           </SignedIn>
         </div>
+        <p className="lp-hero__trust reveal reveal--delay-3">SEC EDGAR · STOCK Act · Real-time alerts · Free to start</p>
 
         {/* Product preview strip */}
         <div className="lp-preview reveal reveal--delay-4">
