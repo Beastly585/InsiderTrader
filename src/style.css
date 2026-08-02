@@ -1101,6 +1101,7 @@ td { padding:7px 11px; vertical-align:middle; }
 .dash-tile__title {
   font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .08em; color: var(--text-3);
+  border-left: 2px solid var(--accent); padding-left: 8px;
 }
 .dash-tile__sub { font-size: 0.6875rem; color: var(--text-3); margin-left: auto; }
 
@@ -1165,7 +1166,7 @@ td { padding:7px 11px; vertical-align:middle; }
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 8px 14px 7px; border-bottom: 0.5px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 2;
 }
-.dash-inner-label { font-size: 0.5625rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--accent-strong); padding-left: 0; }
+.dash-inner-label { font-size: 0.5625rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--accent-strong); border-left: 2px solid var(--accent); padding-left: 6px; }
 .dash-inner-empty { padding: 16px 14px; font-size: 0.75rem; color: var(--text-3); }
 .dash-inner-section { border-top: 0.5px solid var(--border); }
 .dash-inner-section:first-child { border-top: none; }
@@ -3123,7 +3124,11 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .lp-hero__sub {
   font-size: 1.125rem; line-height: 1.65; color: var(--text-2);
-  max-width: 580px; margin: 0 auto 36px;
+  max-width: 580px; margin: 0 auto 16px;
+}
+.lp-hero__tagline {
+  font-size: 1rem; font-weight: 600; color: var(--accent-strong);
+  margin: 0 auto 36px; letter-spacing: -0.01em;
 }
 .lp-hero__cta {
   display: flex; align-items: center; justify-content: center; gap: 16px;
@@ -3316,7 +3321,7 @@ td { padding:7px 11px; vertical-align:middle; }
    Portfolio, Data, and Top Insiders mockups reuse the real app's own
    classes/components directly (see LPFeatureMock in app.jsx) instead of
    parallel lp-mock-* styling. */
-.lp-mock-alert-email { background: #FFFFFF; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.lp-mock-alert-email { background: var(--surface); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 0.5px solid var(--border); }
 .lp-mock-alert-email__hdr {
   background: linear-gradient(135deg, #5A4FE8 0%, #4338C9 60%, #3FBFA0 100%);
   padding: 10px 12px;
@@ -3324,13 +3329,13 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-mock-alert-email__brand { color: #ffffff; font-size: 0.8125rem; font-weight: 800; letter-spacing: -0.02em; }
 .lp-mock-alert-email__kind { color: rgba(255,255,255,0.85); font-size: 0.625rem; margin-left: 6px; }
 .lp-mock-alert-email__body { padding: 10px 12px 12px; }
-.lp-mock-alert-email__intro { font-size: 0.6875rem; color: #111827; margin: 0 0 8px; }
+.lp-mock-alert-email__intro { font-size: 0.6875rem; color: var(--text); margin: 0 0 8px; }
 .lp-mock-alert-email__table { width: 100%; border-collapse: collapse; }
-.lp-mock-alert-email__table td { padding: 6px 4px; border-bottom: 1px solid #E5E7EB; font-size: 0.625rem; vertical-align: top; line-height: 1.5; }
+.lp-mock-alert-email__table td { padding: 6px 4px; border-bottom: 1px solid var(--border); font-size: 0.625rem; vertical-align: top; line-height: 1.5; color: var(--text-2); }
 .lp-mock-alert-email__table tr:last-child td { border-bottom: none; }
-.lp-mock-alert-email__ticker { color: #5A4FE8; font-weight: 700; font-size: 0.6875rem; }
-.lp-mock-alert-email__muted { color: #6B7280; font-size: 0.625rem; }
-.lp-mock-alert-email__faint { color: #9CA3AF; font-size: 0.5625rem; }
+.lp-mock-alert-email__ticker { color: var(--accent-strong); font-weight: 700; font-size: 0.6875rem; }
+.lp-mock-alert-email__muted { color: var(--text-3); font-size: 0.625rem; }
+.lp-mock-alert-email__faint { color: var(--text-3); font-size: 0.5625rem; opacity: 0.7; }
 .lp-mock-alert-email__buy { color: #15803D; font-weight: 700; }
 .lp-mock-alert-email__sell { color: #C0392B; font-weight: 700; }
 .lp-mock-alert-email__val { text-align: right; font-weight: 700; white-space: nowrap; }

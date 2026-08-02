@@ -1528,7 +1528,7 @@ function EnvPreview({ type }) {
         ))}
       </div>
       <div className="env-preview__table">
-        {[0,1,2,3,4,5,6].map(i => (
+        {[0,1,2,3].map(i => (
           <div key={i} className="env-preview__trow env-preview__trow--data">
             <span/>
             <span/>
@@ -1566,6 +1566,7 @@ function EnvPreview({ type }) {
     <div className="env-preview env-preview--alerts">
       {[
         {isNew:true,  buy:true},
+        {isNew:false, buy:true},
         {isNew:false, buy:false},
       ].map((r,i) => (
         <div key={i} className="env-preview__alert-row">
@@ -6500,11 +6501,7 @@ function TermsPage() {
         <div className="lp-footer__links">
           <a href="/">Home</a>
           <span>·</span>
-          <a href="/help" className="lp-footer__link-muted">Help</a>
-          <span>·</span>
-          <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
-          <span>·</span>
-          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
+          <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
         </div>
         </div>
       </footer>
@@ -6592,11 +6589,7 @@ function PrivacyPage() {
         <div className="lp-footer__links">
           <a href="/">Home</a>
           <span>·</span>
-          <a href="/help" className="lp-footer__link-muted">Help</a>
-          <span>·</span>
-          <a href="/terms" className="lp-footer__link-muted">Terms</a>
-          <span>·</span>
-          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
+          <a href="/terms" className="lp-footer__link-muted">Terms of Service</a>
         </div>
         </div>
       </footer>
@@ -6659,11 +6652,7 @@ function CookiePage() {
         <div className="lp-footer__links">
           <a href="/">Home</a>
           <span>·</span>
-          <a href="/help" className="lp-footer__link-muted">Help</a>
-          <span>·</span>
-          <a href="/terms" className="lp-footer__link-muted">Terms</a>
-          <span>·</span>
-          <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+          <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
         </div>
         </div>
       </footer>
@@ -6682,15 +6671,15 @@ const HELP_SECTIONS = [
     label: 'Using Seli',
     render: () => (
       <>
-        <p>Seli has five sections, each serving a different purpose.</p>
+        <p>Seli has five sections, each doing a different job. Here's what each one is actually for.</p>
         <h3>Dashboard</h3>
-        <p>Your <strong>daily overview</strong>: market sentiment, sector performance, recent insider signals, top-ranked insiders, and market news.</p>
+        <p>Your <strong>daily overview</strong>: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news. Start here if you just want to know what's happening today.</p>
         <EnvPreview type="dashboard"/>
         <h3>Insights</h3>
-        <p>The full, filterable signal feed. Every trade Seli has scored, filterable by window, score, type (corporate vs. congressional), and sector.</p>
+        <p>The full, filterable signal feed. Every trade Seli has scored, filterable by window, score, type (corporate vs. congressional), and sector — the complete, raw feed behind the Dashboard's highlights.</p>
         <EnvPreview type="insights"/>
         <h3>Data</h3>
-        <p><strong>Raw, unscored filings.</strong> Every trade, searchable and filterable. If you want to draw your own conclusions, this is where to work.</p>
+        <p>The <strong>raw, unscored filings</strong>. Every trade, searchable and filterable, with a link back to the original government filing. No ranking or opinion applied. If you want to draw your own conclusions, this is where to work.</p>
         <EnvPreview type="data"/>
         <h3>Watchlist</h3>
         <p>Tickers and insiders you've chosen to follow (Pro). Their activity surfaces ahead of everything else, and it's what <strong>instant alerts and email digests</strong> are built from.</p>
@@ -6707,17 +6696,17 @@ const HELP_SECTIONS = [
     render: () => (
       <>
         <h3>Where does the data come from?</h3>
-        <p>Every trade comes from a public government filing: SEC Form 4 for corporate insiders, and STOCK Act periodic transaction reports for Congress.</p>
+        <p>Every trade comes from a public government filing: SEC Form 4 for corporate insiders, and STOCK Act periodic transaction reports for Congress. Nothing is scraped from rumors or licensed from a third party.</p>
         <h3>How current is it?</h3>
-        <p>Seli checks for new filings on a recurring basis throughout the trading day. A disclosure typically appears within minutes of becoming public.</p>
+        <p>Seli checks for new filings on a recurring basis throughout the trading day. A disclosure typically appears within minutes of becoming public, not the next morning.</p>
         <h3>Is this financial advice?</h3>
-        <p>No. Every score, ranking, and notification is generated by the same formula for every user. Conviction scores are Seli's methodology for organizing public filings by factual attributes (who traded, how much, in what direction). See our <a href="/terms">Terms of Service</a>.</p>
+        <p>No. Seli is informational and educational only. Every trade shown, every score, and every alert is generated the exact same way for every user — nothing is personalized to your holdings, goals, or risk tolerance, even where a setting lets you filter or follow specific tickers. Conviction scores are Seli's own methodology for organizing public filings, not a signal about what to do with that information. Nothing here is a recommendation to buy, sell, or hold anything. See our <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
         <h3>Can Seli place trades for me?</h3>
-        <p>No. Brokerage connections are read-only. Seli can see your positions to show relevant insider filings, but it can never place a trade.</p>
+        <p>No. Brokerage connections are read-only. Seli can see your positions to show relevant signals, but it can never place a trade.</p>
         <h3>Why don't option exercises or RSU vests count toward conviction scores?</h3>
-        <p>Only open-market trades count toward conviction. A scheduled option exercise or equity vest is a compensation event, not a voluntary purchase with the insider's own cash.</p>
+        <p>Only open-market trades, meaning someone putting their own cash in, count toward conviction. A scheduled option exercise or equity vest doesn't reflect a discretionary bet the way an open-market purchase does.</p>
         <h3>Still have a question?</h3>
-        <p>Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+        <p>Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. Real questions from real users are exactly what shapes this FAQ and the product itself.</p>
       </>
     ),
   },
@@ -6766,7 +6755,7 @@ const HELP_SECTIONS = [
         <h3>My broker isn't listed</h3>
         <p>Broker support is expanding. If yours isn't available yet, check back, or let us know at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> which one you'd want to see supported.</p>
         <h3>The performance chart looks off</h3>
-        <p>Portfolio performance is an approximation based on your current holdings. It shows what your present position would be worth over time. It does not reconstruct your actual buy/sell history or realized returns.</p>
+        <p>Portfolio performance is an approximation based on your current holdings, not a full reconstruction of every historical buy and sell. It shows what your present position would be worth over time, not necessarily your actual realized returns.</p>
       </>
     ),
   },
@@ -7686,13 +7675,12 @@ function LPFeatureMock({ type }) {
             <span className="lp-mock-alert-email__kind">Instant alert</span>
           </div>
           <div className="lp-mock-alert-email__body">
-            <p className="lp-mock-alert-email__intro">4 of your instant alerts were triggered:</p>
+            <p className="lp-mock-alert-email__intro">3 of your instant alerts were triggered:</p>
             <table className="lp-mock-alert-email__table"><tbody>
               {[
                 {t:'NVDA', co:'NVIDIA Corp',    reason:'Watched ticker traded',  who:'Jensen Huang',   date:'Jul 22, 2026', action:'Buy',  detail:'12,000 sh @ $118.42', val:'$1.42M',    buy:true},
                 {t:'TSLA', co:'Tesla Inc',      reason:'Large executive sale',   who:'Elon Musk',       date:'Jul 21, 2026', action:'Sell', detail:'610 sh @ $248.55',    val:'$151,616',  buy:false},
                 {t:'MSFT', co:'Microsoft Corp', reason:'Followed insider filed', who:'Satya Nadella',   date:'Jul 21, 2026', action:'Buy',  detail:'340 sh @ $421.10',    val:'$143,174',  buy:true},
-                {t:'ADSK', co:'Autodesk Inc',   reason:'You hold this stock',    who:'Andrew Anagnost', date:'Jul 19, 2026', action:'Buy',  detail:'95 sh @ $289.77',     val:'$27,528',   buy:true},
               ].map(r => (
                 <tr key={r.t}>
                   <td>
@@ -7737,6 +7725,9 @@ function LPFeatureMock({ type }) {
                 {d:'Jul 21', t:'MSFT', tt:'buy',  sh:'340',   px:'$421.10', val:'$143,174'},
                 {d:'Jul 21', t:'TSLA', tt:'sell', sh:'610',   px:'$248.55', val:'$151,616'},
                 {d:'Jul 19', t:'ADSK', tt:'buy',  sh:'95',    px:'$289.77', val:'$27,528'},
+                {d:'Jul 18', t:'AAPL', tt:'sell', sh:'32,528',px:'$250.12', val:'$8.1M'},
+                {d:'Jul 18', t:'JPM',  tt:'buy',  sh:'2,400', px:'$267.30', val:'$641,520'},
+                {d:'Jul 17', t:'GOOGL',tt:'buy',  sh:'780',   px:'$192.45', val:'$150,111'},
               ].map((r,i) => (
                 <tr key={i} className={`row-${r.tt}`}>
                   <td className="td-date"><span className="td-date-main">{r.d}</span></td>
@@ -7826,29 +7817,29 @@ function LandingPage({ onEnter, dark, setDark }) {
     {
       icon: 'IconLink',
       eyebrow: 'Portfolio',
-      title: 'Watch your own holdings, and theirs',
-      body: 'Link your brokerage and see insider activity on stocks you already own. Or skip that, and just follow the specific tickers and people you want to keep an eye on.',
+      title: 'Keep up with what you own',
+      body: 'Link your brokerage and see insider activity on stocks in your portfolio. If people working behind the scenes act on something you own or want to own, you\'ll know.',
       env: 'watchlist',
     },
     {
       icon: 'IconZap',
       eyebrow: 'Alerts',
       title: 'Get notified the moment it happens',
-      body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you\'ll see it here — as close to real time as public filings allow.',
+      body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you\'ll get notified. Customizable alerts to keep you as updated as you want to be.',
       env: 'settings',
     },
     {
       icon: 'IconData',
       eyebrow: 'Data',
       title: `Every filing since ${dataSinceYear}`,
-      body: `House, Senate, and corporate insider trades, pulled straight from public SEC and STOCK Act disclosures. Nothing here is a rumor or a paid data feed. It's what was actually filed, going back to ${dataSinceYear}.`,
+      body: `House, Senate, and corporate insider trades, pulled straight from public SEC and STOCK Act disclosures. All data available since ${dataSinceYear}; sorted, transparent, easy to read.`,
       env: 'data',
     },
     {
       icon: 'IconInsights',
       eyebrow: 'Signals',
-      title: 'A ranked history, not a hot take',
-      body: 'Corporate and political insiders ranked by their factual trading history: how often they traded, in what direction, and how large. It\'s a transparent scoring methodology applied the same way to everyone, not a recommendation to follow anyone specific.',
+      title: 'Built on patterns historically linked to successful trades',
+      body: 'Easily find trade clusters that have characteristics of historically lucrative trades. Corporate and political insiders ranked by their trading history. Standardized scoring based on peer-reviewed data.',
       env: 'insights',
     },
   ];
@@ -7927,15 +7918,16 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-hero">
         <div className="lp-hero-bg" aria-hidden="true"/>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Public data from the people who beat the market.<br/>
-          <span className="lp-hero__h1-accent">Legible. Instant. At your fingertips.</span>
+          Insiders have an edge that beats the market,<br/>
+          <span className="lp-hero__h1-accent">which they have to publish. Use it.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          Every SEC Form 4 filing and congressional stock disclosure, the moment it's public.
-          No rumors, no paid data feeds, nothing personalized to you — just what corporate
-          executives, directors, and members of Congress actually filed, organized so you can
-          actually read it. Track specific tickers or people, or browse the full record.
+          Seli tracks every SEC Form 4 and congressional trading disclosure within minutes
+          of publication, transforming public filings into a fast, searchable research platform.
+          Follow successful companies, executives, and members of Congress, receive alerts,
+          and uncover insider trends before they disappear into thousands of filings.
         </p>
+        <p className="lp-hero__tagline reveal reveal--delay-2">Public data that works for you.</p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
             <SignInButton mode="modal">
