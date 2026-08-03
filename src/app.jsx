@@ -9,7 +9,7 @@ import XLSX from 'xlsx-js-style'; // npm install xlsx-js-style — same API as p
 // src/app.jsx — Seli — insider trading intelligence platform
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
-import { loadFilings, computeSignals, getSector, REL_LABELS } from './edgar.js';
+import { loadFilings, getSector, REL_LABELS } from './edgar.js';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
@@ -2049,7 +2049,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       WHERE f.insider_name='${d.name.replace(/'/g,"''")}'
         AND f.transaction_type IN ('buy','sell')
       ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r=>{setTraderRows(r);setBusy(false);}).catch(()=>setBusy(false));
+    `).then(r=>{setTraderRows(r);setBusy(false);}).catch(()=>{setTraderRows([]);setBusy(false);});
   },[d.type,d.name]);
 
   useEffect(()=>{
@@ -2074,7 +2074,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       WHERE f.ticker='${(d.ticker||'').replace(/'/g,"''")}'
         AND f.transaction_type IN ('buy','sell')
       ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r=>{setTickerRows(r);setBusy(false);}).catch(()=>setBusy(false));
+    `).then(r=>{setTickerRows(r);setBusy(false);}).catch(()=>{setTickerRows([]);setBusy(false);});
   },[d.type,d.ticker]);
 
   const traderStats = useMemo(()=>{
@@ -6464,49 +6464,86 @@ function TermsPage() {
       </nav>
       <div className="legal-content">
         <h1>Terms of Service</h1>
-        <p className="legal-date">Last updated: June 26, 2025</p>
+        <p className="legal-date">Last updated: August 2, 2026</p>
 
         <h2>1. Acceptance of Terms</h2>
-        <p>By accessing or using Seli ("the Service"), operated by Kevin Maresca ("we," "us," or "our"), you agree to be bound by these Terms of Service. If you don't agree, please don't use Seli.</p>
+        <p>By accessing or using Seli ("the Service"), operated by SELI LLC, a New Mexico limited liability company ("SELI," "we," "us," or "our"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use Seli.</p>
+        <p>We may update these Terms at any time. Material changes will be communicated by email or a notice within the Service at least 30 days before they take effect. Your continued use of Seli after the effective date constitutes acceptance of the revised Terms. If you do not agree to the updated Terms, you must stop using the Service.</p>
 
         <h2>2. Description of Service</h2>
-        <p>Seli aggregates and scores publicly available SEC Form 4 insider trading disclosures, congressional trading disclosures filed under the STOCK Act, and related market data. Every trade you see on Seli is sourced from public government databases, including the SEC's EDGAR system.</p>
+        <p>Seli is a data aggregation and research platform. It collects and organizes publicly available SEC Form 4 insider trading disclosures, congressional periodic transaction reports filed under the STOCK Act, and related public market data. The data is sourced from government databases including the SEC's EDGAR system and congressional disclosure portals.</p>
+        <p>Seli applies a uniform, non-personalized scoring methodology to this data and presents it alongside the original filing data. The scoring is applied identically to every trade and every user.</p>
 
         <h2>3. Not Financial Advice</h2>
-        <p>Seli is informational and educational, not investment guidance. Nothing here (conviction scores, rankings, alerts, or anything else) constitutes financial, investment, legal, or tax advice. We are not a registered investment advisor, broker-dealer, or financial planner. Talk to a qualified financial professional before making investment decisions. Past insider trading patterns don't predict future results.</p>
+        <p><strong>Seli does not provide financial, investment, legal, or tax advice.</strong> No content on Seli, including conviction scores, insider rankings, alert notifications, portfolio overlays, data exports, or any other feature, constitutes a recommendation to buy, sell, or hold any security. Seli is not a registered investment advisor, broker-dealer, or financial planner under federal or state law.</p>
+        <p>The scoring methodology is based on published academic research describing historical statistical tendencies across large samples of insider trades. Historical patterns do not predict future results. Individual trades, insiders, and market conditions vary. You are solely responsible for your own investment decisions.</p>
+        <p>Consult a qualified financial professional before making investment decisions based on any information you find on Seli or elsewhere.</p>
 
-        <h2>4. Data Accuracy</h2>
-        <p>We make reasonable efforts to keep Seli's data accurate, but we make no representations or warranties about its completeness, accuracy, or timeliness. SEC filings themselves can contain errors, and there can be delays between a filing's actual date and when it appears in Seli. You assume all risk associated with relying on this information.</p>
+        <h2>4. Data Accuracy and Limitations</h2>
+        <p>We make commercially reasonable efforts to keep Seli's data accurate and current, but we make no representations or warranties about the completeness, accuracy, reliability, or timeliness of any data on the platform. Specific limitations include:</p>
+        <ul>
+          <li>SEC Form 4 filings may be filed up to two business days after a transaction occurs. Congressional disclosures may be filed up to 45 days after a transaction.</li>
+          <li>SEC filings themselves may contain errors filed by the reporting persons.</li>
+          <li>Ingestion, parsing, or scoring errors may occasionally occur on Seli's end despite reasonable quality controls.</li>
+          <li>Market data (prices, returns, sector classifications) is sourced from third-party providers and may be delayed, incomplete, or inaccurate.</li>
+          <li>Historical data coverage varies by time period and may be less complete for earlier years.</li>
+        </ul>
+        <p>You assume all risk associated with relying on this information.</p>
 
         <h2>5. User Accounts</h2>
-        <p>You'll need an account to access certain features. You're responsible for keeping your account credentials secure, providing accurate information, and telling us right away if you notice unauthorized use of your account.</p>
+        <p>An account is required to access certain features. You are responsible for maintaining the confidentiality of your account credentials, providing accurate registration information, and notifying us promptly of any unauthorized use at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+        <p>We may suspend or terminate accounts that violate these Terms, remain inactive for an extended period, or are used in a manner that threatens the security or integrity of the Service.</p>
 
         <h2>6. Brokerage Connections</h2>
-        <p>If you connect a brokerage account, you're authorizing Seli to retrieve read-only account data (positions, balances, account information) on your behalf. We never store your brokerage credentials, and Seli can never execute a trade for you. You can disconnect your brokerage account at any time from Settings.</p>
+        <p>If you connect a brokerage account through SnapTrade, you authorize Seli to retrieve read-only account data (positions, balances, account metadata) on your behalf. Seli never stores your brokerage login credentials and can never execute trades or move funds on your behalf. The brokerage connection is subject to SnapTrade's own terms and privacy policy. You can disconnect your brokerage at any time from Settings, which immediately revokes Seli's access.</p>
 
-        <h2>7. Subscriptions and Billing</h2>
-        <p>Certain features require a paid subscription. Subscriptions bill monthly. You can cancel anytime; cancellation takes effect at the end of your current billing period, not immediately. We reserve the right to change pricing with 30 days' notice. Payments are processed by Stripe and subject to Stripe's own terms of service.</p>
+        <h2>7. Subscriptions, Billing, and Refunds</h2>
+        <p>Certain features require a paid Pro subscription ($11.99/month) or a one-time data export purchase ($39.99). All payments are processed by Stripe and subject to <a href="https://stripe.com/legal" target="_blank" rel="noopener noreferrer">Stripe's terms of service</a>.</p>
+        <p><strong>Subscriptions.</strong> Pro subscriptions bill monthly. You may cancel at any time; cancellation takes effect at the end of the current billing period. No partial-month refunds are issued for cancellations. We reserve the right to change pricing with at least 30 days' notice to current subscribers.</p>
+        <p><strong>Data exports.</strong> Each data export purchase provides a one-time download of the database as it exists at the time of purchase. Data exports are non-refundable once the download link has been generated.</p>
+        <p><strong>Refund requests.</strong> If you believe you were charged in error or have not received the service you paid for, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> within 30 days of the charge. We will review each request individually.</p>
 
         <h2>8. Prohibited Uses</h2>
-        <p>You may not: (a) use Seli for any unlawful purpose; (b) scrape, crawl, or otherwise systematically extract data from Seli; (c) resell or redistribute our data without written permission; (d) attempt to gain unauthorized access to any part of Seli; (e) use Seli to facilitate insider trading or securities fraud.</p>
+        <p>You agree not to:</p>
+        <ul>
+          <li>Use Seli for any purpose that violates applicable law, including securities law.</li>
+          <li>Scrape, crawl, or systematically extract data from Seli by automated means.</li>
+          <li>Resell, sublicense, or redistribute Seli's data, scoring, or rankings without written permission.</li>
+          <li>Attempt to reverse-engineer the scoring methodology, algorithms, or backend systems.</li>
+          <li>Attempt to gain unauthorized access to any part of Seli, its infrastructure, or other users' accounts.</li>
+          <li>Use Seli in any manner that could disable, overburden, or impair the Service.</li>
+          <li>Use Seli to facilitate insider trading, securities fraud, or market manipulation.</li>
+        </ul>
 
         <h2>9. Intellectual Property</h2>
-        <p>Seli, including its design, algorithms, and conviction scoring methodology, is the property of Kevin Maresca. The underlying SEC filing data itself is public domain. You may not copy, modify, or distribute Seli's proprietary systems without permission.</p>
+        <p>The Service, including its design, user interface, algorithms, scoring methodology, and all related intellectual property, is owned by SELI LLC. The underlying SEC and congressional filing data is public domain. Your use of Seli does not grant you ownership of or rights to any part of the Service beyond the limited license to use it under these Terms.</p>
+        <p>You may use data you access through Seli (including data exports you purchase) for your own personal, non-commercial research purposes. Redistribution, resale, or commercial use of exported data requires written permission from SELI LLC.</p>
 
         <h2>10. Disclaimer of Warranties</h2>
-        <p>Seli is provided "as is," without warranty of any kind. We disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, and non-infringement.</p>
+        <p><strong>SELI IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, COMPLETENESS, AND NON-INFRINGEMENT.</strong></p>
+        <p>We do not warrant that the Service will be uninterrupted, error-free, or free from harmful components. We do not warrant the accuracy, reliability, or completeness of any data, scores, rankings, or other content on the platform.</p>
 
         <h2>11. Limitation of Liability</h2>
-        <p>To the maximum extent permitted by law, Kevin Maresca isn't liable for indirect, incidental, special, consequential, or punitive damages arising from your use of Seli, including investment losses.</p>
+        <p><strong>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, SELI LLC, ITS MEMBERS, OFFICERS, AND AGENTS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, LOSS OF DATA, INVESTMENT LOSSES, OR BUSINESS INTERRUPTION, ARISING OUT OF OR IN CONNECTION WITH YOUR USE OF OR INABILITY TO USE SELI, REGARDLESS OF THE THEORY OF LIABILITY (CONTRACT, TORT, STRICT LIABILITY, OR OTHERWISE), EVEN IF WE HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</strong></p>
+        <p>Our total aggregate liability for all claims arising out of or relating to these Terms or the Service shall not exceed the greater of (a) the total amount you paid to SELI LLC in the twelve (12) months immediately preceding the event giving rise to the claim, or (b) one hundred dollars ($100).</p>
 
-        <h2>12. Governing Law</h2>
-        <p>These Terms are governed by the laws of the State of New Mexico, United States, without regard to conflict of law principles.</p>
+        <h2>12. Indemnification</h2>
+        <p>You agree to indemnify, defend, and hold harmless SELI LLC, its members, officers, employees, and agents from and against any and all claims, damages, losses, liabilities, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to: (a) your use of or reliance on the Service; (b) your violation of these Terms; (c) your violation of any applicable law or regulation; or (d) any investment decisions you make based in whole or in part on information obtained through Seli.</p>
 
-        <h2>13. Changes to Terms</h2>
-        <p>We may update these Terms at any time. Continuing to use Seli after a change means you accept the new Terms.</p>
+        <h2>13. Dispute Resolution</h2>
+        <p><strong>Governing law.</strong> These Terms are governed by and construed in accordance with the laws of the State of New Mexico, without regard to conflict of law principles.</p>
+        <p><strong>Informal resolution.</strong> Before filing any formal proceeding, you agree to first contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and attempt to resolve the dispute informally for at least 30 days.</p>
+        <p><strong>Jurisdiction.</strong> If informal resolution fails, any legal action or proceeding arising under these Terms shall be brought exclusively in the state or federal courts located in Bernalillo County, New Mexico, and you consent to the personal jurisdiction of such courts.</p>
+        <p><strong>Class action waiver.</strong> You agree that any dispute resolution proceedings will be conducted only on an individual basis and not as a class, consolidated, or representative action.</p>
 
-        <h2>14. Contact</h2>
-        <p>Questions about these Terms? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+        <h2>14. Severability</h2>
+        <p>If any provision of these Terms is found to be unenforceable or invalid, that provision shall be limited or eliminated to the minimum extent necessary so that the remaining Terms remain in full force and effect.</p>
+
+        <h2>15. Entire Agreement</h2>
+        <p>These Terms, together with the <a href="/privacy">Privacy Policy</a> and <a href="/cookies">Cookie Policy</a>, constitute the entire agreement between you and SELI LLC regarding your use of Seli and supersede any prior agreements.</p>
+
+        <h2>16. Contact</h2>
+        <p>SELI LLC<br/>Albuquerque, New Mexico<br/><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__frame">
@@ -6518,7 +6555,9 @@ function TermsPage() {
         <div className="lp-footer__links">
           <a href="/">Home</a>
           <span>·</span>
-          <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
+          <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+          <span>·</span>
+          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
         </div>
         </div>
       </footer>
@@ -6545,56 +6584,95 @@ function PrivacyPage() {
       </nav>
       <div className="legal-content">
         <h1>Privacy Policy</h1>
-        <p className="legal-date">Last updated: June 26, 2025</p>
+        <p className="legal-date">Last updated: August 2, 2026</p>
 
         <h2>1. Overview</h2>
-        <p>Seli, operated by Kevin Maresca, takes your privacy seriously. Here's exactly what Seli collects, how it's used, and the rights you have over your own data.</p>
+        <p>This Privacy Policy describes how SELI LLC ("SELI," "we," "us," or "our") collects, uses, shares, and protects your personal information when you use Seli. By using the Service, you consent to the practices described in this policy.</p>
 
         <h2>2. Information We Collect</h2>
+
         <h3>Account Information</h3>
-        <p>When you create a Seli account, we collect your email address and, if you sign in with Google, your Google profile name and picture. Authentication runs through Clerk (clerk.com). Seli never stores your password.</p>
+        <p>When you create a Seli account, we collect your email address and, if you sign in with Google, your name and profile picture. Authentication is handled by Clerk (clerk.com). Seli never receives or stores your password.</p>
 
-        <h3>Watchlist Data</h3>
-        <p>Tickers and insiders you add to your watchlist are stored in Seli's database, tied to your account.</p>
+        <h3>Billing Information</h3>
+        <p>If you subscribe to Pro or purchase a data export, payment is processed by Stripe. Seli receives a Stripe customer ID and subscription status. We never receive, process, or store your full credit card number, bank account details, or other payment credentials.</p>
 
-        <h3>Brokerage Connection Data</h3>
-        <p>If you connect a brokerage account, Seli stores an encrypted access token to retrieve your portfolio data, and holds your position data temporarily for display. Seli never stores your brokerage username or password.</p>
+        <h3>Watchlist and Preference Data</h3>
+        <p>Tickers and insiders you add to your watchlist, notification preferences, and display settings (theme, filters) are stored in our database and tied to your account.</p>
+
+        <h3>Brokerage Data</h3>
+        <p>If you connect a brokerage account through SnapTrade, Seli stores an encrypted connection token and retrieves your portfolio positions (holdings, balances, account metadata) on a read-only basis. Seli never receives or stores your brokerage login credentials and cannot execute trades or transfer funds.</p>
 
         <h3>Usage Data</h3>
-        <p>Standard server logs (IP addresses, browser type, pages visited) for security and performance monitoring. Seli never sells this data.</p>
+        <p>We collect standard server logs (IP addresses, browser type, pages visited, timestamps) for security monitoring, performance optimization, and debugging. If analytics tooling is added in the future, this policy will be updated before any new data collection begins.</p>
 
         <h2>3. How We Use Your Information</h2>
-        <p>To: (a) provide and improve Seli; (b) show your portfolio alongside relevant insider trading signals; (c) send transactional emails (account verification, password reset) through Clerk; (d) send alert emails if you subscribe to Pro notifications; (e) process payments through Stripe.</p>
-
-        <h2>4. Data Sharing</h2>
-        <p>Seli doesn't sell your personal data. We share data only with the service providers who help run Seli:</p>
+        <p>We use the information we collect to:</p>
         <ul>
-          <li><strong>Clerk</strong> (clerk.com): authentication and user management</li>
-          <li><strong>Stripe</strong> (stripe.com): payment processing</li>
-          <li><strong>Neon</strong> (neon.tech): database hosting</li>
-          <li><strong>Cloudflare</strong> (cloudflare.com): hosting and security</li>
+          <li>Provide, operate, and improve the Service.</li>
+          <li>Display insider trading activity relevant to your portfolio holdings and watchlist.</li>
+          <li>Send transactional emails (account verification, password reset) through Clerk.</li>
+          <li>Send digest and instant alert notifications if you have enabled them in Settings.</li>
+          <li>Process payments through Stripe.</li>
+          <li>Respond to support requests.</li>
+          <li>Detect and prevent fraud, abuse, or security incidents.</li>
         </ul>
 
+        <h2>4. Data Sharing and Sub-Processors</h2>
+        <p><strong>Seli does not sell your personal data.</strong> We do not share your personal information with third parties for their own marketing purposes. We share data only with the following service providers ("sub-processors") who process it on our behalf to operate the Service:</p>
+        <table className="legal-table">
+          <thead><tr><th>Provider</th><th>Purpose</th><th>Data shared</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://clerk.com/privacy" target="_blank" rel="noopener noreferrer">Clerk</a></td><td>Authentication, user management</td><td>Email, name, profile picture</td></tr>
+            <tr><td><a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer">Stripe</a></td><td>Payment processing</td><td>Email, payment method (direct to Stripe)</td></tr>
+            <tr><td><a href="https://neon.tech/privacy" target="_blank" rel="noopener noreferrer">Neon</a></td><td>Database hosting</td><td>Account data, watchlist, preferences</td></tr>
+            <tr><td><a href="https://cloudflare.com/privacypolicy" target="_blank" rel="noopener noreferrer">Cloudflare</a></td><td>Hosting, CDN, security</td><td>Request metadata (IP, headers)</td></tr>
+            <tr><td><a href="https://snaptrade.com/privacy" target="_blank" rel="noopener noreferrer">SnapTrade</a></td><td>Brokerage connection</td><td>Connection token, portfolio data</td></tr>
+            <tr><td><a href="https://resend.com/privacy" target="_blank" rel="noopener noreferrer">Resend</a></td><td>Email delivery</td><td>Email address, email content</td></tr>
+          </tbody>
+        </table>
+        <p>We may also disclose your information if required by law, subpoena, court order, or other legal process, or if we believe disclosure is necessary to protect the rights, property, or safety of SELI LLC, our users, or the public.</p>
+
         <h2>5. Data Retention</h2>
-        <p>Your account data stays with us for as long as your account is active. Delete your account, and we delete your personal data within 30 days. Watchlist and broker connection data is removed immediately on disconnection or account deletion, with no delay.</p>
+        <p>Your account data is retained for as long as your account is active. If you delete your account, we will delete your personal data within 30 days. Watchlist data, notification preferences, and brokerage connection tokens are deleted immediately upon account deletion or disconnection. Anonymized, aggregated data that cannot be used to identify you may be retained indefinitely for service improvement purposes.</p>
 
         <h2>6. Security</h2>
-        <p>Encrypted connections (HTTPS), encrypted storage of sensitive tokens (AES-256), and access controls throughout. No system is 100% secure, so you use Seli at your own risk.</p>
+        <p>We use industry-standard security measures including encrypted connections (TLS/HTTPS), encrypted storage of sensitive tokens (AES-256), and access controls. Despite these measures, no method of transmission or storage is 100% secure, and we cannot guarantee absolute security.</p>
 
         <h2>7. Your Rights</h2>
-        <p>You can: (a) access or export your data by contacting us; (b) delete your account and everything tied to it, anytime; (c) disconnect any brokerage connection anytime from Settings; (d) opt out of marketing emails anytime.</p>
+        <p>Depending on your jurisdiction, you may have the following rights regarding your personal data:</p>
+        <ul>
+          <li><strong>Access.</strong> Request a copy of the personal data we hold about you.</li>
+          <li><strong>Correction.</strong> Request correction of inaccurate personal data.</li>
+          <li><strong>Deletion.</strong> Request deletion of your account and associated personal data.</li>
+          <li><strong>Portability.</strong> Request your data in a structured, machine-readable format.</li>
+          <li><strong>Opt-out.</strong> Unsubscribe from digest or alert emails at any time from Settings or by using the unsubscribe link in any email.</li>
+          <li><strong>Disconnect.</strong> Revoke brokerage access at any time from Settings.</li>
+        </ul>
+        <p>To exercise any of these rights, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. We will respond within 30 days.</p>
 
-        <h2>8. Cookies</h2>
-        <p>Seli uses only essential cookies required for authentication (managed by Clerk), with no advertising or tracking cookies. Full details live in our <a href="/cookies">Cookie Policy</a>.</p>
+        <h2>8. State Privacy Rights</h2>
 
-        <h2>9. Children's Privacy</h2>
-        <p>Seli isn't directed at children under 13, and we don't knowingly collect personal information from anyone under 13.</p>
+        <h3>California (CCPA/CPRA)</h3>
+        <p>If you are a California resident, you have the right to: (a) know what personal information we collect, use, and disclose; (b) request deletion of your personal information; (c) opt out of the sale or sharing of your personal information (Seli does not sell or share personal information for cross-context behavioral advertising); and (d) not be discriminated against for exercising your privacy rights. To submit a verifiable consumer request, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
 
-        <h2>10. Changes to This Policy</h2>
-        <p>We may update this Privacy Policy periodically. We'll notify you of material changes by email or in Seli itself.</p>
+        <h3>Other U.S. States</h3>
+        <p>Residents of Colorado, Connecticut, Virginia, Utah, and other states with consumer privacy laws have similar rights to access, correct, delete, and opt out of certain processing of personal data. Contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> to exercise these rights.</p>
 
-        <h2>11. Contact</h2>
-        <p>Questions about this Privacy Policy? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+        <h2>9. Cookies</h2>
+        <p>Seli uses only essential cookies required for authentication. We do not use advertising, analytics, or tracking cookies. Full details are in our <a href="/cookies">Cookie Policy</a>.</p>
+
+        <h2>10. Children's Privacy</h2>
+        <p>Seli is not directed at anyone under the age of 18. We do not knowingly collect personal information from anyone under 18. If we learn that we have collected personal information from someone under 18, we will delete it promptly.</p>
+
+        <h2>11. International Users</h2>
+        <p>Seli is operated from the United States. If you access Seli from outside the United States, your information will be transferred to and processed in the United States, which may have different data protection standards than your jurisdiction.</p>
+
+        <h2>12. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy periodically. Material changes will be communicated by email or a notice within the Service. The "Last updated" date at the top of this page reflects when it was most recently revised.</p>
+
+        <h2>13. Contact</h2>
+        <p>SELI LLC<br/>Albuquerque, New Mexico<br/><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__frame">
@@ -6606,7 +6684,9 @@ function PrivacyPage() {
         <div className="lp-footer__links">
           <a href="/">Home</a>
           <span>·</span>
-          <a href="/terms" className="lp-footer__link-muted">Terms of Service</a>
+          <a href="/terms" className="lp-footer__link-muted">Terms</a>
+          <span>·</span>
+          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
         </div>
         </div>
       </footer>
@@ -8527,11 +8607,17 @@ function AppInner() {
 
   return (
     <>
-    {isDataStale && (
+    {isDataStale && !error && (
       <button className="stale-banner" onClick={() => setShowStaleDataModal(true)}>
         <IconWarning style={{width:14,height:14}}/>
         Live data isn't updating right now — tap for details
       </button>
+    )}
+    {error && (
+      <div className="stale-banner stale-banner--error" role="alert">
+        <IconWarning style={{width:14,height:14}}/>
+        <span>Failed to load filing data. <button className="stale-banner__retry" onClick={()=>load(filingsWindowDays)}>Retry</button></span>
+      </div>
     )}
     {showStaleDataModal && (
       <div className="modal-overlay" onClick={(e)=>{if(e.target===e.currentTarget)setShowStaleDataModal(false);}}>
