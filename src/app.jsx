@@ -2343,6 +2343,20 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     const dt=r.transaction_date||r.transactionDate||r.date;
     const codeLabel = TX_CODE_TOOLTIPS[code]||code;
     const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
+    const secUrl = secFilingUrl(r.accessionNumber || r.accession_number, r.cikIssuer || r.cik_issuer);
+    const secIcon = secUrl ? (
+      <a href={secUrl} target="_blank" rel="noopener noreferrer"
+         className="dp-trade-sec-link"
+         title="View original SEC filing"
+         onClick={e => e.stopPropagation()}>
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V11"/>
+          <path d="M9 2h5v5"/>
+          <path d="M14 2 7 9"/>
+        </svg>
+        <span className="dp-trade-sec-tooltip">View SEC filing</span>
+      </a>
+    ) : null;
     // Scopes the eventual "expand to full Explore view" to whatever this
     // panel itself represents — DataDrawer already restores every filter
     // from this object and scrolls to/highlights the exact row that opened
@@ -2375,12 +2389,12 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-trade-left__top">
                 {showInsider && r.insider_name
                   ? <span className="dp-clickable dp-trade-row2__name dp-trade-row2__name--lg" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
-                  : <span className="dp-trade-date">{dateLabel}</span>}
+                  : <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
                 {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
                 {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
               </div>
               <div className="dp-trade-left__bottom">
-                {showInsider && r.insider_name && <span className="dp-trade-date">{dateLabel}</span>}
+                {showInsider && r.insider_name && <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
                 {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
               </div>
             </div>
@@ -2390,6 +2404,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                 <span className="dp-clickable dp-trade-row2__name" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
                 <div className="dp-trade-toprow__meta">
                   <span className="dp-trade-date">{dateLabel}</span>
+                  {secIcon}
                   {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
                   {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
                 </div>
@@ -2404,6 +2419,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             <div className="dp-trade-left">
               <div className="dp-trade-left__top">
                 <span className="dp-trade-date">{dateLabel}</span>
+                {secIcon}
                 {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
               </div>
               <div className="dp-trade-left__bottom">
@@ -2491,23 +2507,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             </div>
           )}
         </div>
-        {/* SEC EDGAR link — only for corporate filings (congressional have no CIK) */}
-        {(() => {
-          const url = secFilingUrl(r.accessionNumber || r.accession_number, r.cikIssuer || r.cik_issuer);
-          return url ? (
-            <a href={url} target="_blank" rel="noopener noreferrer"
-               className="dp-trade-sec-link"
-               title="View original SEC filing"
-               onClick={e => e.stopPropagation()}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V11"/>
-                <path d="M9 2h5v5"/>
-                <path d="M14 2 7 9"/>
-              </svg>
-              <span className="dp-trade-sec-tooltip">View SEC filing</span>
-            </a>
-          ) : null;
-        })()}
       </div>
     );
   };
@@ -8527,7 +8526,13 @@ function AppInner() {
     if (!lastFilingDate) return null;
     return Math.floor((new Date() - new Date(lastFilingDate + 'T12:00:00')) / (1000*60*60*24));
   }, [lastFilingDate]);
-  const isDataStale = daysSinceLastFiling != null && daysSinceLastFiling >= 2;
+  // Weekend-aware: Friday's filing is the latest expected on Sat/Sun/Mon morning.
+  // Fri→Sat=1d, Fri→Sun=2d, Fri→Mon=3d — all normal. Alert at 4 on those days
+  // (meaning all of Monday passed with nothing). Tue-Fri alert at 2 (a full
+  // trading day went by with no filings).
+  const dayOfWeek = new Date().getDay(); // 0=Sun, 6=Sat
+  const staleThreshold = (dayOfWeek === 0 || dayOfWeek === 1 || dayOfWeek === 6) ? 4 : 2;
+  const isDataStale = daysSinceLastFiling != null && daysSinceLastFiling >= staleThreshold;
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;

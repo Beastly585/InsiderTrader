@@ -76,6 +76,13 @@ const workerHandler = {
     } catch (e) {
       console.error('[Scheduled] csv threw:', String(e), e?.stack?.slice(0, 500));
     }
+    // Dead-man's-switch: alert if no new filings have landed in 48 hours
+    // on a weekday. Prevents silent ingestion gaps from going unnoticed.
+    try {
+      await checkIngestionHealth(env);
+    } catch (e) {
+      console.error('[Scheduled] ingestion health check threw:', String(e), e?.stack?.slice(0, 500));
+    }
     console.log('[Scheduled] tick done');
   },
 
@@ -686,6 +693,73 @@ async function buildExportCSV(env) {
   }
 }
 
+
+// ── Dead-man's-switch: ingestion health check ───────────────────────────────
+// Runs inside the scheduled handler. Checks if the most recent filing in the
+// database is older than 48 hours AND it's a weekday (no filings expected on
+// weekends). If so, sends a one-time alert email to ADMIN_EMAIL via Resend.
+// Uses R2 to track when the last alert was sent to avoid spamming every tick.
+//
+// Setup: add ADMIN_EMAIL as a Worker secret (wrangler secret put ADMIN_EMAIL)
+async function checkIngestionHealth(env) {
+  if (!env.RESEND_API_KEY) return;
+  const adminEmail = env.ADMIN_EMAIL || 'admin@seli.app';
+
+  // Only check on weekdays (ET) after 9am — no filings expected on weekends
+  const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const dayOfWeek = nowET.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) return;
+  if (nowET.getHours() < 9) return;
+
+  const result = await neonFetch(env,
+    `SELECT MAX(filing_date) AS last_filing FROM public.filings`
+  );
+  const lastFiling = result?.[0]?.last_filing;
+  if (!lastFiling) return;
+
+  const lastDate = new Date(lastFiling + 'T12:00:00');
+  const hoursSince = (Date.now() - lastDate.getTime()) / (1000 * 60 * 60);
+  if (hoursSince < 48) return;
+
+  // Check R2 for last alert — avoid spamming on every cron tick
+  if (env.EXPORT_BUCKET) {
+    try {
+      const marker = await env.EXPORT_BUCKET.get('_internal/last-ingestion-alert.txt');
+      if (marker) {
+        const markerText = await marker.text();
+        if (markerText === lastFiling) return; // already alerted for this gap
+      }
+    } catch {}
+  }
+
+  // Send the alert
+  const daysSince = Math.floor(hoursSince / 24);
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app',
+      to: adminEmail,
+      subject: `Seli ingestion gap: no new filings in ${daysSince} days`,
+      html: `<p>The most recent filing in the database is from <strong>${lastFiling}</strong> (${daysSince} days ago).</p>
+             <p>This likely means the ingestion cron has stopped running or is failing silently. Check:</p>
+             <ul>
+               <li>fetch_filings_neon.py — is the daily cron running?</li>
+               <li>SEC EDGAR — is the source actually publishing new filings?</li>
+               <li>Neon — any connection issues?</li>
+             </ul>
+             <p>This alert will not repeat until the gap is resolved and a new one occurs.</p>`,
+    }),
+  });
+
+  // Mark this gap as alerted in R2
+  if (env.EXPORT_BUCKET) {
+    try {
+      await env.EXPORT_BUCKET.put('_internal/last-ingestion-alert.txt', lastFiling);
+    } catch {}
+  }
+  console.log(`[IngestionHealth] Alert sent — last filing ${lastFiling}, ${daysSince} days ago`);
+}
 
 // ── CSV download endpoint ────────────────────────────────────────────────────
 // Auth check + purchase gate, then bundle the per-year CSVs into a ZIP,
