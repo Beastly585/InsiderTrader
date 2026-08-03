@@ -2024,10 +2024,10 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   // InsightsDrawer (signals explore). Without this, clicking "All SYBT
   // trades →" from a Data-originated transaction would lose the dataFilters
   // on the new detail, causing expand to fall through to InsightsDrawer.
-  const nav = (type,data) => {
+  const nav = (type,data,opts) => {
     if (!onNavigate) return;
     const forwarded = d.dataFilters ? { dataFilters: d.dataFilters, ...data } : data;
-    onNavigate({type,...forwarded});
+    onNavigate({type,...forwarded}, opts);
   };
 
   useEffect(()=>{
@@ -2777,8 +2777,8 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               {[['Trade date',fmt.date(t.transactionDate||t.transaction_date)],['Filed',fmt.date(t.date||t.filing_date)],['Code',t.transactionCode||t.transaction_code],['Open market',(t.isOpenMarket||t.is_open_market)?'✓ Yes':'No'],['Sector',t.sector]].filter(([,v])=>v&&v!=='—').map(([k,v],i)=>(<div key={i} className="dp-detail-row"><span>{k}</span><span>{v}</span></div>))}
             </div>
             <div style={{marginTop:12,display:'flex',gap:12}}>
-              <button className="dp-nav-link" onClick={()=>nav('trader',{name:t.insiderName||t.insider_name,title:t.title})}>Trader profile →</button>
-              <button className="dp-nav-link" onClick={()=>nav('ticker',{ticker:t.ticker,company:t.company_name||t.company})}>All {t.ticker} trades →</button>
+              <button className="dp-nav-link" onClick={()=>nav('trader',{name:t.insiderName||t.insider_name,title:t.title},{expand:true})}>Trader profile →</button>
+              <button className="dp-nav-link" onClick={()=>nav('ticker',{ticker:t.ticker,company:t.company_name||t.company},{expand:true})}>All {t.ticker} trades →</button>
             </div>
           </>);
         })()}
@@ -8569,14 +8569,10 @@ function AppInner() {
 
   function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setDetailStack([]);setDetailFull(true);setPage('signals');}
   function selectSignal(s){setSelSig(s);if(s)setHlTick(s.ticker);}
-  function openDetail(d){
-    // Push whatever was open before onto the stack — covers both "clicked a
-    // link inside the currently-open detail" and "clicked a different item
-    // from the list while one was already open." Both are real navigation a
-    // person would want to step back out of, not just a silent replace.
+  function openDetail(d, opts = {}){
     setDetailStack(prev => detail ? [...prev, detail] : prev);
     setDetail(d);
-    setDetailFull(false);
+    setDetailFull(opts.expand ? true : false);
   }
   function goBackDetail(){
     setDetailStack(prev=>{
