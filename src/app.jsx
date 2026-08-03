@@ -9,7 +9,7 @@ import XLSX from 'xlsx-js-style'; // npm install xlsx-js-style — same API as p
 // src/app.jsx — Seli — insider trading intelligence platform
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
-import { loadFilings, getSector, REL_LABELS } from './edgar.js';
+import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
@@ -2034,7 +2034,8 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     if (d.type!=='trader') return;
     setTraderRows(null); setBusy(true);
     queryNeon(`
-      SELECT f.transaction_date,f.filing_date,f.ticker,f.company_name,
+      SELECT f.accession_number,f.cik_issuer,
+             f.transaction_date,f.filing_date,f.ticker,f.company_name,
              f.transaction_type,f.transaction_code,f.is_open_market,f.is_derivative,
              f.shares::float,f.price_per_share::float AS price,
              f.value::float,f.pct_owned_change::float,
@@ -2056,7 +2057,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     if (d.type!=='ticker') return;
     setTickerRows(null); setBusy(true);
     queryNeon(`
-      SELECT f.transaction_date,f.filing_date,f.insider_name,
+      SELECT f.accession_number,f.transaction_date,f.filing_date,f.insider_name,
              f.insider_title AS title,f.relationship,
              f.transaction_type,f.transaction_code,f.is_open_market,
              f.shares::float,f.price_per_share::float AS price,
@@ -2490,6 +2491,23 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             </div>
           )}
         </div>
+        {/* SEC EDGAR link — only for corporate filings (congressional have no CIK) */}
+        {(() => {
+          const url = secFilingUrl(r.accessionNumber || r.accession_number, r.cikIssuer || r.cik_issuer);
+          return url ? (
+            <a href={url} target="_blank" rel="noopener noreferrer"
+               className="dp-trade-sec-link"
+               title="View original SEC filing"
+               onClick={e => e.stopPropagation()}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V11"/>
+                <path d="M9 2h5v5"/>
+                <path d="M14 2 7 9"/>
+              </svg>
+              <span className="dp-trade-sec-tooltip">View SEC filing</span>
+            </a>
+          ) : null;
+        })()}
       </div>
     );
   };
@@ -8509,7 +8527,7 @@ function AppInner() {
     if (!lastFilingDate) return null;
     return Math.floor((new Date() - new Date(lastFilingDate + 'T12:00:00')) / (1000*60*60*24));
   }, [lastFilingDate]);
-  const isDataStale = daysSinceLastFiling != null && daysSinceLastFiling >= 3;
+  const isDataStale = daysSinceLastFiling != null && daysSinceLastFiling >= 2;
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;

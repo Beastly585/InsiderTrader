@@ -544,6 +544,32 @@ pre {
 }
 .dp-trade-detail__val { font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-2); white-space: nowrap; }
 .dp-trade-detail__val--total { font-weight: 700; color: var(--text); font-size: 0.8125rem; }
+/* SEC filing link — small external-link icon at the end of each trade row */
+.dp-trade-sec-link {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  width: 24px; height: 24px; border-radius: 4px;
+  color: var(--text-3); text-decoration: none;
+  transition: color .12s, background .12s;
+  align-self: center;
+  margin-left: auto;
+}
+.dp-trade-sec-link:hover {
+  color: var(--accent-strong);
+  background: var(--accent-50, rgba(124,111,255,0.08));
+}
+.dp-trade-sec-tooltip {
+  display: none;
+  position: absolute; right: 100%; top: 50%; transform: translateY(-50%);
+  margin-right: 6px; white-space: nowrap;
+  font-size: 0.6875rem; font-weight: 500;
+  background: var(--surface-3); border: 0.5px solid var(--border);
+  color: var(--text); padding: 4px 8px; border-radius: 4px;
+  pointer-events: none; z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.dp-trade-sec-link:hover .dp-trade-sec-tooltip { display: block; }
 .dp-trade-om-label {
   font-size: 0.625rem; font-weight: 600; color: var(--blue-600);
   background: var(--blue-50); padding: 1px 6px; border-radius: 4px;

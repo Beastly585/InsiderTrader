@@ -26,6 +26,19 @@ const OPEN_MARKET = new Set(['P', 'S']);
 
 export function getSector(t) { return TICKER_SECTOR[(t||'').toUpperCase()] || 'Other'; }
 
+// Build a direct link to the SEC EDGAR filing viewer.
+// accession format from DB: "0001234567-26-012345"
+// URL needs: CIK (no leading zeros) and accession with dashes.
+export function secFilingUrl(accessionNumber, cikIssuer) {
+  if (!accessionNumber) return null;
+  // Some filings (congressional) don't have a CIK — no SEC link possible
+  if (!cikIssuer) return null;
+  const cik = String(cikIssuer).replace(/^0+/, '');
+  const accDashed = accessionNumber; // already has dashes from DB
+  const accNoDash = accessionNumber.replace(/-/g, '');
+  return `https://www.sec.gov/Archives/edgar/data/${cik}/${accNoDash}/${accDashed}-index.htm`;
+}
+
 function getRel(title, isOfficer) {
   const t = (title||'').toLowerCase();
   if (isOfficer || /chief|ceo|cfo|coo|cto|president/.test(t)) return 'strong';
@@ -122,6 +135,7 @@ async function fetchFromNeon(daysBack = 90) {
   const sql = `
     SELECT
       accession_number,
+      cik_issuer,
       filing_date            AS date,
       transaction_date,
       company_name           AS company,
@@ -168,6 +182,7 @@ async function fetchFromNeon(daysBack = 90) {
 
   return (data.rows || []).map(r => enrich({
     accessionNumber:      r.accession_number,
+    cikIssuer:            r.cik_issuer,
     date:                 r.date,
     transactionDate:      r.transaction_date,
     company:              r.company,
