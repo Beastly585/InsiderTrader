@@ -419,7 +419,7 @@ function CheckoutModal({ product, onClose, onSuccess }) {
           {!error && reactivating && (
             <div style={{padding:'2rem',display:'flex',flexDirection:'column',alignItems:'center',gap:10}}>
               <Spinner/>
-              <p style={{fontSize:12,color:'var(--text-2)'}}>Reactivating your subscription…</p>
+              <p style={{fontSize:'0.75rem',color:'var(--text-2)'}}>Reactivating your subscription…</p>
             </div>
           )}
 
@@ -509,7 +509,7 @@ function CancelModal({ busy, onConfirm, onClose }) {
         <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 16px',textAlign:'left'}}>
           You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately.
         </p>
-        <label style={{display:'block',textAlign:'left',fontSize:11.5,fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
+        <label style={{display:'block',textAlign:'left',fontSize:'0.6875rem'.5,fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
           Want to leave feedback? (optional)
         </label>
         <textarea
@@ -731,7 +731,7 @@ function BillingSection({ user }) {
               </div>
             ))}
             {redownloadErr && <div className="checkout-error" style={{margin:'10px 16px'}}>{redownloadErr}</div>}
-            <div className="td-muted" style={{fontSize:11,padding:'10px 16px'}}>
+            <div className="td-muted" style={{fontSize:'0.6875rem',padding:'10px 16px'}}>
               Re-download gives you the data as it stood on this purchase's date — not anything newer added since.
             </div>
           </div>
@@ -1155,9 +1155,9 @@ function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
           <button key={n.id}
             className={`nav-item nav-item--icon-only${page===n.id?' nav-item--active':''}`}
             onClick={()=>setPage(n.id)}
-            title={n.label}
             aria-label={n.label}>
             <n.Icon className="nav-icon nav-icon--svg"/>
+            <span className="nav-item__tooltip">{n.label}</span>
           </button>
         ))}
       </div>
@@ -1329,7 +1329,7 @@ function trustScore(st) {
 }
 
 function TrustStars({score}) {
-  if (score===null) return <span className="td-muted" style={{fontSize:11}}>Insufficient data</span>;
+  if (score===null) return <span className="td-muted" style={{fontSize:'0.6875rem'}}>Insufficient data</span>;
   // Round to nearest 0.5 for clean half-star rendering (e.g. 2.3->2.5, 2.7->2.5... no: round to nearest half)
   const rounded = Math.round(score*2)/2;
   const stars = [0,1,2,3,4].map(i=>{
@@ -1391,17 +1391,17 @@ const GUIDE_SECTIONS = [
 
         <h4 className="guide-section-heading">Dashboard</h4>
         <p>Your daily overview: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news.</p>
-        <p className="td-muted" style={{fontSize:12,marginTop:-4}}>Main use — quick snapshot of recent movement related to insiders.</p>
+        <p className="td-muted" style={{fontSize:'0.75rem',marginTop:-4}}>Main use — quick snapshot of recent movement related to insiders.</p>
 
         <h4 className="guide-section-heading">Insights</h4>
         <p>The full, filterable signal feed. Thousands of trades are reported daily, and it can be hard to keep track of what's significant.</p>
         <p>Seli compares each trade against peer-reviewed research on how insiders beat the market and scores each insider based on how much they beat the market (SPY) by. None of this is personalized, each trade is scored equally.</p>
         <p>In insights is where you'll also see your portfolio information and any insider trades related to assets you currently hold.</p>
-        <p className="td-muted" style={{fontSize:12,marginTop:-4}}>Main use — get a feel on who's making money on trades and which trades have markers of historically successful trades.</p>
+        <p className="td-muted" style={{fontSize:'0.75rem',marginTop:-4}}>Main use — get a feel on who's making money on trades and which trades have markers of historically successful trades.</p>
 
         <h4 className="guide-section-heading">Data</h4>
         <p>Raw, legible filing data. Every trade, searchable and filterable, with a link back to the original government filing. If you want to draw your own conclusions, this is where to work.</p>
-        <p className="td-muted" style={{fontSize:12,marginTop:-4}}>Main use — deep dive raw data, make your own deductions.</p>
+        <p className="td-muted" style={{fontSize:'0.75rem',marginTop:-4}}>Main use — deep dive raw data, make your own deductions.</p>
 
         <h4 className="guide-section-heading">Watchlist</h4>
         <p>Tickers and insiders you've chosen to follow. Their activity surfaces ahead of everything else, and it's what instant alerts and email digests are built from.</p>
@@ -1433,7 +1433,7 @@ const GUIDE_SECTIONS = [
         <p>Every trade is scored from a standardized approach based on peer-reviewed research:</p>
         <p>Seli calculates a <strong>conviction score</strong> for each trade, a number built from a few factors. Below is a general breakdown of those factors:</p>
         <ul>
-          <li><strong>Relationship</strong> between executor of the trade and the equity in question. Closer relationships are attributed to C-Suite execs, Congress members.</li>
+          <li><strong>Relationship</strong> between executor of the trade and the equity in question. Closer relationships are attributed to executives, Congress members.</li>
           <li><strong>Buys and sells aggregation</strong> within a time-window helps strengthen or dilute a signal.</li>
           <li><strong>Dollar amounts</strong> play a small role in signal weighting.</li>
           <li>A trade that represents a <strong>large share of someone's existing position</strong> counts for more than a routine top-up.</li>
@@ -1874,7 +1874,7 @@ function FeedbackModal({ page, onClose }) {
           >
             Attach screenshot
           </button>
-          <span className="td-muted" style={{fontSize:11}}>or paste one into the text box</span>
+          <span className="td-muted" style={{fontSize:'0.6875rem'}}>or paste one into the text box</span>
           <input
             ref={fileInputRef}
             type="file"
@@ -1925,7 +1925,7 @@ function CompanyProfileCard({ ticker, cik, company }) {
   const pe    = metrics?.['peNormalizedAnnual'] ? Number(metrics['peNormalizedAnnual']).toFixed(1) : null;
   const beta  = metrics?.['beta']        ? Number(metrics['beta']).toFixed(2) : null;
 
-  if (loading) return <div style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:8,borderBottom:'0.5px solid var(--border)'}}><Spinner size={14}/><span className="td-muted" style={{fontSize:12}}>Loading profile…</span></div>;
+  if (loading) return <div style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:8,borderBottom:'0.5px solid var(--border)'}}><Spinner size={14}/><span className="td-muted" style={{fontSize:'0.75rem'}}>Loading profile…</span></div>;
   if (!profile && !desc) return null;
 
   return (
@@ -2317,7 +2317,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   },[d]);
 
   const score=traderStats?trustScore(traderStats):null;
-  const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{rel==='strong'?'C-Suite':rel==='medium'?'Officer':'Director'}</Badge>;
+  const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{rel==='strong'?'Exec':rel==='medium'?'Officer':'Director'}</Badge>;
 
   const TRow=({r,showTicker,showInsider})=>{
     const tt=r.transaction_type||r.transactionType;
@@ -2512,7 +2512,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   };
 
   const header=()=>{
-    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.title&&<div className="td-muted" style={{fontSize:11}}>{traderStats.title}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.title&&<div className="td-muted" style={{fontSize:'0.6875rem'}}>{traderStats.title}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
     if(d.type==='ticker')return(
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
@@ -2527,7 +2527,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
         {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
       </div>
     );
-    if(d.type==='transaction')return<div><div style={{display:'flex',alignItems:'baseline',gap:8}}><span className="ticker" style={{fontSize:15}}>{d.trade?.ticker}</span><span style={{fontSize:12,color:'var(--text-2)'}}>{d.trade?.company_name||d.trade?.company}</span></div><div className="td-muted" style={{fontSize:11}}>Transaction</div></div>;
+    if(d.type==='transaction')return<div><div style={{display:'flex',alignItems:'baseline',gap:8}}><span className="ticker" style={{fontSize:15}}>{d.trade?.ticker}</span><span style={{fontSize:'0.75rem',color:'var(--text-2)'}}>{d.trade?.company_name||d.trade?.company}</span></div><div className="td-muted" style={{fontSize:'0.6875rem'}}>Transaction</div></div>;
   };
 
   return (
@@ -2537,7 +2537,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
         <div style={{minWidth:0,flex:1}}>{header()}</div>
         {!inline&&onExpand&&<button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
         {!inline&&<button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>}
-        {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:11}} onClick={onClose} title="Clear"><IconClose style={{width:12,height:12}}/></button>}
+        {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:'0.6875rem'}} onClick={onClose} title="Clear"><IconClose style={{width:12,height:12}}/></button>}
       </div>
       <div className="detail-panel__body">
 
@@ -2596,12 +2596,12 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-sum-item"><span className="dp-sum-label">OM Sells</span><span className="val-sell dp-sum-val">{traderStats.omSells}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Bought $</span><span className="dp-sum-val">{fmt.money(traderStats.totalBuyVal)}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Sold $</span><span className="dp-sum-val">{fmt.money(traderStats.totalSellVal)}</span></div>
-              {traderStats.combinedHitRate!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate>=60?'val-buy':traderStats.combinedHitRate<40?'val-sell':''}`}>{traderStats.combinedHitRate}% <span style={{fontSize:11,opacity:.7}}>({traderStats.withReturn} events)</span></span></div>}
+              {traderStats.combinedHitRate!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate>=60?'val-buy':traderStats.combinedHitRate<40?'val-sell':''}`}>{traderStats.combinedHitRate}% <span style={{fontSize:'0.6875rem',opacity:.7}}>({traderStats.withReturn} events)</span></span></div>}
               {traderStats.avgRealizedReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgRealizedReturn>=0?'+':''}{traderStats.avgRealizedReturn}%</span></div>}
               {traderStats.avgReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgReturn>=0?'+':''}{traderStats.avgReturn}%</span></div>}
             </div>
-            {traderStats.companies.length>0&&<div className="trader-meta-row"><span>Companies</span><span style={{textAlign:'right'}}>{traderStats.companies.slice(0,6).map((tk,i)=><span key={tk} className="ticker dp-clickable" style={{fontSize:11,marginLeft:i>0?4:0}} onClick={()=>nav('ticker',{ticker:tk,company:''})}>{tk}</span>)}{traderStats.companies.length>6&&<span className="td-muted"> +{traderStats.companies.length-6}</span>}</span></div>}
-            {traderStats.sectors.length>0&&<div className="trader-meta-row"><span>Sectors</span><span style={{fontSize:11,textAlign:'right'}}>{traderStats.sectors.slice(0,3).join(' · ')}</span></div>}
+            {traderStats.companies.length>0&&<div className="trader-meta-row"><span>Companies</span><span style={{textAlign:'right'}}>{traderStats.companies.slice(0,6).map((tk,i)=><span key={tk} className="ticker dp-clickable" style={{fontSize:'0.6875rem',marginLeft:i>0?4:0}} onClick={()=>nav('ticker',{ticker:tk,company:''})}>{tk}</span>)}{traderStats.companies.length>6&&<span className="td-muted"> +{traderStats.companies.length-6}</span>}</span></div>}
+            {traderStats.sectors.length>0&&<div className="trader-meta-row"><span>Sectors</span><span style={{fontSize:'0.6875rem',textAlign:'right'}}>{traderStats.sectors.slice(0,3).join(' · ')}</span></div>}
           </details>
 
           {perStockBreakdown.length>0&&(<>
@@ -2630,7 +2630,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                       {s.stillHolding?'Holding':'Closed'}
                     </span>
                   </div>
-                  <span className="td-muted" style={{fontSize:11}}>{s.tradeCount} txn{s.tradeCount!==1?'s':''}</span>
+                  <span className="td-muted" style={{fontSize:'0.6875rem'}}>{s.tradeCount} txn{s.tradeCount!==1?'s':''}</span>
                 </div>
 
                 <div className="position-card__value-row">
@@ -2674,15 +2674,15 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                     <summary>{s.roundTrips.length} closed round-trip{s.roundTrips.length!==1?'s':''} (FIFO, open-market)</summary>
                     {s.roundTrips.slice(0,8).map((rt,j)=>(
                       <div key={j} className="roundtrip-row">
-                        <span className="td-muted" style={{fontSize:11}}>{fmt.dateShort(rt.buyDate)} → {fmt.dateShort(rt.sellDate)}</span>
-                        <span className="td-muted" style={{fontSize:11}}>{rt.holdDays}d held</span>
-                        <span style={{fontSize:11,fontFamily:'var(--font-mono)'}}>@{fmt.price(rt.buyPrice)}→{fmt.price(rt.sellPrice)}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>{fmt.dateShort(rt.buyDate)} → {fmt.dateShort(rt.sellDate)}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>{rt.holdDays}d held</span>
+                        <span style={{fontSize:'0.6875rem',fontFamily:'var(--font-mono)'}}>@{fmt.price(rt.buyPrice)}→{fmt.price(rt.sellPrice)}</span>
                         <span className={`roundtrip-pnl ${rt.pnl>=0?'val-buy':'val-sell'}`}>
                           {rt.pnl>=0?'+':''}{fmt.money(rt.pnl)} ({rt.pnlPct>=0?'+':''}{rt.pnlPct.toFixed(1)}%)
                         </span>
                       </div>
                     ))}
-                    {s.roundTrips.length>8&&<div className="td-muted" style={{fontSize:11,padding:'4px 0'}}>+{s.roundTrips.length-8} more</div>}
+                    {s.roundTrips.length>8&&<div className="td-muted" style={{fontSize:'0.6875rem',padding:'4px 0'}}>+{s.roundTrips.length-8} more</div>}
                   </details>
                 )}
 
@@ -2740,7 +2740,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-insider-header">
                 <RelBadge rel={ins.rel}/>
                 <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:ins.name,title:ins.title})}>{ins.name}</span>
-                <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{ins.title}</span>
+                <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{ins.title}</span>
               </div>
               {ins.trades.map((t,j)=><TRow key={j} r={{...t,insider_name:t.insiderName||ins.name,title:t.title||ins.title,transaction_type:t.transactionType,transaction_code:t.transactionCode,is_open_market:t.isOpenMarket,price:t.price,current_price:t.currentPrice,pct_owned_change:t.pctOwnedChange,transaction_date:t.transactionDate,is_foreign_price:t.isForeignPrice}} showTicker={false} showInsider={true}/>)}
             </div>
@@ -2760,7 +2760,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-sum-item"><span className="dp-sum-label">Type</span><Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Value</span><span className="dp-sum-val">{fmt.money(t.value)}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Shares</span><span className="dp-sum-val">{fmt.number(t.shares)}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:11}}> <IconWarning style={{width:9,height:9,display:'inline',verticalAlign:'-1px'}}/> verify (3x+ move)</span>}</span></div>
+              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:'0.6875rem'}}> <IconWarning style={{width:9,height:9,display:'inline',verticalAlign:'-1px'}}/> verify (3x+ move)</span>}</span></div>
               {ret!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Now</span><span className={`dp-sum-val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span></div>}
               {(t.pctOwnedChange||t.pct_owned_change)!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Pos Δ</span><span className="dp-sum-val val-buy">+{(t.pctOwnedChange||t.pct_owned_change).toFixed(1)}%</span></div>}
             </div>
@@ -2769,7 +2769,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-insider-header">
                 <RelBadge rel={t.relationship||'weak'}/>
                 <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:t.insiderName||t.insider_name,title:t.title||t.insider_title})}>{t.insiderName||t.insider_name}</span>
-                <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{t.title||t.insider_title}</span>
+                <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{t.title||t.insider_title}</span>
               </div>
             </div>
             <div className="dp-section-label" style={{marginTop:12}}>Details</div>
@@ -2970,7 +2970,7 @@ function HeatmapOnly() {
         <span className="td-muted" style={{fontWeight:400,marginLeft:6}}>day return · by weight · ETF proxy</span>
         <TileInfoButton section="insights-formula" title="S&P 500 sector heatmap"/>
         {Object.keys(sectors).length===0&&(
-          <span className="td-muted" style={{marginLeft:'auto',fontSize:11}}>
+          <span className="td-muted" style={{marginLeft:'auto',fontSize:'0.6875rem'}}>
             {mkt?.err?'unavailable':'loading…'}
           </span>
         )}
@@ -3143,8 +3143,8 @@ function PortfolioTickerNews({ tickers }) {
       {news.map((n,i)=>(
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
-            <span className="ticker" style={{fontSize:11}}>{n._ticker}</span>
-            <span className="td-muted" style={{fontSize:11}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            <span className="ticker" style={{fontSize:'0.6875rem'}}>{n._ticker}</span>
+            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
@@ -3258,16 +3258,16 @@ function NewsMatchBadge({ ticker, reason }) {
 // would show a broken/blank frame for the majority of sources rather than
 // the article. New tab is the reliable option, not a placeholder choice.
 function NewsList({ news, loading, hasKey, emptyHint }) {
-  if (!hasKey) return <div className="dp-placeholder" style={{padding:'1rem'}}><p style={{fontSize:11}}>No headlines available right now.</p></div>;
+  if (!hasKey) return <div className="dp-placeholder" style={{padding:'1rem'}}><p style={{fontSize:'0.6875rem'}}>No headlines available right now.</p></div>;
   if (loading) return <div style={{padding:'1.5rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>;
-  if (!news.length) return <div style={{padding:'1rem',fontSize:12,color:'var(--text-3)'}}>{emptyHint||'No headlines available right now'}</div>;
+  if (!news.length) return <div style={{padding:'1rem',fontSize:'0.75rem',color:'var(--text-3)'}}>{emptyHint||'No headlines available right now'}</div>;
   return (
     <div className="dash-news-list">
       {news.map((n,i)=>(
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
             {n._ticker&&<NewsMatchBadge ticker={n._ticker} reason={n._reason}/>}
-            <span className="td-muted" style={{fontSize:11}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
@@ -3493,7 +3493,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               {loading?<SkeletonRows count={8}/>
               :signals.length===0?<div className="dash-inner-empty">
                 <div style={{fontWeight:500,marginBottom:4}}>No signals in this window</div>
-                <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>Form 4s are filed 1–2 days after transactions. Try the 7d or 30d window.</div>
+                <div style={{fontSize:'0.6875rem',color:'var(--text-3)',lineHeight:1.5}}>Form 4s are filed 1–2 days after transactions. Try the 7d or 30d window.</div>
               </div>
               :<div className="dash-sig-list">
                 {signals.map(s=>{
@@ -3509,14 +3509,14 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                           <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                         </div>
                         <div className="dash-sig-item__row2">
-                          <span style={{fontSize:11,color:'var(--text-2)'}}>{s.company}</span>
+                          <span style={{fontSize:'0.6875rem',color:'var(--text-2)'}}>{s.company}</span>
                         </div>
                         <div className="dash-sig-item__row3">
-                          <span className="td-muted" style={{fontSize:11}}>
+                          <span className="td-muted" style={{fontSize:'0.6875rem'}}>
                             {s.insiderCount} insider{s.insiderCount!==1?'s':''}
                             {s.cSuiteBuys>0?` · ${s.cSuiteBuys} exec buy${s.cSuiteBuys!==1?'s':''}`:''}
                           </span>
-                          <span className="td-muted" style={{fontSize:11}}>{fmt.ago(s.lastTradeDate)}</span>
+                          <span className="td-muted" style={{fontSize:'0.6875rem'}}>{fmt.ago(s.lastTradeDate)}</span>
                         </div>
                       </div>
                       <div className="dash-sig-item__right">
@@ -3822,7 +3822,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             {loading?<SkeletonRows count={12}/>
             :signals.length===0?<div className="ins-empty">
               <div style={{fontWeight:500,marginBottom:4}}>No qualifying signals</div>
-              <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>
+              <div style={{fontSize:'0.6875rem',color:'var(--text-3)',lineHeight:1.5}}>
                 {minStrength>1
                   ? 'Try lowering the strength filter or widening the timespan.'
                   : sourceF==='political'
@@ -3854,7 +3854,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                         <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                       </div>
                       <div className="ins-sig-row__co">{s.company}</div>
-                      {s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:11}}>{s.sector}</div>}
+                      {s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:'0.6875rem'}}>{s.sector}</div>}
                     </div>
                     <div className="ins-sig-row__type">
                       <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}`}>{typeLabel}</span>
@@ -3865,7 +3865,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     <div className="ins-sig-row__exec">
                       {s.cSuiteBuys>0
                         ? <span className="csuite-badge">{s.cSuiteBuys}×</span>
-                        : <span className="td-muted" style={{fontSize:11}}>—</span>}
+                        : <span className="td-muted" style={{fontSize:'0.6875rem'}}>—</span>}
                     </div>
                     <div className="ins-sig-row__signal">
                       <ConvictionBar score={s.conviction} showLabel={true}/>
@@ -4256,15 +4256,15 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                         className={`drawer__list-row drawer__list-row--${tier}${isActive?' drawer__list-row--active':''}`}
                         onClick={()=>{ setDetail({type:'signal',...s}); setDetailStack([]); }}>
                         <div className="drawer__list-row__main">
-                          <span className="ticker" style={{fontSize:12,fontWeight:700}}>{s.ticker}</span>
-                          {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:11}}>{s.cSuiteBuys}×</span>}
-                          {s.isPolitical&&<span className="badge badge--src-congress" style={{fontSize:11}}>C</span>}
-                          <span className="td-muted" style={{fontSize:11,flex:1}}>{s.company}</span>
+                          <span className="ticker" style={{fontSize:'0.75rem',fontWeight:700}}>{s.ticker}</span>
+                          {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:'0.6875rem'}}>{s.cSuiteBuys}×</span>}
+                          {s.isPolitical&&<span className="badge badge--src-congress" style={{fontSize:'0.6875rem'}}>C</span>}
+                          <span className="td-muted" style={{fontSize:'0.6875rem',flex:1}}>{s.company}</span>
                           <span className={`td-mono drawer__list-row__val ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
                         </div>
                         <div className="drawer__list-row__sub">
                           <ConvictionBar score={s.conviction}/>
-                          <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.ago(s.lastTradeDate)}</span>
+                          <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{fmt.ago(s.lastTradeDate)}</span>
                         </div>
                       </div>
                     );
@@ -4290,8 +4290,8 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                           className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
                           onClick={()=>{ setDetail({type:'trader',name:r.insider_name,title:r.insider_title}); setDetailStack([]); }}>
                           <div className="drawer__list-row__main">
-                            <span className="td-muted" style={{fontSize:11,width:18}}>{i+1}</span>
-                            <span style={{fontSize:12,fontWeight:500,flex:1}}>{r.insider_name}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem',width:18}}>{i+1}</span>
+                            <span style={{fontSize:'0.75rem',fontWeight:500,flex:1}}>{r.insider_name}</span>
                             {r.hit_rate!=null
                               ? <span
                                   className={`td-mono ${r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}`}
@@ -4300,13 +4300,13 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                                     ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
                                     : undefined}
                                 >{r.hit_rate}%</span>
-                              : <span className="td-muted" style={{fontSize:11,fontWeight:500,cursor:'help'}}
+                              : <span className="td-muted" style={{fontSize:'0.6875rem',fontWeight:500,cursor:'help'}}
                                   title="Congressional filings disclose only a dollar range — no share count or purchase price — so a price-based hit rate can't be computed. Ranked by buy activity instead.">n/a</span>
                             }
                           </div>
                           <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:11}}>{r.insider_title||'Unknown'}</span>
-                            <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'Unknown'}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
                           </div>
                         </div>
                       );
@@ -4371,9 +4371,9 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <span>Portfolio</span>
       {port && (
         <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
-          {lastRefreshed && <span className="td-muted" style={{fontWeight:400,fontSize:10}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
+          {lastRefreshed && <span className="td-muted" style={{fontWeight:400,fontSize:'0.625rem'}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
           <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} title="Refresh positions" style={{width:22,height:22}}>
-            <span style={{display:'inline-block',fontSize:12,animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
+            <span style={{display:'inline-block',fontSize:'0.75rem',animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
           </button>
         </div>
       )}
@@ -4385,7 +4385,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
         <div className="port-mini-tile__body">
-          <span className="td-muted" style={{fontSize:11}}>
+          <span className="td-muted" style={{fontSize:'0.6875rem'}}>
             Pro feature — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=billing')}>upgrade</button> to see insider activity on your real holdings.
           </span>
         </div>
@@ -4398,7 +4398,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
         <div className="port-mini-tile__body" style={{flexDirection:'row',alignItems:'center'}}>
-          <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions.</span>
+          <span className="td-muted" style={{fontSize:'0.6875rem',color:'var(--red-600)'}}>Couldn't load your positions.</span>
           <button className="btn btn--ghost btn--sm" style={{marginLeft:'auto'}} onClick={refresh} disabled={refreshing}>{refreshing?'Retrying…':'Retry'}</button>
         </div>
       </div>
@@ -4410,7 +4410,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
         <div className="port-mini-tile__body">
-          <span className="td-muted" style={{fontSize:11}}>
+          <span className="td-muted" style={{fontSize:'0.6875rem'}}>
             No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>Link your account</button> to see your real holdings and get notified when insiders trade your stocks.
           </span>
         </div>
@@ -4448,7 +4448,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
             {perf===undefined ? (
               <div style={{display:'flex',justifyContent:'center',padding:'0.5rem'}}><Spinner size={12}/></div>
             ) : perf===null || perf.length<2 ? (
-              <p className="td-muted" style={{fontSize:10,textAlign:'center',padding:'0.4rem 0'}}>Performance history will appear here once available.</p>
+              <p className="td-muted" style={{fontSize:'0.625rem',textAlign:'center',padding:'0.4rem 0'}}>Performance history will appear here once available.</p>
             ) : (
               <PortfolioChartWithRanges points={perf} compact onExplore={onExpand}/>
             )}
@@ -4458,17 +4458,17 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
               pushing Top insiders (below) out of view */}
           <div className="port-mini-tile__list">
             {pos.length===0
-              ? <p className="td-muted" style={{fontSize:11,padding:'8px 0'}}>No open positions in your connected account.</p>
+              ? <p className="td-muted" style={{fontSize:'0.6875rem',padding:'8px 0'}}>No open positions in your connected account.</p>
               : [...pos].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>{
                   const hasActivity=activeSignalTickers.has(p.symbol);
                   const hasPnl = p.openPnl!=null;
                   return (
                     <div key={i} className="port-mini-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:p.company})}>
-                      <span className="ticker" style={{fontSize:12,minWidth:50}}>{p.symbol}</span>
+                      <span className="ticker" style={{fontSize:'0.75rem',minWidth:50}}>{p.symbol}</span>
                       {hasActivity&&<span className="ins-port-chip__signal-badge" style={{fontSize:'0.5rem'}}>activity</span>}
-                      <span className="td-muted" style={{fontSize:10,flex:1,textAlign:'right'}}>{fmt.money(p.marketValue)}</span>
+                      <span className="td-muted" style={{fontSize:'0.625rem',flex:1,textAlign:'right'}}>{fmt.money(p.marketValue)}</span>
                       {hasPnl && (
-                        <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:10,fontFamily:'var(--font-mono)',minWidth:70,textAlign:'right'}}>
+                        <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:'0.625rem',fontFamily:'var(--font-mono)',minWidth:70,textAlign:'right'}}>
                           {p.openPnl>=0?'+':''}{p.openPnlPct.toFixed(1)}%
                         </span>
                       )}
@@ -4729,7 +4729,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
               {[['positions','Positions'],['activity','Insider activity'],['news','News']].map(([id,l])=>(
                 <button key={id}
                   className={`dash-tile-pill${tab===id?' dash-tile-pill--active':''}`}
-                  style={{fontSize:11}} onClick={()=>setTab(id)}>{l}</button>
+                  style={{fontSize:'0.6875rem'}} onClick={()=>setTab(id)}>{l}</button>
               ))}
             </div>
 
@@ -4754,9 +4754,9 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
                           onClick={()=>{ setSelected(p.symbol); setDetail({type:'ticker',ticker:p.symbol,company:''}); setDetailStack([]); }}>
                           <div className="drawer__list-row__main">
                             <span className="ticker" style={{fontSize:13,fontWeight:700}}>{p.symbol}</span>
-                            {hasActivity&&<span className="reversal-badge" style={{fontSize:11}}>insider activity</span>}
-                            <span className="td-muted" style={{fontSize:11,flex:1}}>{qty%1?qty.toFixed(2):qty} sh · {fmt.money(mv)}</span>
-                            {upl!=null && <span className={`td-mono ${upl>=0?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:700}}>{upl>=0?'+':''}{fmt.money(upl)}</span>}
+                            {hasActivity&&<span className="reversal-badge" style={{fontSize:'0.6875rem'}}>insider activity</span>}
+                            <span className="td-muted" style={{fontSize:'0.6875rem',flex:1}}>{qty%1?qty.toFixed(2):qty} sh · {fmt.money(mv)}</span>
+                            {upl!=null && <span className={`td-mono ${upl>=0?'val-buy':'val-sell'}`} style={{fontSize:'0.75rem',fontWeight:700}}>{upl>=0?'+':''}{fmt.money(upl)}</span>}
                           </div>
                           {upl!=null && (
                             <div className="port-plbar-track">
@@ -4777,20 +4777,20 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
                   : Object.entries(activityByTicker).map(([ticker,trades])=>(
                     <div key={ticker}>
                       <div className="port-activity-ticker-hdr">
-                        <span className="ticker" style={{fontSize:12}}>{ticker}</span>
-                        <span className="td-muted" style={{fontSize:11,marginLeft:6}}>{trades.length} trade{trades.length!==1?'s':''}</span>
+                        <span className="ticker" style={{fontSize:'0.75rem'}}>{ticker}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{trades.length} trade{trades.length!==1?'s':''}</span>
                       </div>
                       {trades.map((f,i)=>(
                         <div key={i} className="drawer__list-row"
                           onClick={()=>{ setSelected(ticker); setDetail({type:'ticker',ticker,company:''}); setDetailStack([]); setTab('positions'); }}>
                           <div className="drawer__list-row__main">
                             <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?<IconBuyTri style={{width:8,height:8}}/>:<IconSellTri style={{width:8,height:8}}/>}</Badge>
-                            <span style={{fontSize:11,fontWeight:500,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName}</span>
-                            <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</span>
+                            <span style={{fontSize:'0.6875rem',fontWeight:500,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName}</span>
+                            <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:'0.75rem',fontWeight:600}}>{fmt.money(f.value)}</span>
                           </div>
                           <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:11}}>{f.title||f.relationship||'Unknown'}</span>
-                            <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{f.title||f.relationship||'Unknown'}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
                           </div>
                         </div>
                       ))}
@@ -4813,7 +4813,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
               {perf===undefined ? (
                 <div style={{padding:'0.75rem',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>
               ) : perf===null || perf.length<2 ? (
-                <p className="td-muted" style={{fontSize:11,padding:'0.6rem 1rem'}}>
+                <p className="td-muted" style={{fontSize:'0.6875rem',padding:'0.6rem 1rem'}}>
                   Performance history will appear here once enough data has been collected.
                 </p>
               ) : (
@@ -4915,10 +4915,10 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
             <div className="ins-lb-card__rank">{i+1}</div>
             <div className="ins-lb-card__body">
               <div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>
-              <div className="td-muted" style={{fontSize:11}}>{r.insider_title||'Unknown'}</div>
+              <div className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'Unknown'}</div>
               <div className="ins-lb-card__meta">
                 <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
-                <span className="td-muted" style={{fontSize:11}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
+                <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
               </div>
             </div>
             <div className="ins-lb-card__score">
@@ -5622,7 +5622,7 @@ function FilterPanel({
       <div className="ins-filter-group">
         <span className="ins-filter-group__label">Role</span>
         <div className="dash-tile-pills">
-          {[['','All'],['strong','C-Suite'],['medium','Officer'],['weak','Director']].map(([v,l])=>(
+          {[['','All'],['strong','Exec'],['medium','Officer'],['weak','Director']].map(([v,l])=>(
             <button key={v} className={`dash-tile-pill${relF===v?' dash-tile-pill--active':''}`} onClick={()=>setRelF(v)}>{l}</button>
           ))}
         </div>
@@ -5838,14 +5838,14 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                       className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
                       onClick={()=>navigate({type:'transaction',trade})}>
                       <div className="drawer__list-row__main">
-                        <span className="ticker" style={{fontSize:12,fontWeight:700}}>{r.ticker||'—'}</span>
+                        <span className="ticker" style={{fontSize:'0.75rem',fontWeight:700}}>{r.ticker||'—'}</span>
                         <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?'Buy':tt==='sell'?'Sell':'Other'}</Badge>
-                        <span className="td-muted" style={{fontSize:11,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.company_name}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.company_name}</span>
                         <span className={`td-mono drawer__list-row__val ${tt==='buy'?'val-buy':tt==='sell'?'val-sell':''}`}>{r.value?fmt.money(r.value):'—'}</span>
                       </div>
                       <div className="drawer__list-row__sub">
-                        <span className="td-muted" style={{fontSize:11}}>{r.insider_name}</span>
-                        <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.dateShort(r.transaction_date||r.filing_date)}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_name}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{fmt.dateShort(r.transaction_date||r.filing_date)}</span>
                       </div>
                     </div>
                   );
@@ -6034,7 +6034,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               <div className="drawer__toolbar-divider"/>
               <div style={{display:'flex',alignItems:'center',gap:7}}>
                 <input type="date" value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setDPreset(null);}}/>
-                <span style={{color:'var(--text-3)',fontSize:12}}>→</span>
+                <span style={{color:'var(--text-3)',fontSize:'0.75rem'}}>→</span>
                 <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
               </div>
             </>
@@ -6067,7 +6067,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           :isMobile?<div className="data-mobile-list">
             {rows.map((r,i)=>{
               const rel=r.relationship||'weak';
-              const rl=rel==='strong'?'C-Suite':rel==='medium'?'Officer':'Dir';
+              const rl=rel==='strong'?'Exec':rel==='medium'?'Officer':'Dir';
               const tt=r.transaction_type;
               const rowKey = `${r.ticker}-${r.transaction_date||r.filing_date}-${i}`;
               const isOpen = expandedRow===rowKey;
@@ -6088,7 +6088,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                   {isOpen && (
                     <div className="data-mobile-card__expanded" onClick={e=>e.stopPropagation()}>
                       <div className="data-mobile-card__grid">
-                        <div><span className="td-muted">Insider</span><br/>{r.insider_name||'—'}<br/><span className="td-muted" style={{fontSize:11}}>{r.insider_title||'—'}</span></div>
+                        <div><span className="td-muted">Insider</span><br/>{r.insider_name||'—'}<br/><span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'—'}</span></div>
                         <div><span className="td-muted">Relationship</span><br/><Badge type={`rel-${rel}`}>{rl}</Badge></div>
                         <div><span className="td-muted">Shares</span><br/>{fmt.number(r.shares)}</div>
                         <div><span className="td-muted">Price</span><br/>{fmt.price(r.price_per_share)}</div>
@@ -6116,7 +6116,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               <tbody>
                 {rows.map((r,i)=>{
                   const rel=r.relationship||'weak';
-                  const rl=rel==='strong'?'C-Suite':rel==='medium'?'Officer':'Dir';
+                  const rl=rel==='strong'?'Exec':rel==='medium'?'Officer':'Dir';
                   const tt=r.transaction_type;
                   return (
                     <tr key={i} className={`row-${tt} row-clickable`}
@@ -6137,7 +6137,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                       <td className="td-date">
                         <div className="td-date-main">{fmt.dateShort(r.transaction_date||r.filing_date)}</div>
                         {r.filing_date&&r.filing_date!==r.transaction_date&&
-                          <div style={{fontSize:11,color:'var(--text-3)'}}>filed {fmt.dateShort(r.filing_date)}</div>}
+                          <div style={{fontSize:'0.6875rem',color:'var(--text-3)'}}>filed {fmt.dateShort(r.filing_date)}</div>}
                       </td>
                       <td><span className="ticker dp-clickable" onClick={e=>{e.stopPropagation();r.ticker&&onOpenDetail&&onOpenDetail({type:'ticker',dataFilters,ticker:r.ticker,company:r.company_name});}}>{r.ticker||'—'}</span></td>
                       <td className="td-company">
@@ -6146,7 +6146,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                       </td>
                       <td className="td-insider">
                         <div className="td-overflow dp-clickable" onClick={e=>{e.stopPropagation();r.insider_name&&onOpenDetail&&onOpenDetail({type:'trader',dataFilters,name:r.insider_name,title:r.insider_title});}}>{r.insider_name}</div>
-                        <div className="td-muted td-overflow" style={{fontSize:11}}>{r.insider_title||'—'}</div>
+                        <div className="td-muted td-overflow" style={{fontSize:'0.6875rem'}}>{r.insider_title||'—'}</div>
                       </td>
                       <td>
                         <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>
@@ -7441,15 +7441,15 @@ function SettingsPage({ user, onUpgrade }) {
                 <div className="settings-group">
                   <div className="settings-group__label" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                     <span>Positions</span>
-                    {portfolio.lastRefreshed && <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,fontSize:11}}>Updated {fmt.ago(portfolio.lastRefreshed.toISOString())}</span>}
+                    {portfolio.lastRefreshed && <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,fontSize:'0.6875rem'}}>Updated {fmt.ago(portfolio.lastRefreshed.toISOString())}</span>}
                   </div>
                   <div style={{padding:'12px 14px'}}>
                     {!portfolio.port ? (
-                      <div style={{display:'flex',alignItems:'center',gap:8}}><Spinner size={14}/><span className="td-muted" style={{fontSize:12}}>Loading positions…</span></div>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}><Spinner size={14}/><span className="td-muted" style={{fontSize:'0.75rem'}}>Loading positions…</span></div>
                     ) : portfolio.err ? (
-                      <p className="td-muted" style={{fontSize:12,color:'var(--red-600)'}}>Couldn't load your positions right now.</p>
+                      <p className="td-muted" style={{fontSize:'0.75rem',color:'var(--red-600)'}}>Couldn't load your positions right now.</p>
                     ) : portfolio.port.positions.length===0 ? (
-                      <p className="td-muted" style={{fontSize:12}}>No positions found in this account.</p>
+                      <p className="td-muted" style={{fontSize:'0.75rem'}}>No positions found in this account.</p>
                     ) : (
                       <>
                         <p style={{fontSize:13,marginBottom:10}}>
@@ -7457,11 +7457,11 @@ function SettingsPage({ user, onUpgrade }) {
                         </p>
                         {[...portfolio.port.positions].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>(
                           <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:i>0?'0.5px solid var(--border)':'none'}}>
-                            <span className="ticker" style={{fontSize:12,minWidth:56}}>{p.symbol}</span>
-                            <span className="td-muted" style={{fontSize:11,flex:1}}>{p.company}</span>
-                            <span style={{fontSize:12,fontFamily:'var(--font-mono)'}}>{fmt.money(p.marketValue)}</span>
+                            <span className="ticker" style={{fontSize:'0.75rem',minWidth:56}}>{p.symbol}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem',flex:1}}>{p.company}</span>
+                            <span style={{fontSize:'0.75rem',fontFamily:'var(--font-mono)'}}>{fmt.money(p.marketValue)}</span>
                             {p.openPnl!=null && (
-                              <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:11,fontFamily:'var(--font-mono)',minWidth:90,textAlign:'right'}}>
+                              <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:'0.6875rem',fontFamily:'var(--font-mono)',minWidth:90,textAlign:'right'}}>
                                 {p.openPnl>=0?'+':''}{fmt.money(p.openPnl)} ({p.openPnlPct>=0?'+':''}{p.openPnlPct.toFixed(1)}%)
                               </span>
                             )}
@@ -7754,10 +7754,10 @@ function LPFeatureMock({ type }) {
             {t:'GOOGL', v:'$2,660',  pnl:'+1.4%', sig:false},
           ].map(r => (
             <div key={r.t} className="port-mini-row">
-              <span className="ticker" style={{fontSize:12,minWidth:50}}>{r.t}</span>
+              <span className="ticker" style={{fontSize:'0.75rem',minWidth:50}}>{r.t}</span>
               {r.sig && <span className="ins-port-chip__signal-badge" style={{fontSize:'0.5rem'}}>activity</span>}
-              <span className="td-muted" style={{fontSize:10,flex:1,textAlign:'right'}}>{r.v}</span>
-              <span className={parseFloat(r.pnl)>=0?'val-buy':'val-sell'} style={{fontSize:10,fontFamily:'var(--font-mono)',minWidth:50,textAlign:'right'}}>{r.pnl}</span>
+              <span className="td-muted" style={{fontSize:'0.625rem',flex:1,textAlign:'right'}}>{r.v}</span>
+              <span className={parseFloat(r.pnl)>=0?'val-buy':'val-sell'} style={{fontSize:'0.625rem',fontFamily:'var(--font-mono)',minWidth:50,textAlign:'right'}}>{r.pnl}</span>
             </div>
           ))}
         </div>
@@ -7874,10 +7874,10 @@ function LPFeatureMock({ type }) {
               <div className="ins-lb-card__rank">{i+1}</div>
               <div className="ins-lb-card__body">
                 <div className="ins-lb-card__name">{r.n}</div>
-                <div className="td-muted" style={{fontSize:11}}>{r.title}</div>
+                <div className="td-muted" style={{fontSize:'0.6875rem'}}>{r.title}</div>
                 <div className="ins-lb-card__meta">
-                  <Badge type={`rel-${r.rel}`}>{r.rel==='strong'?'C-Suite':r.rel==='medium'?'Officer':'Dir'}</Badge>
-                  <span className="td-muted" style={{fontSize:11}}>{r.buys} · {r.val}</span>
+                  <Badge type={`rel-${r.rel}`}>{r.rel==='strong'?'Exec':r.rel==='medium'?'Officer':'Dir'}</Badge>
+                  <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.buys} · {r.val}</span>
                 </div>
               </div>
               <div className="ins-lb-card__score">

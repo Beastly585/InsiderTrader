@@ -21,7 +21,7 @@ const SECTOR_MAP = {
 const TICKER_SECTOR = {};
 for (const [s, ts] of Object.entries(SECTOR_MAP)) for (const t of ts) TICKER_SECTOR[t] = s;
 
-export const REL_LABELS = { strong: 'C-Suite', medium: 'Officer', weak: 'Director' };
+export const REL_LABELS = { strong: 'Executive', medium: 'Officer', weak: 'Director' };
 const OPEN_MARKET = new Set(['P', 'S']);
 
 export function getSector(t) { return TICKER_SECTOR[(t||'').toUpperCase()] || 'Other'; }
@@ -41,8 +41,10 @@ export function secFilingUrl(accessionNumber, cikIssuer) {
 
 function getRel(title, isOfficer) {
   const t = (title||'').toLowerCase();
-  if (isOfficer || /chief|ceo|cfo|coo|cto|president/.test(t)) return 'strong';
-  if (/\bsvp\b|\bevp\b|senior v|managing|general counsel/.test(t)) return 'medium';
+  // Only actual C-suite / president get 'strong' (Executive badge)
+  if (/chief|ceo|cfo|coo|cto|cio|cmo|cso|president/.test(t)) return 'strong';
+  // Named senior officers get 'medium' (Officer badge)
+  if (isOfficer || /\bsvp\b|\bevp\b|senior v|managing|general counsel|treasurer|controller|secretary/.test(t)) return 'medium';
   return 'weak';
 }
 
