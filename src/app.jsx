@@ -3,6 +3,7 @@ import logoSimple from './assets/logo-simple.png';
 import { isPro, buildSignals, processLeaderboardRows, RISK_APPETITE_THRESHOLDS, RISK_APPETITE_LABELS, tierFromPct, filterAndScoreSignals } from './lib/scoring.js';
 import { fmt } from './lib/format.js';
 import { useAuth, useUser, SignInButton, SignedIn, SignedOut, UserButton } from '@clerk/clerk-react';
+import posthog from 'posthog-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import XLSX from 'xlsx-js-style'; // npm install xlsx-js-style — same API as plain xlsx, but plain xlsx silently drops cell styles (bold etc.) since that's a Pro-only feature there. Default import, not named — this package exports CommonJS-style.
@@ -475,6 +476,9 @@ function CheckoutForm({ product, onSuccess, onClose }) {
       if (ok) break;
     }
     setSyncing(false);
+    posthog.capture(product === 'pro' ? 'subscription_started' : 'data_export_purchased', {
+      product,
+    });
     onSuccess && onSuccess();
   }
 
@@ -509,7 +513,7 @@ function CancelModal({ busy, onConfirm, onClose }) {
         <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 16px',textAlign:'left'}}>
           You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately.
         </p>
-        <label style={{display:'block',textAlign:'left',fontSize:'0.6875rem'.5,fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
+        <label style={{display:'block',textAlign:'left',fontSize:'0.6875rem',fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
           Want to leave feedback? (optional)
         </label>
         <textarea
@@ -598,6 +602,7 @@ function BillingSection({ user }) {
         await new Promise(r => setTimeout(r, 1500));
       }
 
+      posthog.capture('subscription_cancelled');
       setConfirmCancel(false);
       setStatusModal({
         title: 'Subscription canceled',
@@ -629,6 +634,7 @@ function BillingSection({ user }) {
         await new Promise(r => setTimeout(r, 1500));
       }
 
+      posthog.capture('subscription_reactivated');
       setStatusModal({
         title: 'Subscription reactivated',
         message: fresh?.current_period_end
@@ -872,8 +878,12 @@ function useWatchlist(user) {
     if (!pro) { setShowUpgrade('watchlist_ticker'); return; }
     setTickers(prev => {
       const next = prev.includes(ticker) ? prev.filter(t=>t!==ticker) : [...prev, ticker];
+      const action = prev.includes(ticker) ? 'remove' : 'add';
       wlSet(next, WL_KEY);
-      neonWatchlistMutate('ticker', ticker, prev.includes(ticker) ? 'remove' : 'add');
+      neonWatchlistMutate('ticker', ticker, action);
+      posthog.capture(action === 'add' ? 'watchlist_item_added' : 'watchlist_item_removed', {
+        item_type: 'ticker',
+      });
       return next;
     });
   }, [pro]);
@@ -883,8 +893,12 @@ function useWatchlist(user) {
     if (!pro) { setShowUpgrade('watchlist_insider'); return; }
     setInsiders(prev => {
       const next = prev.includes(name) ? prev.filter(n=>n!==name) : [...prev, name];
+      const action = prev.includes(name) ? 'remove' : 'add';
       wlSet(next, WL_INSIDER_KEY);
-      neonWatchlistMutate('insider', name, prev.includes(name) ? 'remove' : 'add');
+      neonWatchlistMutate('insider', name, action);
+      posthog.capture(action === 'add' ? 'watchlist_item_added' : 'watchlist_item_removed', {
+        item_type: 'insider',
+      });
       return next;
     });
   }, [pro]);
@@ -1813,6 +1827,10 @@ function FeedbackModal({ page, onClose }) {
         }),
       });
       if (!r.ok) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Something went wrong sending this — try again in a moment.'); }
+      posthog.capture('feedback_submitted', {
+        page,
+        has_screenshots: screenshots.length > 0,
+      });
       setSent(true);
     } catch (e) {
       setError(e.message);
@@ -8374,6 +8392,20 @@ function AppInner() {
   const [dark,setDark] = useTheme();
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (isSignedIn && user?.id) {
+      posthog.identify(user.id, {
+        email: user.primaryEmailAddress?.emailAddress,
+        name: user.fullName,
+        plan: user.publicMetadata?.plan || 'free',
+      });
+    } else {
+      posthog.reset();
+    }
+  }, [isLoaded, isSignedIn, user]);
 
   // Register Clerk token getter globally so edgar.js can use it without
   // needing to import Clerk directly (edgar.js is a plain ES module)
