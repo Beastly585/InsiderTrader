@@ -11,11 +11,13 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.8",
+    "@posthog/react": "^1.10.3",
     "@sentry/cloudflare": "^10.66.0",
     "@sentry/react": "^10.66.0",
     "@stripe/react-stripe-js": "^6.7.0",
     "@stripe/stripe-js": "^9.9.0",
     "fflate": "^0.8.3",
+    "posthog-js": "^1.413.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "stripe": "^22.3.0",
