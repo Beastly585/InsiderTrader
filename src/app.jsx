@@ -509,7 +509,7 @@ function CancelModal({ busy, onConfirm, onClose }) {
         <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 16px',textAlign:'left'}}>
           You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately.
         </p>
-        <label style={{display:'block',textAlign:'left',fontSize:'0.6875rem',fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
+        <label style={{display:'block',textAlign:'left',fontSize:'0.72rem',fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
           Want to leave feedback? (optional)
         </label>
         <textarea
@@ -9049,7 +9049,39 @@ function AppErrorFallback({ error }) {
 // anywhere in AppInner's tree now shows this fallback instead of a blank
 // white screen, and gets reported to Sentry automatically since
 // Sentry.ErrorBoundary reports what it catches on its own.
+// ── SEO: dynamic canonical URL + page title per route ─────────────────────
+// Without this, every SPA route serves the same static <link rel="canonical">
+// from index.html, which tells Google "every page is a duplicate of the
+// homepage." This sets it correctly per route so /about, /data-download, etc.
+// get indexed as separate pages.
+const SEO_TITLES = {
+  '/':              'Seli — Insider Trading Intelligence',
+  '/about':         'How Insider Trades Beat the Market — Seli',
+  '/data-download': 'Download SEC Insider Trading Data (CSV) — Seli',
+  '/terms':         'Terms of Service — Seli',
+  '/privacy':       'Privacy Policy — Seli',
+  '/cookies':       'Cookie Policy — Seli',
+  '/help':          'Help Center — Seli',
+};
+
+function useSEO() {
+  React.useEffect(() => {
+    const path = window.location.pathname.replace(/\/$/, '') || '/';
+    // Canonical
+    let link = document.querySelector('link[rel="canonical"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'canonical';
+      document.head.appendChild(link);
+    }
+    link.href = `https://seli.app${path === '/' ? '' : path}`;
+    // Title
+    document.title = SEO_TITLES[path] || 'Seli — Insider Trading Intelligence';
+  }, []);
+}
+
 export default function App() {
+  useSEO();
   return (
     <Sentry.ErrorBoundary fallback={AppErrorFallback}>
       <AppInner/>
