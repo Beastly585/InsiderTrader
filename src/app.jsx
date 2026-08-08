@@ -6908,20 +6908,23 @@ function DataDownloadPage() {
     { name:'shares_owned_after',   desc:'Insider\'s total holdings after the trade' },
     { name:'pct_owned_change',     desc:'Percentage change in the insider\'s position' },
     { name:'relationship',         desc:'Executive, Officer, or Director' },
-    { name:'is_routine',           desc:'Whether the trade follows a routine historical pattern' },
+    { name:'is_routine',           desc:'Whether the trade follows a routine historical pattern (Cohen et al. 2012)' },
     { name:'sector',               desc:'Company sector classification' },
-    { name:'accession_number',     desc:'SEC EDGAR accession number — links directly to the original filing' },
+    { name:'accession_number',     desc:'SEC EDGAR accession number for verification against the original filing' },
   ];
 
-  function handlePurchase() {
-    if (isSignedIn) {
-      window.location.href = '/#settings';
-    } else {
-      // Clerk's SignInButton isn't available outside ClerkProvider context here,
-      // so redirect to main app which will show sign-in modal
-      window.location.href = '/?action=purchase-csv';
-    }
-  }
+  const purchaseCTA = (
+    <div style={{textAlign:'center',margin:'12px 0'}}>
+      <SignedOut>
+        <SignInButton mode="modal" afterSignInUrl="/data-download">
+          <button className="lp-btn-primary lp-btn-primary--lg">Sign up to purchase →</button>
+        </SignInButton>
+      </SignedOut>
+      <SignedIn>
+        <button className="lp-btn-primary lp-btn-primary--lg" onClick={()=>{window.location.href='/#settings';}}>Purchase in Settings →</button>
+      </SignedIn>
+    </div>
+  );
 
   return (
     <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
@@ -6943,47 +6946,62 @@ function DataDownloadPage() {
       <div className="legal-content" style={{maxWidth:960}}>
 
         <div className="lp-info__eyebrow">Data Export</div>
-        <h1 className="lp-info__h1">Download the Full Insider Trading Dataset</h1>
+        <h1 className="lp-info__h1">Download the Full SEC Insider Trading Dataset</h1>
         <p className="lp-info__lede">
-          Every SEC Form 4 filing and congressional stock disclosure Seli has collected,
-          delivered as a single CSV download. Open-market purchases, insider sales, executive trades,
+          Every SEC Form 4 insider filing and congressional stock disclosure Seli has ingested,
+          delivered as structured CSV files. Open-market purchases, insider sales, executive trades,
           director transactions, and congressional disclosures going back over a decade.
         </p>
 
+        {/* ── What you get + early price anchor ──────────────────────── */}
         <section className="lp-info__section">
           <h2>What you get</h2>
           <p>
-            A complete export of Seli's database at the time of purchase. Every row is a single
-            transaction line-item from a public SEC Form 4 or STOCK Act disclosure, parsed and
-            structured for analysis. Corporate insider trades and congressional stock transactions
-            in one file.
+            A complete export of Seli's insider trading database at the time of purchase. Every row
+            is a single transaction line-item from a public SEC Form 4 or STOCK Act disclosure,
+            parsed and structured for analysis.
           </p>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16,margin:'20px 0'}}>
             <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
               <div style={{fontSize:'1.5rem',fontWeight:700}}>10+ years</div>
-              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>of insider trading data</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>of insider trading filings</div>
             </div>
             <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
               <div style={{fontSize:'1.5rem',fontWeight:700}}>SEC EDGAR</div>
-              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Form 4 corporate filings</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Form 4 corporate insider filings</div>
             </div>
             <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
               <div style={{fontSize:'1.5rem',fontWeight:700}}>STOCK Act</div>
-              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Congressional disclosures</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Congressional trade disclosures</div>
             </div>
             <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
-              <div style={{fontSize:'1.5rem',fontWeight:700}}>CSV</div>
-              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Ready for Excel, Python, R</div>
+              <div style={{fontSize:'1.5rem',fontWeight:700}}>18 fields</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>per transaction, ready for analysis</div>
             </div>
+          </div>
+          <p>
+            Delivered as a compressed ZIP archive with <strong>one CSV per calendar year</strong>. Load
+            individual years or combine them. Every file uses the same column schema, so they
+            concatenate cleanly in pandas, R, Excel Power Query, or any tool that reads CSV.
+          </p>
+
+          {/* Early price anchor */}
+          <div style={{margin:'24px 0',padding:'20px 24px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:16}}>
+            <div>
+              <div style={{fontSize:'1.75rem',fontWeight:800,letterSpacing:'-1px'}}>$39.99</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:2}}>One-time purchase. No subscription required.</div>
+            </div>
+            {purchaseCTA}
           </div>
         </section>
 
+        {/* ── Sample data ────────────────────────────────────────────── */}
         <section className="lp-info__section">
           <h2>Sample data</h2>
           <p>
-            Each row represents one transaction from a public filing. Below is a preview of how
-            the data is structured. The actual export contains every field listed in the schema
-            section below.
+            Each row represents one transaction from a public SEC or congressional filing. Below is a
+            preview of how the data is structured. The full export contains all {COLUMNS.length} fields
+            listed in the schema section.
           </p>
           <div style={{overflowX:'auto',margin:'16px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem',whiteSpace:'nowrap'}}>
@@ -7015,15 +7033,16 @@ function DataDownloadPage() {
             </table>
           </div>
           <p style={{fontSize:'0.8125rem',color:'var(--text-3)',fontStyle:'italic'}}>
-            Sample data shown for illustration. Actual values, dates, and figures in the export reflect real SEC filings.
+            Representative sample. Actual export contains real SEC filings with verified data.
           </p>
         </section>
 
+        {/* ── Column schema ──────────────────────────────────────────── */}
         <section className="lp-info__section">
-          <h2>Full column schema</h2>
+          <h2>Full column schema ({COLUMNS.length} fields)</h2>
           <p>
-            The export includes {COLUMNS.length} fields per transaction. Every row traces back to
-            a specific SEC accession number that you can use to verify against the original EDGAR filing.
+            Every row traces back to a specific SEC accession number you can verify directly
+            against the original EDGAR filing.
           </p>
           <div style={{overflowX:'auto',margin:'16px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
             <table className="legal-table" style={{margin:0}}>
@@ -7042,38 +7061,53 @@ function DataDownloadPage() {
           </div>
         </section>
 
+        {/* ── Use cases ──────────────────────────────────────────────── */}
         <section className="lp-info__section">
           <h2>Use cases</h2>
           <p>
-            The dataset is structured for direct use in Excel, Google Sheets, Python (pandas), R,
-            or any tool that reads CSV files. Common applications include:
+            The dataset works directly in Excel, Google Sheets, Python (pandas), R, or any tool
+            that reads CSV. Common applications:
           </p>
           <ul className="lp-info__principles">
-            <li><strong>Backtest insider signals.</strong> Filter to open-market executive purchases
-              and measure forward returns across different holding periods.</li>
-            <li><strong>Academic and quantitative research.</strong> Decade-plus coverage of Form 4
+            <li><strong>Backtest insider trading signals.</strong> Filter to open-market executive
+              purchases and measure forward returns across different holding periods.</li>
+            <li><strong>Academic and quantitative research.</strong> Over a decade of Form 4 insider
               filings with consistent field parsing, ready for statistical analysis.</li>
             <li><strong>Sector and industry analysis.</strong> Aggregate insider buying and selling
               patterns by sector, time period, or insider role.</li>
-            <li><strong>Congressional trading research.</strong> STOCK Act disclosures parsed alongside
-              corporate filings in the same schema, enabling direct comparison.</li>
+            <li><strong>Congressional stock trading research.</strong> STOCK Act disclosures parsed
+              alongside corporate insider filings in the same schema for direct comparison.</li>
             <li><strong>Build your own models.</strong> The raw data behind Seli's conviction scoring,
               available for your own methodology.</li>
           </ul>
         </section>
 
-        <section className="lp-info__section" style={{textAlign:'center',padding:'40px 0'}}>
+        {/* ── Why this vs alternatives ───────────────────────────────── */}
+        <section className="lp-info__section">
+          <h2>Why Seli's export</h2>
+          <p>
+            Raw SEC EDGAR XML is free but requires significant parsing work to extract structured,
+            analysis-ready data. Commercial insider trading APIs and data platforms typically charge
+            $200-500+/month as ongoing subscriptions.
+          </p>
+          <p>
+            Seli's export is a <strong>one-time $39.99 purchase</strong> with no recurring fee.
+            You get the full parsed dataset as clean CSVs, organized by year, with every field
+            already extracted and normalized. Buy it once, use it as long as you want.
+            Purchase again later if you want updated coverage.
+          </p>
+        </section>
+
+        {/* ── Bottom CTA ─────────────────────────────────────────────── */}
+        <section className="lp-info__section" style={{textAlign:'center',padding:'40px 0',borderTop:'0.5px solid var(--border)'}}>
           <div style={{fontSize:'2rem',fontWeight:800,letterSpacing:'-1px'}}>$39.99</div>
           <div style={{fontSize:'0.875rem',color:'var(--text-3)',marginTop:4,marginBottom:20}}>
-            One-time purchase. Full database as of the purchase date.
+            One-time purchase. Full database snapshot. No subscription.
           </div>
-          <button className="lp-btn-primary lp-btn-primary--lg" onClick={handlePurchase}>
-            {isSignedIn ? 'Purchase in Settings →' : 'Sign up to purchase →'}
-          </button>
-          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:16,maxWidth:480,marginLeft:'auto',marginRight:'auto'}}>
+          {purchaseCTA}
+          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:16,maxWidth:520,marginLeft:'auto',marginRight:'auto'}}>
             The export is a snapshot of the database at the time of purchase. Re-downloads
-            deliver the same data, not newer filings added after your purchase date.
-            Create a free Seli account to purchase.
+            deliver the same data from that date. Create a free account to purchase.
           </p>
         </section>
 
@@ -9063,6 +9097,11 @@ const SEO_TITLES = {
   '/cookies':       'Cookie Policy — Seli',
   '/help':          'Help Center — Seli',
 };
+const SEO_DESCRIPTIONS = {
+  '/':              'Track SEC Form 4 insider trading signals in real time. Conviction scoring, congressional trades, and portfolio integration. Built for serious retail investors.',
+  '/about':         'The peer-reviewed research behind insider trading signals. How Seli scores Form 4 filings using findings from Seyhun, Lakonishok & Lee, and Cohen, Malloy & Pomorski.',
+  '/data-download': 'Download the complete SEC Form 4 insider trading dataset as CSV. 10+ years of corporate and congressional stock trades, structured for Excel, Python, and R. One-time purchase, $39.99.',
+};
 
 function useSEO() {
   React.useEffect(() => {
@@ -9077,6 +9116,17 @@ function useSEO() {
     link.href = `https://seli.app${path === '/' ? '' : path}`;
     // Title
     document.title = SEO_TITLES[path] || 'Seli — Insider Trading Intelligence';
+    // Meta description
+    const desc = SEO_DESCRIPTIONS[path];
+    if (desc) {
+      let meta = document.querySelector('meta[name="description"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'description';
+        document.head.appendChild(meta);
+      }
+      meta.content = desc;
+    }
   }, []);
 }
 
