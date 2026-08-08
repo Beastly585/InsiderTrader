@@ -7207,19 +7207,61 @@ function PurchaseCompletePage() {
 }
 
 // ── Re-download page ──────────────────────────────────────────────────────
-// Public page where users enter their order ID + email to re-download a
-// previously purchased CSV export.
+// Unified page: signed-in users see their purchase history with re-download
+// buttons. Anyone (signed-in or not) can also look up an order by ID + email.
 function RedownloadPage() {
   const [dark, setDark] = useTheme();
+  const { isSignedIn, getToken } = useAuth();
   const [orderId, setOrderId] = useState('');
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState('idle'); // idle | loading | error
+  const [lookupStatus, setLookupStatus] = useState('idle'); // idle | loading | error
   const [errorMsg, setErrorMsg] = useState('');
+  const [history, setHistory] = useState(null); // null = loading, [] = empty
+  const [historyError, setHistoryError] = useState(null);
 
-  function handleSubmit(e) {
+  // Fetch purchase history for signed-in users
+  useEffect(() => {
+    if (!isSignedIn) { setHistory([]); return; }
+    (async () => {
+      try {
+        const token = await getToken();
+        const r = await fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/billing/status', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const d = await r.json();
+        setHistory(d.purchases || []);
+      } catch (e) { setHistoryError(e.message); setHistory([]); }
+    })();
+  }, [isSignedIn]);
+
+  function handleRedownload(purchase) {
+    // For signed-in users, use the existing authenticated download
+    (async () => {
+      try {
+        const token = await getToken();
+        const r = await fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/billing/csv-download', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'redownload', purchaseId: purchase.id }),
+        });
+        if (!r.ok) throw new Error('Download failed');
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `seli_insider_trades_${purchase.purchased_at?.split('T')[0] || 'export'}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) { alert('Download failed. Please try again or contact admin@seli.app'); }
+    })();
+  }
+
+  function handleLookup(e) {
     e.preventDefault();
     if (!orderId.trim() || !email.trim()) return;
-    setStatus('loading');
+    setLookupStatus('loading');
     setErrorMsg('');
 
     fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv-download', {
@@ -7240,9 +7282,9 @@ function RedownloadPage() {
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        setStatus('idle');
+        setLookupStatus('idle');
       })
-      .catch(err => { setStatus('error'); setErrorMsg(err.message); });
+      .catch(err => { setLookupStatus('error'); setErrorMsg(err.message); });
   }
 
   return (
@@ -7255,57 +7297,92 @@ function RedownloadPage() {
           </a>
           <div style={{display:'flex',alignItems:'center',gap:12,marginLeft:'auto'}}>
             <a href="/help" className="lp-nav__link">Help</a>
+            <a href="/data-download" className="lp-nav__link">Buy data</a>
           </div>
         </div>
       </nav>
-      <div className="legal-content" style={{maxWidth:480,paddingTop:60}}>
+      <div className="legal-content" style={{maxWidth:560,paddingTop:48}}>
 
-        <h1 style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Re-download your data export</h1>
-        <p style={{color:'var(--text-2)',marginBottom:28,fontSize:'0.9375rem'}}>
-          Enter the Order ID and email from your original purchase. Your Order ID is
-          in the order details you received at checkout and in your Stripe receipt email.
-        </p>
+        <h1 style={{fontSize:'1.5rem',fontWeight:700,marginBottom:24}}>Re-download your data export</h1>
 
-        <div style={{display:'flex',flexDirection:'column',gap:16}}>
-          <div>
-            <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Order ID</label>
-            <input
-              type="text"
-              value={orderId}
-              onChange={e => setOrderId(e.target.value)}
-              placeholder="pi_3Nk8..."
-              style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontFamily:'monospace',boxSizing:'border-box'}}
-            />
-          </div>
-          <div>
-            <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Email used at checkout</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',boxSizing:'border-box'}}
-            />
-          </div>
-          <button
-            className="lp-btn-primary"
-            onClick={handleSubmit}
-            disabled={status === 'loading' || !orderId.trim() || !email.trim()}
-            style={{width:'100%',padding:'12px'}}
-          >
-            {status === 'loading' ? 'Verifying...' : 'Download'}
-          </button>
-          {status === 'error' && (
-            <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6}}>
-              {errorMsg || 'Could not verify this order. Double-check your Order ID and email.'}
+        {/* ── Signed-in user's purchase history ──────────────────────── */}
+        {isSignedIn && (
+          <section style={{marginBottom:36}}>
+            <h2 style={{fontSize:'0.875rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',color:'var(--text-3)',marginBottom:12}}>Your purchases</h2>
+            {history === null ? (
+              <SkeletonRows count={3}/>
+            ) : history.length === 0 ? (
+              <p style={{color:'var(--text-3)',fontSize:'0.875rem'}}>
+                {historyError ? 'Could not load purchase history.' : 'No data export purchases on this account.'}
+              </p>
+            ) : (
+              <div style={{border:'0.5px solid var(--border)',borderRadius:8,overflow:'hidden'}}>
+                {history.map((p, i) => (
+                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:i < history.length - 1 ? '0.5px solid var(--border)' : 'none'}}>
+                    <div>
+                      <div style={{fontWeight:600,fontSize:'0.875rem'}}>{fmt.date(p.purchased_at)}</div>
+                      <div style={{fontSize:'0.8125rem',color:'var(--text-3)'}}>${(p.amount_cents / 100).toFixed(2)}</div>
+                    </div>
+                    <button
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => handleRedownload(p)}
+                    >Re-download</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <hr style={{border:'none',borderTop:'0.5px solid var(--border)',margin:'28px 0'}}/>
+          </section>
+        )}
+
+        {/* ── Order lookup (works for everyone) ──────────────────────── */}
+        <section>
+          <h2 style={{fontSize:'0.875rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',color:'var(--text-3)',marginBottom:4}}>Look up an order</h2>
+          <p style={{color:'var(--text-2)',marginBottom:20,fontSize:'0.875rem'}}>
+            Enter the Order ID and email from your purchase. Both are in the Stripe receipt sent to your email.
+          </p>
+
+          <div style={{display:'flex',flexDirection:'column',gap:16}}>
+            <div>
+              <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Order ID</label>
+              <input
+                type="text"
+                value={orderId}
+                onChange={e => setOrderId(e.target.value)}
+                placeholder="pi_3Nk8..."
+                style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontFamily:'monospace',boxSizing:'border-box'}}
+              />
             </div>
-          )}
-        </div>
+            <div>
+              <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Email used at checkout</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',boxSizing:'border-box'}}
+              />
+            </div>
+            <button
+              className="lp-btn-primary"
+              onClick={handleLookup}
+              disabled={lookupStatus === 'loading' || !orderId.trim() || !email.trim()}
+              style={{width:'100%',padding:'12px'}}
+            >
+              {lookupStatus === 'loading' ? 'Verifying...' : 'Download'}
+            </button>
+            {lookupStatus === 'error' && (
+              <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6}}>
+                {errorMsg || 'Could not verify this order. Double-check your Order ID and email.'}
+              </div>
+            )}
+          </div>
 
-        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:28,lineHeight:1.6}}>
-          Can't find your Order ID? Check your email for a receipt from Stripe. If you need
-          help, contact <a href="mailto:admin@seli.app" style={{color:'var(--accent-strong)'}}>admin@seli.app</a>.
-        </p>
+          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:24,lineHeight:1.6}}>
+            Can't find your Order ID? Check your email for a receipt from Stripe. Still need
+            help? Contact <a href="mailto:admin@seli.app" style={{color:'var(--accent-strong)'}}>admin@seli.app</a>.
+          </p>
+        </section>
       </div>
     </div>
   );
@@ -8656,14 +8733,11 @@ function LandingPage({ onEnter, dark, setDark }) {
           </div>
           <div className="lp-price-card--landscape__action">
             <div className="lp-price-card__price">$39.99<span>/one-time</span></div>
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="lp-btn-ghost lp-btn-ghost--full">Download dataset →</button>
-              </SignInButton>
-            </SignedOut>
-            <SignedIn>
-              <button className="lp-btn-ghost lp-btn-ghost--full" onClick={onEnter}>Download dataset →</button>
-            </SignedIn>
+            <button className="lp-btn-ghost lp-btn-ghost--full" onClick={()=>{
+              fetch(cfg.NEON_PROXY_URL.replace(/\/+$/,'') + '/checkout/csv', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+              }).then(r=>r.json()).then(d=>{ if(d.url) window.location.href=d.url; });
+            }}>Download dataset →</button>
           </div>
         </div>
       </section>
