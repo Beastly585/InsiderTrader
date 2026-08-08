@@ -6882,46 +6882,45 @@ const HELP_SECTIONS = [
 // signed-in users.
 function DataDownloadPage() {
   const [dark, setDark] = useTheme();
-  const { isSignedIn } = useAuth();
 
   const SAMPLE_ROWS = [
-    { date:'2026-07-28', ticker:'AAPL', company:'Apple Inc.', insider:'WILLIAMS JEFFREY E', title:'General Counsel', type:'Buy', code:'P', shares:'10,500', price:'$198.42', value:'$2.1M', pct_change:'+12.3%', relationship:'Executive', is_routine:'No' },
-    { date:'2026-07-25', ticker:'NVDA', company:'NVIDIA Corporation', insider:'HUANG JEN HSUN', title:'CEO', type:'Buy', code:'P', shares:'50,000', price:'$112.80', value:'$5.6M', pct_change:'+3.1%', relationship:'Executive', is_routine:'No' },
-    { date:'2026-07-24', ticker:'JPM', company:'JPMorgan Chase & Co.', insider:'DIMON JAMES', title:'CEO', type:'Buy', code:'P', shares:'25,000', price:'$221.35', value:'$5.5M', pct_change:'+1.8%', relationship:'Executive', is_routine:'Yes' },
-    { date:'2026-07-22', ticker:'MSFT', company:'Microsoft Corporation', insider:'NADELLA SATYA', title:'CEO', type:'Sell', code:'S', shares:'8,000', price:'$438.90', value:'$3.5M', pct_change:'-0.4%', relationship:'Executive', is_routine:'Yes' },
-    { date:'2026-07-20', ticker:'TSLA', company:'Tesla, Inc.', insider:'TANEJA VAIBHAV', title:'CFO', type:'Buy', code:'P', shares:'5,000', price:'$248.15', value:'$1.2M', pct_change:'+8.7%', relationship:'Executive', is_routine:'No' },
+    { date:'2026-07-28', ticker:'AAPL', company:'Apple Inc.', insider:'WILLIAMS JEFFREY E', title:'General Counsel', type:'Buy', shares:'10,500', price:'$198.42', value:'$2.1M', pct:'+12.3%', role:'Executive', routine:'No' },
+    { date:'2026-07-25', ticker:'NVDA', company:'NVIDIA Corp', insider:'HUANG JEN HSUN', title:'CEO', type:'Buy', shares:'50,000', price:'$112.80', value:'$5.6M', pct:'+3.1%', role:'Executive', routine:'No' },
+    { date:'2026-07-24', ticker:'JPM', company:'JPMorgan Chase', insider:'DIMON JAMES', title:'CEO', type:'Buy', shares:'25,000', price:'$221.35', value:'$5.5M', pct:'+1.8%', role:'Executive', routine:'Yes' },
+    { date:'2026-07-22', ticker:'MSFT', company:'Microsoft Corp', insider:'NADELLA SATYA', title:'CEO', type:'Sell', shares:'8,000', price:'$438.90', value:'$3.5M', pct:'-0.4%', role:'Executive', routine:'Yes' },
+    { date:'2026-07-20', ticker:'TSLA', company:'Tesla, Inc.', insider:'TANEJA VAIBHAV', title:'CFO', type:'Buy', shares:'5,000', price:'$248.15', value:'$1.2M', pct:'+8.7%', role:'Executive', routine:'No' },
   ];
 
   const COLUMNS = [
     { name:'transaction_date',     desc:'Date the trade occurred' },
     { name:'filing_date',          desc:'Date the SEC filing was published' },
     { name:'ticker',               desc:'Stock ticker symbol' },
-    { name:'company_name',         desc:'Full company name from the filing' },
-    { name:'insider_name',         desc:'Name of the reporting insider' },
+    { name:'company_name',         desc:'Full company name' },
+    { name:'insider_name',         desc:'Reporting insider' },
     { name:'insider_title',        desc:'Title or role at the company' },
     { name:'transaction_type',     desc:'Buy or Sell' },
-    { name:'transaction_code',     desc:'SEC transaction code (P = open-market purchase, S = open-market sale)' },
-    { name:'is_open_market',       desc:'Whether this was a voluntary open-market trade' },
-    { name:'shares',               desc:'Number of shares traded' },
-    { name:'price_per_share',      desc:'Price per share at time of trade' },
-    { name:'value',                desc:'Total dollar value of the transaction' },
-    { name:'shares_owned_after',   desc:'Insider\'s total holdings after the trade' },
-    { name:'pct_owned_change',     desc:'Percentage change in the insider\'s position' },
+    { name:'transaction_code',     desc:'SEC code (P = purchase, S = sale)' },
+    { name:'is_open_market',       desc:'Voluntary open-market trade' },
+    { name:'shares',               desc:'Shares traded' },
+    { name:'price_per_share',      desc:'Price at time of trade' },
+    { name:'value',                desc:'Total dollar value' },
+    { name:'shares_owned_after',   desc:'Holdings after the trade' },
+    { name:'pct_owned_change',     desc:'Position change (%)' },
     { name:'relationship',         desc:'Executive, Officer, or Director' },
-    { name:'is_routine',           desc:'Whether the trade follows a routine historical pattern (Cohen et al. 2012)' },
-    { name:'sector',               desc:'Company sector classification' },
-    { name:'accession_number',     desc:'SEC EDGAR accession number for verification against the original filing' },
+    { name:'is_routine',           desc:'Routine pattern flag (Cohen et al. 2012)' },
+    { name:'sector',               desc:'Sector classification' },
+    { name:'accession_number',     desc:'SEC EDGAR accession number for source verification' },
   ];
 
-  const purchaseCTA = (
-    <div style={{textAlign:'center',margin:'12px 0'}}>
+  const buyCTA = (
+    <div style={{textAlign:'center'}}>
       <SignedOut>
         <SignInButton mode="modal" afterSignInUrl="/data-download">
-          <button className="lp-btn-primary lp-btn-primary--lg">Sign up to purchase →</button>
+          <button className="lp-btn-primary lp-btn-primary--lg">Buy now — $39.99</button>
         </SignInButton>
       </SignedOut>
       <SignedIn>
-        <button className="lp-btn-primary lp-btn-primary--lg" onClick={()=>{window.location.href='/#settings';}}>Purchase in Settings →</button>
+        <button className="lp-btn-primary lp-btn-primary--lg" onClick={()=>{window.location.href='/#settings';}}>Buy now — $39.99</button>
       </SignedIn>
     </div>
   );
@@ -6947,63 +6946,26 @@ function DataDownloadPage() {
 
         <div className="lp-info__eyebrow">Data Export</div>
         <h1 className="lp-info__h1">Download the Full SEC Insider Trading Dataset</h1>
-        <p className="lp-info__lede">
-          Every SEC Form 4 insider filing and congressional stock disclosure Seli has ingested,
-          delivered as structured CSV files. Open-market purchases, insider sales, executive trades,
-          director transactions, and congressional disclosures going back over a decade.
+        <p style={{fontSize:'1rem',color:'var(--text-2)',lineHeight:1.6,maxWidth:640,marginBottom:8}}>
+          Every SEC Form 4 insider filing and congressional stock disclosure Seli has ingested.
+          10+ years of open-market purchases, insider sales, executive trades, and congressional
+          disclosures, delivered as structured CSVs organized by year. One-time purchase, no subscription.
+        </p>
+        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginBottom:28}}>
+          Compressed ZIP · one CSV per calendar year · {COLUMNS.length} fields per transaction · Excel, Python, R
         </p>
 
-        {/* ── What you get + early price anchor ──────────────────────── */}
-        <section className="lp-info__section">
-          <h2>What you get</h2>
-          <p>
-            A complete export of Seli's insider trading database at the time of purchase. Every row
-            is a single transaction line-item from a public SEC Form 4 or STOCK Act disclosure,
-            parsed and structured for analysis.
-          </p>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16,margin:'20px 0'}}>
-            <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
-              <div style={{fontSize:'1.5rem',fontWeight:700}}>10+ years</div>
-              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>of insider trading filings</div>
-            </div>
-            <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
-              <div style={{fontSize:'1.5rem',fontWeight:700}}>SEC EDGAR</div>
-              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Form 4 corporate insider filings</div>
-            </div>
-            <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
-              <div style={{fontSize:'1.5rem',fontWeight:700}}>STOCK Act</div>
-              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Congressional trade disclosures</div>
-            </div>
-            <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
-              <div style={{fontSize:'1.5rem',fontWeight:700}}>18 fields</div>
-              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>per transaction, ready for analysis</div>
-            </div>
-          </div>
-          <p>
-            Delivered as a compressed ZIP archive with <strong>one CSV per calendar year</strong>. Load
-            individual years or combine them. Every file uses the same column schema, so they
-            concatenate cleanly in pandas, R, Excel Power Query, or any tool that reads CSV.
-          </p>
+        {buyCTA}
 
-          {/* Early price anchor */}
-          <div style={{margin:'24px 0',padding:'20px 24px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:16}}>
-            <div>
-              <div style={{fontSize:'1.75rem',fontWeight:800,letterSpacing:'-1px'}}>$39.99</div>
-              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:2}}>One-time purchase. No subscription required.</div>
-            </div>
-            {purchaseCTA}
-          </div>
-        </section>
+        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',textAlign:'center',marginTop:10,marginBottom:0}}>
+          Database snapshot at purchase date. Free account required for purchase and re-downloads.
+        </p>
 
-        {/* ── Sample data ────────────────────────────────────────────── */}
+        <hr style={{border:'none',borderTop:'0.5px solid var(--border)',margin:'40px 0'}}/>
+
         <section className="lp-info__section">
           <h2>Sample data</h2>
-          <p>
-            Each row represents one transaction from a public SEC or congressional filing. Below is a
-            preview of how the data is structured. The full export contains all {COLUMNS.length} fields
-            listed in the schema section.
-          </p>
-          <div style={{overflowX:'auto',margin:'16px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
+          <div style={{overflowX:'auto',margin:'12px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem',whiteSpace:'nowrap'}}>
               <thead>
                 <tr style={{borderBottom:'1px solid var(--border)'}}>
@@ -7017,34 +6979,29 @@ function DataDownloadPage() {
                   <tr key={i} style={{borderBottom:'0.5px solid var(--border)'}}>
                     <td style={{padding:'8px 10px'}}>{r.date}</td>
                     <td style={{padding:'8px 10px',fontWeight:600,color:'var(--accent-strong)'}}>{r.ticker}</td>
-                    <td style={{padding:'8px 10px',color:'var(--text-2)',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis'}}>{r.company}</td>
+                    <td style={{padding:'8px 10px',color:'var(--text-2)',maxWidth:140,overflow:'hidden',textOverflow:'ellipsis'}}>{r.company}</td>
                     <td style={{padding:'8px 10px'}}>{r.insider}</td>
                     <td style={{padding:'8px 10px',color:'var(--text-3)'}}>{r.title}</td>
                     <td style={{padding:'8px 10px'}}><span style={{color:r.type==='Buy'?'var(--green-600)':'var(--red-600)',fontWeight:600}}>{r.type}</span></td>
                     <td style={{padding:'8px 10px',textAlign:'right'}}>{r.shares}</td>
                     <td style={{padding:'8px 10px',textAlign:'right'}}>{r.price}</td>
                     <td style={{padding:'8px 10px',textAlign:'right',fontWeight:600}}>{r.value}</td>
-                    <td style={{padding:'8px 10px',textAlign:'right',color:r.pct_change.startsWith('+')?'var(--green-600)':'var(--red-600)'}}>{r.pct_change}</td>
-                    <td style={{padding:'8px 10px'}}>{r.relationship}</td>
-                    <td style={{padding:'8px 10px',color:'var(--text-3)'}}>{r.is_routine}</td>
+                    <td style={{padding:'8px 10px',textAlign:'right',color:r.pct.startsWith('+')?'var(--green-600)':'var(--red-600)'}}>{r.pct}</td>
+                    <td style={{padding:'8px 10px'}}>{r.role}</td>
+                    <td style={{padding:'8px 10px',color:'var(--text-3)'}}>{r.routine}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <p style={{fontSize:'0.8125rem',color:'var(--text-3)',fontStyle:'italic'}}>
-            Representative sample. Actual export contains real SEC filings with verified data.
+            Representative sample. Actual export contains real SEC filings.
           </p>
         </section>
 
-        {/* ── Column schema ──────────────────────────────────────────── */}
         <section className="lp-info__section">
-          <h2>Full column schema ({COLUMNS.length} fields)</h2>
-          <p>
-            Every row traces back to a specific SEC accession number you can verify directly
-            against the original EDGAR filing.
-          </p>
-          <div style={{overflowX:'auto',margin:'16px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
+          <h2>Column schema ({COLUMNS.length} fields)</h2>
+          <div style={{overflowX:'auto',margin:'12px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
             <table className="legal-table" style={{margin:0}}>
               <thead>
                 <tr><th style={{width:200}}>Column</th><th>Description</th></tr>
@@ -7061,54 +7018,34 @@ function DataDownloadPage() {
           </div>
         </section>
 
-        {/* ── Use cases ──────────────────────────────────────────────── */}
         <section className="lp-info__section">
           <h2>Use cases</h2>
-          <p>
-            The dataset works directly in Excel, Google Sheets, Python (pandas), R, or any tool
-            that reads CSV. Common applications:
-          </p>
           <ul className="lp-info__principles">
             <li><strong>Backtest insider trading signals.</strong> Filter to open-market executive
-              purchases and measure forward returns across different holding periods.</li>
-            <li><strong>Academic and quantitative research.</strong> Over a decade of Form 4 insider
-              filings with consistent field parsing, ready for statistical analysis.</li>
-            <li><strong>Sector and industry analysis.</strong> Aggregate insider buying and selling
-              patterns by sector, time period, or insider role.</li>
-            <li><strong>Congressional stock trading research.</strong> STOCK Act disclosures parsed
-              alongside corporate insider filings in the same schema for direct comparison.</li>
-            <li><strong>Build your own models.</strong> The raw data behind Seli's conviction scoring,
-              available for your own methodology.</li>
+              purchases and measure forward returns across holding periods.</li>
+            <li><strong>Academic research.</strong> Over a decade of Form 4 insider filings with
+              consistent parsing, ready for statistical analysis.</li>
+            <li><strong>Sector analysis.</strong> Aggregate insider buying and selling patterns by
+              sector, time period, or insider role.</li>
+            <li><strong>Congressional trading.</strong> STOCK Act disclosures in the same schema as
+              corporate filings for direct comparison.</li>
+            <li><strong>Build your own models.</strong> The raw data behind Seli's scoring, available
+              for your own methodology.</li>
           </ul>
-        </section>
-
-        {/* ── Why this vs alternatives ───────────────────────────────── */}
-        <section className="lp-info__section">
-          <h2>Why Seli's export</h2>
-          <p>
-            Raw SEC EDGAR XML is free but requires significant parsing work to extract structured,
-            analysis-ready data. Commercial insider trading APIs and data platforms typically charge
-            $200-500+/month as ongoing subscriptions.
-          </p>
-          <p>
-            Seli's export is a <strong>one-time $39.99 purchase</strong> with no recurring fee.
-            You get the full parsed dataset as clean CSVs, organized by year, with every field
-            already extracted and normalized. Buy it once, use it as long as you want.
-            Purchase again later if you want updated coverage.
+          <p style={{fontSize:'0.875rem',color:'var(--text-2)'}}>
+            Raw EDGAR XML is free but requires heavy parsing. Commercial insider data APIs run
+            $200-500+/month. This is a one-time $39.99 purchase with no recurring fee.
           </p>
         </section>
 
-        {/* ── Bottom CTA ─────────────────────────────────────────────── */}
-        <section className="lp-info__section" style={{textAlign:'center',padding:'40px 0',borderTop:'0.5px solid var(--border)'}}>
-          <div style={{fontSize:'2rem',fontWeight:800,letterSpacing:'-1px'}}>$39.99</div>
-          <div style={{fontSize:'0.875rem',color:'var(--text-3)',marginTop:4,marginBottom:20}}>
-            One-time purchase. Full database snapshot. No subscription.
-          </div>
-          {purchaseCTA}
-          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:16,maxWidth:520,marginLeft:'auto',marginRight:'auto'}}>
-            The export is a snapshot of the database at the time of purchase. Re-downloads
-            deliver the same data from that date. Create a free account to purchase.
+        <section style={{textAlign:'center',padding:'40px 0',borderTop:'0.5px solid var(--border)',marginTop:24}}>
+          {buyCTA}
+          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:16,marginBottom:20}}>
+            One-time purchase. No subscription. Re-download anytime from your account.
           </p>
+          <a href="/" style={{fontSize:'0.875rem',color:'var(--accent-strong)',textDecoration:'none',fontWeight:500}}>
+            Or explore Seli free — real-time signals, scoring, and alerts →
+          </a>
         </section>
 
       </div>
@@ -7133,7 +7070,6 @@ function DataDownloadPage() {
     </div>
   );
 }
-
 function HelpCenterPage() {
   const [activeId, setActiveId] = useState('using-seli');
   const idx = HELP_SECTIONS.findIndex(s => s.id === activeId);
