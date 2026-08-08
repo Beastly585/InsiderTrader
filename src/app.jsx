@@ -509,7 +509,7 @@ function CancelModal({ busy, onConfirm, onClose }) {
         <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 16px',textAlign:'left'}}>
           You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately.
         </p>
-        <label style={{display:'block',textAlign:'left',fontSize:'0.6875rem',fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
+        <label style={{display:'block',textAlign:'left',fontSize:'0.6875rem'.5,fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
           Want to leave feedback? (optional)
         </label>
         <textarea
@@ -6875,6 +6875,231 @@ const HELP_SECTIONS = [
   },
 ];
 
+// ── Public CSV Data Download page ─────────────────────────────────────────
+// SEO-optimized public page for the $39.99 one-time data export.
+// No auth required to view — purchase CTA opens the sign-in modal for
+// unauthenticated visitors, or navigates to Settings > Billing for
+// signed-in users.
+function DataDownloadPage() {
+  const [dark, setDark] = useTheme();
+  const { isSignedIn } = useAuth();
+
+  const SAMPLE_ROWS = [
+    { date:'2026-07-28', ticker:'AAPL', company:'Apple Inc.', insider:'WILLIAMS JEFFREY E', title:'General Counsel', type:'Buy', code:'P', shares:'10,500', price:'$198.42', value:'$2.1M', pct_change:'+12.3%', relationship:'Executive', is_routine:'No' },
+    { date:'2026-07-25', ticker:'NVDA', company:'NVIDIA Corporation', insider:'HUANG JEN HSUN', title:'CEO', type:'Buy', code:'P', shares:'50,000', price:'$112.80', value:'$5.6M', pct_change:'+3.1%', relationship:'Executive', is_routine:'No' },
+    { date:'2026-07-24', ticker:'JPM', company:'JPMorgan Chase & Co.', insider:'DIMON JAMES', title:'CEO', type:'Buy', code:'P', shares:'25,000', price:'$221.35', value:'$5.5M', pct_change:'+1.8%', relationship:'Executive', is_routine:'Yes' },
+    { date:'2026-07-22', ticker:'MSFT', company:'Microsoft Corporation', insider:'NADELLA SATYA', title:'CEO', type:'Sell', code:'S', shares:'8,000', price:'$438.90', value:'$3.5M', pct_change:'-0.4%', relationship:'Executive', is_routine:'Yes' },
+    { date:'2026-07-20', ticker:'TSLA', company:'Tesla, Inc.', insider:'TANEJA VAIBHAV', title:'CFO', type:'Buy', code:'P', shares:'5,000', price:'$248.15', value:'$1.2M', pct_change:'+8.7%', relationship:'Executive', is_routine:'No' },
+  ];
+
+  const COLUMNS = [
+    { name:'transaction_date',     desc:'Date the trade occurred' },
+    { name:'filing_date',          desc:'Date the SEC filing was published' },
+    { name:'ticker',               desc:'Stock ticker symbol' },
+    { name:'company_name',         desc:'Full company name from the filing' },
+    { name:'insider_name',         desc:'Name of the reporting insider' },
+    { name:'insider_title',        desc:'Title or role at the company' },
+    { name:'transaction_type',     desc:'Buy or Sell' },
+    { name:'transaction_code',     desc:'SEC transaction code (P = open-market purchase, S = open-market sale)' },
+    { name:'is_open_market',       desc:'Whether this was a voluntary open-market trade' },
+    { name:'shares',               desc:'Number of shares traded' },
+    { name:'price_per_share',      desc:'Price per share at time of trade' },
+    { name:'value',                desc:'Total dollar value of the transaction' },
+    { name:'shares_owned_after',   desc:'Insider\'s total holdings after the trade' },
+    { name:'pct_owned_change',     desc:'Percentage change in the insider\'s position' },
+    { name:'relationship',         desc:'Executive, Officer, or Director' },
+    { name:'is_routine',           desc:'Whether the trade follows a routine historical pattern' },
+    { name:'sector',               desc:'Company sector classification' },
+    { name:'accession_number',     desc:'SEC EDGAR accession number — links directly to the original filing' },
+  ];
+
+  function handlePurchase() {
+    if (isSignedIn) {
+      window.location.href = '/#settings';
+    } else {
+      // Clerk's SignInButton isn't available outside ClerkProvider context here,
+      // so redirect to main app which will show sign-in modal
+      window.location.href = '/?action=purchase-csv';
+    }
+  }
+
+  return (
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
+      <nav className="lp-nav">
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+          </a>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginLeft:'auto'}}>
+            <a href="/about" className="lp-nav__link">About</a>
+            <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={()=>setDark(d=>!d)} title="Toggle theme">
+              {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+            </button>
+          </div>
+        </div>
+      </nav>
+      <div className="legal-content" style={{maxWidth:960}}>
+
+        <div className="lp-info__eyebrow">Data Export</div>
+        <h1 className="lp-info__h1">Download the Full Insider Trading Dataset</h1>
+        <p className="lp-info__lede">
+          Every SEC Form 4 filing and congressional stock disclosure Seli has collected,
+          delivered as a single CSV download. Open-market purchases, insider sales, executive trades,
+          director transactions, and congressional disclosures going back over a decade.
+        </p>
+
+        <section className="lp-info__section">
+          <h2>What you get</h2>
+          <p>
+            A complete export of Seli's database at the time of purchase. Every row is a single
+            transaction line-item from a public SEC Form 4 or STOCK Act disclosure, parsed and
+            structured for analysis. Corporate insider trades and congressional stock transactions
+            in one file.
+          </p>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16,margin:'20px 0'}}>
+            <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
+              <div style={{fontSize:'1.5rem',fontWeight:700}}>10+ years</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>of insider trading data</div>
+            </div>
+            <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
+              <div style={{fontSize:'1.5rem',fontWeight:700}}>SEC EDGAR</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Form 4 corporate filings</div>
+            </div>
+            <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
+              <div style={{fontSize:'1.5rem',fontWeight:700}}>STOCK Act</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Congressional disclosures</div>
+            </div>
+            <div style={{padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
+              <div style={{fontSize:'1.5rem',fontWeight:700}}>CSV</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:4}}>Ready for Excel, Python, R</div>
+            </div>
+          </div>
+        </section>
+
+        <section className="lp-info__section">
+          <h2>Sample data</h2>
+          <p>
+            Each row represents one transaction from a public filing. Below is a preview of how
+            the data is structured. The actual export contains every field listed in the schema
+            section below.
+          </p>
+          <div style={{overflowX:'auto',margin:'16px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem',whiteSpace:'nowrap'}}>
+              <thead>
+                <tr style={{borderBottom:'1px solid var(--border)'}}>
+                  {['Date','Ticker','Company','Insider','Title','Type','Shares','Price','Value','Pos%','Role','Routine'].map(h=>(
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,fontSize:'0.6875rem',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.04em'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {SAMPLE_ROWS.map((r,i)=>(
+                  <tr key={i} style={{borderBottom:'0.5px solid var(--border)'}}>
+                    <td style={{padding:'8px 10px'}}>{r.date}</td>
+                    <td style={{padding:'8px 10px',fontWeight:600,color:'var(--accent-strong)'}}>{r.ticker}</td>
+                    <td style={{padding:'8px 10px',color:'var(--text-2)',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis'}}>{r.company}</td>
+                    <td style={{padding:'8px 10px'}}>{r.insider}</td>
+                    <td style={{padding:'8px 10px',color:'var(--text-3)'}}>{r.title}</td>
+                    <td style={{padding:'8px 10px'}}><span style={{color:r.type==='Buy'?'var(--green-600)':'var(--red-600)',fontWeight:600}}>{r.type}</span></td>
+                    <td style={{padding:'8px 10px',textAlign:'right'}}>{r.shares}</td>
+                    <td style={{padding:'8px 10px',textAlign:'right'}}>{r.price}</td>
+                    <td style={{padding:'8px 10px',textAlign:'right',fontWeight:600}}>{r.value}</td>
+                    <td style={{padding:'8px 10px',textAlign:'right',color:r.pct_change.startsWith('+')?'var(--green-600)':'var(--red-600)'}}>{r.pct_change}</td>
+                    <td style={{padding:'8px 10px'}}>{r.relationship}</td>
+                    <td style={{padding:'8px 10px',color:'var(--text-3)'}}>{r.is_routine}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',fontStyle:'italic'}}>
+            Sample data shown for illustration. Actual values, dates, and figures in the export reflect real SEC filings.
+          </p>
+        </section>
+
+        <section className="lp-info__section">
+          <h2>Full column schema</h2>
+          <p>
+            The export includes {COLUMNS.length} fields per transaction. Every row traces back to
+            a specific SEC accession number that you can use to verify against the original EDGAR filing.
+          </p>
+          <div style={{overflowX:'auto',margin:'16px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
+            <table className="legal-table" style={{margin:0}}>
+              <thead>
+                <tr><th style={{width:200}}>Column</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                {COLUMNS.map(c=>(
+                  <tr key={c.name}>
+                    <td><code style={{fontSize:'0.75rem',background:'var(--surface-2)',padding:'2px 6px',borderRadius:3}}>{c.name}</code></td>
+                    <td>{c.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="lp-info__section">
+          <h2>Use cases</h2>
+          <p>
+            The dataset is structured for direct use in Excel, Google Sheets, Python (pandas), R,
+            or any tool that reads CSV files. Common applications include:
+          </p>
+          <ul className="lp-info__principles">
+            <li><strong>Backtest insider signals.</strong> Filter to open-market executive purchases
+              and measure forward returns across different holding periods.</li>
+            <li><strong>Academic and quantitative research.</strong> Decade-plus coverage of Form 4
+              filings with consistent field parsing, ready for statistical analysis.</li>
+            <li><strong>Sector and industry analysis.</strong> Aggregate insider buying and selling
+              patterns by sector, time period, or insider role.</li>
+            <li><strong>Congressional trading research.</strong> STOCK Act disclosures parsed alongside
+              corporate filings in the same schema, enabling direct comparison.</li>
+            <li><strong>Build your own models.</strong> The raw data behind Seli's conviction scoring,
+              available for your own methodology.</li>
+          </ul>
+        </section>
+
+        <section className="lp-info__section" style={{textAlign:'center',padding:'40px 0'}}>
+          <div style={{fontSize:'2rem',fontWeight:800,letterSpacing:'-1px'}}>$39.99</div>
+          <div style={{fontSize:'0.875rem',color:'var(--text-3)',marginTop:4,marginBottom:20}}>
+            One-time purchase. Full database as of the purchase date.
+          </div>
+          <button className="lp-btn-primary lp-btn-primary--lg" onClick={handlePurchase}>
+            {isSignedIn ? 'Purchase in Settings →' : 'Sign up to purchase →'}
+          </button>
+          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:16,maxWidth:480,marginLeft:'auto',marginRight:'auto'}}>
+            The export is a snapshot of the database at the time of purchase. Re-downloads
+            deliver the same data, not newer filings added after your purchase date.
+            Create a free Seli account to purchase.
+          </p>
+        </section>
+
+      </div>
+      <footer className="lp-footer">
+        <div className="lp-footer__frame">
+          <div className="lp-footer__logo">
+            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+          </div>
+          <div className="lp-footer__links">
+            <a href="/">Home</a>
+            <span>·</span>
+            <a href="/about" className="lp-footer__link-muted">About</a>
+            <span>·</span>
+            <a href="/terms" className="lp-footer__link-muted">Terms</a>
+            <span>·</span>
+            <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
 function HelpCenterPage() {
   const [activeId, setActiveId] = useState('using-seli');
   const idx = HELP_SECTIONS.findIndex(s => s.id === activeId);
@@ -8447,7 +8672,7 @@ function AppInner() {
     // reverts to the dashboard a moment later": the URL got silently
     // overwritten, and the early-return check above reads the URL fresh
     // on every render, so it stopped matching once that happened.
-    if (['/terms','/privacy','/cookies','/help'].includes(window.location.pathname)) return;
+    if (['/terms','/privacy','/cookies','/help','/data-download'].includes(window.location.pathname)) return;
     const path = pathFromAppState(page, detail);
     if (window.location.pathname !== path) {
       window.history.pushState({ page, detail }, '', path);
@@ -8610,6 +8835,7 @@ function AppInner() {
   if (path === '/privacy') return <PrivacyPage />;
   if (path === '/cookies') return <CookiePage />;
   if (path === '/help') return <HelpCenterPage />;
+  if (path === '/data-download') return <DataDownloadPage />;
 
   // ── Loading state — show minimal spinner while Clerk initializes
   // Prevents the flash of landing page that appears for ~200ms on first load
