@@ -142,6 +142,21 @@ async function handleFetchInner(request, env, origin) {
       return corsResponse({ error: 'Origin not allowed' }, 403, origin, env);
     }
 
+    // ── Unauthenticated CSV checkout — creates a Stripe Checkout Session
+    // for the $39.99 data export without requiring a Seli account. Stripe
+    // handles email collection, payment, and receipt. After payment, the
+    // user is redirected to /purchase-complete?session_id={CHECKOUT_SESSION_ID}.
+    if (url.pathname === '/checkout/csv' && request.method === 'POST') {
+      return handleGuestCSVCheckout(request, env, origin);
+    }
+
+    // ── Guest CSV download — verifies a Stripe Checkout Session or
+    // Payment Intent and serves the ZIP. No auth required; the session_id
+    // or order_id+email IS the proof of purchase.
+    if (url.pathname === '/checkout/csv-download' && request.method === 'POST') {
+      return handleGuestCSVDownload(request, env, origin);
+    }
+
     // Auth check — accepts either:
     //   Phase 1: X-API-Key header (current)
     //   Phase 2: Authorization: Bearer <Clerk JWT> (once CLERK_JWKS_URL secret is set)
@@ -759,6 +774,173 @@ async function checkIngestionHealth(env) {
     } catch {}
   }
   console.log(`[IngestionHealth] Alert sent — last filing ${lastFiling}, ${daysSince} days ago`);
+}
+
+// ── Guest CSV Checkout — no auth required ────────────────────────────────
+// Creates a Stripe Checkout Session for the $39.99 data export. Stripe
+// collects the email and payment. On success, redirects to the app's
+// /purchase-complete page with the session_id.
+async function handleGuestCSVCheckout(request, env, origin) {
+  try {
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: "2024-06-20" });
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: { name: 'Seli Insider Trading Dataset (CSV Export)' },
+          unit_amount: 3999,
+        },
+        quantity: 1,
+      }],
+      customer_creation: 'if_required',
+      success_url: `${env.APP_URL || 'https://seli.app'}/purchase-complete?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${env.APP_URL || 'https://seli.app'}/data-download`,
+      metadata: { type: 'csv_export_guest' },
+    });
+    return corsResponse({ url: session.url }, 200, origin, env);
+  } catch (e) {
+    console.error('[Guest CSV Checkout]', e.message);
+    return corsResponse({ error: 'Failed to create checkout session' }, 500, origin, env);
+  }
+}
+
+// ── Guest CSV Download — verifies purchase, serves ZIP ───────────────────
+// Accepts either { session_id } (from checkout redirect) or
+// { order_id, email } (for re-downloads). Verifies against Stripe,
+// then streams the ZIP from R2.
+async function handleGuestCSVDownload(request, env, origin) {
+  try {
+    const body = await request.json();
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: "2024-06-20" });
+    let paymentIntent;
+    let customerEmail;
+    let purchaseDate;
+
+    if (body.session_id) {
+      // Fresh checkout — verify the session is paid
+      const session = await stripe.checkout.sessions.retrieve(body.session_id);
+      if (session.payment_status !== 'paid') {
+        return corsResponse({ error: 'Payment not completed' }, 402, origin, env);
+      }
+      paymentIntent = session.payment_intent;
+      customerEmail = session.customer_details?.email;
+      purchaseDate = new Date(session.created * 1000).toISOString().split('T')[0];
+
+      // Info-only mode: just return order details without streaming the ZIP
+      if (body.info_only) {
+        return corsResponse({
+          order_id: paymentIntent,
+          email: customerEmail,
+          purchase_date: purchaseDate,
+        }, 200, origin, env);
+      }
+    } else if (body.order_id && body.email) {
+      // Re-download — verify order_id is a real paid PaymentIntent
+      // and email matches the one on file
+      try {
+        const pi = await stripe.paymentIntents.retrieve(body.order_id);
+        if (pi.status !== 'succeeded') {
+          return corsResponse({ error: 'Payment not found or not completed' }, 404, origin, env);
+        }
+        // Get the email from the associated charge
+        const charges = await stripe.charges.list({ payment_intent: body.order_id, limit: 1 });
+        const chargeEmail = charges.data[0]?.billing_details?.email || charges.data[0]?.receipt_email;
+        if (!chargeEmail || chargeEmail.toLowerCase() !== body.email.toLowerCase()) {
+          return corsResponse({ error: 'Email does not match this order' }, 403, origin, env);
+        }
+        paymentIntent = body.order_id;
+        customerEmail = chargeEmail;
+        purchaseDate = new Date(pi.created * 1000).toISOString().split('T')[0];
+      } catch (e) {
+        return corsResponse({ error: 'Order not found' }, 404, origin, env);
+      }
+    } else {
+      return corsResponse({ error: 'Missing session_id or order_id+email' }, 400, origin, env);
+    }
+
+    // Build the ZIP from R2 — same logic as handleCSVDownload but
+    // scoped to purchaseDate instead of a Neon purchase record
+    const manifestObj = await env.EXPORT_BUCKET.get('csv-export/manifest.json');
+    if (!manifestObj) return corsResponse({ error: 'Export not available yet' }, 503, origin, env);
+    const manifest = await manifestObj.json();
+
+    const cutoffDate = purchaseDate;
+    const cutoffYear = parseInt(cutoffDate.slice(0, 4), 10);
+    const yearsToInclude = (manifest.years || []).filter(y => Number(y.year) <= cutoffYear);
+
+    if (yearsToInclude.length === 0) {
+      return corsResponse({ error: 'No data available for this purchase date' }, 404, origin, env);
+    }
+
+    const CSV_EXPORT_PREFIX = 'csv-export/filings_';
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const zip = new Zip();
+    zip.ondata = (err, chunk, final) => {
+      if (err) { writer.abort(err); return; }
+      writer.write(chunk);
+      if (final) writer.close();
+    };
+
+    // Stream the ZIP in the background
+    (async () => {
+      try {
+        for (const y of yearsToInclude) {
+          const key = `${CSV_EXPORT_PREFIX}${y.year}.csv`;
+          const obj = await env.EXPORT_BUCKET.get(key);
+          if (!obj) continue;
+          let bytes;
+          if (Number(y.year) === cutoffYear) {
+            const text = await obj.text();
+            const lines = text.split('\n');
+            const kept = [lines[0]];
+            for (let i = 1; i < lines.length; i++) {
+              const line = lines[i];
+              if (!line) continue;
+              const comma1 = line.indexOf(',');
+              const comma2 = line.indexOf(',', comma1 + 1);
+              const txDate = line.slice(0, comma1);
+              const filingDate = line.slice(comma1 + 1, comma2);
+              const effectiveDate = txDate || filingDate;
+              if (!effectiveDate || effectiveDate <= cutoffDate) kept.push(line);
+            }
+            bytes = new TextEncoder().encode(kept.join('\n'));
+          } else {
+            bytes = new Uint8Array(await obj.arrayBuffer());
+          }
+          const entry = new ZipPassThrough(`seli_insider_trades_${y.year}.csv`);
+          zip.add(entry);
+          entry.push(bytes, true);
+        }
+        if (manifest.undatedRows > 0) {
+          const undatedObj = await env.EXPORT_BUCKET.get(`${CSV_EXPORT_PREFIX}unknown.csv`);
+          if (undatedObj) {
+            const entry = new ZipPassThrough('seli_insider_trades_undated.csv');
+            zip.add(entry);
+            entry.push(new Uint8Array(await undatedObj.arrayBuffer()), true);
+          }
+        }
+        zip.end();
+      } catch (e) {
+        console.error('[Guest CSV Download] zip build failed:', e.message);
+        writer.abort(e);
+      }
+    })();
+
+    return new Response(readable, {
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="seli_insider_trades_${cutoffDate}.zip"`,
+        ...corsHeaders(origin, env),
+      },
+    });
+  } catch (e) {
+    console.error('[Guest CSV Download]', e.message);
+    return corsResponse({ error: 'Download failed' }, 500, origin, env);
+  }
 }
 
 // ── CSV download endpoint ────────────────────────────────────────────────────

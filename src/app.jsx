@@ -6912,21 +6912,27 @@ function DataDownloadPage() {
     { name:'accession_number',     desc:'SEC EDGAR accession number for source verification' },
   ];
 
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  function handleBuy() {
+    setCheckoutLoading(true);
+    fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.url) window.location.href = d.url;
+        else { alert('Could not start checkout. Please try again.'); setCheckoutLoading(false); }
+      })
+      .catch(() => { alert('Could not start checkout. Please try again.'); setCheckoutLoading(false); });
+  }
+
   const buyCTA = (
     <div style={{textAlign:'center'}}>
-      <SignedOut>
-        <SignInButton mode="modal" afterSignInUrl="/data-download">
-          <button className="lp-btn-primary lp-btn-primary--lg">
-            <svg width="16" height="16" viewBox="0 0 48 48" style={{marginRight:8,verticalAlign:'-3px'}}><path fill="#4285F4" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#34A853" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.9 7.35 2.56 10.56l7.97-5.97z"/><path fill="#EA4335" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 5.97C6.51 42.62 14.62 48 24 48z"/></svg>
-            Continue to purchase — $39.99
-          </button>
-        </SignInButton>
-      </SignedOut>
-      <SignedIn>
-        <button className="lp-btn-primary lp-btn-primary--lg" onClick={()=>{window.location.href='/?purchase=data_export';}}>
-          Buy now — $39.99
-        </button>
-      </SignedIn>
+      <button className="lp-btn-primary lp-btn-primary--lg" onClick={handleBuy} disabled={checkoutLoading}>
+        {checkoutLoading ? 'Loading checkout...' : 'Buy now — $39.99'}
+      </button>
     </div>
   );
 
@@ -6963,7 +6969,7 @@ function DataDownloadPage() {
         {buyCTA}
 
         <p style={{fontSize:'0.8125rem',color:'var(--text-3)',textAlign:'center',marginTop:10,marginBottom:0}}>
-          Database snapshot at purchase date. One Google sign-in, then straight to checkout.
+          Checkout powered by Stripe. No account required.
         </p>
 
         <hr style={{border:'none',borderTop:'0.5px solid var(--border)',margin:'40px 0'}}/>
@@ -7075,6 +7081,236 @@ function DataDownloadPage() {
     </div>
   );
 }
+// ── Purchase Complete page ─────────────────────────────────────────────────
+// Shown after Stripe Checkout redirect. Verifies payment, shows download
+// button, and displays the order ID for re-download reference.
+function PurchaseCompletePage() {
+  const [dark, setDark] = useTheme();
+  const [status, setStatus] = useState('loading'); // loading | ready | error
+  const [orderInfo, setOrderInfo] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    if (!sessionId) { setStatus('error'); return; }
+
+    // Verify the session and get order info
+    fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv-download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, info_only: true }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setStatus('error'); return; }
+        setOrderInfo({ sessionId, orderId: d.order_id, email: d.email, date: d.purchase_date });
+        setStatus('ready');
+      })
+      .catch(() => setStatus('error'));
+  }, []);
+
+  function handleDownload() {
+    setDownloading(true);
+    const params = new URLSearchParams(window.location.search);
+    fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv-download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: params.get('session_id') }),
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('Download failed');
+        return r.blob();
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `seli_insider_trades_${orderInfo?.date || 'export'}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setDownloading(false);
+      })
+      .catch(() => { setDownloading(false); setStatus('error'); });
+  }
+
+  return (
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
+      <nav className="lp-nav">
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+          </a>
+        </div>
+      </nav>
+      <div className="legal-content" style={{maxWidth:600,textAlign:'center',paddingTop:60}}>
+        {status === 'loading' && (
+          <>
+            <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:12}}>Verifying your purchase...</div>
+            <SkeletonRows count={3}/>
+          </>
+        )}
+        {status === 'ready' && (
+          <>
+            <div style={{fontSize:'2.5rem',marginBottom:8}}>✓</div>
+            <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Payment confirmed</div>
+            <p style={{color:'var(--text-2)',marginBottom:24}}>
+              Your insider trading dataset is ready to download.
+            </p>
+            <button
+              className="lp-btn-primary lp-btn-primary--lg"
+              onClick={handleDownload}
+              disabled={downloading}
+              style={{marginBottom:24}}
+            >
+              {downloading ? 'Preparing download...' : 'Download dataset (.zip)'}
+            </button>
+
+            <div style={{background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8,padding:'20px 24px',textAlign:'left',marginBottom:24}}>
+              <div style={{fontSize:'0.75rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',color:'var(--text-3)',marginBottom:12}}>Order details — save this</div>
+              <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 16px',fontSize:'0.875rem'}}>
+                <span style={{color:'var(--text-3)'}}>Order ID</span>
+                <span style={{fontFamily:'monospace',fontSize:'0.8125rem',wordBreak:'break-all'}}>{orderInfo?.orderId || '—'}</span>
+                <span style={{color:'var(--text-3)'}}>Email</span>
+                <span>{orderInfo?.email || '—'}</span>
+                <span style={{color:'var(--text-3)'}}>Data through</span>
+                <span>{orderInfo?.date || '—'}</span>
+              </div>
+            </div>
+
+            <p style={{fontSize:'0.8125rem',color:'var(--text-3)',lineHeight:1.6}}>
+              Need to re-download later? Go to <a href="/redownload" style={{color:'var(--accent-strong)'}}>seli.app/redownload</a> and
+              enter your Order ID and email. A receipt has been sent to your email by Stripe.
+            </p>
+          </>
+        )}
+        {status === 'error' && (
+          <>
+            <div style={{fontSize:'2.5rem',marginBottom:8}}>×</div>
+            <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Something went wrong</div>
+            <p style={{color:'var(--text-2)',marginBottom:24}}>
+              We couldn't verify your purchase. If you were charged, your payment is safe.
+            </p>
+            <p style={{fontSize:'0.875rem',color:'var(--text-3)',marginBottom:24}}>
+              Contact <a href="mailto:admin@seli.app" style={{color:'var(--accent-strong)'}}>admin@seli.app</a> with
+              your Stripe receipt and we'll get your download sorted.
+            </p>
+            <a href="/data-download" className="lp-btn-primary">Back to Data Export</a>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Re-download page ──────────────────────────────────────────────────────
+// Public page where users enter their order ID + email to re-download a
+// previously purchased CSV export.
+function RedownloadPage() {
+  const [dark, setDark] = useTheme();
+  const [orderId, setOrderId] = useState('');
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState('idle'); // idle | loading | error
+  const [errorMsg, setErrorMsg] = useState('');
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (!orderId.trim() || !email.trim()) return;
+    setStatus('loading');
+    setErrorMsg('');
+
+    fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv-download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId.trim(), email: email.trim() }),
+    })
+      .then(r => {
+        if (!r.ok) return r.json().then(d => { throw new Error(d.error || 'Download failed'); });
+        return r.blob();
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'seli_insider_trades_export.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setStatus('idle');
+      })
+      .catch(err => { setStatus('error'); setErrorMsg(err.message); });
+  }
+
+  return (
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
+      <nav className="lp-nav">
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+          </a>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginLeft:'auto'}}>
+            <a href="/help" className="lp-nav__link">Help</a>
+          </div>
+        </div>
+      </nav>
+      <div className="legal-content" style={{maxWidth:480,paddingTop:60}}>
+
+        <h1 style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Re-download your data export</h1>
+        <p style={{color:'var(--text-2)',marginBottom:28,fontSize:'0.9375rem'}}>
+          Enter the Order ID and email from your original purchase. Your Order ID is
+          in the order details you received at checkout and in your Stripe receipt email.
+        </p>
+
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div>
+            <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Order ID</label>
+            <input
+              type="text"
+              value={orderId}
+              onChange={e => setOrderId(e.target.value)}
+              placeholder="pi_3Nk8..."
+              style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontFamily:'monospace',boxSizing:'border-box'}}
+            />
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Email used at checkout</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',boxSizing:'border-box'}}
+            />
+          </div>
+          <button
+            className="lp-btn-primary"
+            onClick={handleSubmit}
+            disabled={status === 'loading' || !orderId.trim() || !email.trim()}
+            style={{width:'100%',padding:'12px'}}
+          >
+            {status === 'loading' ? 'Verifying...' : 'Download'}
+          </button>
+          {status === 'error' && (
+            <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6}}>
+              {errorMsg || 'Could not verify this order. Double-check your Order ID and email.'}
+            </div>
+          )}
+        </div>
+
+        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:28,lineHeight:1.6}}>
+          Can't find your Order ID? Check your email for a receipt from Stripe. If you need
+          help, contact <a href="mailto:admin@seli.app" style={{color:'var(--accent-strong)'}}>admin@seli.app</a>.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function HelpCenterPage() {
   const [activeId, setActiveId] = useState('using-seli');
   const idx = HELP_SECTIONS.findIndex(s => s.id === activeId);
@@ -8659,7 +8895,7 @@ function AppInner() {
     // reverts to the dashboard a moment later": the URL got silently
     // overwritten, and the early-return check above reads the URL fresh
     // on every render, so it stopped matching once that happened.
-    if (['/terms','/privacy','/cookies','/help','/data-download'].includes(window.location.pathname)) return;
+    if (['/terms','/privacy','/cookies','/help','/data-download','/purchase-complete','/redownload'].includes(window.location.pathname)) return;
     const path = pathFromAppState(page, detail);
     if (window.location.pathname !== path) {
       window.history.pushState({ page, detail }, '', path);
@@ -8823,6 +9059,8 @@ function AppInner() {
   if (path === '/cookies') return <CookiePage />;
   if (path === '/help') return <HelpCenterPage />;
   if (path === '/data-download') return <DataDownloadPage />;
+  if (path === '/purchase-complete') return <PurchaseCompletePage />;
+  if (path === '/redownload') return <RedownloadPage />;
 
   // ── Loading state — show minimal spinner while Clerk initializes
   // Prevents the flash of landing page that appears for ~200ms on first load
