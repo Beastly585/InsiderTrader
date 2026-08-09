@@ -2810,6 +2810,7 @@ async function handleStripeWebhook(request, env) {
         const clerkUserId = pi.metadata?.clerk_user_id;
         if (!clerkUserId) break;
 
+        const purchaseDate = new Date().toISOString().split('T')[0];
         await neonFetch(env, `
           INSERT INTO public.data_purchases
             (clerk_user_id, stripe_payment_intent_id, amount_cents, purchased_at)
@@ -2817,6 +2818,51 @@ async function handleStripeWebhook(request, env) {
           ON CONFLICT (stripe_payment_intent_id) DO NOTHING
         `);
         await syncClerkMetadata(env, clerkUserId, { hasDataExport: true });
+
+        // Send purchase confirmation email
+        if (env.RESEND_API_KEY && env.CLERK_SECRET_KEY) {
+          try {
+            const clerkResp = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
+              headers: { 'Authorization': `Bearer ${env.CLERK_SECRET_KEY}` },
+            });
+            const clerkUser = await clerkResp.json();
+            const userEmail = clerkUser.email_addresses?.[0]?.email_address;
+            if (userEmail) {
+              await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  from: env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app',
+                  to: userEmail,
+                  subject: 'Your Seli data export is ready',
+                  html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 0">
+                    <h1 style="font-size:20px;font-weight:700;margin-bottom:16px">Your data export is ready</h1>
+                    <p style="color:#555;line-height:1.6;margin-bottom:20px">
+                      Thank you for purchasing the Seli Insider Trading Dataset. Your download is available now.
+                    </p>
+                    <div style="background:#f7f7f8;border:1px solid #e5e5e5;border-radius:8px;padding:16px 20px;margin-bottom:20px">
+                      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:10px">Order details</div>
+                      <div style="margin-bottom:6px"><strong>Order ID:</strong> <code style="font-size:13px">${pi.id}</code></div>
+                      <div style="margin-bottom:6px"><strong>Email:</strong> ${userEmail}</div>
+                      <div><strong>Data through:</strong> ${purchaseDate}</div>
+                    </div>
+                    <p style="color:#555;line-height:1.6;margin-bottom:20px">
+                      <strong>Save this email.</strong> You can re-download your data anytime at
+                      <a href="https://seli.app/redownload" style="color:#5A4FE8">seli.app/redownload</a>.
+                    </p>
+                    <a href="https://seli.app/redownload" style="display:inline-block;background:#5A4FE8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px">Download your dataset</a>
+                    <p style="color:#999;font-size:12px;margin-top:24px;line-height:1.5">
+                      This is a one-time purchase. The export contains data through ${purchaseDate}.
+                      Re-downloads deliver the same snapshot.
+                    </p>
+                  </div>`,
+                }),
+              });
+            }
+          } catch (e) {
+            console.error('[Worker] Data export confirmation email failed:', e.message);
+          }
+        }
         break;
       }
       case 'charge.refunded':
