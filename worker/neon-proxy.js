@@ -789,7 +789,10 @@ async function handleGuestCSVCheckout(request, env, origin) {
       line_items: [{
         price_data: {
           currency: 'usd',
-          product_data: { name: 'Seli Insider Trading Dataset (CSV Export)' },
+          product_data: {
+            name: 'Seli Insider Trading Dataset (CSV Export)',
+            description: 'Complete SEC Form 4 and congressional trading dataset. 10+ years of insider filings, 18 fields per transaction, one CSV per year. One-time purchase.',
+          },
           unit_amount: 3999,
         },
         quantity: 1,
@@ -831,6 +834,42 @@ async function handleGuestCSVDownload(request, env, origin) {
 
       // Info-only mode: just return order details without streaming the ZIP
       if (body.info_only) {
+        // Send confirmation email on first info_only call (i.e. when the user
+        // first lands on /purchase-complete). Idempotent: Stripe session ID
+        // is unique, so even if called twice the email is the same content.
+        if (customerEmail && env.RESEND_API_KEY) {
+          fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app',
+              to: customerEmail,
+              subject: 'Your Seli data export is ready',
+              html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 0">
+                <h1 style="font-size:20px;font-weight:700;margin-bottom:16px">Your data export is ready</h1>
+                <p style="color:#555;line-height:1.6;margin-bottom:20px">
+                  Thank you for purchasing the Seli Insider Trading Dataset. Your download is available now.
+                </p>
+                <div style="background:#f7f7f8;border:1px solid #e5e5e5;border-radius:8px;padding:16px 20px;margin-bottom:20px">
+                  <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:10px">Order details</div>
+                  <div style="margin-bottom:6px"><strong>Order ID:</strong> <code style="font-size:13px">${paymentIntent}</code></div>
+                  <div style="margin-bottom:6px"><strong>Email:</strong> ${customerEmail}</div>
+                  <div><strong>Data through:</strong> ${purchaseDate}</div>
+                </div>
+                <p style="color:#555;line-height:1.6;margin-bottom:20px">
+                  <strong>Save this email.</strong> If you need to re-download your data later, go to
+                  <a href="https://seli.app/redownload" style="color:#5A4FE8">seli.app/redownload</a>
+                  and enter your Order ID and email.
+                </p>
+                <a href="https://seli.app/purchase-complete?session_id=${body.session_id}" style="display:inline-block;background:#5A4FE8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px">Download your dataset</a>
+                <p style="color:#999;font-size:12px;margin-top:24px;line-height:1.5">
+                  This is a one-time purchase. The export contains data through ${purchaseDate}.
+                  Re-downloads deliver the same snapshot — not newer data added after your purchase.
+                </p>
+              </div>`,
+            }),
+          }).catch(e => console.error('[Guest CSV] confirmation email failed:', e.message));
+        }
         return corsResponse({
           order_id: paymentIntent,
           email: customerEmail,

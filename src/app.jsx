@@ -7191,10 +7191,6 @@ function PurchaseCompletePage() {
 }
 
 // ── Re-download page ──────────────────────────────────────────────────────
-// Standalone download hub. Three paths to get your file:
-//   1. Signed in → see purchase history, click to re-download
-//   2. Not signed in → sign in to see history
-//   3. Anonymous → paste order ID + email to look up any purchase
 function RedownloadPage() {
   const [dark, setDark] = useTheme();
   const { isSignedIn, getToken } = useAuth();
@@ -7204,10 +7200,9 @@ function RedownloadPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [history, setHistory] = useState(null);
   const [historyError, setHistoryError] = useState(null);
-  const [downloadProgress, setDownloadProgress] = useState(null); // null | { label, pct }
+  const [downloadProgress, setDownloadProgress] = useState(null);
   const [activeTab, setActiveTab] = useState(isSignedIn ? 'history' : 'lookup');
 
-  // Fetch purchase history for signed-in users
   useEffect(() => {
     if (!isSignedIn) { setHistory([]); return; }
     setActiveTab('history');
@@ -7218,14 +7213,15 @@ function RedownloadPage() {
           headers: { 'Authorization': `Bearer ${token}` },
         });
         const d = await r.json();
-        setHistory(d.purchases || []);
+        // API returns dataExports, not purchases
+        setHistory(d.dataExports || []);
       } catch (e) { setHistoryError(e.message); setHistory([]); }
     })();
   }, [isSignedIn]);
 
-  // Download helper with progress tracking
   async function downloadBlob(fetchPromise, filename) {
     setDownloadProgress({ label: 'Preparing download...', pct: 0 });
+    setErrorMsg('');
     try {
       const r = await fetchPromise;
       if (!r.ok) {
@@ -7236,7 +7232,6 @@ function RedownloadPage() {
       const reader = r.body.getReader();
       const chunks = [];
       let received = 0;
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -7245,10 +7240,9 @@ function RedownloadPage() {
         const pct = total > 0 ? Math.round((received / total) * 100) : null;
         setDownloadProgress({
           label: total > 0 ? `Downloading... ${Math.round(received / 1024)}KB / ${Math.round(total / 1024)}KB` : `Downloading... ${Math.round(received / 1024)}KB`,
-          pct: pct,
+          pct,
         });
       }
-
       const blob = new Blob(chunks);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -7274,7 +7268,7 @@ function RedownloadPage() {
         fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/billing/csv-download', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'redownload', purchaseId: purchase.id }),
+          body: JSON.stringify({ mode: 'redownload', purchaseId: purchase.stripe_payment_intent_id }),
         }),
         `seli_insider_trades_${purchase.purchased_at?.split('T')[0] || 'export'}.zip`
       );
@@ -7286,7 +7280,6 @@ function RedownloadPage() {
     if (!orderId.trim() || !email.trim()) return;
     setLookupStatus('loading');
     setErrorMsg('');
-
     downloadBlob(
       fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv-download', {
         method: 'POST',
@@ -7296,6 +7289,14 @@ function RedownloadPage() {
       'seli_insider_trades_export.zip'
     ).then(() => setLookupStatus('idle'));
   }
+
+  const tabStyle = (active) => ({
+    padding:'10px 20px',fontSize:'0.875rem',fontWeight:active?600:400,
+    color:active?'var(--accent-strong)':'var(--text-3)',
+    background:'none',border:'none',
+    borderBottom:active?'2px solid var(--accent-strong)':'2px solid transparent',
+    cursor:'pointer',fontFamily:'var(--font)',
+  });
 
   return (
     <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
@@ -7318,16 +7319,13 @@ function RedownloadPage() {
           Already purchased? Re-download your dataset below.
         </p>
 
-        {/* ── Download progress bar ──────────────────────────────────── */}
         {downloadProgress && (
           <div style={{marginBottom:24,padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
             <div style={{fontSize:'0.8125rem',fontWeight:500,marginBottom:8}}>{downloadProgress.label}</div>
             <div style={{width:'100%',height:6,background:'var(--surface-3)',borderRadius:3,overflow:'hidden'}}>
               <div style={{
                 width: downloadProgress.pct != null ? `${downloadProgress.pct}%` : '60%',
-                height:'100%',
-                background:'var(--accent-strong)',
-                borderRadius:3,
+                height:'100%', background:'var(--accent-strong)', borderRadius:3,
                 transition:'width 0.3s ease',
                 animation: downloadProgress.pct == null ? 'skel-fade 1s ease-in-out infinite alternate' : 'none',
               }}/>
@@ -7335,119 +7333,94 @@ function RedownloadPage() {
           </div>
         )}
 
-        {/* ── Tab switcher ───────────────────────────────────────────── */}
         <div style={{display:'flex',gap:0,marginBottom:24,borderBottom:'1px solid var(--border)'}}>
-          <button
-            onClick={() => setActiveTab('history')}
-            style={{
-              padding:'10px 20px',fontSize:'0.875rem',fontWeight:activeTab==='history'?600:400,
-              color:activeTab==='history'?'var(--accent-strong)':'var(--text-3)',
-              background:'none',border:'none',borderBottom:activeTab==='history'?'2px solid var(--accent-strong)':'2px solid transparent',
-              cursor:'pointer',fontFamily:'var(--font)',
-            }}
-          >My purchases</button>
-          <button
-            onClick={() => setActiveTab('lookup')}
-            style={{
-              padding:'10px 20px',fontSize:'0.875rem',fontWeight:activeTab==='lookup'?600:400,
-              color:activeTab==='lookup'?'var(--accent-strong)':'var(--text-3)',
-              background:'none',border:'none',borderBottom:activeTab==='lookup'?'2px solid var(--accent-strong)':'2px solid transparent',
-              cursor:'pointer',fontFamily:'var(--font)',
-            }}
-          >Look up an order</button>
+          <button onClick={() => setActiveTab('history')} style={tabStyle(activeTab==='history')}>My purchases</button>
+          <button onClick={() => setActiveTab('lookup')} style={tabStyle(activeTab==='lookup')}>Look up an order</button>
         </div>
 
-        {/* ── Tab: My purchases ──────────────────────────────────────── */}
-        {activeTab === 'history' && (
-          <section>
-            {!isSignedIn ? (
-              <div style={{textAlign:'center',padding:'32px 0'}}>
-                <p style={{color:'var(--text-2)',marginBottom:16,fontSize:'0.9375rem'}}>
-                  Sign in to see purchases linked to your account.
-                </p>
-                <SignInButton mode="modal" afterSignInUrl="/redownload">
-                  <button className="lp-btn-primary">Sign in</button>
-                </SignInButton>
-              </div>
-            ) : history === null ? (
-              <SkeletonRows count={3}/>
-            ) : history.length === 0 ? (
-              <div style={{textAlign:'center',padding:'32px 0'}}>
-                <p style={{color:'var(--text-3)',fontSize:'0.9375rem',marginBottom:16}}>
-                  {historyError ? 'Could not load purchase history.' : 'No data export purchases on this account.'}
-                </p>
-                <a href="/data-download" style={{color:'var(--accent-strong)',fontSize:'0.875rem',fontWeight:500,textDecoration:'none'}}>
-                  Purchase the dataset →
-                </a>
-              </div>
-            ) : (
-              <div style={{border:'0.5px solid var(--border)',borderRadius:8,overflow:'hidden'}}>
-                {history.map((p, i) => (
-                  <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:i < history.length - 1 ? '0.5px solid var(--border)' : 'none'}}>
-                    <div>
-                      <div style={{fontWeight:600,fontSize:'0.875rem'}}>{fmt.date(p.purchased_at)}</div>
-                      <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:2}}>${(p.amount_cents / 100).toFixed(2)}</div>
-                    </div>
-                    <button
-                      className="btn btn--primary btn--sm"
-                      onClick={() => handleRedownload(p)}
-                      disabled={downloadProgress != null}
-                    >Re-download</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {isSignedIn && history && history.length > 0 && (
-              <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:12}}>
-                Each re-download delivers the data as it stood on that purchase's date.
-              </p>
-            )}
-          </section>
-        )}
+        {/* Fixed-height tab content area prevents width/height jumping */}
+        <div style={{minHeight:260}}>
 
-        {/* ── Tab: Look up an order ──────────────────────────────────── */}
-        {activeTab === 'lookup' && (
-          <section>
-            <p style={{color:'var(--text-2)',marginBottom:20,fontSize:'0.875rem'}}>
-              Enter the Order ID and email from your Stripe receipt to re-download.
-            </p>
-            <div style={{display:'flex',flexDirection:'column',gap:16}}>
-              <div>
-                <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Order ID</label>
-                <input
-                  type="text"
-                  value={orderId}
-                  onChange={e => setOrderId(e.target.value)}
-                  placeholder="pi_3Nk8..."
-                  style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontFamily:'monospace',boxSizing:'border-box'}}
-                />
-              </div>
-              <div>
-                <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Email used at checkout</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',boxSizing:'border-box'}}
-                />
-              </div>
-              <button
-                className="lp-btn-primary"
-                onClick={handleLookup}
-                disabled={lookupStatus === 'loading' || !orderId.trim() || !email.trim() || downloadProgress != null}
-                style={{width:'100%',padding:'12px'}}
-              >
-                {lookupStatus === 'loading' ? 'Verifying...' : 'Download'}
-              </button>
-              {lookupStatus === 'error' && (
-                <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6}}>
-                  {errorMsg || 'Could not verify this order. Double-check your Order ID and email.'}
+          {activeTab === 'history' && (
+            <section>
+              {!isSignedIn ? (
+                <div style={{textAlign:'center',padding:'32px 0'}}>
+                  <p style={{color:'var(--text-2)',marginBottom:16,fontSize:'0.9375rem'}}>
+                    Sign in to see purchases linked to your account.
+                  </p>
+                  <SignInButton mode="modal" afterSignInUrl="/redownload">
+                    <button className="lp-btn-primary">Sign in</button>
+                  </SignInButton>
+                </div>
+              ) : history === null ? (
+                <SkeletonRows count={3}/>
+              ) : history.length === 0 ? (
+                <div style={{textAlign:'center',padding:'32px 0'}}>
+                  <p style={{color:'var(--text-3)',fontSize:'0.9375rem',marginBottom:16}}>
+                    {historyError ? 'Could not load purchase history.' : 'No data export purchases on this account.'}
+                  </p>
+                  <a href="/data-download" style={{color:'var(--accent-strong)',fontSize:'0.875rem',fontWeight:500,textDecoration:'none'}}>
+                    Purchase the dataset →
+                  </a>
+                </div>
+              ) : (
+                <div style={{border:'0.5px solid var(--border)',borderRadius:8,overflow:'hidden'}}>
+                  {history.map((p, i) => (
+                    <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:i < history.length - 1 ? '0.5px solid var(--border)' : 'none'}}>
+                      <div>
+                        <div style={{fontWeight:600,fontSize:'0.875rem'}}>{fmt.date(p.purchased_at)}</div>
+                        <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:2}}>${(p.amount_cents / 100).toFixed(2)}{p.downloaded_at ? ' · downloaded' : ''}</div>
+                      </div>
+                      <button
+                        className="btn btn--primary btn--sm"
+                        onClick={() => handleRedownload(p)}
+                        disabled={downloadProgress != null}
+                      >Re-download</button>
+                    </div>
+                  ))}
                 </div>
               )}
-            </div>
-          </section>
-        )}
+              {isSignedIn && history && history.length > 0 && (
+                <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:12}}>
+                  Each re-download delivers the data as it stood on that purchase's date.
+                </p>
+              )}
+            </section>
+          )}
+
+          {activeTab === 'lookup' && (
+            <section>
+              <p style={{color:'var(--text-2)',marginBottom:20,fontSize:'0.875rem'}}>
+                Enter the Order ID and email from your Stripe receipt to re-download.
+              </p>
+              <div style={{display:'flex',flexDirection:'column',gap:16}}>
+                <div>
+                  <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Order ID</label>
+                  <input type="text" value={orderId} onChange={e => setOrderId(e.target.value)}
+                    placeholder="pi_3Nk8..."
+                    style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontFamily:'monospace',boxSizing:'border-box'}}
+                  />
+                </div>
+                <div>
+                  <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Email used at checkout</label>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',boxSizing:'border-box'}}
+                  />
+                </div>
+                <button className="lp-btn-primary" onClick={handleLookup}
+                  disabled={lookupStatus === 'loading' || !orderId.trim() || !email.trim() || downloadProgress != null}
+                  style={{width:'100%',padding:'12px'}}
+                >{lookupStatus === 'loading' ? 'Verifying...' : 'Download'}</button>
+                {lookupStatus === 'error' && (
+                  <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6}}>
+                    {errorMsg || 'Could not verify this order. Double-check your Order ID and email.'}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+        </div>
 
         <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:28,lineHeight:1.6,textAlign:'center'}}>
           Need help? Contact <a href="mailto:admin@seli.app" style={{color:'var(--accent-strong)'}}>admin@seli.app</a>
