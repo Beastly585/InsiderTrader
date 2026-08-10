@@ -1882,21 +1882,19 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-sig-row__net { font-size: 0.875rem; font-weight: 700; font-family: var(--font-mono); letter-spacing: -0.3px; white-space: nowrap; }
 
 @media (max-width: 640px) {
-  /* This fixed 5-column grid (1fr 100px 60px 130px 110px, ~450px minimum)
-     never had a mobile layout at all — on a 375px phone it simply
-     overflowed past the container's right edge, which was the actual
-     mechanism behind the "padding disappears after signals load" bug.
-     Collapsed to a compact 2-line summary (ticker/badges + company on one
-     row, conviction + net flow on the next) with the rest available via
-     tap-to-expand instead of trying to cram five columns into one line. */
   .ins-sig-row {
-    display: flex; flex-wrap: wrap; gap: 6px 10px;
+    display: flex; flex-wrap: wrap; gap: 4px 10px;
     padding: 10px 14px;
   }
-  .ins-sig-row__left  { flex: 1 1 100%; order: 1; }
-  .ins-sig-row__signal { flex: 1 1 auto; order: 2; flex-direction: row; align-items: center; gap: 8px; }
-  .ins-sig-row__right  { order: 3; flex: 0 0 auto; }
-  .ins-sig-row__type, .ins-sig-row__exec { display: none; } /* covered by .ins-sig-row__expanded instead */
+  .ins-sig-row__left  { flex: 1 1 0; order: 1; min-width: 0; }
+  .ins-sig-row__signal { display: none; } /* conviction bar moves into __right on mobile */
+  .ins-sig-row__right  {
+    order: 2; flex: 0 0 auto; display: flex; flex-direction: column;
+    align-items: flex-end; gap: 4px; justify-content: center;
+  }
+  /* Show conviction bar inside the right column on mobile */
+  .ins-sig-row__right .conv-bar-wrap { display: flex; width: 80px; }
+  .ins-sig-row__type, .ins-sig-row__exec { display: none; }
   .ins-sig-row__expand-chevron {
     order: 4; flex: 1 1 100%; text-align: center;
     font-size: 0.6875rem; color: var(--text-3); padding-top: 2px;
@@ -1908,6 +1906,7 @@ td { padding:7px 11px; vertical-align:middle; }
   .ins-sig-row__expanded-grid {
     display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; font-size: 0.8125rem;
   }
+  .ins-sig-row__co { display: block; font-size: 0.6875rem; }
 }
 @media (max-width: 900px) {
   .ins-sig-col-hdrs { display: none; }
@@ -3384,7 +3383,17 @@ td { padding:7px 11px; vertical-align:middle; }
   aspect-ratio: 4 / 3; border-radius: var(--radius-lg);
   border: 0.5px solid var(--border); background: var(--surface-2);
   display: flex; align-items: stretch; justify-content: stretch;
-  padding: 20px;
+  padding: 20px; overflow: hidden;
+}
+@media (max-width: 640px) {
+  .lp-benefit-snippet-box { padding: 10px; }
+  /* Data preview: drop Insider and Value columns on mobile — too many columns for narrow screens */
+  .env-preview__thead { grid-template-columns: 1fr 36px 18px; }
+  .env-preview__trow--data { grid-template-columns: 1fr 36px 18px; }
+  .env-preview__thead span:nth-child(2),
+  .env-preview__thead span:nth-child(5),
+  .env-preview__trow--data span:nth-child(2),
+  .env-preview__trow--data span:nth-child(5) { display: none; }
 }
 .lp-benefit-snippet-box .env-preview { width: 100%; margin: 0; }
 /* These mocks sit in a fixed 4:3 box (.lp-benefit-snippet-box) that's

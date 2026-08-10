@@ -3838,7 +3838,12 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                         <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                       </div>
                       <div className="ins-sig-row__co">{s.company}</div>
-                      {s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:'0.6875rem'}}>{s.sector}</div>}
+                      {isMobile && s.lastTradeDate && (
+                        <div className="td-muted" style={{fontSize:'0.6875rem'}}>
+                          {fmt.dateShort(s.lastTradeDate)} · {s.insiderCount} insider{s.insiderCount!==1?'s':''}{s.cSuiteBuys>0?` · ${s.cSuiteBuys} exec`:''}
+                        </div>
+                      )}
+                      {!isMobile && s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:'0.6875rem'}}>{s.sector}</div>}
                     </div>
                     <div className="ins-sig-row__type">
                       <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}`}>{typeLabel}</span>
@@ -3861,6 +3866,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     </div>
                     <div className="ins-sig-row__right">
                       <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
+                      {isMobile && <ConvictionBar score={s.conviction}/>}
                     </div>
                     {/* Mobile-only — everything above hidden by default via CSS
                         (see .ins-sig-row--expanded), shown here as a proper
@@ -6364,7 +6370,10 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                       </div>
                     </div>
                     <div className="ins-sig-row__signal"><ConvictionBar score={s.conviction}/></div>
-                    <div className="ins-sig-row__right"><span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span></div>
+                    <div className="ins-sig-row__right">
+                      <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
+                      {isMobile && <ConvictionBar score={s.conviction}/>}
+                    </div>
                     {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
                     {isExpanded && (
                       <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
