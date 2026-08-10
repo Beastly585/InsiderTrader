@@ -3758,6 +3758,7 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
+  overflow-x: hidden;
 }
 .legal-page > .legal-content { flex: 1; }
 .legal-content {
@@ -3816,6 +3817,11 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .legal-table a { color: var(--accent-strong); text-decoration: none; }
 .legal-table a:hover { text-decoration: underline; }
+@media (max-width: 640px) {
+  .legal-table th, .legal-table td { padding: 6px 8px; font-size: 0.75rem; }
+  .legal-table th:first-child { width: 120px; }
+  .legal-table code { font-size: 0.6875rem; word-break: break-all; }
+}
 .legal-content h2 {
   font-size: 1.0625rem;
   font-weight: 600;

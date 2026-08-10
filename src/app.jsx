@@ -6959,8 +6959,8 @@ function DataDownloadPage() {
       <div className="legal-content" style={{maxWidth:960}}>
 
         <div className="lp-info__eyebrow">Data Export</div>
-        <h1 className="lp-info__h1">Download the Full SEC Insider Trading Dataset</h1>
-        <p style={{fontSize:'1rem',color:'var(--text-2)',lineHeight:1.6,maxWidth:640,marginBottom:8}}>
+        <h1 style={{fontSize:'clamp(1.375rem, 5vw, 2.25rem)',fontWeight:800,letterSpacing:'-1px',lineHeight:1.1,marginBottom:20}}>Download the Full SEC Insider Trading Dataset</h1>
+        <p style={{fontSize:'0.9375rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:8}}>
           Every SEC Form 4 insider filing and congressional stock disclosure Seli has ingested.
           10+ years of open-market purchases, insider sales, executive trades, and congressional
           disclosures, delivered as structured CSVs organized by year. One-time purchase, no subscription.
@@ -6979,37 +6979,31 @@ function DataDownloadPage() {
 
         <section className="lp-info__section">
           <h2>Sample data</h2>
-          <div style={{overflowX:'auto',margin:'12px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem',whiteSpace:'nowrap'}}>
+          <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch',margin:'12px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem',minWidth:420}}>
               <thead>
                 <tr style={{borderBottom:'1px solid var(--border)'}}>
-                  {['Date','Ticker','Company','Insider','Title','Type','Shares','Price','Value','Pos%','Role','Routine'].map(h=>(
-                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,fontSize:'0.6875rem',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.04em'}}>{h}</th>
+                  {['Date','Ticker','Insider','Type','Value','Role'].map(h=>(
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,fontSize:'0.6875rem',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {SAMPLE_ROWS.map((r,i)=>(
                   <tr key={i} style={{borderBottom:'0.5px solid var(--border)'}}>
-                    <td style={{padding:'8px 10px'}}>{r.date}</td>
-                    <td style={{padding:'8px 10px',fontWeight:600,color:'var(--accent-strong)'}}>{r.ticker}</td>
-                    <td style={{padding:'8px 10px',color:'var(--text-2)',maxWidth:140,overflow:'hidden',textOverflow:'ellipsis'}}>{r.company}</td>
-                    <td style={{padding:'8px 10px'}}>{r.insider}</td>
-                    <td style={{padding:'8px 10px',color:'var(--text-3)'}}>{r.title}</td>
+                    <td style={{padding:'8px 10px',whiteSpace:'nowrap'}}>{r.date}</td>
+                    <td style={{padding:'8px 10px',fontWeight:600,color:'var(--accent-strong)',whiteSpace:'nowrap'}}>{r.ticker}</td>
+                    <td style={{padding:'8px 10px',whiteSpace:'nowrap'}}>{r.insider}</td>
                     <td style={{padding:'8px 10px'}}><span style={{color:r.type==='Buy'?'var(--green-600)':'var(--red-600)',fontWeight:600}}>{r.type}</span></td>
-                    <td style={{padding:'8px 10px',textAlign:'right'}}>{r.shares}</td>
-                    <td style={{padding:'8px 10px',textAlign:'right'}}>{r.price}</td>
-                    <td style={{padding:'8px 10px',textAlign:'right',fontWeight:600}}>{r.value}</td>
-                    <td style={{padding:'8px 10px',textAlign:'right',color:r.pct.startsWith('+')?'var(--green-600)':'var(--red-600)'}}>{r.pct}</td>
-                    <td style={{padding:'8px 10px'}}>{r.role}</td>
-                    <td style={{padding:'8px 10px',color:'var(--text-3)'}}>{r.routine}</td>
+                    <td style={{padding:'8px 10px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{r.value}</td>
+                    <td style={{padding:'8px 10px',whiteSpace:'nowrap'}}>{r.role}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <p style={{fontSize:'0.8125rem',color:'var(--text-3)',fontStyle:'italic'}}>
-            Representative sample. Actual export contains real SEC filings.
+            Representative sample showing 6 of {COLUMNS.length} fields. Actual export contains all columns listed below.
           </p>
         </section>
 
