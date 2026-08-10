@@ -9046,7 +9046,13 @@ function AppInner() {
     finally{setLoading(false);}
   },[]);
 
-  useEffect(()=>{load(filingsWindowDays);},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{
+    // Wait for Clerk to finish loading before fetching — on mobile fresh
+    // loads, the JWT isn't ready when this effect fires, causing a 401
+    // that shows the error banner until manual reload.
+    if (!isLoaded || !isSignedIn) return;
+    load(filingsWindowDays);
+  },[isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Called by any component whose own time-range control lets a user pick
   // something wider than what's currently loaded (e.g. Explore drawer's
@@ -9244,9 +9250,9 @@ function AppInner() {
                 Placed alongside Guide since both are "get help / weigh
                 in" actions. */}
             <FeedbackButton page={page}/>
-            {/* Guide — reachable anytime, not just on first sign-in or via a
-                tile's "?". Opens in-app rather than a new tab, since it's
-                part of using the product, not a separate reference page. */}
+            <a href="/help" className="status-bar__icon-btn" title="Help Center" aria-label="Help Center" style={{textDecoration:'none',color:'inherit'}}>
+              <IconHelp style={{width:16,height:16}}/>
+            </a>
             <GuideStatusBarButton/>
             {/* Theme toggle — moved here from the sidebar */}
             <button className="status-bar__icon-btn" onClick={()=>setDark(d=>!d)}

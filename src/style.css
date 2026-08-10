@@ -719,6 +719,9 @@ input[type="checkbox"] { height:auto; width:auto; }
   background: var(--surface); border: 0.5px solid var(--border);
   border-radius: var(--radius-lg); margin-bottom: 16px; overflow: hidden;
 }
+@media (max-width: 640px) {
+  .data-toolbar .btn--primary { display: none; }
+}
 .data-toolbar .filter-bar {
   border: none; border-radius: 0; margin-bottom: 0;
   border-bottom: 0.5px solid var(--border);
@@ -2469,6 +2472,7 @@ td { padding:7px 11px; vertical-align:middle; }
   margin: 14px 0; padding: 14px; border: 0.5px solid var(--border);
   border-radius: var(--radius-md); background: var(--surface);
   display: flex; flex-direction: column; gap: 8px;
+  overflow: hidden; max-width: 100%;
 }
 .env-preview__stats { display: flex; gap: 10px; margin-bottom: 4px; }
 .env-preview__stat { flex: 1; display: flex; flex-direction: column; gap: 4px; }
@@ -2924,6 +2928,7 @@ td { padding:7px 11px; vertical-align:middle; }
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   position: relative;
+  overflow-x: hidden;
 }
 /* Ambient edge gradients — fill the side whitespace outside the constrained
    content column with a hint of color throughout scrolling, not just in
@@ -3751,6 +3756,10 @@ td { padding:7px 11px; vertical-align:middle; }
   margin: 0 auto;
   padding: 60px 48px 80px;
 }
+@media (max-width: 640px) {
+  .legal-content { padding: 32px 16px 60px; }
+  .lp-nav__frame .lp-nav__link { font-size: 0.75rem; padding: 4px 8px; }
+}
 .legal-content.help-center { max-width: 920px; }
 .help-center__body { display: flex; gap: 40px; align-items: flex-start; }
 .help-center__nav {
@@ -3876,6 +3885,21 @@ td { padding:7px 11px; vertical-align:middle; }
   .lp-pricing        { padding: 40px 16px 64px; }
   .lp-footer__frame  { padding: 16px; gap: 10px; }
   .lp-footer__links  { flex-wrap: wrap; row-gap: 4px; font-size: 0.6875rem; }
+  /* Hero preview: scale down to fit mobile viewport */
+  .lp-preview { margin: 0 -8px; border-radius: 10px; }
+  .lp-preview__bar { padding: 6px 12px; }
+  .lp-preview__dots span { width: 7px; height: 7px; }
+  .lp-preview__url { font-size: 0.5625rem; }
+  /* Hide the stat strip on mobile — it's too dense for narrow screens */
+  .lp-screen-strip { display: none; }
+  .lp-screen-stat { padding: 6px 8px; }
+  .lp-screen-stat__label { font-size: 0.4375rem; }
+  .lp-screen-stat__val { font-size: 0.625rem; }
+  .lp-screen-hdr { font-size: 0.5rem; }
+  .lp-screen-row { padding: 4px 8px; font-size: 0.625rem; }
+  .lp-screen-ticker { font-size: 0.625rem; }
+  .lp-screen-co { font-size: 0.5rem; }
+  .lp-screen-bar { height: 5px; }
 }
 
 /* Data export price styling */
@@ -4074,12 +4098,15 @@ td { padding:7px 11px; vertical-align:middle; }
     flex-direction: row; justify-content: center;
     overflow: visible;
     border-top: none; border-bottom: 0.5px solid var(--border);
-    padding: 10px 12px; gap: 6px;
+    padding: 0; gap: 0;
+    height: 44px; align-items: stretch;
   }
   .settings-sidenav__item {
     flex-shrink: 0; white-space: nowrap; width: auto;
     border-left: none; border-bottom: 2px solid transparent;
     border-radius: 0;
+    padding: 0 16px; display: flex; align-items: center;
+    height: 100%;
   }
   .settings-sidenav__item--active { border-left-color: transparent; border-bottom-color: var(--accent-strong); }
   .settings-sidenav__spacer, .settings-sidenav__plan { display: none; } /* plan badge lived at the "bottom" of a vertical list — no bottom to anchor to once this is a centered horizontal row */
