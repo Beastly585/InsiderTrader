@@ -217,37 +217,6 @@ async function fetchFromNeon(daysBack = 90) {
   }));
 }
 
-export function computeSignals(filings) {
-  const map = {};
-  for (const f of filings) {
-    if (!f.ticker) continue;
-    if (!map[f.ticker]) {
-      map[f.ticker] = {
-        ticker: f.ticker, company: f.company, sector: f.sector,
-        buys: 0, sells: 0, buyValue: 0, sellValue: 0, cSuiteBuys: 0,
-        insiders: new Set(), lastTradeDate: '', trades: [],
-      };
-    }
-    const s = map[f.ticker];
-    s.insiders.add(f.insiderName);
-    if ((f.transactionDate||f.date) > s.lastTradeDate) s.lastTradeDate = f.transactionDate||f.date;
-    s.trades.push(f);
-    if (f.transactionType === 'buy') {
-      s.buys++; s.buyValue += f.value||0;
-      if (f.isOpenMarket && f.relationship === 'strong') s.cSuiteBuys++;
-    } else if (f.transactionType === 'sell') {
-      s.sells++; s.sellValue += f.value||0;
-    }
-  }
-  return Object.values(map).map(s => ({
-    ...s,
-    insiderCount: s.insiders.size,
-    netValue:     s.buyValue - s.sellValue,
-    conviction:   (s.cSuiteBuys * 5) + (s.buys - s.sells) + Math.min(Math.log10(s.buyValue + 1), 5),
-    avgReturn:    null, // prices table not yet available
-  })).sort((a,b) => b.conviction - a.conviction);
-}
-
 export async function loadFilings(daysBack = 90) {
   switch (cfg.DATA_SOURCE) {
     case 'neon':

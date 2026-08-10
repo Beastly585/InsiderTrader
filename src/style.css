@@ -1740,15 +1740,17 @@ td { padding:7px 11px; vertical-align:middle; }
 /* 2-column layout: signals (wide) | insiders — portfolio is a bar above */
 .ins-3col {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 320px;
   flex: 1; min-height: 500px;
   gap: 12px;
 }
 .ins-3col__signals   { grid-column: 1; display: flex; flex-direction: column; min-height: 0; }
+.ins-3col__right     { grid-column: 2; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 
 @media (max-width: 1000px) {
-  .ins-3col { height: auto; }
+  .ins-3col { grid-template-columns: 1fr; height: auto; }
   .ins-3col__signals { max-height: none; }
+  .ins-3col__right   { grid-column: 1; }
 }
 
 /* Signal panel in 3col — fills column height, body scrolls */

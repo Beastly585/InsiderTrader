@@ -3899,6 +3899,25 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           </div>
         </div>
 
+        {/* RIGHT: Top insiders leaderboard + Portfolio */}
+        {!isMobile && (
+          <div className="ins-3col__right">
+            <div className="ins-lb-panel-wrap">
+              <div className="ins-sig-panel__hdr">
+                <span className="ins-sig-panel__title">Top insiders</span>
+                <TileInfoButton section="insights-formula" title="Top insiders"/>
+                <div className="dash-tile__hdr-controls">
+                  <button className="btn btn--ghost btn--icon" onClick={()=>{setModal('insiders');setModalInitial(null);}} title="Open full insiders view">⤢</button>
+                </div>
+              </div>
+              <div className="ins-lb-panel__body">
+                <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
+              </div>
+            </div>
+            <InsightsPortfolioBar filings={filings} cutoff={cutoff} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={isPro(user)}/>
+          </div>
+        )}
+
       </div>
 
       {modal&&(
