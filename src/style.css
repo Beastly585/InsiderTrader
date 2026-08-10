@@ -2542,9 +2542,9 @@ td { padding:7px 11px; vertical-align:middle; }
 /* Data mockup — labeled column headers over the filing rows, with a real
    P/S transaction-code chip, so it reads as a filings table rather than
    an abstract grid of bars. */
-.env-preview__thead { display: grid; grid-template-columns: 1fr 1fr 44px 22px 40px; gap: 6px; padding: 0 0 2px; }
-.env-preview__th { font-size: 0.5rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
-.env-preview__trow--data { grid-template-columns: 1fr 1fr 44px 22px 40px; align-items: center; }
+.env-preview__thead { display: grid; grid-template-columns: 1fr 1fr 36px 18px 34px; gap: 4px; padding: 0 0 2px; }
+.env-preview__th { font-size: 0.5rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis; }
+.env-preview__trow--data { grid-template-columns: 1fr 1fr 36px 18px 34px; align-items: center; }
 .env-preview__code {
   display: inline-flex; align-items: center; justify-content: center;
   width: 16px; height: 16px; border-radius: 4px; font-size: 0.5625rem; font-weight: 700;

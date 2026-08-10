@@ -6355,7 +6355,13 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                     onClick={()=>selectRow({type:'ticker', ticker:s.ticker, company:s.company})}>
                     <div className="ins-sig-row__left">
                       <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
-                      <div className="ins-sig-row__co">{s.company}</div>
+                      {isMobile && s.lastTradeDate && <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{fmt.dateShort(s.lastTradeDate)}</span>}
+                      <div className="ins-sig-row__co">
+                        {s.company}
+                        {isMobile && s.insiderCount > 0 && (
+                          <span className="td-muted" style={{fontSize:'0.6875rem'}}> · {s.insiderCount} insider{s.insiderCount!==1?'s':''}{s.cSuiteBuys>0?` · ${s.cSuiteBuys} exec`:''}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="ins-sig-row__signal"><ConvictionBar score={s.conviction}/></div>
                     <div className="ins-sig-row__right"><span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span></div>
@@ -6381,9 +6387,13 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                     onClick={()=>selectRow({type:'trader', name:r.name, title:r.title})}>
                     <div className="ins-sig-row__left">
                       <span className="ins-sig-row__ticker" style={{fontSize:13}}>{r.name}</span>
+                      {isMobile && r.lastDate && <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{fmt.dateShort(r.lastDate)}</span>}
                       {r.title&&<div className="ins-sig-row__co">{r.title}</div>}
                     </div>
-                    <div className="ins-sig-row__right"><span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''}</span></div>
+                    <div className="ins-sig-row__right">
+                      <span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''}</span>
+                      {isMobile && <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.netValue>=0?'+':''}{fmt.money(r.netValue)}</span>}
+                    </div>
                     {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
                     {isExpanded && (
                       <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
@@ -8050,6 +8060,7 @@ function SettingsPage({ user, onUpgrade }) {
           footer instead of scrolling with the active tab's content, which
           is what put it at wildly different heights depending on section. */}
       <div className="settings-legal-bar">
+        <a href="/help" target="_blank" rel="noreferrer">Help</a>
         <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
         <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
         <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
@@ -9250,9 +9261,6 @@ function AppInner() {
                 Placed alongside Guide since both are "get help / weigh
                 in" actions. */}
             <FeedbackButton page={page}/>
-            <a href="/help" className="status-bar__icon-btn" title="Help Center" aria-label="Help Center" style={{textDecoration:'none',color:'inherit'}}>
-              <IconHelp style={{width:16,height:16}}/>
-            </a>
             <GuideStatusBarButton/>
             {/* Theme toggle — moved here from the sidebar */}
             <button className="status-bar__icon-btn" onClick={()=>setDark(d=>!d)}
