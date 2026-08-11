@@ -2112,11 +2112,12 @@ async function handleFeedback(request, env, origin) {
 //   compromise this one.
 
 // The one authorized function that ever reads+decrypts a stored secret.
-async function getSnapTradeConnection(env, clerkUserId) {
+async function getSnapTradeConnection(env, clerkUserId, { anyStatus = false } = {}) {
+  const statusFilter = anyStatus ? '' : `AND status = 'active'`;
   const result = await neonFetch(env, `
     SELECT snaptrade_user_id, secret_ciphertext, secret_iv
     FROM public.portfolio_connections
-    WHERE clerk_user_id = ${sqlVal(clerkUserId)} AND status = 'active'
+    WHERE clerk_user_id = ${sqlVal(clerkUserId)} ${statusFilter}
   `);
   const row = result.rows?.[0];
   if (!row) return null;
@@ -2273,7 +2274,11 @@ async function handleSnapTradeConfirm(request, env, origin) {
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
   try {
-    const conn = await getSnapTradeConnection(env, clerkUserId);
+    // Must look up ANY status — the row is 'pending' at this point, and the
+    // whole purpose of this handler is to flip it to 'active'. The default
+    // getSnapTradeConnection filters to 'active' only, which creates a
+    // catch-22 where confirm can never find the row it's supposed to confirm.
+    const conn = await getSnapTradeConnection(env, clerkUserId, { anyStatus: true });
     if (!conn) return corsResponse({ confirmed: false, reason: 'no_connection' }, 200, origin, env);
 
     // Ask SnapTrade whether this user actually has any linked brokerage accounts.
