@@ -7701,7 +7701,31 @@ function useSnapTrade(pro) {
     }
   }, [pro]);
 
-  useEffect(() => { refreshStatus(); }, [refreshStatus]);
+  // On mount: if we just returned from SnapTrade's redirect, confirm the
+  // connection first (flips status from 'pending' to 'active' on the worker)
+  // then check status. Without this, the row stays 'pending' and every
+  // downstream query filtering by status='active' returns nothing.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('snaptrade') && pro && cfg.NEON_PROXY_URL) {
+      (async () => {
+        try {
+          const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+          await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/confirm`, { method: 'POST', headers, body: JSON.stringify({}) });
+        } catch (e) {
+          console.error('[useSnapTrade] confirm failed:', e.message);
+        }
+        // Clean the snaptrade param from the URL so a page refresh doesn't re-confirm
+        const url = new URL(window.location);
+        url.searchParams.delete('snaptrade');
+        url.searchParams.delete('status');
+        window.history.replaceState({}, '', url.pathname + (url.search || ''));
+        await refreshStatus();
+      })();
+    } else {
+      refreshStatus();
+    }
+  }, [refreshStatus, pro]);
 
   async function connect() {
     setConnecting(true); setError(null);
