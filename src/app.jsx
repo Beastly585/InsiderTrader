@@ -6212,39 +6212,27 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
 // Shows all recent insider activity for tickers the user has starred.
 // Entirely localStorage-backed — no auth needed.
 function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow, user }) {
+  const pro = isPro(user);
   const [days, setDays] = useState(30);
   const [tab, setTab]   = useState('tickers');
   const [sortKey, setSortKey] = useState('lastTradeDate');
   const [sortDir, setSortDir] = useState(-1);
-  const [detail, setDetail] = useState(null);
-  const [detailStack, setDetailStack] = useState([]);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
   const isMobile = useIsMobile();
-  const pro = isPro(user);
   const [expandedKey, setExpandedKey] = useState(null);
   const [feedCollapsed, setFeedCollapsed] = useState(false);
 
   const watchedTickers  = watchlist.tickers;
   const watchedInsiders = watchlist.insiders || [];
 
-  function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
-  function goBack() { setDetailStack(s=>{ const next=[...s]; const prev=next.pop(); setDetail(prev||null); return next; }); }
   function selectRow(d) {
     if (isMobile) {
       const key = d.type==='ticker' ? d.ticker : d.name;
       setExpandedKey(k => k===key ? null : key);
       return;
     }
-    setDetailStack([]); setDetail(d);
+    onOpenDetail({...d, expand:true});
   }
-  function jumpTo(i) { setDetail(detailStack[i]); setDetailStack(s=>s.slice(0,i)); }
-  const crumbLabel = (d) => d.type==='ticker' ? d.ticker : d.name;
-
-  useEffect(()=>{ setDetail(null); setDetailStack([]); }, [tab]);
-  useEffect(()=>{
-    if (detail?.type==='ticker' && !watchedTickers.includes(detail.ticker)) { setDetail(null); setDetailStack([]); }
-    if (detail?.type==='trader' && !watchedInsiders.includes(detail.name)) { setDetail(null); setDetailStack([]); }
-  }, [watchedTickers, watchedInsiders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Recent activity feed — individual trades across all watched items ──
   const recentActivity = useMemo(()=>{
@@ -6262,30 +6250,48 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 
   const signals = useMemo(()=>{
     if (!watchedTickers.length) return [];
-    const base = filings.filter(f=>{
-      if (!watchedTickers.includes(f.ticker)) return false;
-      if ((f.transactionDate||f.date||'') < cutoff) return false;
-      return true;
+    // All filings for watched tickers (no cutoff) — for absolute last trade date
+    const allForWatched = filings.filter(f => watchedTickers.includes(f.ticker));
+    const absLast = {};
+    allForWatched.forEach(f => {
+      const d = f.transactionDate || f.date || '';
+      if (!absLast[f.ticker] || d > absLast[f.ticker].d) absLast[f.ticker] = { d, type: f.transactionType };
     });
+    // In-window filings for scoring
+    const base = allForWatched.filter(f => (f.transactionDate||f.date||'') >= cutoff);
     const built = buildSignals(base);
-    // Pre-compute last trade type per ticker for the "Last activity" column
-    const lastByTicker = {};
+    // Attach last trade — prefer in-window, fall back to absolute
+    const iwLast = {};
     base.forEach(f => {
       const d = f.transactionDate || f.date || '';
-      if (!lastByTicker[f.ticker] || d > lastByTicker[f.ticker].d) {
-        lastByTicker[f.ticker] = { d, type: f.transactionType };
-      }
+      if (!iwLast[f.ticker] || d > iwLast[f.ticker].d) iwLast[f.ticker] = { d, type: f.transactionType };
     });
-    built.forEach(s => { s.lastTradeType = lastByTicker[s.ticker]?.type || null; });
+    built.forEach(s => {
+      const iw = iwLast[s.ticker];
+      const ab = absLast[s.ticker];
+      s.lastTradeType = iw?.type || ab?.type || null;
+      if (!s.lastTradeDate && ab) s.lastTradeDate = ab.d;
+    });
     const seen = new Set(built.map(s=>s.ticker));
     watchedTickers.forEach(t=>{
-      if (!seen.has(t)) built.push({ ticker:t, company:'', conviction:0, netValue:0, cSuiteBuys:0, insiderCount:0, lastTradeDate:null, lastTradeType:null, buys:0, sells:0, sector:'' });
+      if (!seen.has(t)) {
+        const ab = absLast[t];
+        built.push({ ticker:t, company:'', conviction:0, netValue:0, cSuiteBuys:0, insiderCount:0,
+          lastTradeDate:ab?.d||null, lastTradeType:ab?.type||null, buys:0, sells:0, sector:'' });
+      }
     });
     return built;
   },[filings, watchedTickers, cutoff]);
 
   const insiderRows = useMemo(()=>{
     if (!watchedInsiders.length) return [];
+    // Absolute last trade per insider (no cutoff)
+    const absLast = {};
+    filings.forEach(f => {
+      if (!watchedInsiders.includes(f.insiderName)) return;
+      const d = f.transactionDate || f.date || '';
+      if (!absLast[f.insiderName] || d > absLast[f.insiderName].d) absLast[f.insiderName] = { d, type: f.transactionType };
+    });
     const byName = {};
     filings
       .filter(f=>watchedInsiders.includes(f.insiderName) && (f.transactionDate||f.date||'')>=cutoff)
@@ -6299,7 +6305,13 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
           byName[f.insiderName].lastType = f.transactionType;
         }
       });
-    watchedInsiders.forEach(n=>{ if (!byName[n]) byName[n] = { name:n, title:'', trades:0, netValue:0, lastDate:null, lastType:null }; });
+    // Backfill insiders with no in-window trades — show absolute last date
+    watchedInsiders.forEach(n=>{
+      if (!byName[n]) {
+        const ab = absLast[n];
+        byName[n] = { name:n, title:'', trades:0, netValue:0, lastDate:ab?.d||null, lastType:ab?.type||null };
+      }
+    });
     return Object.values(byName);
   },[filings, watchedInsiders, cutoff]);
 
@@ -6354,209 +6366,182 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
         </p>
       </div>
 
-      {/* ── Recent activity feed ── */}
-      {!allEmpty && (
-        <div className="wl-feed">
-          <div className="wl-section-label" style={{display:'flex',alignItems:'center',gap:8}}>
-            <span style={{flex:1}}>Recent activity</span>
-            <button className="btn btn--ghost btn--icon" style={{width:20,height:20,fontSize:'0.6875rem'}}
-              onClick={()=>setFeedCollapsed(c=>!c)} title={feedCollapsed?'Expand':'Collapse'}>
-              {feedCollapsed ? '▸' : '▾'}
-            </button>
-          </div>
-          {!feedCollapsed && (
-            recentActivity.length === 0 ? (
-              <div style={{padding:'16px 14px',fontSize:'0.75rem',color:'var(--text-3)'}}>
-                No trades from your watched tickers or followed insiders in the last {days} days.
-              </div>
-            ) : (
-              <div className="wl-feed__scroll">
-                {recentActivity.map((f,i)=>(
-                  <div key={`${f.accessionNumber||i}-${f.insiderName}`} className="wl-trade-row"
-                    onClick={()=>onOpenDetail({type:'ticker', ticker:f.ticker, company:f.company, expand:true})}>
-                    <span className="td-muted" style={{fontSize:'0.6875rem',flexShrink:0,width:52}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
-                    <span className="ticker" style={{flexShrink:0,width:48}}>{f.ticker}</span>
-                    <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--text-2)'}}>{f.insiderName}</span>
-                    <span className={`wl-feed__badge ${f.transactionType==='buy'?'wl-feed__badge--buy':'wl-feed__badge--sell'}`}>
-                      {f.transactionType==='buy'?'Buy':'Sell'}
-                    </span>
-                    <span style={{fontWeight:600,flexShrink:0,width:60,textAlign:'right'}}>{f.value?fmt.money(f.value):'—'}</span>
-                  </div>
-                ))}
-              </div>
-            )
-          )}
-        </div>
-      )}
-
-      {/* ── Portfolio tile (above ticker/insider list, below feed) ── */}
-      {!allEmpty && !isMobile && (
-        <div style={{marginBottom:14}}>
-          <InsightsPortfolioBar filings={filings} cutoff={cutoff} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
-        </div>
-      )}
-
-      {emptyNow ? (
+      {allEmpty ? (
         <div className="wl-empty">
-          {tab==='tickers' ? (
-            <div className="wl-empty__icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" width="40" height="40">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-            </div>
-          ) : (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} width="40" height="40" style={{color:'var(--text-3)'}}><circle cx="12" cy="12" r="9"/></svg>
-          )}
-          <div className="wl-empty__title">{tab==='tickers' ? 'No tickers watched yet' : 'No insiders followed yet'}</div>
+          <div className="wl-empty__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" width="40" height="40">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </div>
+          <div className="wl-empty__title">No tickers or insiders watched yet</div>
           <div className="wl-empty__sub">
-            {tab==='tickers'
-              ? 'Click the star on any ticker in Insights, the detail panel, or All Data to start tracking it here.'
-              : 'Click "Follow" on any insider in the leaderboard or trader profile to track their activity here.'}
+            Star tickers or follow insiders from Insights, All Data, or any detail panel to start tracking them here.
           </div>
         </div>
       ) : (
-        <div className="drawer__body wl-drawer-body">
-          <div className="drawer__list">
-            <div className="drawer__list-hdr">
-              <span>{rows.length} {tab}</span>
-            </div>
-            {tab==='tickers' ? (
-              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 100px 90px'}}>
-                <button className="ins-col-sort" onClick={()=>onSort('ticker')}>Ticker · Company{sortKey==='ticker'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" onClick={()=>onSort('lastTradeDate')}>Last activity{sortKey==='lastTradeDate'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
+        <div className="wl-bento">
+          {/* LEFT: Ticker / Insider list */}
+          <div className="wl-col-left">
+            <div className="dash-tile" style={{flex:1}}>
+              <div className="dash-tile__hdr">
+                <span className="dash-tile__title">{tab==='tickers' ? 'Watched tickers' : 'Followed insiders'}</span>
+                <span className="dash-tile__sub">{rows.length} {tab}</span>
               </div>
-            ) : (
-              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 100px 90px'}}>
-                <button className="ins-col-sort" onClick={()=>onSort('name')}>Insider{sortKey==='name'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" onClick={()=>onSort('lastDate')}>Last activity{sortKey==='lastDate'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
-              </div>
-            )}
-
-            <div className="drawer__list-scroll">
-              {tab==='tickers' ? sortedTickerRows.map(s=>{
-                const isSel = detail?.type==='ticker' && detail.ticker===s.ticker;
-                const isExpanded = isMobile && expandedKey===s.ticker;
-                const lastType = s.lastTradeType;
-                return (
-                  <div key={s.ticker} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}${isExpanded?' ins-sig-row--expanded':''}`} style={isMobile?undefined:{gridTemplateColumns:'1fr 100px 90px'}}
-                    onClick={()=>selectRow({type:'ticker', ticker:s.ticker, company:s.company})}>
-                    <div className="ins-sig-row__left">
-                      <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
-                      {isMobile && s.lastTradeDate && <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{fmt.dateShort(s.lastTradeDate)}</span>}
-                      <div className="ins-sig-row__co">
-                        {s.company}
-                        {isMobile && s.insiderCount > 0 && (
-                          <span className="td-muted" style={{fontSize:'0.6875rem'}}> · {s.insiderCount} insider{s.insiderCount!==1?'s':''}{s.cSuiteBuys>0?` · ${s.cSuiteBuys} exec`:''}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="ins-sig-row__signal">
-                      {s.lastTradeDate ? (
-                        <span style={{display:'flex',alignItems:'center',gap:6,fontSize:'0.75rem'}}>
-                          <span className="td-muted">{fmt.ago(s.lastTradeDate)}</span>
-                          {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{lastType==='buy'?'Buy':'Sell'}</span>}
-                        </span>
-                      ) : (
-                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>
-                      )}
-                    </div>
-                    <div className="ins-sig-row__right">
-                      <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
-                      {isMobile && s.lastTradeDate && (
-                        <span style={{display:'flex',alignItems:'center',gap:4,fontSize:'0.6875rem'}}>
-                          <span className="td-muted">{fmt.ago(s.lastTradeDate)}</span>
-                          {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.5625rem'}}>{lastType==='buy'?'B':'S'}</span>}
-                        </span>
-                      )}
-                    </div>
-                    {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
-                    {isExpanded && (
-                      <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
-                        <div className="ins-sig-row__expanded-grid">
-                          <div><span className="td-muted">Sector</span><br/>{s.sector&&s.sector!=='Other'?s.sector:'—'}</div>
-                          <div><span className="td-muted">Buys / Sells</span><br/>{s.buys||0} / {s.sells||0}</div>
-                          <div><span className="td-muted">Insiders</span><br/>{s.insiderCount||0}{s.lastTradeDate?` · ${fmt.ago(s.lastTradeDate)}`:''}</div>
-                          <div><span className="td-muted">Exec buys</span><br/>{s.cSuiteBuys>0?`${s.cSuiteBuys}×`:'—'}</div>
-                          <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 15</div>
-                        </div>
-                      </div>
-                    )}
+              {emptyNow ? (
+                <div style={{padding:'32px 20px',textAlign:'center'}}>
+                  <div style={{fontSize:'0.8125rem',color:'var(--text-3)',lineHeight:1.5}}>
+                    {tab==='tickers'
+                      ? 'No tickers watched yet. Star any ticker from Insights or All Data.'
+                      : 'No insiders followed yet. Follow any insider from the leaderboard or trader profile.'}
                   </div>
-                );
-              }) : sortedInsiderRows.map(r=>{
-                const isSel = detail?.type==='trader' && detail.name===r.name;
-                const isExpanded = isMobile && expandedKey===r.name;
-                return (
-                  <div key={r.name} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}${isExpanded?' ins-sig-row--expanded':''}`} style={isMobile?undefined:{gridTemplateColumns:'1fr 100px 90px'}}
-                    onClick={()=>selectRow({type:'trader', name:r.name, title:r.title})}>
-                    <div className="ins-sig-row__left">
-                      <span className="ins-sig-row__ticker" style={{fontSize:13}}>{r.name}</span>
-                      {isMobile && r.lastDate && <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{fmt.dateShort(r.lastDate)}</span>}
-                      {r.title&&<div className="ins-sig-row__co">{r.title}</div>}
+                </div>
+              ) : (
+                <>
+                  {tab==='tickers' ? (
+                    <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 100px 90px'}}>
+                      <button className="ins-col-sort" onClick={()=>onSort('ticker')}>Ticker · Company{sortKey==='ticker'&&(sortDir<0?' ↓':' ↑')}</button>
+                      <button className="ins-col-sort" onClick={()=>onSort('lastTradeDate')}>Last activity{sortKey==='lastTradeDate'&&(sortDir<0?' ↓':' ↑')}</button>
+                      <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
                     </div>
-                    <div className="ins-sig-row__signal">
-                      {r.lastDate ? (
-                        <span style={{display:'flex',alignItems:'center',gap:6,fontSize:'0.75rem'}}>
-                          <span className="td-muted">{fmt.ago(r.lastDate)}</span>
-                          {r.lastType && <span className={`wl-feed__badge wl-feed__badge--${r.lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{r.lastType==='buy'?'Buy':'Sell'}</span>}
-                        </span>
-                      ) : (
-                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>
-                      )}
+                  ) : (
+                    <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 100px 90px'}}>
+                      <button className="ins-col-sort" onClick={()=>onSort('name')}>Insider{sortKey==='name'&&(sortDir<0?' ↓':' ↑')}</button>
+                      <button className="ins-col-sort" onClick={()=>onSort('lastDate')}>Last activity{sortKey==='lastDate'&&(sortDir<0?' ↓':' ↑')}</button>
+                      <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
                     </div>
-                    <div className="ins-sig-row__right">
-                      <span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''} ({days}d)</span>
-                      {isMobile && <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.netValue>=0?'+':''}{fmt.money(r.netValue)}</span>}
-                    </div>
-                    {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
-                    {isExpanded && (
-                      <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
-                        <div className="ins-sig-row__expanded-grid">
-                          <div><span className="td-muted">Title</span><br/>{r.title||'—'}</div>
-                          <div><span className="td-muted">Trades ({days}d)</span><br/>{r.trades}</div>
-                          <div><span className="td-muted">Last trade</span><br/>{r.lastDate?fmt.ago(r.lastDate):'—'}</div>
-                          <div><span className="td-muted">Net flow</span><br/><span className={r.netValue>=0?'val-buy':'val-sell'}>{r.netValue>=0?'+':''}{fmt.money(r.netValue)}</span></div>
+                  )}
+                  <div className="dash-tile__body">
+                    {tab==='tickers' ? sortedTickerRows.map(s=>{
+                      const isExpanded = isMobile && expandedKey===s.ticker;
+                      const lastType = s.lastTradeType;
+                      return (
+                        <div key={s.ticker} className={`ins-sig-row${isExpanded?' ins-sig-row--expanded':''}`} style={isMobile?undefined:{gridTemplateColumns:'1fr 100px 90px'}}
+                          onClick={()=>selectRow({type:'ticker', ticker:s.ticker, company:s.company})}>
+                          <div className="ins-sig-row__left">
+                            <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
+                            {isMobile && s.lastTradeDate && <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{fmt.dateShort(s.lastTradeDate)}</span>}
+                            <div className="ins-sig-row__co">
+                              {s.company}
+                              {isMobile && s.insiderCount > 0 && (
+                                <span className="td-muted" style={{fontSize:'0.6875rem'}}> · {s.insiderCount} insider{s.insiderCount!==1?'s':''}{s.cSuiteBuys>0?` · ${s.cSuiteBuys} exec`:''}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="ins-sig-row__signal">
+                            {s.lastTradeDate ? (
+                              <span style={{display:'flex',alignItems:'center',gap:6,fontSize:'0.75rem'}}>
+                                <span className="td-muted">{fmt.ago(s.lastTradeDate)}</span>
+                                {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{lastType==='buy'?'Buy':'Sell'}</span>}
+                              </span>
+                            ) : (
+                              <span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>
+                            )}
+                          </div>
+                          <div className="ins-sig-row__right">
+                            <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
+                            {isMobile && s.lastTradeDate && (
+                              <span style={{display:'flex',alignItems:'center',gap:4,fontSize:'0.6875rem'}}>
+                                <span className="td-muted">{fmt.ago(s.lastTradeDate)}</span>
+                                {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.5625rem'}}>{lastType==='buy'?'B':'S'}</span>}
+                              </span>
+                            )}
+                          </div>
+                          {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
+                          {isExpanded && (
+                            <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
+                              <div className="ins-sig-row__expanded-grid">
+                                <div><span className="td-muted">Sector</span><br/>{s.sector&&s.sector!=='Other'?s.sector:'—'}</div>
+                                <div><span className="td-muted">Buys / Sells</span><br/>{s.buys||0} / {s.sells||0}</div>
+                                <div><span className="td-muted">Insiders</span><br/>{s.insiderCount||0}{s.lastTradeDate?` · ${fmt.ago(s.lastTradeDate)}`:''}</div>
+                                <div><span className="td-muted">Exec buys</span><br/>{s.cSuiteBuys>0?`${s.cSuiteBuys}×`:'—'}</div>
+                                <div><span className="td-muted">Conviction score</span><br/>{s.conviction.toFixed(1)} / 15</div>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    }) : sortedInsiderRows.map(r=>{
+                      const isExpanded = isMobile && expandedKey===r.name;
+                      return (
+                        <div key={r.name} className={`ins-sig-row${isExpanded?' ins-sig-row--expanded':''}`} style={isMobile?undefined:{gridTemplateColumns:'1fr 100px 90px'}}
+                          onClick={()=>selectRow({type:'trader', name:r.name, title:r.title})}>
+                          <div className="ins-sig-row__left">
+                            <span className="ins-sig-row__ticker" style={{fontSize:13}}>{r.name}</span>
+                            {isMobile && r.lastDate && <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{fmt.dateShort(r.lastDate)}</span>}
+                            {r.title&&<div className="ins-sig-row__co">{r.title}</div>}
+                          </div>
+                          <div className="ins-sig-row__signal">
+                            {r.lastDate ? (
+                              <span style={{display:'flex',alignItems:'center',gap:6,fontSize:'0.75rem'}}>
+                                <span className="td-muted">{fmt.ago(r.lastDate)}</span>
+                                {r.lastType && <span className={`wl-feed__badge wl-feed__badge--${r.lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{r.lastType==='buy'?'Buy':'Sell'}</span>}
+                              </span>
+                            ) : (
+                              <span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>
+                            )}
+                          </div>
+                          <div className="ins-sig-row__right">
+                            <span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''} ({days}d)</span>
+                            {isMobile && <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.netValue>=0?'+':''}{fmt.money(r.netValue)}</span>}
+                          </div>
+                          {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
+                          {isExpanded && (
+                            <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
+                              <div className="ins-sig-row__expanded-grid">
+                                <div><span className="td-muted">Title</span><br/>{r.title||'—'}</div>
+                                <div><span className="td-muted">Trades ({days}d)</span><br/>{r.trades}</div>
+                                <div><span className="td-muted">Last trade</span><br/>{r.lastDate?fmt.ago(r.lastDate):'—'}</div>
+                                <div><span className="td-muted">Net flow</span><br/><span className={r.netValue>=0?'val-buy':'val-sell'}>{r.netValue>=0?'+':''}{fmt.money(r.netValue)}</span></div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
+                </>
+              )}
             </div>
           </div>
 
-          <div className="drawer__detail">
-            {!detail
-              ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
-                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {tab==='tickers'?'ticker':'insider'} to explore</div>
-                </div>
-              : <>
-                  {detailStack.length>0 && (
-                    <div className="wl-breadcrumb">
-                      {detailStack.map((d,i)=>(
-                        <React.Fragment key={i}>
-                          <button className="wl-breadcrumb__item" onClick={()=>jumpTo(i)}>{crumbLabel(d)}</button>
-                          <span className="wl-breadcrumb__sep">›</span>
-                        </React.Fragment>
-                      ))}
-                      <span className="wl-breadcrumb__current">{crumbLabel(detail)}</span>
-                    </div>
-                  )}
-                  <DetailPanel
-                    detail={detail}
-                    filings={filings}
-                    onClose={()=>{setDetail(null);setDetailStack([]);}}
-                    onNavigate={navigate}
-                    onBack={goBack}
-                    canGoBack={detailStack.length>0}
-                    watchlist={watchlist}
-                    inline={true}
-                  />
-                </>
-            }
+          {/* RIGHT: Recent activity + Portfolio */}
+          <div className="wl-col-right">
+            <div className="dash-tile wl-feed" style={{flex:recentActivity.length>0?11:0}}>
+              <div className="wl-section-label" style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{flex:1}}>Recent activity</span>
+                {recentActivity.length>0 && (
+                  <button className="btn btn--ghost btn--icon" style={{width:20,height:20,fontSize:'0.6875rem'}}
+                    onClick={()=>setFeedCollapsed(c=>!c)} title={feedCollapsed?'Expand':'Collapse'}>
+                    {feedCollapsed ? '▸' : '▾'}
+                  </button>
+                )}
+              </div>
+              {!feedCollapsed && (
+                recentActivity.length === 0 ? (
+                  <div style={{padding:'16px 14px',fontSize:'0.75rem',color:'var(--text-3)'}}>
+                    No trades from your watched items in the last {days} days.
+                  </div>
+                ) : (
+                  <div className="wl-feed__scroll">
+                    {recentActivity.map((f,i)=>(
+                      <div key={`${f.accessionNumber||i}-${f.insiderName}`} className="wl-trade-row"
+                        onClick={()=>onOpenDetail({type:'ticker', ticker:f.ticker, company:f.company, expand:true})}>
+                        <span className="td-muted" style={{fontSize:'0.6875rem',flexShrink:0,width:52}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                        <span className="ticker" style={{flexShrink:0,width:48}}>{f.ticker}</span>
+                        <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--text-2)'}}>{f.insiderName}</span>
+                        <span className={`wl-feed__badge ${f.transactionType==='buy'?'wl-feed__badge--buy':'wl-feed__badge--sell'}`}>
+                          {f.transactionType==='buy'?'Buy':'Sell'}
+                        </span>
+                        <span style={{fontWeight:600,flexShrink:0,width:60,textAlign:'right'}}>{f.value?fmt.money(f.value):'—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+            {!isMobile && (
+              <InsightsPortfolioBar filings={filings} cutoff={cutoff} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
+            )}
           </div>
         </div>
       )}

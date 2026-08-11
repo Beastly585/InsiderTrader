@@ -2318,7 +2318,24 @@ td { padding:7px 11px; vertical-align:middle; }
 .wl-feed {
   background: var(--surface); border: 0.5px solid var(--border);
   border-radius: var(--radius-lg); overflow: hidden;
-  margin-bottom: 12px;
+}
+
+/* Watchlist bento grid — mirrors dash-bento: list left, activity+portfolio right */
+.wl-bento {
+  display: grid;
+  grid-template-columns: 3fr 1.6fr;
+  gap: 10px;
+  flex: 1;
+  min-height: 480px;
+}
+.wl-col-left  { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+.wl-col-right { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
+.wl-col-left > .dash-tile { overflow: auto; }
+
+@media (max-width: 1000px) {
+  .wl-bento { grid-template-columns: 1fr; height: auto; min-height: 0; }
+  .wl-col-left, .wl-col-right { max-height: none; }
+  .wl-col-left > .dash-tile { max-height: 500px; }
 }
 .wl-section-label {
   font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
