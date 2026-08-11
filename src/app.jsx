@@ -6211,18 +6211,18 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
 // ─── WATCHLIST PAGE ───────────────────────────────────────────────────────────
 // Shows all recent insider activity for tickers the user has starred.
 // Entirely localStorage-backed — no auth needed.
-function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow }) {
+function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow, user }) {
   const [days, setDays] = useState(30);
   const [tab, setTab]   = useState('tickers');
-  const [sortKey, setSortKey] = useState('netValue');
+  const [sortKey, setSortKey] = useState('lastTradeDate');
   const [sortDir, setSortDir] = useState(-1);
   const [detail, setDetail] = useState(null);
   const [detailStack, setDetailStack] = useState([]);
   const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
   const isMobile = useIsMobile();
-  // Mobile-only — matches every other list now: a row tap expands in place
-  // instead of opening any kind of panel, drawer, or "explore" view.
+  const pro = isPro(user);
   const [expandedKey, setExpandedKey] = useState(null);
+  const [feedCollapsed, setFeedCollapsed] = useState(false);
 
   const watchedTickers  = watchlist.tickers;
   const watchedInsiders = watchlist.insiders || [];
@@ -6240,14 +6240,25 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   function jumpTo(i) { setDetail(detailStack[i]); setDetailStack(s=>s.slice(0,i)); }
   const crumbLabel = (d) => d.type==='ticker' ? d.ticker : d.name;
 
-  // Reset selection when switching tabs or when the currently-selected item
-  // gets unwatched out from under it (star/follow toggled off from within
-  // the open detail pane itself).
   useEffect(()=>{ setDetail(null); setDetailStack([]); }, [tab]);
   useEffect(()=>{
     if (detail?.type==='ticker' && !watchedTickers.includes(detail.ticker)) { setDetail(null); setDetailStack([]); }
     if (detail?.type==='trader' && !watchedInsiders.includes(detail.name)) { setDetail(null); setDetailStack([]); }
   }, [watchedTickers, watchedInsiders]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Recent activity feed — individual trades across all watched items ──
+  const recentActivity = useMemo(()=>{
+    const allWatched = new Set([...watchedTickers]);
+    const allInsiders = new Set([...watchedInsiders]);
+    if (!allWatched.size && !allInsiders.size) return [];
+    return filings
+      .filter(f => {
+        if ((f.transactionDate||f.date||'') < cutoff) return false;
+        return allWatched.has(f.ticker) || allInsiders.has(f.insiderName);
+      })
+      .sort((a,b) => (b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
+      .slice(0, 25);
+  }, [filings, watchedTickers, watchedInsiders, cutoff]);
 
   const signals = useMemo(()=>{
     if (!watchedTickers.length) return [];
@@ -6257,12 +6268,18 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
       return true;
     });
     const built = buildSignals(base);
-    // Tickers with zero qualifying signals in this window still belong on the
-    // list — they're watched regardless of recent activity — so backfill a
-    // bare placeholder row for any watched ticker buildSignals didn't produce.
+    // Pre-compute last trade type per ticker for the "Last activity" column
+    const lastByTicker = {};
+    base.forEach(f => {
+      const d = f.transactionDate || f.date || '';
+      if (!lastByTicker[f.ticker] || d > lastByTicker[f.ticker].d) {
+        lastByTicker[f.ticker] = { d, type: f.transactionType };
+      }
+    });
+    built.forEach(s => { s.lastTradeType = lastByTicker[s.ticker]?.type || null; });
     const seen = new Set(built.map(s=>s.ticker));
     watchedTickers.forEach(t=>{
-      if (!seen.has(t)) built.push({ ticker:t, company:'', conviction:0, netValue:0, cSuiteBuys:0, insiderCount:0, lastTradeDate:null });
+      if (!seen.has(t)) built.push({ ticker:t, company:'', conviction:0, netValue:0, cSuiteBuys:0, insiderCount:0, lastTradeDate:null, lastTradeType:null, buys:0, sells:0, sector:'' });
     });
     return built;
   },[filings, watchedTickers, cutoff]);
@@ -6273,28 +6290,31 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
     filings
       .filter(f=>watchedInsiders.includes(f.insiderName) && (f.transactionDate||f.date||'')>=cutoff)
       .forEach(f=>{
-        if (!byName[f.insiderName]) byName[f.insiderName] = { name:f.insiderName, title:f.title||'', trades:0, netValue:0, lastDate:null };
+        if (!byName[f.insiderName]) byName[f.insiderName] = { name:f.insiderName, title:f.title||'', trades:0, netValue:0, lastDate:null, lastType:null };
         byName[f.insiderName].trades++;
         byName[f.insiderName].netValue += (f.transactionType==='buy'?1:-1) * (f.value||0);
         const d = f.transactionDate||f.date;
-        if (!byName[f.insiderName].lastDate || d>byName[f.insiderName].lastDate) byName[f.insiderName].lastDate = d;
+        if (!byName[f.insiderName].lastDate || d>byName[f.insiderName].lastDate) {
+          byName[f.insiderName].lastDate = d;
+          byName[f.insiderName].lastType = f.transactionType;
+        }
       });
-    watchedInsiders.forEach(n=>{ if (!byName[n]) byName[n] = { name:n, title:'', trades:0, netValue:0, lastDate:null }; });
+    watchedInsiders.forEach(n=>{ if (!byName[n]) byName[n] = { name:n, title:'', trades:0, netValue:0, lastDate:null, lastType:null }; });
     return Object.values(byName);
   },[filings, watchedInsiders, cutoff]);
 
   const sortedTickerRows = useMemo(()=>{
     return [...signals].sort((a,b)=>{
-      const av=a[sortKey]??-Infinity, bv=b[sortKey]??-Infinity;
+      const av=a[sortKey]??'', bv=b[sortKey]??'';
       if (typeof av==='string') return sortDir>0 ? av.localeCompare(bv) : bv.localeCompare(av);
       return sortDir>0 ? av-bv : bv-av;
     });
   },[signals, sortKey, sortDir]);
 
   const sortedInsiderRows = useMemo(()=>{
-    const key = sortKey==='conviction' ? 'trades' : sortKey==='lastTradeDate' ? 'lastDate' : sortKey; // map shared sort keys to this tab's field names
+    const key = sortKey==='lastTradeDate' ? 'lastDate' : sortKey==='conviction' ? 'trades' : sortKey;
     return [...insiderRows].sort((a,b)=>{
-      const av=a[key]??-Infinity, bv=b[key]??-Infinity;
+      const av=a[key]??'', bv=b[key]??'';
       if (typeof av==='string') return sortDir>0 ? av.localeCompare(bv) : bv.localeCompare(av);
       return sortDir>0 ? av-bv : bv-av;
     });
@@ -6304,6 +6324,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 
   const rows = tab==='tickers' ? sortedTickerRows : sortedInsiderRows;
   const emptyNow = tab==='tickers' ? watchedTickers.length===0 : watchedInsiders.length===0;
+  const allEmpty = watchedTickers.length===0 && watchedInsiders.length===0;
 
   return (
     <div className="page-content">
@@ -6333,6 +6354,48 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
         </p>
       </div>
 
+      {/* ── Recent activity feed ── */}
+      {!allEmpty && (
+        <div className="wl-feed">
+          <div className="wl-section-label" style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{flex:1}}>Recent activity</span>
+            <button className="btn btn--ghost btn--icon" style={{width:20,height:20,fontSize:'0.6875rem'}}
+              onClick={()=>setFeedCollapsed(c=>!c)} title={feedCollapsed?'Expand':'Collapse'}>
+              {feedCollapsed ? '▸' : '▾'}
+            </button>
+          </div>
+          {!feedCollapsed && (
+            recentActivity.length === 0 ? (
+              <div style={{padding:'16px 14px',fontSize:'0.75rem',color:'var(--text-3)'}}>
+                No trades from your watched tickers or followed insiders in the last {days} days.
+              </div>
+            ) : (
+              <div className="wl-feed__scroll">
+                {recentActivity.map((f,i)=>(
+                  <div key={`${f.accessionNumber||i}-${f.insiderName}`} className="wl-trade-row"
+                    onClick={()=>onOpenDetail({type:'ticker', ticker:f.ticker, company:f.company, expand:true})}>
+                    <span className="td-muted" style={{fontSize:'0.6875rem',flexShrink:0,width:52}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                    <span className="ticker" style={{flexShrink:0,width:48}}>{f.ticker}</span>
+                    <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--text-2)'}}>{f.insiderName}</span>
+                    <span className={`wl-feed__badge ${f.transactionType==='buy'?'wl-feed__badge--buy':'wl-feed__badge--sell'}`}>
+                      {f.transactionType==='buy'?'Buy':'Sell'}
+                    </span>
+                    <span style={{fontWeight:600,flexShrink:0,width:60,textAlign:'right'}}>{f.value?fmt.money(f.value):'—'}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+        </div>
+      )}
+
+      {/* ── Portfolio tile (above ticker/insider list, below feed) ── */}
+      {!allEmpty && !isMobile && (
+        <div style={{marginBottom:14}}>
+          <InsightsPortfolioBar filings={filings} cutoff={cutoff} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
+        </div>
+      )}
+
       {emptyNow ? (
         <div className="wl-empty">
           {tab==='tickers' ? (
@@ -6360,13 +6423,13 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
             {tab==='tickers' ? (
               <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 100px 90px'}}>
                 <button className="ins-col-sort" onClick={()=>onSort('ticker')}>Ticker · Company{sortKey==='ticker'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" onClick={()=>onSort('conviction')}>Signal{sortKey==='conviction'&&(sortDir<0?' ↓':' ↑')}</button>
+                <button className="ins-col-sort" onClick={()=>onSort('lastTradeDate')}>Last activity{sortKey==='lastTradeDate'&&(sortDir<0?' ↓':' ↑')}</button>
                 <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
               </div>
             ) : (
-              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 70px 90px'}}>
+              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 100px 90px'}}>
                 <button className="ins-col-sort" onClick={()=>onSort('name')}>Insider{sortKey==='name'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" onClick={()=>onSort('trades')}>Trades{sortKey==='trades'&&(sortDir<0?' ↓':' ↑')}</button>
+                <button className="ins-col-sort" onClick={()=>onSort('lastDate')}>Last activity{sortKey==='lastDate'&&(sortDir<0?' ↓':' ↑')}</button>
                 <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
               </div>
             )}
@@ -6375,6 +6438,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
               {tab==='tickers' ? sortedTickerRows.map(s=>{
                 const isSel = detail?.type==='ticker' && detail.ticker===s.ticker;
                 const isExpanded = isMobile && expandedKey===s.ticker;
+                const lastType = s.lastTradeType;
                 return (
                   <div key={s.ticker} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}${isExpanded?' ins-sig-row--expanded':''}`} style={isMobile?undefined:{gridTemplateColumns:'1fr 100px 90px'}}
                     onClick={()=>selectRow({type:'ticker', ticker:s.ticker, company:s.company})}>
@@ -6388,10 +6452,24 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                         )}
                       </div>
                     </div>
-                    <div className="ins-sig-row__signal"><ConvictionBar score={s.conviction}/></div>
+                    <div className="ins-sig-row__signal">
+                      {s.lastTradeDate ? (
+                        <span style={{display:'flex',alignItems:'center',gap:6,fontSize:'0.75rem'}}>
+                          <span className="td-muted">{fmt.ago(s.lastTradeDate)}</span>
+                          {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{lastType==='buy'?'Buy':'Sell'}</span>}
+                        </span>
+                      ) : (
+                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>
+                      )}
+                    </div>
                     <div className="ins-sig-row__right">
                       <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
-                      {isMobile && <ConvictionBar score={s.conviction}/>}
+                      {isMobile && s.lastTradeDate && (
+                        <span style={{display:'flex',alignItems:'center',gap:4,fontSize:'0.6875rem'}}>
+                          <span className="td-muted">{fmt.ago(s.lastTradeDate)}</span>
+                          {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.5625rem'}}>{lastType==='buy'?'B':'S'}</span>}
+                        </span>
+                      )}
                     </div>
                     {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
                     {isExpanded && (
@@ -6411,15 +6489,25 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                 const isSel = detail?.type==='trader' && detail.name===r.name;
                 const isExpanded = isMobile && expandedKey===r.name;
                 return (
-                  <div key={r.name} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}${isExpanded?' ins-sig-row--expanded':''}`} style={isMobile?undefined:{gridTemplateColumns:'1fr 70px 90px'}}
+                  <div key={r.name} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}${isExpanded?' ins-sig-row--expanded':''}`} style={isMobile?undefined:{gridTemplateColumns:'1fr 100px 90px'}}
                     onClick={()=>selectRow({type:'trader', name:r.name, title:r.title})}>
                     <div className="ins-sig-row__left">
                       <span className="ins-sig-row__ticker" style={{fontSize:13}}>{r.name}</span>
                       {isMobile && r.lastDate && <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{fmt.dateShort(r.lastDate)}</span>}
                       {r.title&&<div className="ins-sig-row__co">{r.title}</div>}
                     </div>
+                    <div className="ins-sig-row__signal">
+                      {r.lastDate ? (
+                        <span style={{display:'flex',alignItems:'center',gap:6,fontSize:'0.75rem'}}>
+                          <span className="td-muted">{fmt.ago(r.lastDate)}</span>
+                          {r.lastType && <span className={`wl-feed__badge wl-feed__badge--${r.lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{r.lastType==='buy'?'Buy':'Sell'}</span>}
+                        </span>
+                      ) : (
+                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>
+                      )}
+                    </div>
                     <div className="ins-sig-row__right">
-                      <span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''}</span>
+                      <span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''} ({days}d)</span>
                       {isMobile && <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.netValue>=0?'+':''}{fmt.money(r.netValue)}</span>}
                     </div>
                     {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
@@ -9331,7 +9419,7 @@ function AppInner() {
             ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist}/>}
           {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'data_export')}/>}
           {page==='settings'  &&<SettingsPage user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-          {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow}/>}
+          {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow} user={user}/>}
         </div>
         <footer className="footer">
           <span className="footer__center">Private Beta · Not financial advice.</span>

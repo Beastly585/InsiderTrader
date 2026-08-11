@@ -2318,6 +2318,7 @@ td { padding:7px 11px; vertical-align:middle; }
 .wl-feed {
   background: var(--surface); border: 0.5px solid var(--border);
   border-radius: var(--radius-lg); overflow: hidden;
+  margin-bottom: 12px;
 }
 .wl-section-label {
   font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
@@ -2332,6 +2333,30 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .wl-trade-row:last-child { border-bottom: none; }
 .wl-trade-row:hover { background: var(--surface-2); }
+
+/* Activity feed scroll + toggle */
+.wl-feed__scroll { max-height: 280px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border-md) transparent; }
+.wl-feed__scroll::-webkit-scrollbar { width: 3px; }
+.wl-feed__scroll::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 3px; }
+.wl-feed__toggle {
+  display: block; width: 100%; padding: 8px 14px;
+  background: none; border: none; border-top: 0.5px solid var(--border);
+  color: var(--accent-strong); font-size: 0.6875rem; font-weight: 500;
+  cursor: pointer; font-family: var(--font); text-align: center;
+}
+.wl-feed__toggle:hover { background: var(--surface-2); }
+
+/* Buy/Sell badge — compact inline label used in feed rows + last activity column */
+.wl-feed__badge {
+  font-size: 0.625rem; font-weight: 600; padding: 1px 5px;
+  border-radius: 3px; flex-shrink: 0; line-height: 1.4;
+}
+.wl-feed__badge--buy  { color: var(--green-600); background: color-mix(in srgb, var(--green-600) 12%, transparent); }
+.wl-feed__badge--sell { color: var(--red-600);   background: color-mix(in srgb, var(--red-600) 12%, transparent); }
+
+@media (max-width: 640px) {
+  .wl-trade-row span:nth-child(3) { display: none; } /* hide insider name on narrow phones */
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    INSIGHTS MODAL — full-screen deep dive for signals and leaderboard
@@ -3765,8 +3790,11 @@ td { padding:7px 11px; vertical-align:middle; }
 .legal-page > .legal-content { flex: 1; }
 .legal-content {
   max-width: 720px;
+  width: 100%;
   margin: 0 auto;
   padding: 60px 48px 80px;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 @media (max-width: 640px) {
   .legal-content { padding: 32px 16px 60px; }
