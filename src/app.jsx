@@ -6234,19 +6234,16 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
     onOpenDetail({...d, expand:true});
   }
 
-  // ── Recent activity feed — individual trades across all watched items ──
+  // ── Recent activity feed — all trades for watched tickers + insiders ──
   const recentActivity = useMemo(()=>{
     const allWatched = new Set([...watchedTickers]);
     const allInsiders = new Set([...watchedInsiders]);
     if (!allWatched.size && !allInsiders.size) return [];
     return filings
-      .filter(f => {
-        if ((f.transactionDate||f.date||'') < cutoff) return false;
-        return allWatched.has(f.ticker) || allInsiders.has(f.insiderName);
-      })
+      .filter(f => allWatched.has(f.ticker) || allInsiders.has(f.insiderName))
       .sort((a,b) => (b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
-      .slice(0, 25);
-  }, [filings, watchedTickers, watchedInsiders, cutoff]);
+      .slice(0, 50);
+  }, [filings, watchedTickers, watchedInsiders]);
 
   const signals = useMemo(()=>{
     if (!watchedTickers.length) return [];
@@ -6340,31 +6337,6 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 
   return (
     <div className="page-content">
-      <div className="wl-toolbar">
-        <div className="ins-filter-group">
-          <span className="ins-filter-group__label">View</span>
-          <div className="settings-tabs">
-            <button className={`settings-tab${tab==='tickers'?' settings-tab--active':''}`} onClick={()=>setTab('tickers')}>
-              Tickers {watchedTickers.length>0&&<span className="wl-tab-count">{watchedTickers.length}</span>}
-            </button>
-            <button className={`settings-tab${tab==='insiders'?' settings-tab--active':''}`} onClick={()=>setTab('insiders')}>
-              Insiders {watchedInsiders.length>0&&<span className="wl-tab-count">{watchedInsiders.length}</span>}
-            </button>
-          </div>
-        </div>
-        <div className="drawer__toolbar-divider" style={{alignSelf:'stretch',margin:0}}/>
-        <div className="ins-filter-group">
-          <span className="ins-filter-group__label">Window</span>
-          <div className="dash-tile-pills">
-            {[7,30,90].map(d=>(
-              <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>{setDays(d);ensureFilingsWindow&&ensureFilingsWindow(d);}}>{d}d</button>
-            ))}
-          </div>
-        </div>
-        <p className="page-sub" style={{margin:'0 0 0 auto'}}>
-          {watchedTickers.length} ticker{watchedTickers.length!==1?'s':''} · {watchedInsiders.length} insider{watchedInsiders.length!==1?'s':''} tracked
-        </p>
-      </div>
 
       {allEmpty ? (
         <div className="wl-empty">
@@ -6380,12 +6352,33 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
         </div>
       ) : (
         <div className="wl-bento">
-          {/* LEFT: Ticker / Insider list */}
+          {/* LEFT: Toolbar + Ticker/Insider list in one tile */}
           <div className="wl-col-left">
             <div className="dash-tile" style={{flex:1}}>
-              <div className="dash-tile__hdr">
-                <span className="dash-tile__title">{tab==='tickers' ? 'Watched tickers' : 'Followed insiders'}</span>
-                <span className="dash-tile__sub">{rows.length} {tab}</span>
+              <div className="wl-toolbar">
+                <div className="ins-filter-group">
+                  <span className="ins-filter-group__label">View</span>
+                  <div className="settings-tabs">
+                    <button className={`settings-tab${tab==='tickers'?' settings-tab--active':''}`} onClick={()=>setTab('tickers')}>
+                      Tickers {watchedTickers.length>0&&<span className="wl-tab-count">{watchedTickers.length}</span>}
+                    </button>
+                    <button className={`settings-tab${tab==='insiders'?' settings-tab--active':''}`} onClick={()=>setTab('insiders')}>
+                      Insiders {watchedInsiders.length>0&&<span className="wl-tab-count">{watchedInsiders.length}</span>}
+                    </button>
+                  </div>
+                </div>
+                <div className="drawer__toolbar-divider" style={{alignSelf:'stretch',margin:0}}/>
+                <div className="ins-filter-group">
+                  <span className="ins-filter-group__label">Window</span>
+                  <div className="dash-tile-pills">
+                    {[7,30,90].map(d=>(
+                      <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>{setDays(d);ensureFilingsWindow&&ensureFilingsWindow(d);}}>{d}d</button>
+                    ))}
+                  </div>
+                </div>
+                <p className="page-sub" style={{margin:'0 0 0 auto'}}>
+                  {rows.length} {tab}
+                </p>
               </div>
               {emptyNow ? (
                 <div style={{padding:'32px 20px',textAlign:'center'}}>
@@ -6504,9 +6497,12 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
             </div>
           </div>
 
-          {/* RIGHT: Recent activity + Portfolio */}
+          {/* RIGHT: Portfolio + Recent activity */}
           <div className="wl-col-right">
-            <div className="dash-tile wl-feed" style={{flex:recentActivity.length>0?11:0}}>
+            {!isMobile && (
+              <InsightsPortfolioBar filings={filings} cutoff={cutoff} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
+            )}
+            <div className="dash-tile wl-feed" style={{flex:1,minHeight:0}}>
               <div className="wl-section-label" style={{display:'flex',alignItems:'center',gap:8}}>
                 <span style={{flex:1}}>Recent activity</span>
                 {recentActivity.length>0 && (
@@ -6519,7 +6515,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
               {!feedCollapsed && (
                 recentActivity.length === 0 ? (
                   <div style={{padding:'16px 14px',fontSize:'0.75rem',color:'var(--text-3)'}}>
-                    No trades from your watched items in the last {days} days.
+                    No trades from your watched items yet.
                   </div>
                 ) : (
                   <div className="wl-feed__scroll">
@@ -6539,9 +6535,6 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                 )
               )}
             </div>
-            {!isMobile && (
-              <InsightsPortfolioBar filings={filings} cutoff={cutoff} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
-            )}
           </div>
         </div>
       )}
