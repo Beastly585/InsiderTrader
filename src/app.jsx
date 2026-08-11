@@ -7705,9 +7705,12 @@ function useSnapTrade(pro) {
   // connection first (flips status from 'pending' to 'active' on the worker)
   // then check status. Without this, the row stays 'pending' and every
   // downstream query filtering by status='active' returns nothing.
+  // SnapTrade redirects back with ?connection_id=... (their own param),
+  // ignoring the query string on customRedirect.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('snaptrade') && pro && cfg.NEON_PROXY_URL) {
+    const isSnapTradeReturn = params.has('connection_id') || params.get('snaptrade');
+    if (isSnapTradeReturn && pro && cfg.NEON_PROXY_URL) {
       (async () => {
         try {
           const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
@@ -7715,10 +7718,11 @@ function useSnapTrade(pro) {
         } catch (e) {
           console.error('[useSnapTrade] confirm failed:', e.message);
         }
-        // Clean the snaptrade param from the URL so a page refresh doesn't re-confirm
+        // Clean SnapTrade params from the URL so a page refresh doesn't re-confirm
         const url = new URL(window.location);
         url.searchParams.delete('snaptrade');
         url.searchParams.delete('status');
+        url.searchParams.delete('connection_id');
         window.history.replaceState({}, '', url.pathname + (url.search || ''));
         await refreshStatus();
       })();
@@ -7766,7 +7770,7 @@ function SettingsPage({ user, onUpgrade }) {
   const portfolio = usePortfolio(pro);
   const [section, setSection] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('section') || (params.get('snaptrade') ? 'brokers' : 'billing');
+    return params.get('section') || (params.has('connection_id') || params.get('snaptrade') ? 'brokers' : 'billing');
   });
   const [local,   setLocal]   = useState(null);
   const [testState, setTestState] = useState(null); // null | 'sending' | 'sent' | error string
