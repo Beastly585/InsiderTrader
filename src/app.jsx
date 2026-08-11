@@ -3899,10 +3899,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           </div>
         </div>
 
-        {/* RIGHT: Top insiders leaderboard + Portfolio */}
+        {/* RIGHT: Top insiders leaderboard */}
         {!isMobile && (
           <div className="ins-3col__right">
-            <div className="ins-lb-panel-wrap">
+            <div className="ins-lb-panel-wrap" style={{flex:1}}>
               <div className="ins-sig-panel__hdr">
                 <span className="ins-sig-panel__title">Top insiders</span>
                 <TileInfoButton section="insights-formula" title="Top insiders"/>
@@ -3914,7 +3914,6 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
               </div>
             </div>
-            <InsightsPortfolioBar filings={filings} cutoff={cutoff} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={isPro(user)}/>
           </div>
         )}
 
@@ -7708,7 +7707,9 @@ function useSnapTrade(pro) {
     setConnecting(true); setError(null);
     try {
       const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/connect`, { method: 'POST', headers });
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/connect`, {
+        method: 'POST', headers, body: JSON.stringify({})
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Connect failed');
       window.location.href = data.redirectURI; // hand off to SnapTrade's hosted portal
@@ -7738,7 +7739,7 @@ function SettingsPage({ user, onUpgrade }) {
   const pro   = isPro(user);
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
   const snaptrade = useSnapTrade(pro);
-  const portfolio = usePortfolio();
+  const portfolio = usePortfolio(pro);
   const [section, setSection] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('section') || (params.get('snaptrade') ? 'brokers' : 'billing');
