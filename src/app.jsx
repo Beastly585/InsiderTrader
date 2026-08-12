@@ -4406,7 +4406,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
         <div className="port-mini-tile__body" style={{flexDirection:'row',alignItems:'center'}}>
-          <span className="td-muted" style={{fontSize:'0.6875rem',color:'var(--red-600)'}}>Couldn't load your positions.</span>
+          <span className="td-muted" style={{fontSize:'0.6875rem'}}>{connected ? 'No positions available from your broker yet.' : 'Couldn\'t load your positions.'}</span>
           <button className="btn btn--ghost btn--sm" style={{marginLeft:'auto'}} onClick={refresh} disabled={refreshing}>{refreshing?'Retrying…':'Retry'}</button>
         </div>
       </div>
@@ -8116,45 +8116,6 @@ function SettingsPage({ user, onUpgrade }) {
                       </div>
                     </div>
                   )}
-                </div>
-              )}
-
-              {pro && snaptrade.status?.connection && (
-                <div className="settings-group">
-                  <div className="settings-group__label" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                    <span>Positions</span>
-                    {portfolio.lastRefreshed && <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,fontSize:'0.6875rem'}}>Updated {fmt.ago(portfolio.lastRefreshed.toISOString())}</span>}
-                  </div>
-                  <div style={{padding:'12px 14px'}}>
-                    {!portfolio.port ? (
-                      <div style={{display:'flex',alignItems:'center',gap:8}}><Spinner size={14}/><span className="td-muted" style={{fontSize:'0.75rem'}}>Loading positions…</span></div>
-                    ) : portfolio.err ? (
-                      <p className="td-muted" style={{fontSize:'0.75rem',color:'var(--red-600)'}}>Couldn't load your positions right now.</p>
-                    ) : portfolio.port.positions.length===0 ? (
-                      <p className="td-muted" style={{fontSize:'0.75rem'}}>No positions found in this account.</p>
-                    ) : (
-                      <>
-                        <p style={{fontSize:13,marginBottom:10}}>
-                          <strong>{portfolio.port.positions.length}</strong> position{portfolio.port.positions.length!==1?'s':''} · <strong>{fmt.money(portfolio.port.totalValue)}</strong> total value
-                        </p>
-                        {[...portfolio.port.positions].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>(
-                          <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:i>0?'0.5px solid var(--border)':'none'}}>
-                            <span className="ticker" style={{fontSize:'0.75rem',minWidth:56}}>{p.symbol}</span>
-                            <span className="td-muted" style={{fontSize:'0.6875rem',flex:1}}>{p.company}</span>
-                            <span style={{fontSize:'0.75rem',fontFamily:'var(--font-mono)'}}>{fmt.money(p.marketValue)}</span>
-                            {p.openPnl!=null && (
-                              <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:'0.6875rem',fontFamily:'var(--font-mono)',minWidth:90,textAlign:'right'}}>
-                                {p.openPnl>=0?'+':''}{fmt.money(p.openPnl)} ({p.openPnlPct>=0?'+':''}{p.openPnlPct.toFixed(1)}%)
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </>
-                    )}
-                    <button className="btn btn--ghost btn--sm" style={{marginTop:12}} onClick={portfolio.refresh} disabled={portfolio.refreshing}>
-                      {portfolio.refreshing?'Refreshing…':'Refresh'}
-                    </button>
-                  </div>
                 </div>
               )}
 

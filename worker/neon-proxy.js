@@ -2671,6 +2671,11 @@ async function neonFetch(env, query) {
   // try/catch surfaces it (webhook -> 500 -> Stripe retries; a route ->
   // a real error response instead of quietly pretending nothing happened.
   if (result.error) throw new Error(`Neon query failed: ${result.error}`);
+  // Neon's SQL-over-HTTP can also return SQL errors as {message, code,
+  // severity:'ERROR'} without a top-level 'error' key — catch those too,
+  // otherwise a constraint violation or syntax error is silently swallowed
+  // and the caller continues as if the write succeeded.
+  if (result.severity === 'ERROR') throw new Error(`Neon query failed: ${result.message} [${result.code}]`);
   return result;
 }
 
