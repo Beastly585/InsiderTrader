@@ -2210,7 +2210,8 @@ async function handleSnapTradeConnect(request, env, origin) {
 
     const { ciphertext, iv } = await encryptSecret(env.SNAPTRADE_ENCRYPTION_KEY, userSecret);
 
-    await neonFetch(env, `
+    console.log('[Worker] Inserting portfolio_connections for:', clerkUserId, 'snaptrade:', snapTradeUserId);
+    const insertResult = await neonFetch(env, `
       INSERT INTO public.portfolio_connections
         (clerk_user_id, snaptrade_user_id, secret_ciphertext, secret_iv, connection_type, status, updated_at)
       VALUES (${sqlVal(clerkUserId)}, ${sqlVal(snapTradeUserId)}, ${sqlVal(ciphertext)}, ${sqlVal(iv)}, 'read', 'pending', now())
@@ -2221,6 +2222,11 @@ async function handleSnapTradeConnect(request, env, origin) {
         status             = 'pending',
         updated_at         = now()
     `);
+    console.log('[Worker] INSERT result:', JSON.stringify(insertResult));
+
+    // Verify the row is actually there
+    const verifyResult = await neonFetch(env, `SELECT id, clerk_user_id, status FROM public.portfolio_connections WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    console.log('[Worker] Verify row after INSERT:', JSON.stringify(verifyResult));
 
     // connectionType defaults to read-only on SnapTrade's side even if
     // omitted, per their docs — passed explicitly here anyway so the
@@ -2279,6 +2285,7 @@ async function handleSnapTradeConfirm(request, env, origin) {
     // getSnapTradeConnection filters to 'active' only, which creates a
     // catch-22 where confirm can never find the row it's supposed to confirm.
     const conn = await getSnapTradeConnection(env, clerkUserId, { anyStatus: true });
+    console.log('[Worker] confirm — connection lookup result:', conn ? 'found' : 'null', 'for user:', clerkUserId);
     if (!conn) return corsResponse({ confirmed: false, reason: 'no_connection' }, 200, origin, env);
 
     // Ask SnapTrade whether this user actually has any linked brokerage accounts.
