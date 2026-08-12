@@ -121,13 +121,11 @@ async function getAuthHeaders() {
 
 // ── Main data fetch ───────────────────────────────────────────────────────────
 async function fetchFromNeon(daysBack = 90) {
-  // daysBack=null means "as wide as this user's plan allows" — the server
-  // already clamps free users to 1 year (see neon-proxy.js's handleQuery),
-  // so the client doesn't need to know the plan; it just asks for what the
-  // UI wants and the server enforces the real ceiling. The historical floor
-  // below (2021-01-01) is the absolute earliest data in the DB, not a plan
-  // limit — that's enforced server-side regardless of what's requested here.
-  let floorDate = '2021-01-01';
+  // Absolute floor — matches the earliest data backfilled into Neon.
+  // daysBack=null ("All") uses this floor; otherwise the computed date
+  // from daysBack will be more recent and override it. LIMIT 50000 in
+  // the query below caps the actual response size regardless.
+  let floorDate = '2013-01-01';
   if (daysBack != null) {
     const d = new Date();
     d.setDate(d.getDate() - daysBack);

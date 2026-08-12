@@ -5954,7 +5954,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
     const ef=dateFrom||(dPreset!=null?(()=>{const d=new Date();d.setDate(d.getDate()-dPreset);return d.toISOString().split('T')[0];})():null);
     const et=dateTo||new Date().toISOString().split('T')[0]; // always clamp to today unless user picks a later date themselves
     if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
-    c.push(`COALESCE(transaction_date,filing_date)>='2021-01-01'`); // hard floor regardless — matches edgar.js, covers the 'All' preset which otherwise has no lower bound at all
+    c.push(`COALESCE(transaction_date,filing_date)>='2013-01-01'`); // hard floor — matches earliest backfilled data
     c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
     if (typeF)  c.push(`transaction_type='${typeF}'`);
     if (relF)   c.push(`relationship='${relF}'`);
