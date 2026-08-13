@@ -3473,13 +3473,14 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
           component already lives full-size; there's no separate dedicated
           Top Insiders page to link to instead. */}
       <HomeTile title="Top Insiders" onSeeAll={()=>onSeeAll('dashboard')}>
-        <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
+        <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
       </HomeTile>
     </div>
   );
 }
 
-function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist }) {
+function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist, user, onUpgrade }) {
+  const pro = isPro(user);
   const [days, setDays] = useState(7);
   const isMobile = useIsMobile();
   const [newsExpanded, setNewsExpanded] = useState(false);
@@ -3515,9 +3516,13 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               <TileInfoButton section="insights-formula" title="Insider signals"/>
               <div className="dash-tile__hdr-controls">
                 <div className="dash-tile-pills">
-                  {DASH_DATE_OPTS.map(o=>(
-                    <button key={o.label} className={`dash-tile-pill${days===o.days?' dash-tile-pill--active':''}`} onClick={()=>setDays(o.days)}>{o.label}</button>
-                  ))}
+                  {DASH_DATE_OPTS.map(o=>{
+                    if (!pro && o.days > 7) return null;
+                    return (
+                      <button key={o.label} className={`dash-tile-pill${days===o.days?' dash-tile-pill--active':''}`} onClick={()=>setDays(o.days)}>{o.label}</button>
+                    );
+                  })}
+                  {!pro&&<button className="dash-tile-pill dash-tile-pill--locked" onClick={()=>onUpgrade('full_history')}>More <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>}
                 </div>
                 <span className="dash-tile__sub">{signals.length} signals</span>
               </div>
@@ -3581,7 +3586,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               </div>
             </div>
             <div className="dash-tile__body">
-              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
+              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
             </div>
           </div>
           <div className="dash-tile dash-tile--news">
@@ -3619,6 +3624,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           sigSort="conviction" sigDir={-1} sigOnSort={()=>{}}
           ensureFilingsWindow={()=>{}}
           filingsLoading={loading}
+          pro={pro}
         />
       )}
     </div>
@@ -3692,7 +3698,7 @@ function detectReversals(filings) {
 }
 
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
-function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow, watchlist }) {
+function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow, watchlist, onUpgrade }) {
   const pro = isPro(user);
   const [appetite] = React.useContext(RiskAppetiteContext);
   const [days, setDays] = useState(7);
@@ -3969,7 +3975,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 </div>
               </div>
               <div className="ins-lb-panel__body">
-                <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
+                <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
               </div>
             </div>
           </div>
@@ -3987,6 +3993,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading}
           watchlist={watchlist}
           initialFilters={{days, sourceF, sectorF, minStrength}}
+          pro={pro}
         />
       )}
     </div>
@@ -4000,7 +4007,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // Clicking any row in the left pane drives the right pane without closing.
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
-function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, initialDetailStack, ensureFilingsWindow, filingsLoading, watchlist, initialFilters }) {
+function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, initialDetailStack, ensureFilingsWindow, filingsLoading, watchlist, initialFilters, pro }) {
   const [appetite] = React.useContext(RiskAppetiteContext);
 
   // ── left pane state ──────────────────────────────────────────────────────
@@ -4250,20 +4257,26 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Source</span>
                 <div className="dash-tile-pills" style={{gap:2}}>
-                  {[[null,'All'],['corporate','Corporate'],['congress','Congress']].map(([v,l])=>(
-                    <button key={l} className={`dash-tile-pill${lbSource===v?' dash-tile-pill--active':''}`}
-                      onClick={()=>setLbSource(v)}>{l}</button>
-                  ))}
+                  {[[null,'All'],['corporate','Corporate'],['congress','Congress']].map(([v,l])=>{
+                    if (!pro && v !== null) return null;
+                    return (
+                      <button key={l} className={`dash-tile-pill${lbSource===v?' dash-tile-pill--active':''}`}
+                        onClick={()=>setLbSource(v)}>{l}</button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="drawer__toolbar-divider"/>
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Window</span>
                 <div className="dash-tile-pills" style={{gap:2}}>
-                  {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>(
-                    <button key={l} className={`dash-tile-pill${lbYearsBack===v?' dash-tile-pill--active':''}`}
-                      onClick={()=>setLbYearsBack(v)}>{l}</button>
-                  ))}
+                  {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>{
+                    if (!pro && v !== null) return null;
+                    return (
+                      <button key={l} className={`dash-tile-pill${lbYearsBack===v?' dash-tile-pill--active':''}`}
+                        onClick={()=>setLbYearsBack(v)}>{l}</button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="drawer__toolbar-divider"/>
@@ -4919,7 +4932,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
 // Active insiders — who has been most active in the selected window
 
 // ─── Leaderboard sidebar ────────────────────────────────────────────────────────
-function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
+function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [yearsBack, setYearsBack] = useState(null); // null = all-time, matches the previous fixed default
@@ -4948,6 +4961,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
 
   return (
     <div className="ins-lb-list-wrap">
+      {pro && (
       <div className="ins-lb-pill-row">
         <span className="ins-lb-pill-row__label">Window</span>
         {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>(
@@ -4960,6 +4974,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
             onClick={()=>setSource(v)}>{l}</button>
         ))}
       </div>
+      )}
       <div className="ins-lb-col-hdr">
         <span className="ins-lb-col-hdr__spacer"/>
         <span className="ins-lb-col-hdr__name">Insider</span>
@@ -9453,12 +9468,13 @@ function AppInner() {
           )}
           {page==='home'     &&<HomePage filings={filings} loading={loading} watchlist={watchlist} user={user}
             onOpenDetail={openDetail} onSeeAll={seeAllFromHome}/>}
-          {page==='dashboard'&&<DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist}/>}
+          {page==='dashboard'&&<DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
           {page==='signals'  &&<InsightsPage   filings={filings} loading={loading}
             highlightTicker={hlTicker} setHighlightTicker={setHlTick}
             onSelectSignal={selectSignal} selectedSignal={selSignal}
             onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user}
-            ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist}/>}
+            ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist}
+            onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
           {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'data_export')}/>}
           {page==='settings'  &&<SettingsPage user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
           {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow} user={user}/>}
@@ -9490,7 +9506,7 @@ function AppInner() {
               watchlist={watchlist}
               portfolioTickers={portfolioTickers}
               pro={isPro(user)}
-              onUpgrade={openUpgrade}
+              onUpgrade={(f)=>setShowUpgradeModal(f||'default')}
             />
           : <InsightsDrawer
               type={detail?.type==='trader' ? 'insiders' : 'signals'}
@@ -9502,6 +9518,7 @@ function AppInner() {
               ensureFilingsWindow={ensureFilingsWindow}
               filingsLoading={loading}
               watchlist={watchlist}
+              pro={isPro(user)}
             />
       )}
     </div>
