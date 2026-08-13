@@ -186,20 +186,17 @@ function UpgradeModal({ feature, pro, onClose }) {
     );
   }
 
-  // Already-Pro users hitting the data-export wall don't need (or want) an
-  // "Upgrade to Pro" pitch — they already have Pro, and the export is a
-  // separate one-time purchase specifically because it's NOT part of the
-  // subscription. A dedicated, single-purpose modal here instead of the
-  // dual Free/Pro comparison avoids the confusing experience of being told
-  // to upgrade to something you already have.
-  if (feature==='data_export' && pro) {
+  // Data export is its own $39.99 one-time product, separate from the Pro
+  // subscription — anyone can buy it, free or Pro. Show the focused export
+  // modal instead of the dual Free/Pro comparison.
+  if (feature==='data_export') {
     return (
       <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
         <div className="upgrade-modal upgrade-modal--export">
           <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
           <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <div className="upgrade-modal__title">Buy full data export</div>
-          <div className="upgrade-modal__subtitle">A one-time pull of everything currently in the database, delivered as CSV — separate from your Pro subscription.</div>
+          <div className="upgrade-modal__subtitle">A one-time pull of everything currently in the database, delivered as CSV — no subscription required.</div>
           <div className="export-price-card">
             <div className="export-price-card__row">
               <span className="export-price-card__label">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
@@ -1590,6 +1587,7 @@ function BetaWelcomeModal({ onDismiss }) {
       <div className="modal-panel" style={{maxWidth:480,padding:0,overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
         <div style={{padding:'32px 32px 0'}}>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20}}>
+            <div className="logo-mark" style={{width:32,height:32,flexShrink:0}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
             <span style={{fontSize:'1.5rem',fontWeight:800,letterSpacing:'-0.5px'}}>Seli</span>
             <span style={{fontSize:'0.6875rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--accent-strong)',background:'color-mix(in srgb, var(--accent-strong) 12%, transparent)',padding:'2px 8px',borderRadius:4}}>Private Beta</span>
           </div>
@@ -1598,9 +1596,9 @@ function BetaWelcomeModal({ onDismiss }) {
             You're one of the first people using this. Everything you see — the signals, the leaderboard, the scoring — is built on real SEC filings and peer-reviewed methodology, but the product is still early.
           </p>
           <div style={{background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'14px 16px',marginBottom:16}}>
-            <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6}}>Your feedback shapes what gets built</p>
+            <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6}}>Your feedback is important</p>
             <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5}}>
-              Hit the <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:20,height:20,borderRadius:4,background:'var(--surface)',border:'0.5px solid var(--border)',fontSize:'0.6875rem',verticalAlign:'middle',margin:'0 2px'}}>💬</span> button in the top bar anytime — bugs, ideas, complaints, whatever. I read every one.
+              Please use the feedback button — <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:20,height:20,borderRadius:4,background:'var(--surface)',border:'0.5px solid var(--border)',fontSize:'0.6875rem',verticalAlign:'middle',margin:'0 2px'}}>💬</span> in the top right — to provide feedback on bugs or issues you have using the app. You can write comments, paste or attach screenshots.
             </p>
           </div>
           <div style={{background:'color-mix(in srgb, var(--accent-strong) 6%, transparent)',border:'0.5px solid color-mix(in srgb, var(--accent-strong) 20%, transparent)',borderRadius:'var(--radius-lg)',padding:'14px 16px',marginBottom:8}}>
@@ -1611,7 +1609,7 @@ function BetaWelcomeModal({ onDismiss }) {
           </div>
         </div>
         <div style={{padding:'16px 32px 28px',display:'flex',justifyContent:'center'}}>
-          <button className="btn btn--primary" style={{minWidth:200,padding:'10px 24px',fontSize:'0.875rem'}} onClick={onDismiss}>
+          <button className="upgrade-modal__cta" onClick={onDismiss}>
             Got it — let's go
           </button>
         </div>
