@@ -3783,10 +3783,18 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <div className="ins-filter-group">
               <span className="ins-filter-group__label">Window</span>
               <div className="dash-tile-pills">
-                {[{v:1,l:'1d'},{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
-                  <button key={o.l} className={`dash-tile-pill${days===o.v?' dash-tile-pill--active':''}`}
-                    onClick={()=>{setDays(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
-                ))}
+                {[{v:1,l:'1d'},{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>{
+                  const needsPro = !pro && (o.v === null || o.v > 7);
+                  return (
+                    <button key={o.l} className={`dash-tile-pill${days===o.v?' dash-tile-pill--active':''}${needsPro?' dash-tile-pill--locked':''}`}
+                      onClick={()=>{
+                        if (needsPro) { onUpgrade('full_history'); return; }
+                        setDays(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);
+                      }}>
+                      {o.l}{needsPro&&<span className="settings-pro-badge" style={{marginLeft:4,fontSize:'0.5rem'}}>Pro</span>}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="drawer__toolbar-divider"/>
@@ -3836,8 +3844,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               </select>
             </div>
             <span className="td-muted ins-filter-count">
-              {signals.length} signals
-              {!pro&&<span className="free-tier-inline"> · free plan: last 12mo only</span>}
+              {signals.length} signal{signals.length!==1?'s':''}
             </span>
             {!filtersAreDefault&&(
               <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
@@ -6079,18 +6086,32 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           </div>
           <div className="drawer__toolbar-divider"/>
           <div className="date-pills">
-            {DATA_DATE_PRESETS.map(p=>(
-              <button key={p.l} className={`pill${dPreset===p.d&&!dateFrom?' pill--active':''}`}
-                title={p.l==='All'&&!pro?'Free plan is still capped at the last 12 months — Pro unlocks true full history':undefined}
-                onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>
-                {p.l}</button>
-            ))}
+            {DATA_DATE_PRESETS.map(p=>{
+              const needsPro = !pro && p.d === null;
+              return (
+                <button key={p.l} className={`pill${dPreset===p.d&&!dateFrom?' pill--active':''}${needsPro?' dash-tile-pill--locked':''}`}
+                  onClick={()=>{
+                    if (needsPro) { onUpgrade('full_history'); return; }
+                    setDPreset(p.d);setDateFrom('');setDateTo('');
+                  }}>
+                  {p.l}{needsPro&&<span className="settings-pro-badge" style={{marginLeft:4,fontSize:'0.5rem'}}>Pro</span>}
+                </button>
+              );
+            })}
           </div>
           {!isMobile && (
             <>
               <div className="drawer__toolbar-divider"/>
               <div style={{display:'flex',alignItems:'center',gap:7}}>
-                <input type="date" value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setDPreset(null);}}/>
+                <input type="date" value={dateFrom}
+                  min={!pro ? new Date(Date.now()-365*86400000).toISOString().split('T')[0] : undefined}
+                  onChange={e=>{
+                    if (!pro) {
+                      const floor = new Date(Date.now()-365*86400000).toISOString().split('T')[0];
+                      if (e.target.value && e.target.value < floor) { onUpgrade('full_history'); return; }
+                    }
+                    setDateFrom(e.target.value);setDPreset(null);
+                  }}/>
                 <span style={{color:'var(--text-3)',fontSize:'0.75rem'}}>→</span>
                 <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
               </div>
@@ -6233,7 +6254,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                 {total!=null
                   ? `${pg*DATA_PAGE+1}–${Math.min((pg+1)*DATA_PAGE,total||0)} of ${total.toLocaleString()} filing${total===1?'':'s'}`
                   : ''}
-                {!pro&&<span> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
+                {!pro&&<span className="td-muted"> · Free plan: last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
               </span>
               <div className="pagination__btns">
                 <button className="btn btn--sm" onClick={()=>fetchPg(0)}       disabled={pg===0||loading||totalPgs<=1}>««</button>
