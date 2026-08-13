@@ -1835,8 +1835,9 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* Signal rows */
 /* Signal table column headers */
+/* Signal column headers + rows — 6 columns: ticker+co | type | exec | last trade | conviction | net flow */
 .ins-sig-col-hdrs {
-  display: grid; grid-template-columns: 1fr 100px 60px 130px 110px;
+  display: grid; grid-template-columns: 1fr 90px 50px 80px 120px 100px;
   gap: 12px; padding: 5px 16px 4px;
   font-size: 0.5938rem; font-weight: 600; text-transform: uppercase;
   letter-spacing: .05em; color: var(--text-3);
@@ -1848,10 +1849,10 @@ td { padding:7px 11px; vertical-align:middle; }
   cursor: pointer; display: flex; align-items: center;
 }
 .ins-col-sort:hover { color: var(--text-2); }
-/* Signal rows — 5 columns: ticker+co | type | exec | conviction | net flow */
+/* Signal rows — 6 columns: ticker+co | type | exec | last trade | conviction | net flow */
 .ins-sig-list { display: flex; flex-direction: column; }
 .ins-sig-row {
-  display: grid; grid-template-columns: 1fr 100px 60px 130px 110px;
+  display: grid; grid-template-columns: 1fr 90px 50px 80px 120px 100px;
   align-items: center; gap: 12px;
   padding: 9px 16px; border-bottom: 0.5px solid var(--border);
   cursor: pointer; transition: background .07s;
@@ -1909,6 +1910,7 @@ td { padding:7px 11px; vertical-align:middle; }
   .ins-sig-row { grid-template-columns: 160px 1fr auto; }
   .ins-sig-row__type { display: none; }
   .ins-sig-row__exec { display: none; }
+  .ins-sig-row__date { display: none; }
 }
 @media (max-width: 480px) {
   /* 160px fixed is still ~43% of a true phone's width even after the

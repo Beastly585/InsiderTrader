@@ -3784,17 +3784,15 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               <span className="ins-filter-group__label">Window</span>
               <div className="dash-tile-pills">
                 {[{v:1,l:'1d'},{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>{
-                  const needsPro = !pro && (o.v === null || o.v > 7);
+                  if (!pro && (o.v === null || o.v > 7)) return null;
                   return (
-                    <button key={o.l} className={`dash-tile-pill${days===o.v?' dash-tile-pill--active':''}${needsPro?' dash-tile-pill--locked':''}`}
-                      onClick={()=>{
-                        if (needsPro) { onUpgrade('full_history'); return; }
-                        setDays(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);
-                      }}>
-                      {o.l}{needsPro&&<span className="settings-pro-badge" style={{marginLeft:4,fontSize:'0.5rem'}}>Pro</span>}
+                    <button key={o.l} className={`dash-tile-pill${days===o.v?' dash-tile-pill--active':''}`}
+                      onClick={()=>{setDays(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>
+                      {o.l}
                     </button>
                   );
                 })}
+                {!pro&&<button className="dash-tile-pill dash-tile-pill--locked" onClick={()=>onUpgrade('full_history')}>More <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>}
               </div>
             </div>
             <div className="drawer__toolbar-divider"/>
@@ -3855,6 +3853,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <button className="ins-col-sort" onClick={()=>sigOnSort('ticker')}>Ticker · Company{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
             <span>Type</span>
             <button className="ins-col-sort" onClick={()=>sigOnSort('cSuiteBuys')}>Exec{sigSort==='cSuiteBuys'&&(sigDir<0?' ↓':' ↑')}</button>
+            <button className="ins-col-sort" onClick={()=>sigOnSort('lastTradeDate')}>Last trade{sigSort==='lastTradeDate'&&(sigDir<0?' ↓':' ↑')}</button>
             <button className="ins-col-sort" title="Conviction = exec participation × buy size × clustering" onClick={()=>sigOnSort('conviction')}>Signal ⓘ{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
             <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>sigOnSort('netValue')}>Net flow{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
           </div>
@@ -3911,6 +3910,9 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                       {s.cSuiteBuys>0
                         ? <span className="csuite-badge">{s.cSuiteBuys}×</span>
                         : <span className="td-muted" style={{fontSize:'0.6875rem'}}>—</span>}
+                    </div>
+                    <div className="ins-sig-row__date">
+                      <span className="td-muted" style={{fontSize:'0.6875rem'}}>{s.lastTradeDate?fmt.ago(s.lastTradeDate):'—'}</span>
                     </div>
                     <div className="ins-sig-row__signal">
                       <ConvictionBar score={s.conviction} showLabel={true}/>
@@ -5732,7 +5734,7 @@ function FilterPanel({
 // already done — same reasoning InsightsDrawer already uses for its own
 // initialFilters. Runs its own query rather than reading DataPage's state
 // directly, since DataPage may since have unmounted.
-function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers }) {
+function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers, pro, onUpgrade }) {
   const f = filterState || {};
   const [search,   setSearch]   = useState(f.search || '');
   const [typeF,    setTypeF]    = useState(f.typeF || '');
@@ -5845,10 +5847,14 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
           <div className="drawer__filter-group">
             <span className="drawer__filter-label">Window</span>
             <div className="dash-tile-pills" style={{gap:2}}>
-              {DATA_DATE_PRESETS.map(p=>(
-                <button key={p.l} className={`dash-tile-pill${dPreset===p.d&&!dateFrom?' dash-tile-pill--active':''}`}
-                  onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>{p.l}</button>
-              ))}
+              {DATA_DATE_PRESETS.map(p=>{
+                if (!pro && p.d === null) return null;
+                return (
+                  <button key={p.l} className={`dash-tile-pill${dPreset===p.d&&!dateFrom?' dash-tile-pill--active':''}`}
+                    onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>{p.l}</button>
+                );
+              })}
+              {!pro&&<button className="dash-tile-pill dash-tile-pill--locked" onClick={()=>onUpgrade&&onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>}
             </div>
           </div>
           {(search||typeF||relF||sectorF||sourceF||openMkt||fromPortfolio||dPreset!==7||dateFrom||dateTo) && (
@@ -6087,17 +6093,15 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           <div className="drawer__toolbar-divider"/>
           <div className="date-pills">
             {DATA_DATE_PRESETS.map(p=>{
-              const needsPro = !pro && p.d === null;
+              if (!pro && p.d === null) return null;
               return (
-                <button key={p.l} className={`pill${dPreset===p.d&&!dateFrom?' pill--active':''}${needsPro?' dash-tile-pill--locked':''}`}
-                  onClick={()=>{
-                    if (needsPro) { onUpgrade('full_history'); return; }
-                    setDPreset(p.d);setDateFrom('');setDateTo('');
-                  }}>
-                  {p.l}{needsPro&&<span className="settings-pro-badge" style={{marginLeft:4,fontSize:'0.5rem'}}>Pro</span>}
+                <button key={p.l} className={`pill${dPreset===p.d&&!dateFrom?' pill--active':''}`}
+                  onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>
+                  {p.l}
                 </button>
               );
             })}
+            {!pro&&<button className="pill dash-tile-pill--locked" onClick={()=>onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>}
           </div>
           {!isMobile && (
             <>
@@ -9485,6 +9489,8 @@ function AppInner() {
               onClose={closeDetail}
               watchlist={watchlist}
               portfolioTickers={portfolioTickers}
+              pro={isPro(user)}
+              onUpgrade={openUpgrade}
             />
           : <InsightsDrawer
               type={detail?.type==='trader' ? 'insiders' : 'signals'}
