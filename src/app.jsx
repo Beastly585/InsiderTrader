@@ -1380,7 +1380,6 @@ const GUIDE_SECTIONS = [
         <h4 className="guide-section-heading">Insights</h4>
         <p>The full, filterable signal feed. Thousands of trades are reported daily, and it can be hard to keep track of what's significant.</p>
         <p>Seli compares each trade against peer-reviewed research on how insiders beat the market and scores each insider based on how much they beat the market (SPY) by. None of this is personalized, each trade is scored equally.</p>
-        <p>In insights is where you'll also see your portfolio information and any insider trades related to assets you currently hold.</p>
         <p className="td-muted" style={{fontSize:'0.75rem',marginTop:-4}}>Main use — get a feel on who's making money on trades and which trades have markers of historically successful trades.</p>
 
         <h4 className="guide-section-heading">Data</h4>
@@ -1388,7 +1387,7 @@ const GUIDE_SECTIONS = [
         <p className="td-muted" style={{fontSize:'0.75rem',marginTop:-4}}>Main use — deep dive raw data, make your own deductions.</p>
 
         <h4 className="guide-section-heading">Watchlist</h4>
-        <p>Tickers and insiders you've chosen to follow. Their activity surfaces ahead of everything else, and it's what instant alerts and email digests are built from.</p>
+        <p>Tickers and insiders you've chosen to follow. Their activity surfaces ahead of everything else, and it's what instant alerts and email digests are built from. Your linked portfolio also lives here — connect a brokerage to see insider activity on stocks you actually hold.</p>
 
         <h4 className="guide-section-heading">Settings</h4>
         <p>Your plan, billing, notification preferences, and brokerage connection all live here.</p>
@@ -1584,22 +1583,73 @@ const LP_FEATURE_ICON_MAP = {
   IconData, IconInsights, IconLink, IconZap,
 };
 
+// ── Beta welcome modal — shown once, before the guide, for beta testers ──
+function BetaWelcomeModal({ onDismiss }) {
+  return (
+    <div className="modal-overlay" style={{zIndex:310}} onClick={onDismiss}>
+      <div className="modal-panel" style={{maxWidth:480,padding:0,overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:'32px 32px 0'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20}}>
+            <span style={{fontSize:'1.5rem',fontWeight:800,letterSpacing:'-0.5px'}}>Seli</span>
+            <span style={{fontSize:'0.6875rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--accent-strong)',background:'color-mix(in srgb, var(--accent-strong) 12%, transparent)',padding:'2px 8px',borderRadius:4}}>Private Beta</span>
+          </div>
+          <h2 style={{fontSize:'1.25rem',fontWeight:700,lineHeight:1.3,marginBottom:12}}>Welcome to the Seli private beta</h2>
+          <p style={{fontSize:'0.875rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:16}}>
+            You're one of the first people using this. Everything you see — the signals, the leaderboard, the scoring — is built on real SEC filings and peer-reviewed methodology, but the product is still early.
+          </p>
+          <div style={{background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'14px 16px',marginBottom:16}}>
+            <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6}}>Your feedback shapes what gets built</p>
+            <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5}}>
+              Hit the <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:20,height:20,borderRadius:4,background:'var(--surface)',border:'0.5px solid var(--border)',fontSize:'0.6875rem',verticalAlign:'middle',margin:'0 2px'}}>💬</span> button in the top bar anytime — bugs, ideas, complaints, whatever. I read every one.
+            </p>
+          </div>
+          <div style={{background:'color-mix(in srgb, var(--accent-strong) 6%, transparent)',border:'0.5px solid color-mix(in srgb, var(--accent-strong) 20%, transparent)',borderRadius:'var(--radius-lg)',padding:'14px 16px',marginBottom:8}}>
+            <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6,color:'var(--accent-strong)'}}>Founding member pricing</p>
+            <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5}}>
+              As a beta user, you can lock in Pro at <strong>$6.99/mo — half off, forever</strong>. That rate stays as long as your subscription is active.
+            </p>
+          </div>
+        </div>
+        <div style={{padding:'16px 32px 28px',display:'flex',justifyContent:'center'}}>
+          <button className="btn btn--primary" style={{minWidth:200,padding:'10px 24px',fontSize:'0.875rem'}} onClick={onDismiss}>
+            Got it — let's go
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GuideProvider({ children }) {
   const [openSection, setOpenSection] = useState(null); // null = closed, else a GUIDE_SECTIONS id
+  const [showBetaWelcome, setShowBetaWelcome] = useState(false);
 
-  // Auto-open once per browser, on first real visit to the app (not the
-  // marketing/landing page) — localStorage only, same pattern already used
-  // for theme elsewhere in this file. Not tied to a Neon
-  // column: losing this flag on a new device just means seeing the guide
-  // again, which is a low-stakes outcome, not one worth a server round trip.
+  // Beta welcome shows first (once ever), then the product guide shows on
+  // first visit. Two separate localStorage keys — dismissing the beta modal
+  // doesn't skip the guide, it just gates it behind the beta greeting.
   useEffect(() => {
+    try {
+      if (!localStorage.getItem('seli_beta_welcome_seen')) {
+        setShowBetaWelcome(true);
+      } else if (!localStorage.getItem('seli_guide_seen')) {
+        setOpenSection('welcome');
+        localStorage.setItem('seli_guide_seen', '1');
+      }
+    } catch (_) {}
+  }, []);
+
+  function dismissBetaWelcome() {
+    setShowBetaWelcome(false);
+    try { localStorage.setItem('seli_beta_welcome_seen', '1'); } catch (_) {}
+    // After dismissing the beta greeting, show the product guide if they
+    // haven't seen it yet — so they get both on their first session.
     try {
       if (!localStorage.getItem('seli_guide_seen')) {
         setOpenSection('welcome');
         localStorage.setItem('seli_guide_seen', '1');
       }
     } catch (_) {}
-  }, []);
+  }
 
   const openGuide = useCallback((sectionId) => setOpenSection(sectionId || 'welcome'), []);
   const closeGuide = useCallback(() => setOpenSection(null), []);
@@ -1607,7 +1657,8 @@ function GuideProvider({ children }) {
   return (
     <GuideContext.Provider value={{ openSection, openGuide, closeGuide }}>
       {children}
-      {openSection && <GuideModal initialSection={openSection} onClose={closeGuide}/>}
+      {showBetaWelcome && <BetaWelcomeModal onDismiss={dismissBetaWelcome}/>}
+      {openSection && !showBetaWelcome && <GuideModal initialSection={openSection} onClose={closeGuide}/>}
     </GuideContext.Provider>
   );
 }
@@ -8549,7 +8600,7 @@ function LandingPage({ onEnter, dark, setDark }) {
   // (no auth path involved at all, unlike the generic query endpoint) since
   // this page renders before anyone has signed in. 2018 is the fallback if
   // the fetch hasn't resolved yet or fails outright, not the source of truth.
-  const [dataSinceYear, setDataSinceYear] = useState(2015);
+  const [dataSinceYear, setDataSinceYear] = useState(2010);
   useEffect(() => {
     fetch(`${cfg.NEON_PROXY_URL}/public/data-stats`)
       .then(r => r.ok ? r.json() : null)
