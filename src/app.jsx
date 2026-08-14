@@ -430,7 +430,29 @@ function CheckoutModal({ product, onClose, onSuccess }) {
           )}
 
           {!error && !reactivating && clientSecret && (
-            <Elements stripe={getStripePromise()} options={{ clientSecret }}>
+            <Elements stripe={getStripePromise()} options={{
+              clientSecret,
+              appearance: {
+                theme: 'night',
+                variables: {
+                  colorPrimary: '#7c5cfc',
+                  colorBackground: 'var(--surface, #1a1a2e)',
+                  colorText: 'var(--text, #e2e2e8)',
+                  colorDanger: '#ef4444',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  borderRadius: '8px',
+                  spacingUnit: '4px',
+                },
+                rules: {
+                  '.Input': { backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' },
+                  '.Input:focus': { border: '1px solid #7c5cfc', boxShadow: '0 0 0 1px #7c5cfc' },
+                  '.Label': { color: 'rgba(255,255,255,0.6)', fontSize: '0.8125rem', fontWeight: '500' },
+                  '.Tab': { backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' },
+                  '.Tab--selected': { backgroundColor: '#7c5cfc', border: '1px solid #7c5cfc', color: '#fff' },
+                  '.Tab:hover': { border: '1px solid rgba(255,255,255,0.2)' },
+                },
+              },
+            }}>
               <CheckoutForm product={product} onSuccess={onSuccess} onClose={onClose} />
             </Elements>
           )}

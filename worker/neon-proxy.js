@@ -2819,6 +2819,26 @@ async function handleStripeWebhook(request, env) {
         `);
 
         await syncClerkMetadata(env, clerkUserId, { plan });
+
+        // ── Auto-disconnect SnapTrade when a user loses Pro ──
+        // SnapTrade bills $2/mo per connected user regardless of whether they
+        // use it. When a subscription ends (deleted) or lapses (past_due →
+        // canceled), disconnect their brokerage link so we stop accruing charges
+        // for users who aren't paying. They can reconnect if they resubscribe.
+        if (plan === 'free') {
+          try {
+            const conn = await getSnapTradeConnection(env, clerkUserId);
+            if (conn) {
+              console.log('[Worker] Auto-disconnecting SnapTrade for downgraded user:', clerkUserId);
+              await signSnapTradeRequest(env, 'DELETE', '/api/v1/snapTrade/deleteUser', {
+                query: { userId: conn.snapTradeUserId },
+              }).catch(e => console.error('[Worker] SnapTrade auto-deleteUser failed (non-fatal):', e.message));
+              await neonFetch(env, `DELETE FROM public.portfolio_connections WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+            }
+          } catch (e) {
+            console.error('[Worker] SnapTrade auto-disconnect failed (non-fatal — user already downgraded):', e.message);
+          }
+        }
         break;
       }
       case 'payment_intent.succeeded': {
