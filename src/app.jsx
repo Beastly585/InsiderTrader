@@ -96,6 +96,13 @@ function useCompanyProfile(ticker, cik) {
 // so the same logic under test is the same logic actually running.)
 
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
+// Beta pricing flag — flip to false when you hit 25 founding members, then
+// update STRIPE_PRICE_PRO in your worker secrets to the $13.99 Price ID.
+const BETA_ACTIVE = true;
+const PRO_PRICE_DISPLAY = BETA_ACTIVE ? '$6.99' : '$13.99';
+const PRO_PRICE_LABEL   = BETA_ACTIVE ? '$6.99/mo' : '$13.99/mo';
+const PRO_PRICE_FULL    = '$13.99';
+
 // Shown when a free user tries to use a Pro feature.
 // Comparison-table style, matching the reference layout's structure:
 // logo, title, Free/Pro feature comparison, a plan selector, one CTA.
@@ -245,8 +252,8 @@ function UpgradeModal({ feature, pro, onClose }) {
           <button className={`upgrade-plan-card${plan==='pro'?' upgrade-plan-card--active':''}`} onClick={()=>setPlan('pro')}>
             <span className="upgrade-plan-card__radio"/>
             <span>
-              <span className="upgrade-plan-card__title">Pro</span>
-              <span className="upgrade-plan-card__price">$11.99/month</span>
+              <span className="upgrade-plan-card__title">Pro {BETA_ACTIVE&&<span className="upgrade-plan-card__badge">Beta</span>}</span>
+              <span className="upgrade-plan-card__price">{BETA_ACTIVE&&<span style={{textDecoration:'line-through',opacity:0.5,marginRight:4}}>{PRO_PRICE_FULL}</span>}{PRO_PRICE_LABEL}</span>
             </span>
           </button>
           <button className={`upgrade-plan-card${plan==='data_export'?' upgrade-plan-card--active':''}`} onClick={()=>setPlan('data_export')}>
@@ -259,7 +266,7 @@ function UpgradeModal({ feature, pro, onClose }) {
         </div>
 
         <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct(plan)}>
-          {plan==='pro' ? 'Upgrade Now — $11.99/mo' : 'Buy Export — $39.99'}
+          {plan==='pro' ? `Upgrade Now — ${PRO_PRICE_LABEL}` : 'Buy Export — $39.99'}
         </button>
 
         <div className="upgrade-modal__trust">
@@ -284,8 +291,10 @@ function getStripePromise() {
 
 const PRODUCT_COPY = {
   pro: {
-    title: 'Upgrade to Pro', price: '$11.99/month', endpoint: '/billing/create-subscription',
-    subtitle: 'Full insider data, real-time alerts, and your own portfolio — in one view.',
+    title: 'Upgrade to Pro', price: `${PRO_PRICE_DISPLAY}/month`, endpoint: '/billing/create-subscription',
+    subtitle: BETA_ACTIVE
+      ? `Lock in the founding member rate — ${PRO_PRICE_DISPLAY}/mo, half off forever.`
+      : 'Full insider data, real-time alerts, and your own portfolio — in one view.',
     features: ['Full historical data', 'Portfolio linking', 'Instant alerts'],
   },
   data_export: {
@@ -658,7 +667,7 @@ function BillingSection({ user }) {
         <div className="settings-group__label">Current plan</div>
         <div className="settings-row settings-row--toggle">
           <div>
-            <div className="settings-row__label">{isProPlan ? 'Pro — $11.99/month' : 'Free'}</div>
+            <div className="settings-row__label">{isProPlan ? `Pro — ${PRO_PRICE_LABEL}` : 'Free'}</div>
           </div>
           {!isProPlan && (
             <button className="btn btn--primary" onClick={()=>setCheckoutProduct('pro')}>Upgrade →</button>
@@ -6691,7 +6700,7 @@ function TermsPage() {
         <p>If you connect a brokerage account through SnapTrade, you authorize Seli to retrieve read-only account data (positions, balances, account metadata) on your behalf. Seli never stores your brokerage login credentials and can never execute trades or move funds on your behalf. The brokerage connection is subject to SnapTrade's own terms and privacy policy. You can disconnect your brokerage at any time from Settings, which immediately revokes Seli's access.</p>
 
         <h2>7. Subscriptions, Billing, and Refunds</h2>
-        <p>Certain features require a paid Pro subscription ($11.99/month) or a one-time data export purchase ($39.99). All payments are processed by Stripe and subject to <a href="https://stripe.com/legal" target="_blank" rel="noopener noreferrer">Stripe's terms of service</a>.</p>
+        <p>Certain features require a paid Pro subscription ({PRO_PRICE_LABEL}) or a one-time data export purchase ($39.99). All payments are processed by Stripe and subject to <a href="https://stripe.com/legal" target="_blank" rel="noopener noreferrer">Stripe's terms of service</a>.</p>
         <p><strong>Subscriptions.</strong> Pro subscriptions bill monthly. You may cancel at any time; cancellation takes effect at the end of the current billing period. No partial-month refunds are issued for cancellations. We reserve the right to change pricing with at least 30 days' notice to current subscribers.</p>
         <p><strong>Data exports.</strong> Each data export purchase provides a one-time download of the database as it exists at the time of purchase. Data exports are non-refundable once the download link has been generated.</p>
         <p><strong>Refund requests.</strong> If you believe you were charged in error or have not received the service you paid for, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> within 30 days of the charge. We will review each request individually.</p>
@@ -7006,7 +7015,7 @@ const HELP_SECTIONS = [
     render: () => (
       <>
         <h3>What does Pro include?</h3>
-        <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests, for $11.99 per month.</p>
+        <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests{BETA_ACTIVE ? `, for ${PRO_PRICE_DISPLAY} per month (founding member rate — normally ${PRO_PRICE_FULL}/mo)` : `, for ${PRO_PRICE_FULL} per month`}.</p>
         <h3>What's the Full Data Export?</h3>
         <p>A separate, one-time $39.99 purchase: a complete pull of the database as a spreadsheet, independent of a Pro subscription. Each purchase includes one download. If you need it again later, use Re-download in Settings &gt; Billing at no extra charge (this pulls current data, not a frozen copy from your original purchase date).</p>
         <h3>How do I cancel Pro?</h3>
@@ -8920,7 +8929,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-price-card__badge">Half-off</div>
             <div className="lp-price-card__name">Pro</div>
             <div className="lp-price-card__price">
-              <span className="lp-price-card__price-strike">$11.99</span> $6.99<span>/mo</span>
+              <span className="lp-price-card__price-strike">$13.99</span> $6.99<span>/mo</span>
             </div>
             <div className="lp-price-card__beta-note">Half off, forever — for the first 25 Beta users</div>
             <div className="lp-price-card__desc">Full history, every alert, every score — for serious research.</div>
