@@ -276,12 +276,24 @@ function UpgradeModal({ feature, pro, onClose }) {
           </div>
         </div>
 
-        {/* Data export option */}
-        <div className="upgrade-hero__export">
-          <span style={{fontSize:'0.75rem',color:'var(--text-2)'}}>Just need the dataset?</span>
-          <button className="upgrade-hero__export-btn" onClick={()=>setCheckoutProduct('data_export')}>
-            Buy CSV export — $39.99 one-time
-          </button>
+        {/* Data export — horizontal tile */}
+        <div className="upgrade-hero__export-tile" onClick={()=>setCheckoutProduct('data_export')}>
+          <div className="upgrade-hero__export-tile-left">
+            <span className="upgrade-hero__export-tile-label">Data Export</span>
+            <span className="upgrade-hero__export-tile-desc">Just need the dataset? Download and own it — no subscription.</span>
+            <ul className="upgrade-hero__export-tile-features">
+              <li><IconCheck style={{width:11,height:11}}/>Complete Form 4 dataset</li>
+              <li><IconCheck style={{width:11,height:11}}/>2010→present</li>
+              <li><IconCheck style={{width:11,height:11}}/>CSV, instant download</li>
+            </ul>
+          </div>
+          <div className="upgrade-hero__export-tile-right">
+            <span className="upgrade-hero__export-tile-price">$39.99</span>
+            <span className="upgrade-hero__export-tile-per">one-time</span>
+            <button className="upgrade-hero__export-tile-btn" onClick={e=>{e.stopPropagation();setCheckoutProduct('data_export');}}>
+              Download dataset →
+            </button>
+          </div>
         </div>
 
         <div className="upgrade-modal__trust">
