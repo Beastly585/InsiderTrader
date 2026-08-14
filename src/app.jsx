@@ -226,48 +226,63 @@ function UpgradeModal({ feature, pro, onClose }) {
 
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
-      <div className="upgrade-modal upgrade-modal--large">
+      <div className="upgrade-modal upgrade-modal--hero">
         <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
 
-        <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-        <div className="upgrade-modal__title">Upgrade to Pro</div>
-        <div className="upgrade-modal__subtitle">{subtitle}</div>
+        {/* Hero header */}
+        <div className="upgrade-hero__header">
+          <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+          <h2 className="upgrade-hero__title">Unlock the full picture</h2>
+          <p className="upgrade-hero__sub">{subtitle}</p>
+        </div>
 
-        <div className="upgrade-modal__table">
-          <div className="upgrade-modal__table-header">
-            <span/>
-            <span>Free</span>
-            <span className="upgrade-modal__table-header--pro">Pro</span>
-          </div>
-          {COMPARISON.map(row=>(
-            <div className="upgrade-modal__table-row" key={row.label}>
-              <span className="upgrade-modal__table-label">{row.label}</span>
-              <span className={row.free?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.free?<IconCheck style={{width:12,height:12}}/>:'–'}</span>
-              <span className={row.pro?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.pro?<IconCheck style={{width:12,height:12}}/>:'–'}</span>
+        {/* Two-card comparison */}
+        <div className="upgrade-hero__cards">
+          {/* Free card */}
+          <div className="upgrade-hero__card">
+            <div className="upgrade-hero__card-header">
+              <span className="upgrade-hero__card-label">Free</span>
+              <span className="upgrade-hero__card-price">$0</span>
             </div>
-          ))}
+            <ul className="upgrade-hero__features">
+              <li><IconCheck style={{width:12,height:12}}/>Live dashboard & signals</li>
+              <li><IconCheck style={{width:12,height:12}}/>7-day signal window</li>
+              <li><IconCheck style={{width:12,height:12}}/>Top insiders leaderboard</li>
+              <li><IconCheck style={{width:12,height:12}}/>1 year of data history</li>
+            </ul>
+          </div>
+
+          {/* Pro card */}
+          <div className="upgrade-hero__card upgrade-hero__card--pro">
+            {BETA_ACTIVE && <span className="upgrade-hero__badge">Half off — forever</span>}
+            <div className="upgrade-hero__card-header">
+              <span className="upgrade-hero__card-label">Pro</span>
+              <span className="upgrade-hero__card-price">
+                {BETA_ACTIVE && <span className="upgrade-hero__strike">{PRO_PRICE_FULL}</span>}
+                {PRO_PRICE_DISPLAY}<span className="upgrade-hero__per">/mo</span>
+              </span>
+            </div>
+            <ul className="upgrade-hero__features">
+              <li><IconCheck style={{width:12,height:12}}/>Everything in Free</li>
+              <li><IconCheck style={{width:12,height:12}}/>Full historical data (2010→present)</li>
+              <li><IconCheck style={{width:12,height:12}}/>Customizable instant alerts</li>
+              <li><IconCheck style={{width:12,height:12}}/>Connect your brokerage</li>
+              <li><IconCheck style={{width:12,height:12}}/>Full score breakdown</li>
+              <li><IconCheck style={{width:12,height:12}}/>Insiders deep-dive</li>
+            </ul>
+            <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct('pro')}>
+              Upgrade to Pro — {PRO_PRICE_LABEL}
+            </button>
+          </div>
         </div>
 
-        <div className="upgrade-modal__plans">
-          <button className={`upgrade-plan-card${plan==='pro'?' upgrade-plan-card--active':''}`} onClick={()=>setPlan('pro')}>
-            <span className="upgrade-plan-card__radio"/>
-            <span>
-              <span className="upgrade-plan-card__title">Pro {BETA_ACTIVE&&<span className="upgrade-plan-card__badge">Beta</span>}</span>
-              <span className="upgrade-plan-card__price">{BETA_ACTIVE&&<span style={{textDecoration:'line-through',opacity:0.5,marginRight:4}}>{PRO_PRICE_FULL}</span>}{PRO_PRICE_LABEL}</span>
-            </span>
-          </button>
-          <button className={`upgrade-plan-card${plan==='data_export'?' upgrade-plan-card--active':''}`} onClick={()=>setPlan('data_export')}>
-            <span className="upgrade-plan-card__radio"/>
-            <span>
-              <span className="upgrade-plan-card__title">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
-              <span className="upgrade-plan-card__price">$39.99</span>
-            </span>
+        {/* Data export option */}
+        <div className="upgrade-hero__export">
+          <span style={{fontSize:'0.75rem',color:'var(--text-2)'}}>Just need the dataset?</span>
+          <button className="upgrade-hero__export-btn" onClick={()=>setCheckoutProduct('data_export')}>
+            Buy CSV export — $39.99 one-time
           </button>
         </div>
-
-        <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct(plan)}>
-          {plan==='pro' ? `Upgrade Now — ${PRO_PRICE_LABEL}` : 'Buy Export — $39.99'}
-        </button>
 
         <div className="upgrade-modal__trust">
           <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe</span>

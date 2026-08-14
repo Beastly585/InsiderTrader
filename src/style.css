@@ -4387,13 +4387,13 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 
 .checkout-modal--landscape {
-  display: flex; min-width: 640px; max-width: 720px; width: calc(100% - 32px);
+  display: flex; min-width: 640px; max-width: 780px; width: calc(100% - 32px);
   padding: 0; overflow: hidden; text-align: left;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   position: relative; box-shadow: 0 24px 80px rgba(0,0,0,0.5);
 }
 .checkout-modal__info {
-  flex: 0 0 42%; padding: 28px 24px;
+  flex: 0 0 40%; padding: 32px 28px;
   background: var(--surface-2); border-right: 0.5px solid var(--border);
   display: flex; flex-direction: column;
 }
@@ -4412,7 +4412,7 @@ td { padding:7px 11px; vertical-align:middle; }
   border-top: 0.5px solid var(--border);
 }
 .checkout-modal__pay {
-  flex: 1; padding: 28px 24px; min-width: 0;
+  flex: 1; padding: 36px 32px 28px; min-width: 0;
   max-height: 80vh; overflow-y: auto;
   display: flex; flex-direction: column;
 }
@@ -4421,7 +4421,7 @@ td { padding:7px 11px; vertical-align:middle; }
 @media (max-width: 640px) {
   .checkout-modal--landscape { flex-direction: column; min-width: 0; max-height: 90vh; overflow-y: auto; }
   .checkout-modal__info { flex: none; border-right: none; border-bottom: 0.5px solid var(--border); padding: 24px 20px; }
-  .checkout-modal__pay { padding: 20px; }
+  .checkout-modal__pay { padding: 24px 20px; }
 }
 
 .checkout-modal { min-width: 380px; }
@@ -4607,14 +4607,96 @@ td { padding:7px 11px; vertical-align:middle; }
   position: relative;
   box-shadow: 0 24px 80px rgba(0,0,0,0.4);
 }
-.upgrade-modal--large {
-  max-width: 460px;
-  text-align: left;
+/* Hero-style upgrade modal — landscape two-card layout */
+.upgrade-modal--hero {
+  max-width: 680px; width: calc(100% - 32px);
+  padding: 0; overflow: hidden; text-align: center;
 }
+.upgrade-hero__header {
+  padding: 32px 32px 0;
+}
+.upgrade-hero__title {
+  font-size: 1.375rem; font-weight: 800; letter-spacing: -0.5px;
+  margin-bottom: 6px; color: var(--text);
+}
+.upgrade-hero__sub {
+  font-size: 0.8125rem; color: var(--text-3); line-height: 1.5;
+  margin-bottom: 24px; max-width: 400px; margin-left: auto; margin-right: auto;
+}
+
+.upgrade-hero__cards {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  padding: 0 28px; margin-bottom: 20px;
+}
+.upgrade-hero__card {
+  padding: 20px; border-radius: 12px; text-align: left;
+  border: 1px solid var(--border); background: var(--surface);
+  position: relative;
+}
+.upgrade-hero__card--pro {
+  border-color: var(--accent-strong);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent-strong) 8%, var(--surface)), var(--surface));
+}
+.upgrade-hero__badge {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  font-size: 0.625rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: #fff; background: var(--accent-strong);
+  padding: 3px 10px; border-radius: 10px; white-space: nowrap;
+}
+.upgrade-hero__card-header { margin-bottom: 16px; }
+.upgrade-hero__card-label {
+  display: block; font-size: 0.6875rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-3); margin-bottom: 4px;
+}
+.upgrade-hero__card--pro .upgrade-hero__card-label { color: var(--accent-strong); }
+.upgrade-hero__card-price {
+  font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; color: var(--text);
+}
+.upgrade-hero__per { font-size: 0.875rem; font-weight: 500; color: var(--text-3); }
+.upgrade-hero__strike {
+  text-decoration: line-through; opacity: 0.4; font-size: 1rem;
+  margin-right: 6px; font-weight: 600;
+}
+.upgrade-hero__features {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.upgrade-hero__features li {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 0.75rem; color: var(--text-2);
+}
+.upgrade-hero__features li svg { color: var(--green-600); flex-shrink: 0; }
+.upgrade-hero__card--pro .upgrade-hero__features li svg { color: var(--accent-strong); }
+
+.upgrade-hero__card--pro .upgrade-modal__cta {
+  margin-top: 18px; width: 100%; font-size: 0.8125rem;
+}
+
+.upgrade-hero__export {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 28px;
+  border-top: 0.5px solid var(--border);
+}
+.upgrade-hero__export-btn {
+  background: none; border: none; padding: 0; margin: 0;
+  font: inherit; font-size: 0.75rem; font-weight: 500;
+  color: var(--accent-strong); cursor: pointer;
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.upgrade-hero__export-btn:hover { opacity: 0.8; }
+
+@media (max-width: 640px) {
+  .upgrade-hero__cards { grid-template-columns: 1fr; }
+  .upgrade-hero__header { padding: 24px 20px 0; }
+  .upgrade-hero__cards { padding: 0 20px; }
+  .upgrade-hero__export { padding: 12px 20px; }
+}
+
+/* Keep old styles for export-only modal */
+.upgrade-modal--large { max-width: 460px; text-align: left; }
 .upgrade-modal--large .upgrade-modal__title,
-.upgrade-modal--large .upgrade-modal__subtitle {
-  text-align: center;
-}
+.upgrade-modal--large .upgrade-modal__subtitle { text-align: center; }
 .upgrade-modal--export {
   max-width: 420px;
   padding: 36px 32px;
@@ -4646,64 +4728,6 @@ td { padding:7px 11px; vertical-align:middle; }
   font-size: 0.8125rem; color: var(--text-3); line-height: 1.5;
   margin-bottom: 22px;
 }
-
-/* Free/Pro comparison table */
-.upgrade-modal__table {
-  border: 0.5px solid var(--border); border-radius: 10px;
-  overflow: hidden; margin-bottom: 20px;
-}
-.upgrade-modal__table-header,
-.upgrade-modal__table-row {
-  display: grid; grid-template-columns: 1fr 56px 56px;
-  align-items: center;
-}
-.upgrade-modal__table-header {
-  padding: 8px 14px; background: var(--surface-2);
-  font-size: 0.625rem; font-weight: 700; letter-spacing: 0.4px;
-  color: var(--text-3); text-transform: uppercase;
-  text-align: center;
-}
-.upgrade-modal__table-header span:first-child { text-align: left; }
-.upgrade-modal__table-header--pro { color: var(--accent-strong); }
-.upgrade-modal__table-row {
-  padding: 10px 14px; border-top: 0.5px solid var(--border);
-  background: var(--surface);
-}
-.upgrade-modal__table-label { font-size: 0.75rem; color: var(--text); }
-.upgrade-check { text-align: center; font-size: 0.875rem; font-weight: 700; }
-.upgrade-check--yes { color: var(--accent-strong); }
-.upgrade-check--no { color: var(--text-3); opacity: 0.4; }
-
-/* Plan picker — two selectable cards */
-.upgrade-modal__plans {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-  margin-bottom: 14px;
-}
-.upgrade-plan-card {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 14px; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--surface);
-  cursor: pointer; text-align: left; transition: border-color .12s, background .12s;
-}
-.upgrade-plan-card--active {
-  border-color: var(--accent-strong);
-  background: var(--accent-50);
-}
-.upgrade-plan-card__radio {
-  width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
-  border: 1.5px solid var(--border-md);
-}
-.upgrade-plan-card--active .upgrade-plan-card__radio {
-  border-color: var(--accent-strong);
-  background: var(--accent-strong);
-  box-shadow: inset 0 0 0 3px var(--surface);
-}
-.upgrade-plan-card__title {
-  display: block; font-size: 0.8125rem; font-weight: 600; color: var(--text);
-}
-.upgrade-plan-card__price {
-  display: block; font-size: 0.7188rem; color: var(--text-3); margin-top: 1px;
-}
 .upgrade-plan-card__badge {
   font-size: 0.5938rem; font-weight: 600; color: var(--accent-strong);
   background: var(--accent-50); padding: 1px 5px; border-radius: 4px;
@@ -4712,14 +4736,15 @@ td { padding:7px 11px; vertical-align:middle; }
 
 .upgrade-modal__trust {
   display: flex; justify-content: center; gap: 16px;
-  margin-top: 12px; font-size: 0.6875rem; color: var(--text-3);
+  padding: 14px 28px 20px; font-size: 0.6875rem; color: var(--text-3);
 }
 .upgrade-modal__close {
-  position: absolute; top: 12px; right: 12px; z-index: 2;
-  background: none; border: none;
+  position: absolute; top: 14px; right: 14px; z-index: 2;
+  background: var(--surface-2); border: 0.5px solid var(--border);
   color: var(--text-3); font-size: 1rem;
   cursor: pointer; padding: 6px;
-  border-radius: 6px;
+  border-radius: 6px; width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
   transition: color 0.15s, background 0.15s;
 }
 .upgrade-modal__close:hover { color: var(--text); background: var(--surface-3); }
