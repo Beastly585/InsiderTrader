@@ -170,7 +170,7 @@ function UpgradeModal({ feature, pro, onClose }) {
           if (wasPro) {
             setCheckoutProduct(null);
             setProcessing(false);
-            setStatusModal({ title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' });
+            setStatusModal({ type: 'pro', title: "You're a Pro member!" });
             return;
           }
           // Data export — the whole point of paying for this is getting the
@@ -352,14 +352,48 @@ function ProcessingModal({ text='Finishing up…' }) {
 }
 
 // ─── Status modal — reusable success/confirmation pattern ─────────────────────
-function StatusModal({ title, message, onClose }) {
+function StatusModal({ type, title, message, onClose }) {
+  const isPro = type === 'pro';
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
-      <div className="upgrade-modal" style={{maxWidth:340,textAlign:'center'}}>
-        <div className="status-modal__icon"><IconCheck style={{width:20,height:20}}/></div>
-        <div className="upgrade-modal__title" style={{marginTop:14}}>{title}</div>
-        <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 20px'}}>{message}</p>
-        <button className="upgrade-modal__cta" style={{margin:0}} onClick={onClose}>Done</button>
+      <div className="upgrade-modal" style={{maxWidth: isPro ? 480 : 420, textAlign:'center', padding: isPro ? '40px 36px 32px' : undefined}}>
+        {isPro ? (
+          <>
+            <div className="logo-mark" style={{width:44,height:44,margin:'0 auto 16px'}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="status-modal__icon" style={{margin:'0 auto 16px'}}><IconCheck style={{width:22,height:22}}/></div>
+            <div className="upgrade-modal__title" style={{fontSize:'1.25rem',marginBottom:8}}>{title}</div>
+            <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5,marginBottom:24}}>
+              Your founding member rate is locked in. Here's what's unlocked:
+            </p>
+            <div style={{textAlign:'left',background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'16px 20px',marginBottom:24}}>
+              <ul style={{listStyle:'none',padding:0,margin:0,display:'flex',flexDirection:'column',gap:10}}>
+                {[
+                  ['Full historical data', '2010→present, every filed SEC insider trade'],
+                  ['Portfolio linking', 'Connect your brokerage to see insider activity on your holdings'],
+                  ['Instant alerts', 'Get notified the moment insiders trade your watched tickers'],
+                  ['Full score breakdown', 'See conviction scoring on every signal'],
+                  ['Insiders deep-dive', 'Complete leaderboard with filters and hit-rate analysis'],
+                ].map(([feat, desc])=>(
+                  <li key={feat} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                    <span style={{color:'var(--green-600)',marginTop:2,flexShrink:0}}><IconCheck style={{width:14,height:14}}/></span>
+                    <span>
+                      <span style={{fontSize:'0.8125rem',fontWeight:600,color:'var(--text)',display:'block'}}>{feat}</span>
+                      <span style={{fontSize:'0.6875rem',color:'var(--text-3)'}}>{desc}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button className="upgrade-modal__cta" style={{width:'100%'}} onClick={onClose}>Start exploring</button>
+          </>
+        ) : (
+          <>
+            <div className="status-modal__icon"><IconCheck style={{width:20,height:20}}/></div>
+            <div className="upgrade-modal__title" style={{marginTop:14}}>{title}</div>
+            <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 20px'}}>{message}</p>
+            <button className="upgrade-modal__cta" style={{margin:0}} onClick={onClose}>Done</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -820,7 +854,7 @@ function BillingSection({ user }) {
               }
               setCheckoutProduct(null);
               setProcessing(false);
-              setStatusModal({ title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' });
+              setStatusModal({ type: 'pro', title: "You're a Pro member!" });
               return;
             }
             load();
