@@ -1734,7 +1734,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* 2-column layout: signals (wide) | insiders — portfolio is a bar above */
 .ins-3col {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr 360px;
   flex: 1; min-height: 500px;
   gap: 12px;
 }
@@ -1865,12 +1865,13 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-sig-row__ticker { font-size: 0.875rem; font-weight: 700; }
 .ins-sig-row__co { font-size: 0.75rem; color: var(--text-2); margin-top: 1px; }
 .ins-sig-row__left   { display: flex; flex-direction: column; gap: 2px; }
-.ins-sig-row__type   { display: flex; flex-direction: column; gap: 4px; }
+.ins-sig-row__type   { display: flex; flex-direction: column; gap: 4px; align-items: center; }
 .ins-sig-row__type-top { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .ins-sig-row__type-meta { font-size: 0.6875rem; }
 .ins-type-badge {
-  font-size: 0.6875rem; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.6875rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
   background: var(--accent-50); color: var(--accent-strong);
+  display: inline-block; text-align: center;
 }
 .ins-type-badge--congress { background: var(--blue-50); color: var(--blue-600); }
 .ins-sig-row__signal { display: flex; flex-direction: column; gap: 3px; }

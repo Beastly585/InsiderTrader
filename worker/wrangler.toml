@@ -38,12 +38,7 @@ binding = "EXPORT_SNAPSHOTS"
 bucket_name = "database"
 
 [triggers]
-# Once per minute was needed ONLY for the initial historical backfill, when
-# manual burst-calling wasn't yet an option. Left at that cadence, it was
-# racing concurrently with manual burst-loop calls to /internal/build-csv-now
-# — both hitting buildExportCSV's R2 state at the same time, occasionally
-# both deciding no upload existed yet for a given year and each creating one
-# independently (the duplicate csv-export/2026.csv uploads this caused).
-# Daily is correct for steady-state: new filings trickle in slowly, and the
-# manual endpoints remain available any time a faster rebuild is needed.
-crons = ["0 6 * * *"]
+# Daily CSV rebuild at 6am UTC (steady-state — new filings trickle in slowly).
+# Every-4-min keep-alive prevents Neon serverless compute from hibernating,
+# which otherwise adds 500ms–2s of cold-start latency to the first real query.
+crons = ["0 6 * * *", "*/4 * * * *"]

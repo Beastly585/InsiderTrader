@@ -3951,7 +3951,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <button className="ins-col-sort" onClick={()=>sigOnSort('ticker')}>Ticker · Company{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
             <span>Type</span>
             <button className="ins-col-sort" onClick={()=>sigOnSort('cSuiteBuys')}>Exec{sigSort==='cSuiteBuys'&&(sigDir<0?' ↓':' ↑')}</button>
-            <button className="ins-col-sort" onClick={()=>sigOnSort('lastTradeDate')}>Last trade{sigSort==='lastTradeDate'&&(sigDir<0?' ↓':' ↑')}</button>
+            <button className="ins-col-sort" onClick={()=>sigOnSort('lastTradeDate')}>Date{sigSort==='lastTradeDate'&&(sigDir<0?' ↓':' ↑')}</button>
             <button className="ins-col-sort" title="Conviction = exec participation × buy size × clustering" onClick={()=>sigOnSort('conviction')}>Signal ⓘ{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
             <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>sigOnSort('netValue')}>Net flow{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
           </div>
@@ -4001,7 +4001,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     <div className="ins-sig-row__type">
                       <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}`}>{typeLabel}</span>
                       <div className="td-muted ins-sig-row__type-meta">
-                        {s.insiderCount} insider{s.insiderCount!==1?'s':''} · {fmt.ago(s.lastTradeDate)}
+                        {s.insiderCount} insider{s.insiderCount!==1?'s':''}
                       </div>
                     </div>
                     <div className="ins-sig-row__exec">
