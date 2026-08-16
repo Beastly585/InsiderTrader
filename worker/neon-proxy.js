@@ -63,6 +63,18 @@ const workerHandler = {
   // as often as every minute on Workers Free, since it's a cheap no-op
   // once the snapshot is caught up. No browser is waiting on any of this.
   async scheduled(event, env, ctx) {
+    // The */4 cron is a Neon keep-alive — just ping the DB to prevent
+    // serverless compute hibernation. Skip the heavy snapshot/CSV work.
+    if (event.cron === '*/4 * * * *') {
+      try {
+        await neonFetch(env, 'SELECT 1');
+      } catch (e) {
+        console.error('[Scheduled] keep-alive ping failed:', e.message);
+      }
+      return;
+    }
+
+    // Daily 6am cron — snapshot, CSV, health check
     console.log('[Scheduled] tick start');
     try {
       const snapResult = await continueSnapshotBuild(env);
@@ -1266,7 +1278,17 @@ async function handleQuery(request, env, origin) {
   try { result = JSON.parse(text); }
   catch { return corsResponse({ error: 'Invalid Neon response', raw: text.slice(0,200) }, 502, origin, env); }
 
-  return corsResponse(result, resp.status, origin, env);
+  // Leaderboard queries are heavy aggregations that only change when new
+  // filings are ingested (~daily). Cache them at the edge for 30 minutes
+  // so concurrent users hitting the same leaderboard don't each trigger a
+  // fresh Neon aggregation.
+  const isLeaderboard = query.toLowerCase().includes('benchmark_prices');
+  const extraHeaders = isLeaderboard ? { 'Cache-Control': 'public, max-age=1800' } : {};
+
+  return new Response(
+    JSON.stringify(result),
+    { status: resp.status, headers: { ...corsHeaders(origin, env), 'Content-Type': 'application/json', ...extraHeaders } }
+  );
 }
 
 // ── Full data export — the real access-control gate ─────────────────────────
@@ -2820,11 +2842,13 @@ async function handleStripeWebhook(request, env) {
 
         await syncClerkMetadata(env, clerkUserId, { plan });
 
-        // ── Auto-disconnect SnapTrade when a user loses Pro ──
+        // ── Auto-disconnect SnapTrade when a user actually loses Pro ──
         // SnapTrade bills $2/mo per connected user regardless of whether they
-        // use it. When a subscription ends (deleted) or lapses (past_due →
-        // canceled), disconnect their brokerage link so we stop accruing charges
-        // for users who aren't paying. They can reconnect if they resubscribe.
+        // use it. Disconnect only when plan flips to 'free' (subscription
+        // deleted or status goes non-live) — NOT on cancel_at_period_end,
+        // because the user paid for the full period and deserves portfolio
+        // access until it actually expires. They can reconnect if they
+        // resubscribe later.
         if (plan === 'free') {
           try {
             const conn = await getSnapTradeConnection(env, clerkUserId);

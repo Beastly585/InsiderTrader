@@ -143,23 +143,17 @@ async function fetchFromNeon(daysBack = 90) {
       insider_name,
       insider_title          AS title,
       is_officer,
-      is_director,
-      is_ten_pct_owner       AS is_ten_pct,
       transaction_type,
       transaction_code,
-      transaction_code_label,
       is_open_market,
       shares::float,
       price_per_share::float AS price,
       value::float,
       shares_owned_after::float,
-      shares_owned_before::float,
       pct_owned_change::float,
-      is_derivative,
       sector,
       relationship,
-      is_routine,
-      footnotes
+      is_routine
     FROM public.filings
     WHERE COALESCE(transaction_date, filing_date) >= '${floorDate}'
       AND COALESCE(transaction_date, filing_date) <= CURRENT_DATE
@@ -190,28 +184,17 @@ async function fetchFromNeon(daysBack = 90) {
     insiderName:          r.insider_name,
     title:                r.title,
     isOfficer:            r.is_officer,
-    isDirector:           r.is_director,
-    isTenPct:             r.is_ten_pct,
     transactionType:      r.transaction_type,
     transactionCode:      r.transaction_code,
-    transactionCodeLabel: r.transaction_code_label,
     isOpenMarket:         r.is_open_market,
     shares:               r.shares,
     price:                r.price,
     value:                r.value,
     sharesOwnedAfter:     r.shares_owned_after,
-    sharesOwnedBefore:    r.shares_owned_before,
     pctOwnedChange:       r.pct_owned_change,
-    isDerivative:         r.is_derivative,
     sector:               r.sector,
     relationship:         r.relationship,
     isRoutine:            r.is_routine,
-    footnotes:            r.footnotes,
-    currentPrice:         null,
-    dayChangePct:         null,
-    high52w:              null,
-    low52w:               null,
-    returnPct:            null,
   }));
 }
 

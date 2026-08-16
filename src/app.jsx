@@ -9303,7 +9303,7 @@ function AppInner() {
   // null = as wide as this user's plan allows (server enforces the real
   // ceiling — free capped at 1yr, Pro unbounded — client doesn't need to
   // know which plan it is, it just asks and the server clamps correctly).
-  const [filingsWindowDays, setFilingsWindowDays] = useState(90);
+  const [filingsWindowDays, setFilingsWindowDays] = useState(7); // start narrow for fast initial render
 
   // enterApp now triggers Clerk sign-in via SignInButton — kept for
   // compatibility with LandingPage's onEnter prop
