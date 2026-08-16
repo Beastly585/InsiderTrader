@@ -2798,6 +2798,26 @@ async function handleStripeWebhook(request, env) {
         // failing on renewal), 'unpaid', 'incomplete_expired', 'canceled' —
         // means no access right now.
         const isLiveNow = isLiveStatus(sub.status);
+
+        // ── Stale-subscription guard ──
+        // A user can have multiple Stripe subscriptions (e.g. a failed first
+        // attempt that later expires, plus a successful second attempt). Events
+        // from the dead subscription arrive out-of-order and must NOT overwrite
+        // the live subscription's row. Skip the update if:
+        //   1. This event is for a non-live subscription
+        //   2. Neon already has a row for this user
+        //   3. That row points to a DIFFERENT subscription that IS live
+        if (!isLiveNow && event.type !== 'customer.subscription.deleted') {
+          const existing = await neonFetch(env,
+            `SELECT stripe_subscription_id, status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+          );
+          const existingRow = existing.rows?.[0];
+          if (existingRow && existingRow.stripe_subscription_id !== sub.id && isLiveStatus(existingRow.status)) {
+            console.log('[Worker] Skipping stale subscription event:', sub.id, '(current active:', existingRow.stripe_subscription_id, ')');
+            break;
+          }
+        }
+
         let plan;
         if (event.type === 'customer.subscription.deleted' || !isLiveNow) {
           plan = 'free';
