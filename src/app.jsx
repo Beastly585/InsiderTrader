@@ -2140,9 +2140,21 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
   const [traderRows, setTraderRows] = useState(null);
   const [tickerRows, setTickerRows] = useState(null);
+  const [signalPrice, setSignalPrice] = useState(null); // current price for signal-type details
   const [busy,       setBusy]       = useState(false);
   const [bundleOn,   setBundleOn]   = useState(true);
   const [omOnly,     setOmOnly]     = useState(true);
+
+  // Fetch current price for signal-type details so the NOW column shows data.
+  // Signal trades come from the client-side filings array (no price join),
+  // unlike ticker/trader details which use server queries with LATERAL JOIN.
+  useEffect(()=>{
+    if (d.type!=='signal' || !d.ticker) return;
+    setSignalPrice(null);
+    queryNeon(`SELECT close::float AS current_price FROM public.prices_history WHERE ticker='${(d.ticker||'').replace(/'/g,"''")}' ORDER BY date DESC LIMIT 1`)
+      .then(r => setSignalPrice(r?.[0]?.current_price ?? null))
+      .catch(() => setSignalPrice(null));
+  },[d.type, d.ticker]);
   // When the current detail originated from the Data page (it has
   // dataFilters), carry those filters forward to any sub-navigation so
   // that expanding always opens the DataDrawer (filings explore), not the
@@ -2835,7 +2847,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             <div className="dp-sum-item"><span className="dp-sum-label">Buys</span><span className="val-buy dp-sum-val">{tickerStats.buys}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Sells</span><span className="val-sell dp-sum-val">{tickerStats.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Net $</span><span className={`dp-sum-val ${tickerStats.net>=0?'val-buy':'val-sell'}`}>{tickerStats.net>=0?'+':''}{fmt.money(tickerStats.net)}</span></div>
-            <div className="dp-sum-item"><span className="dp-sum-label">Exec buys</span><span className="dp-sum-val">{tickerStats.cSuite}</span></div>
+            <div className="dp-sum-item"><span className="dp-sum-label">Moves</span><span className="dp-sum-val">{tickerStats.buys + tickerStats.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Insiders</span><span className="dp-sum-val">{tickerStats.insiders}</span></div>
           </div>
           <div className="dp-section-label" style={{marginTop:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -2853,7 +2865,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             <div className="dp-sum-item"><span className="dp-sum-label">Buys</span><span className="val-buy dp-sum-val">{d.buys}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Sells</span><span className="val-sell dp-sum-val">{d.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Net $</span><span className={`dp-sum-val ${d.netValue>=0?'val-buy':'val-sell'}`}>{d.netValue>=0?'+':''}{fmt.money(d.netValue)}</span></div>
-            <div className="dp-sum-item"><span className="dp-sum-label">Exec buys</span><span className="dp-sum-val">{d.cSuiteBuys}</span></div>
+            <div className="dp-sum-item"><span className="dp-sum-label">Moves</span><span className="dp-sum-val">{d.buys + d.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Insiders</span><span className="dp-sum-val">{d.insiderCount}</span></div>
           </div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,marginTop:14}}>
@@ -2867,7 +2879,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                 <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:ins.name,title:ins.title})}>{ins.name}</span>
                 <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{ins.title}</span>
               </div>
-              {ins.trades.map((t,j)=><TRow key={j} r={{...t,insider_name:t.insiderName||ins.name,title:t.title||ins.title,transaction_type:t.transactionType,transaction_code:t.transactionCode,is_open_market:t.isOpenMarket,price:t.price,current_price:t.currentPrice,pct_owned_change:t.pctOwnedChange,transaction_date:t.transactionDate,is_foreign_price:t.isForeignPrice}} showTicker={false} showInsider={true}/>)}
+              {ins.trades.map((t,j)=><TRow key={j} r={{...t,insider_name:t.insiderName||ins.name,title:t.title||ins.title,transaction_type:t.transactionType,transaction_code:t.transactionCode,is_open_market:t.isOpenMarket,price:t.price,current_price:signalPrice,pct_owned_change:t.pctOwnedChange,transaction_date:t.transactionDate,is_foreign_price:t.isForeignPrice}} showTicker={false} showInsider={true}/>)}
             </div>
           ))}
         </>)}
@@ -2917,7 +2929,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 const DASH_SORT_OPTS = [
   {key:'conviction',    label:'Conviction'},
   {key:'netValue',      label:'Net $'},
-  {key:'cSuiteBuys',    label:'Exec'},
+  {key:'buys',           label:'Moves'},
   {key:'lastTradeDate', label:'Recent'},
 ];
 // ── SentimentBar ─────────────────────────────────────────────────────────────
@@ -3950,7 +3962,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           <div className="ins-sig-col-hdrs">
             <button className="ins-col-sort" onClick={()=>sigOnSort('ticker')}>Ticker · Company{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
             <span>Type</span>
-            <button className="ins-col-sort" onClick={()=>sigOnSort('cSuiteBuys')}>Exec{sigSort==='cSuiteBuys'&&(sigDir<0?' ↓':' ↑')}</button>
+            <button className="ins-col-sort" onClick={()=>sigOnSort('buys')}>Moves{sigSort==='buys'&&(sigDir<0?' ↓':' ↑')}</button>
             <button className="ins-col-sort" onClick={()=>sigOnSort('lastTradeDate')}>Date{sigSort==='lastTradeDate'&&(sigDir<0?' ↓':' ↑')}</button>
             <button className="ins-col-sort" title="Conviction = exec participation × buy size × clustering" onClick={()=>sigOnSort('conviction')}>Signal ⓘ{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
             <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>sigOnSort('netValue')}>Net flow{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
@@ -4005,9 +4017,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                       </div>
                     </div>
                     <div className="ins-sig-row__exec">
-                      {s.cSuiteBuys>0
-                        ? <span className="csuite-badge">{s.cSuiteBuys}×</span>
-                        : <span className="td-muted" style={{fontSize:'0.6875rem'}}>—</span>}
+                      <span className="td-muted" style={{fontSize:'0.75rem',fontWeight:600}}>{s.buys+s.sells}</span>
                     </div>
                     <div className="ins-sig-row__date">
                       <span className="td-muted" style={{fontSize:'0.6875rem'}}>{s.lastTradeDate?fmt.ago(s.lastTradeDate):'—'}</span>
@@ -4408,7 +4418,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                 <div className="drawer__list-hdr">
                   <span>{filteredSignals.length} signals{filingsLoading&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>loading more…</span>}</span>
                   <div className="dash-sig-sort" style={{marginLeft:'auto',gap:2}}>
-                    {[['conviction','Conv'],['netValue','Net $'],['cSuiteBuys','Exec'],['lastTradeDate','Recent']].map(([k,l])=>(
+                    {[['conviction','Conv'],['netValue','Net $'],['buys','Moves'],['lastTradeDate','Recent']].map(([k,l])=>(
                       <button key={k} className={`dash-sort-btn${sigSort===k?' dash-sort-btn--active':''}`} onClick={()=>sigOnSort(k)}>
                         {l}{sigSort===k&&(sigDir<0?'↓':'↑')}
                       </button>
