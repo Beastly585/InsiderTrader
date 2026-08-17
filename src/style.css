@@ -2418,6 +2418,65 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .tile-info-btn:hover { color: var(--text-2); background: var(--surface-3); }
 
+/* ── Tile contextual help panel (desktop only) ───────────────────────────── */
+.tile-help-overlay {
+  position: fixed; inset: 0; z-index: 250;
+  background: rgba(0,0,0,0.3);
+  display: flex; justify-content: flex-end;
+}
+.tile-help-panel {
+  width: 340px; max-width: 90vw; height: 100%;
+  background: var(--surface); border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column;
+  animation: tile-help-slide-in 0.15s ease-out;
+}
+@keyframes tile-help-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.tile-help-panel__header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 18px 20px 16px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--surface-2);
+}
+.tile-help-panel__title {
+  flex: 1; font-size: 0.875rem; font-weight: 700; color: var(--text);
+  margin: 0;
+}
+.tile-help-panel__body {
+  flex: 1; overflow-y: auto; padding: 20px;
+  scrollbar-width: thin; scrollbar-color: var(--border-md) transparent;
+}
+.tile-help-panel__what {
+  font-size: 0.8125rem; color: var(--text-2); line-height: 1.6;
+  margin-bottom: 20px; padding-bottom: 16px;
+  border-bottom: 0.5px solid var(--border);
+}
+.tile-help-panel__section { margin-bottom: 20px; }
+.tile-help-panel__section:last-child { margin-bottom: 0; }
+.tile-help-panel__section-title {
+  font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-3); margin: 0 0 10px;
+}
+.tile-help-panel__dl { margin: 0; }
+.tile-help-panel__dl-row {
+  padding: 8px 0; border-bottom: 0.5px solid var(--border);
+}
+.tile-help-panel__dl-row:last-child { border-bottom: none; }
+.tile-help-panel__dl-row dt {
+  font-size: 0.75rem; font-weight: 600; color: var(--text);
+  margin-bottom: 3px;
+}
+.tile-help-panel__dl-row dd {
+  font-size: 0.6875rem; color: var(--text-2); line-height: 1.5;
+  margin: 0;
+}
+.tile-help-panel__text {
+  font-size: 0.6875rem; color: var(--text-2); line-height: 1.6; margin: 0;
+}
+
 /* ── Guide modal — a real two-pane layout (sidebar nav + content), not just
    a wider version of a small explanation popup. Distinct enough from
    .modal-panel's default sizing that it gets its own width/height rules

@@ -1830,17 +1830,139 @@ function GuideModal({ initialSection, onClose }) {
 // rendering its own separate modal. Keeps one real explanation per topic
 // instead of the guide and seven tile tooltips slowly saying slightly
 // different things about the same feature.
-function TileInfoButton({ section, title }) {
-  const guide = useContext(GuideContext);
+// ── Per-tile contextual help ──────────────────────────────────────────────────
+// Each ? button opens a slide-in panel with column definitions, methodology,
+// and data source info specific to that tile. Mobile falls through to the
+// existing guide modal to avoid layout disruption.
+
+const TILE_HELP = {
+  'sector-heatmap': {
+    title: 'S&P 500 Sector Heatmap',
+    what: 'Day return for each GICS sector, weighted by market cap using sector ETF proxies.',
+    columns: [
+      { term: 'Sector name', def: 'GICS sector classification (Technology, Financials, Healthcare, etc.).' },
+      { term: 'Return %', def: 'Intraday return of the sector\'s representative ETF. Green = positive, red = negative.' },
+      { term: 'Width', def: 'Proportional to the sector\'s S&P 500 weight. Technology is widest because it\'s the largest sector.' },
+    ],
+    source: 'Sector ETF proxies (XLK, XLF, XLV, etc.) via market data. Updates throughout the trading day.',
+  },
+  'dashboard-signals': {
+    title: 'Insider Signals',
+    what: 'Tickers with recent open-market insider trades, scored by conviction strength.',
+    columns: [
+      { term: 'Ticker', def: 'The stock\'s trading symbol and company name.' },
+      { term: 'Moves', def: 'Total number of buy + sell transactions in the selected window.' },
+      { term: 'Signal bar', def: 'Visual representation of the conviction score (0–20). Longer and greener = stronger conviction.' },
+      { term: 'Net flow', def: 'Dollar value of buys minus dollar value of sells.' },
+    ],
+    methodology: 'Conviction scoring weights executive participation, buy clustering, trade size relative to position, and whether trades are opportunistic (not routine). Based on Lakonishok & Lee (2001) and Cohen et al. (2012).',
+    source: 'SEC EDGAR Form 4 filings. Open-market transactions only — exercises, gifts, and 10b5-1 plan sales are excluded.',
+  },
+  'insights-signals': {
+    title: 'Insider Signals',
+    what: 'Every ticker with open-market insider activity in the selected window, scored and ranked by conviction.',
+    columns: [
+      { term: 'Ticker · Company', def: 'Stock symbol, company name, and sector (if available).' },
+      { term: 'Type', def: 'Corporate (SEC Form 4) or Congressional (STOCK Act disclosure).' },
+      { term: 'Moves', def: 'Total buy + sell transactions from all insiders at this ticker.' },
+      { term: 'Date', def: 'How recently the most recent transaction occurred.' },
+      { term: 'Signal', def: 'Conviction score (0–20). Composed of: executive participation (×5 for opportunistic buys), C-suite buys (×2), buy value (log-scaled), position sizing (>10% of holdings = +2), and cluster bonus (3+ insiders = +3).' },
+      { term: 'Net flow', def: 'Total dollar value of buys minus sells across all insiders.' },
+    ],
+    methodology: 'The score is buy-side only — insider selling is excluded from conviction because the academic literature shows it\'s much less predictive (insiders sell for diversification, taxes, and liquidity reasons unrelated to company outlook).',
+    source: 'SEC EDGAR Form 4 filings, updated within minutes of new filings. Congressional trades from periodic STOCK Act disclosures (up to 45-day reporting lag).',
+  },
+  'top-insiders': {
+    title: 'Top Insiders',
+    what: 'Ranked leaderboard of individual insiders by their historical trading accuracy.',
+    columns: [
+      { term: 'Insider', def: 'Name and title of the insider. C-Suite badge indicates executive-level officers.' },
+      { term: 'Buys · $Value', def: 'Total number of open-market purchases and their combined dollar value over the selected window.' },
+      { term: 'Hit rate', def: 'Percentage of priced buy trades where the stock price is currently above the purchase price. 100% = every buy is currently profitable.' },
+      { term: 'Bar', def: 'Visual hit rate indicator. Full green = 100% hit rate.' },
+    ],
+    methodology: 'Hit rate compares the insider\'s purchase price against the latest available close in the prices database. Only open-market buys with valid price data are included. Minimum trade threshold applies to filter noise.',
+    source: 'SEC EDGAR Form 4 filings cross-referenced with daily closing prices. Leaderboard recalculates on each page load.',
+  },
+  'market-news': {
+    title: 'Market News',
+    what: 'Latest financial news headlines from major wire services.',
+    columns: [
+      { term: 'Source', def: 'News outlet (Reuters, CNBC, Bloomberg, etc.).' },
+      { term: 'Headline', def: 'Article title — click to open the full article.' },
+      { term: 'My news (Pro)', def: 'Toggle to filter headlines to only show news about your watched tickers and followed insiders\' companies.' },
+    ],
+    source: 'Aggregated from public RSS feeds of major financial news outlets. Updates every few minutes.',
+  },
+};
+
+function TileHelpPanel({ tileId, onClose }) {
+  const help = TILE_HELP[tileId];
+  if (!help) return null;
   return (
-    <button
-      className="tile-info-btn"
-      onClick={(e) => { e.stopPropagation(); guide?.openGuide(section); }}
-      title={`About: ${title}`}
-      aria-label={`About ${title}`}
-    >
-      <IconHelp style={{ width: 12, height: 12 }} />
-    </button>
+    <div className="tile-help-overlay" onClick={onClose}>
+      <div className="tile-help-panel" onClick={e=>e.stopPropagation()}>
+        <div className="tile-help-panel__header">
+          <h3 className="tile-help-panel__title">{help.title}</h3>
+          <button className="upgrade-modal__close" style={{position:'static'}} onClick={onClose} aria-label="Close"><IconClose style={{width:10,height:10}}/></button>
+        </div>
+        <div className="tile-help-panel__body">
+          <p className="tile-help-panel__what">{help.what}</p>
+          {help.columns && (
+            <div className="tile-help-panel__section">
+              <h4 className="tile-help-panel__section-title">Columns</h4>
+              <dl className="tile-help-panel__dl">
+                {help.columns.map(c=>(
+                  <div key={c.term} className="tile-help-panel__dl-row">
+                    <dt>{c.term}</dt>
+                    <dd>{c.def}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+          {help.methodology && (
+            <div className="tile-help-panel__section">
+              <h4 className="tile-help-panel__section-title">Methodology</h4>
+              <p className="tile-help-panel__text">{help.methodology}</p>
+            </div>
+          )}
+          <div className="tile-help-panel__section">
+            <h4 className="tile-help-panel__section-title">Data source</h4>
+            <p className="tile-help-panel__text">{help.source}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TileInfoButton({ section, title, tileId }) {
+  const guide = useContext(GuideContext);
+  const isMobile = useIsMobile();
+  const [showHelp, setShowHelp] = useState(false);
+  // Mobile: open the global guide modal (unchanged behavior)
+  // Desktop: open the contextual per-tile help panel if tileId is provided
+  function handleClick(e) {
+    e.stopPropagation();
+    if (isMobile || !tileId || !TILE_HELP[tileId]) {
+      guide?.openGuide(section);
+    } else {
+      setShowHelp(true);
+    }
+  }
+  return (
+    <>
+      <button
+        className="tile-info-btn"
+        onClick={handleClick}
+        title={`About: ${title}`}
+        aria-label={`About ${title}`}
+      >
+        <IconHelp style={{ width: 12, height: 12 }} />
+      </button>
+      {showHelp && <TileHelpPanel tileId={tileId} onClose={()=>setShowHelp(false)}/>}
+    </>
   );
 }
 
@@ -3105,7 +3227,7 @@ function HeatmapOnly() {
       <div className="mkt-heatmap-label">
         S&amp;P 500 sectors
         <span className="td-muted" style={{fontWeight:400,marginLeft:6}}>day return · by weight · ETF proxy</span>
-        <TileInfoButton section="insights-formula" title="S&P 500 sector heatmap"/>
+        <TileInfoButton section="insights-formula" title="S&P 500 sector heatmap" tileId="sector-heatmap"/>
         {Object.keys(sectors).length===0&&(
           <span className="td-muted" style={{marginLeft:'auto',fontSize:'0.6875rem'}}>
             {mkt?.err?'unavailable':'loading…'}
@@ -3617,7 +3739,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--signals">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Insider signals</span>
-              <TileInfoButton section="insights-formula" title="Insider signals"/>
+              <TileInfoButton section="insights-formula" title="Insider signals" tileId="dashboard-signals"/>
               <div className="dash-tile__hdr-controls">
                 <div className="dash-tile-pills">
                   {DASH_DATE_OPTS.map(o=>{
@@ -3684,7 +3806,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--top-insiders">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Top insiders</span>
-              <TileInfoButton section="insights-formula" title="Top insiders"/>
+              <TileInfoButton section="insights-formula" title="Top insiders" tileId="top-insiders"/>
               <div className="dash-tile__hdr-controls">
                 <button className="btn btn--ghost btn--icon" onClick={()=>setInsidersExpanded(true)} title="Open full insiders view">⤢</button>
               </div>
@@ -3696,7 +3818,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--news">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Market news</span>
-              <TileInfoButton section="welcome" title="Market news"/>
+              <TileInfoButton section="welcome" title="Market news" tileId="market-news"/>
               <div className="dash-tile__hdr-controls">
                 {watchlist&&(
                   <label
@@ -3878,7 +4000,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         <div className="ins-sig-panel ins-3col__signals">
           <div className="ins-sig-panel__hdr">
             <span className="ins-sig-panel__title">Insider signals</span>
-            <TileInfoButton section="insights-formula" title="Insider signals"/>
+            <TileInfoButton section="insights-formula" title="Insider signals" tileId="insights-signals"/>
             {!isMobile && (
               <div className="dash-tile__hdr-controls">
                 <button className="btn btn--ghost btn--icon" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('signals');}} title="Open full Explore view">⤢</button>
@@ -4071,7 +4193,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <div className="ins-lb-panel-wrap" style={{flex:1}}>
               <div className="ins-sig-panel__hdr">
                 <span className="ins-sig-panel__title">Top insiders</span>
-                <TileInfoButton section="insights-formula" title="Top insiders"/>
+                <TileInfoButton section="insights-formula" title="Top insiders" tileId="top-insiders"/>
                 <div className="dash-tile__hdr-controls">
                   <button className="btn btn--ghost btn--icon" onClick={()=>{setModal('insiders');setModalInitial(null);}} title="Open full insiders view">⤢</button>
                 </div>
