@@ -1836,6 +1836,45 @@ function GuideModal({ initialSection, onClose }) {
 // existing guide modal to avoid layout disruption.
 
 const TILE_HELP = {
+  'sentiment': {
+    title: 'Market Sentiment',
+    what: 'Aggregate insider buying vs selling across all open-market SEC filings in the last 30 days.',
+    methodology: 'The score is the ratio of net insider buying to total transaction volume, scaled 0–100. Above 50 means more dollars flowing into insider purchases than sales. The label (Fear → Extreme Greed) maps to fixed score ranges.',
+    columns: [
+      { term: 'Score (0–100)', def: 'Net insider buy ratio. 0 = all selling, 100 = all buying.' },
+      { term: 'Label', def: '0–25 Fear, 25–45 Caution, 45–55 Neutral, 55–75 Greed, 75–100 Extreme Greed.' },
+    ],
+    source: 'Calculated from all open-market Form 4 filings in the last 30 days. Updates as new filings are ingested.',
+  },
+  'market-indexes': {
+    title: 'Market Indexes',
+    what: 'Real-time prices and daily returns for three major U.S. equity benchmarks.',
+    columns: [
+      { term: 'SPY', def: 'SPDR S&P 500 ETF — tracks the 500 largest U.S. companies by market cap. The most widely followed U.S. equity benchmark.' },
+      { term: 'QQQ', def: 'Invesco Nasdaq-100 ETF — tracks the 100 largest non-financial Nasdaq-listed companies. Heavily tech-weighted.' },
+      { term: 'IWM', def: 'iShares Russell 2000 ETF — tracks 2,000 small-cap U.S. stocks. Indicator of broader market health beyond mega-caps.' },
+      { term: 'Return %', def: 'Intraday percentage change from previous close.' },
+    ],
+    source: 'Market data via financial data APIs. Prices update throughout the trading day.',
+  },
+  'data-filings': {
+    title: 'All Filings',
+    what: 'Every SEC Form 4 insider filing and congressional STOCK Act disclosure in the database, with full transaction details.',
+    methodology: 'Filings are ingested directly from SEC EDGAR within minutes of publication. Congressional disclosures are added from periodic STOCK Act releases. Each row is one transaction — a single insider buying or selling shares in one filing.',
+    columns: [
+      { term: 'Trade date', def: 'The date the transaction was executed (not the filing date, which can be 1–2 days later).' },
+      { term: 'Ticker', def: 'Stock trading symbol. Click to drill into the ticker\'s full insider history.' },
+      { term: 'Company', def: 'Full company name as reported on the SEC filing.' },
+      { term: 'Insider', def: 'Name of the insider who traded. Click to see their full trading profile and track record.' },
+      { term: 'Type', def: 'Buy or Sell. Color-coded green (buy) or red (sell). Sub-label shows the SEC transaction code (P = open-market purchase, S = open-market sale, etc.).' },
+      { term: 'Shares', def: 'Number of shares bought or sold in this transaction.' },
+      { term: 'Price', def: 'Price per share at which the transaction was executed.' },
+      { term: 'Value', def: 'Total dollar value of the transaction (shares × price).' },
+      { term: 'Pos%', def: 'Percentage change in the insider\'s total position. Large positive = significantly increasing their stake.' },
+      { term: 'Role', def: 'Insider\'s relationship classification: Exec (C-suite/VP), Officer, or Dir (director/10% owner).' },
+    ],
+    source: 'SEC EDGAR Form 4 filings and congressional STOCK Act disclosures. Free users see the last 12 months; Pro unlocks full history back to 2010.',
+  },
   'sector-heatmap': {
     title: 'S&P 500 Sector Heatmap',
     what: 'Day return for each GICS sector, weighted by market cap using sector ETF proxies.',
@@ -1908,8 +1947,18 @@ function TileHelpPanel({ tileId, onClose }) {
         </div>
         <div className="tile-help-panel__body">
           <p className="tile-help-panel__what">{help.what}</p>
+          {help.methodology && (
+            <div className="tile-help-panel__card">
+              <h4 className="tile-help-panel__section-title">Methodology</h4>
+              <p className="tile-help-panel__text">{help.methodology}</p>
+            </div>
+          )}
+          <div className="tile-help-panel__card">
+            <h4 className="tile-help-panel__section-title">Data source</h4>
+            <p className="tile-help-panel__text">{help.source}</p>
+          </div>
           {help.columns && (
-            <div className="tile-help-panel__section">
+            <div className="tile-help-panel__card">
               <h4 className="tile-help-panel__section-title">Columns</h4>
               <dl className="tile-help-panel__dl">
                 {help.columns.map(c=>(
@@ -1921,16 +1970,6 @@ function TileHelpPanel({ tileId, onClose }) {
               </dl>
             </div>
           )}
-          {help.methodology && (
-            <div className="tile-help-panel__section">
-              <h4 className="tile-help-panel__section-title">Methodology</h4>
-              <p className="tile-help-panel__text">{help.methodology}</p>
-            </div>
-          )}
-          <div className="tile-help-panel__section">
-            <h4 className="tile-help-panel__section-title">Data source</h4>
-            <p className="tile-help-panel__text">{help.source}</p>
-          </div>
         </div>
       </div>
     </div>
@@ -3171,7 +3210,7 @@ function SentimentStrip({ filings }) {
     <div className="mkt-tile mkt-tile--strip-only">
       <div className="mkt-tile__strip">
         <div className="mkt-stat mkt-stat--fg">
-          <span className="mkt-stat__label">Sentiment</span>
+          <span className="mkt-stat__label">Sentiment <TileInfoButton section="insights-formula" title="Sentiment" tileId="sentiment"/></span>
           {fgScore!=null?<>
             <div className="mkt-fg-row">
               <span className="mkt-stat__val" style={{color:fgColor}}>{fgScore}</span>
@@ -3184,6 +3223,7 @@ function SentimentStrip({ filings }) {
           </>:<span className="mkt-stat__loading">{mkt?.err?'—':'...'}</span>}
         </div>
         <div className="mkt-divider"/>
+        <TileInfoButton section="insights-formula" title="Market indexes" tileId="market-indexes"/>
         {INDEX_SYMS.map(sym=>{
           const d=indices[sym];
           return (
@@ -6363,6 +6403,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           {activeFilterCount > 0 || search || dPreset !== 7 || dateFrom || dateTo ? (
             <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
           ) : null}
+          <TileInfoButton section="insights-formula" title="All filings" tileId="data-filings"/>
           <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
             onClick={()=>onUpgrade('data_export')}>
             Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>

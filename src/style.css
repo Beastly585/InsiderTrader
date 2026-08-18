@@ -2451,14 +2451,20 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .tile-help-panel__what {
   font-size: 0.8125rem; color: var(--text-2); line-height: 1.6;
-  margin-bottom: 20px; padding-bottom: 16px;
+  margin-bottom: 16px; padding-bottom: 16px;
   border-bottom: 0.5px solid var(--border);
 }
-.tile-help-panel__section { margin-bottom: 20px; }
-.tile-help-panel__section:last-child { margin-bottom: 0; }
+.tile-help-panel__card {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+}
+.tile-help-panel__card:last-child { margin-bottom: 0; }
 .tile-help-panel__section-title {
   font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .06em; color: var(--text-3); margin: 0 0 10px;
+  letter-spacing: .06em; color: var(--accent-strong); margin: 0 0 8px;
 }
 .tile-help-panel__dl { margin: 0; }
 .tile-help-panel__dl-row {
