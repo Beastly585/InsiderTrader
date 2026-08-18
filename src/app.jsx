@@ -1449,9 +1449,14 @@ const GUIDE_SECTIONS = [
             <span className="guide-hero__wordmark">Seli</span>
           </div>
         </div>
-        <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as it's published, parses it, and makes it easy to review.</p>
-        <p>This guide is a quick walkthrough of where the data comes from, how the scoring works, and the basics of each part of the website. All informational.</p>
-        <p>Remember, Seli isn't providing financial advice or personalized recommendations. It simply screens for insider movements, scores the trade based on peer-reviewed historical findings, and makes it available to you.</p>
+        <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as it's published, scores it, and makes it actionable.</p>
+        <p>This guide walks you through what you're looking at, where the data comes from, and how to get the most out of it.</p>
+        <div style={{background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'14px 16px',margin:'12px 0'}}>
+          <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6}}>You're in the private beta</p>
+          <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5,marginBottom:0}}>
+            Everything here is built on real SEC filings and peer-reviewed methodology, but the product is still early. Please use the feedback button — <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:20,height:20,borderRadius:4,background:'var(--surface)',border:'0.5px solid var(--border)',fontSize:'0.6875rem',verticalAlign:'middle',margin:'0 2px'}}>💬</span> in the top right — to report bugs or share thoughts.
+          </p>
+        </div>
       </>
     ),
   },
@@ -1460,75 +1465,86 @@ const GUIDE_SECTIONS = [
     label: 'Using Seli',
     render: () => (
       <>
-        <p>Seli has five sections, each serving a different purpose.</p>
+        <p>Start on the <strong>Dashboard</strong> each day — it shows market sentiment, the strongest insider signals, top-performing insiders, and news. Think of it as your daily briefing.</p>
 
-        <h4 className="guide-section-heading">Dashboard</h4>
-        <p>Your daily overview: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news.</p>
-        <p className="td-muted" style={{fontSize:'0.75rem',marginTop:-4}}>Main use — quick snapshot of recent movement related to insiders.</p>
+        <p>When something catches your eye, dig deeper on <strong>Insights</strong>. That's the full scored signal feed — every ticker with recent insider activity, ranked by conviction. You can filter by sector, time window, and trade type.</p>
 
-        <h4 className="guide-section-heading">Insights</h4>
-        <p>The full, filterable signal feed. Thousands of trades are reported daily, and it can be hard to keep track of what's significant.</p>
-        <p>Seli compares each trade against peer-reviewed research on how insiders beat the market and scores each insider based on how much they beat the market (SPY) by. None of this is personalized, each trade is scored equally.</p>
-        <p className="td-muted" style={{fontSize:'0.75rem',marginTop:-4}}>Main use — get a feel on who's making money on trades and which trades have markers of historically successful trades.</p>
+        <p><strong>Data</strong> is the raw filing table. Every trade, every field, searchable and linked back to the original SEC filing. Use this when you want to draw your own conclusions.</p>
 
-        <h4 className="guide-section-heading">Data</h4>
-        <p>Raw, legible filing data. Every trade, searchable and filterable, with a link back to the original government filing. If you want to draw your own conclusions, this is where to work.</p>
-        <p className="td-muted" style={{fontSize:'0.75rem',marginTop:-4}}>Main use — deep dive raw data, make your own deductions.</p>
+        <p>Found something worth tracking? Add it to your <strong>Watchlist</strong>. Watched tickers and insiders drive your instant alerts, email digests, and the activity feed. If you've linked a brokerage, portfolio-level insider activity shows up here too.</p>
 
-        <h4 className="guide-section-heading">Watchlist</h4>
-        <p>Tickers and insiders you've chosen to follow. Their activity surfaces ahead of everything else, and it's what instant alerts and email digests are built from. Your linked portfolio also lives here — connect a brokerage to see insider activity on stocks you actually hold.</p>
-
-        <h4 className="guide-section-heading">Settings</h4>
-        <p>Your plan, billing, notification preferences, and brokerage connection all live here.</p>
+        <p><strong>Settings</strong> has your plan, billing, notification preferences, and brokerage connection.</p>
       </>
     ),
   },
   {
     id: 'data-source',
-    label: 'Sourcing the Data',
+    label: 'The Data',
     render: () => (
       <>
-        <p>Seli tracks only official SEC data filed by insiders.</p>
+        <p>Seli tracks two official government sources:</p>
         <ul>
-          <li><strong>Corporate insiders.</strong> Form 4, filed with the SEC by executives, directors, and major shareholders. Corporate trades are reported within 2 business days of a trade.</li>
-          <li><strong>Congress.</strong> Periodic transaction reports required under the STOCK Act, filed by senators and representatives. Congressional transactions must be filed within 45 days of a trade.</li>
+          <li><strong>Corporate insiders</strong> — SEC Form 4, filed by executives, directors, and major shareholders. These must be filed within <strong>2 business days</strong> of a trade.</li>
+          <li><strong>Congress</strong> — STOCK Act disclosures from senators and representatives. These have up to a <strong>45-day reporting lag</strong>, so they appear later.</li>
         </ul>
-        <p>Seli checks for new filings on a recurring basis throughout the trading day, so a disclosure typically shows up here <strong>within minutes</strong>.</p>
+        <p>Seli checks for new filings throughout the trading day. A corporate disclosure typically shows up here <strong>within minutes</strong> of being published on SEC EDGAR.</p>
+        <p>Only <strong>open-market</strong> trades are included — someone choosing to buy or sell with their own money. Option exercises, RSU vests, gifts, and automatic plan transactions are filtered out.</p>
       </>
     ),
   },
   {
     id: 'insights-formula',
-    label: 'Data Scoring',
+    label: 'Scoring',
     render: () => (
       <>
-        <p>Every trade is scored from a standardized approach based on peer-reviewed research:</p>
-        <p>Seli calculates a <strong>conviction score</strong> for each trade, a number built from a few factors. Below is a general breakdown of those factors:</p>
+        <p>Every trade gets a <strong>conviction score</strong> — a number that reflects how historically meaningful the trade's characteristics are. Higher score = more markers of a trade worth paying attention to.</p>
+        <p>The score is built from a few factors:</p>
         <ul>
-          <li><strong>Relationship</strong> between executor of the trade and the equity in question. Closer relationships are attributed to executives, Congress members.</li>
-          <li><strong>Buys and sells aggregation</strong> within a time-window helps strengthen or dilute a signal.</li>
-          <li><strong>Dollar amounts</strong> play a small role in signal weighting.</li>
-          <li>A trade that represents a <strong>large share of someone's existing position</strong> counts for more than a routine top-up.</li>
+          <li><strong>Who traded</strong> — C-suite executives and Congress members carry more weight than directors or 10% owners.</li>
+          <li><strong>Clustering</strong> — multiple insiders buying the same stock in a short window is a stronger signal than one trade alone.</li>
+          <li><strong>Position sizing</strong> — a trade that represents a large chunk of someone's holdings counts more than a routine top-up.</li>
+          <li><strong>Dollar value</strong> — larger trades get a modest boost.</li>
         </ul>
-        <p>Only <strong>open-market</strong> trades count toward this. Option exercises, RSU vests, and grants are left out entirely, since they don't reflect someone choosing to put their own money in.</p>
-        <p style={{ marginTop: 12 }}><strong>This scoring is the same for every user.</strong> It's Seli's own methodology, applied identically to everyone and to every trade — not tailored to you, your holdings, or your risk tolerance. It's informational, not a recommendation to buy, sell, or hold anything. See <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
+        <p>This is based on peer-reviewed research (Lakonishok & Lee, Cohen et al.) — not Seli's opinion. The scoring is identical for every user and every trade. It's informational, not a recommendation. See <a href="/terms">Terms</a>.</p>
+      </>
+    ),
+  },
+  {
+    id: 'getting-help',
+    label: 'Getting Help',
+    render: () => (
+      <>
+        <p>Every tile in Seli has a <strong style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:20,height:20,borderRadius:'50%',background:'var(--surface-2)',border:'0.5px solid var(--border)',fontSize:'0.6875rem',flexShrink:0}}>?</span></strong> button in its header.</p>
+        <p>Tap it to see exactly what that tile shows — every column defined, the methodology behind the numbers, and where the data comes from. If something doesn't make sense, start there.</p>
+        <div style={{background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'14px 16px',margin:'12px 0'}}>
+          <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6}}>You can always reopen this guide</p>
+          <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5,marginBottom:0}}>
+            The <strong style={{display:'inline-flex',alignItems:'center',gap:3}}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:18,height:18,borderRadius:'50%',background:'var(--surface)',border:'0.5px solid var(--border)',fontSize:'0.625rem'}}>?</span></strong> icon in the bottom status bar opens this guide from any page.
+          </p>
+        </div>
+        <p>For bugs or feedback, use the <strong>💬</strong> button in the top right corner of any page.</p>
       </>
     ),
   },
   {
     id: 'pro-features',
-    label: 'Pro Features',
+    label: 'Free vs Pro',
     render: () => (
       <>
-        <p>Seli has two memberships: <strong>Free</strong> and <strong>Pro</strong>.</p>
-        <p>Free allows you to see top 10 insiders, signals from the last 7 days, and allows you to view up to a year back of raw data.</p>
-        <p>Pro allows you better access to the data:</p>
+        <p><strong>Free</strong> gives you the top 10 insiders, signals from the last 7 days, and up to a year of raw filing data.</p>
+        <p><strong>Pro</strong> unlocks the full platform:</p>
         <ul>
-          <li><strong>Get notified immediately.</strong> Instant alerts the moment something you're watching moves, or a daily and weekly digest by email instead. Follow specific insiders or tickers you're interested in.</li>
-          <li><strong>Link your portfolio.</strong> Connect a brokerage account (read-only, never able to place trades) and see insider activity on what you actually hold.</li>
-          <li><strong>All the data.</strong> Gain access to both scored and raw data as far back as Seli is populated.</li>
+          <li><strong>Instant alerts</strong> — get notified the moment a watched ticker or insider files a new trade, plus daily and weekly email digests.</li>
+          <li><strong>Portfolio tracking</strong> — connect a brokerage (read-only) and see insider activity on stocks you actually hold.</li>
+          <li><strong>Full history</strong> — scored signals and raw data going back to 2013.</li>
         </ul>
-        <p><strong>One-time Data Purchase</strong> — Seli also offers the purchase of the whole database up to the time of purchase, downloaded as CSV, for a one-time fee.</p>
+        <div style={{background:'color-mix(in srgb, var(--accent-strong) 6%, transparent)',border:'0.5px solid color-mix(in srgb, var(--accent-strong) 20%, transparent)',borderRadius:'var(--radius-lg)',padding:'14px 16px',margin:'12px 0'}}>
+          <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6,color:'var(--accent-strong)'}}>Founding member pricing</p>
+          <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5,marginBottom:0}}>
+            As a beta user, you can lock in Pro at <strong>$6.99/mo — half off, forever</strong>. That rate stays as long as your subscription is active.
+          </p>
+        </div>
+        <p><strong>One-time data export</strong> — you can also purchase the entire database as a CSV download for a one-time fee.</p>
       </>
     ),
   },
@@ -1672,83 +1688,47 @@ const LP_FEATURE_ICON_MAP = {
   IconData, IconInsights, IconLink, IconZap,
 };
 
-// ── Beta welcome modal — shown once, before the guide, for beta testers ──
-function BetaWelcomeModal({ onDismiss }) {
-  return (
-    <div className="modal-overlay" style={{zIndex:310}} onClick={onDismiss}>
-      <div className="modal-panel" style={{maxWidth:480,padding:0,overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
-        <div style={{padding:'32px 32px 0'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20}}>
-            <div className="logo-mark" style={{width:32,height:32,flexShrink:0}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-            <span style={{fontSize:'1.5rem',fontWeight:800,letterSpacing:'-0.5px'}}>Seli</span>
-            <span style={{fontSize:'0.6875rem',fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--accent-strong)',background:'color-mix(in srgb, var(--accent-strong) 12%, transparent)',padding:'2px 8px',borderRadius:4}}>Private Beta</span>
-          </div>
-          <h2 style={{fontSize:'1.25rem',fontWeight:700,lineHeight:1.3,marginBottom:12}}>Welcome to the Seli private beta</h2>
-          <p style={{fontSize:'0.875rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:16}}>
-            You're one of the first people using this. Everything you see — the signals, the leaderboard, the scoring — is built on real SEC filings and peer-reviewed methodology, but the product is still early.
-          </p>
-          <div style={{background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'14px 16px',marginBottom:16}}>
-            <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6}}>Your feedback is important</p>
-            <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5}}>
-              Please use the feedback button — <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:20,height:20,borderRadius:4,background:'var(--surface)',border:'0.5px solid var(--border)',fontSize:'0.6875rem',verticalAlign:'middle',margin:'0 2px'}}>💬</span> in the top right — to provide feedback on bugs or issues you have using the app. You can write comments, paste or attach screenshots.
-            </p>
-          </div>
-          <div style={{background:'color-mix(in srgb, var(--accent-strong) 6%, transparent)',border:'0.5px solid color-mix(in srgb, var(--accent-strong) 20%, transparent)',borderRadius:'var(--radius-lg)',padding:'14px 16px',marginBottom:8}}>
-            <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6,color:'var(--accent-strong)'}}>Founding member pricing</p>
-            <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5}}>
-              As a beta user, you can lock in Pro at <strong>$6.99/mo — half off, forever</strong>. That rate stays as long as your subscription is active.
-            </p>
-          </div>
-        </div>
-        <div style={{padding:'16px 32px 28px',display:'flex',justifyContent:'center'}}>
-          <button className="upgrade-modal__cta" onClick={onDismiss}>
-            Got it — let's go
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function GuideProvider({ children }) {
   const [openSection, setOpenSection] = useState(null); // null = closed, else a GUIDE_SECTIONS id
-  const [showBetaWelcome, setShowBetaWelcome] = useState(false);
 
-  // Beta welcome shows first (once ever), then the product guide shows on
-  // first visit. Two separate localStorage keys — dismissing the beta modal
-  // doesn't skip the guide, it just gates it behind the beta greeting.
+  // First visit: open the guide at the welcome panel. One flow, one key.
+  // (Replaces the old two-modal approach where a separate BetaWelcomeModal
+  // opened first, then the guide opened second — now the beta greeting is
+  // baked into the welcome panel of the guide itself.)
   useEffect(() => {
     try {
-      if (!localStorage.getItem('seli_beta_welcome_seen')) {
-        setShowBetaWelcome(true);
-      } else if (!localStorage.getItem('seli_guide_seen')) {
+      if (!localStorage.getItem('seli_onboard_seen')) {
         setOpenSection('welcome');
-        localStorage.setItem('seli_guide_seen', '1');
       }
     } catch (_) {}
   }, []);
 
-  function dismissBetaWelcome() {
-    setShowBetaWelcome(false);
-    try { localStorage.setItem('seli_beta_welcome_seen', '1'); } catch (_) {}
-    // After dismissing the beta greeting, show the product guide if they
-    // haven't seen it yet — so they get both on their first session.
-    try {
-      if (!localStorage.getItem('seli_guide_seen')) {
-        setOpenSection('welcome');
-        localStorage.setItem('seli_guide_seen', '1');
-      }
-    } catch (_) {}
-  }
-
   const openGuide = useCallback((sectionId) => setOpenSection(sectionId || 'welcome'), []);
-  const closeGuide = useCallback(() => setOpenSection(null), []);
+  const closeGuide = useCallback(() => {
+    setOpenSection(null);
+    // Mark onboarding complete on first close — subsequent opens via the
+    // status bar ? button don't re-trigger the nudge or re-mark.
+    try { localStorage.setItem('seli_onboard_seen', '1'); } catch (_) {}
+  }, []);
+
+  const nudge = useTileNudge();
+  const closeGuideAndNudge = useCallback(() => {
+    const wasFirstTime = !localStorage.getItem('seli_onboard_seen');
+    setOpenSection(null);
+    try { localStorage.setItem('seli_onboard_seen', '1'); } catch (_) {}
+    // Fire the tile-help nudge only after the very first onboard dismissal
+    if (wasFirstTime) {
+      // Small delay so the guide modal fully animates out before pulsing
+      setTimeout(() => nudge.triggerNudge(), 400);
+    }
+  }, [nudge]);
 
   return (
-    <GuideContext.Provider value={{ openSection, openGuide, closeGuide }}>
-      {children}
-      {showBetaWelcome && <BetaWelcomeModal onDismiss={dismissBetaWelcome}/>}
-      {openSection && !showBetaWelcome && <GuideModal initialSection={openSection} onClose={closeGuide}/>}
+    <GuideContext.Provider value={{ openSection, openGuide, closeGuide: closeGuideAndNudge }}>
+      <TileNudgeContext.Provider value={nudge}>
+        {children}
+      </TileNudgeContext.Provider>
+      {openSection && <GuideModal initialSection={openSection} onClose={closeGuideAndNudge}/>}
     </GuideContext.Provider>
   );
 }
@@ -1976,14 +1956,52 @@ function TileHelpPanel({ tileId, onClose }) {
   );
 }
 
+// ── Tile help nudge ────────────────────────────────────────────────────────────
+// After the onboard guide is dismissed for the first time, a subtle pulse
+// rings the ? buttons on a couple of key tiles (sentiment, dashboard-signals)
+// to teach the user the help system exists. Shown once, separate localStorage
+// key so re-opening the guide later doesn't re-trigger.
+const NUDGE_TILES = new Set(['sentiment', 'dashboard-signals']);
+
+// triggerNudge is called by GuideProvider when the guide closes for the
+// first time — this avoids a timing issue where the effect would run on
+// mount before seli_onboard_seen exists in localStorage.
+function useTileNudge() {
+  const [active, setActive] = useState(false);
+  const timerRef = useRef(null);
+  const trigger = useCallback(() => {
+    try {
+      if (localStorage.getItem('seli_tile_nudge_seen')) return;
+    } catch (_) {}
+    setActive(true);
+    timerRef.current = setTimeout(() => {
+      setActive(false);
+      try { localStorage.setItem('seli_tile_nudge_seen', '1'); } catch (_) {}
+    }, 6000);
+  }, []);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  const dismiss = useCallback(() => {
+    setActive(false);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    try { localStorage.setItem('seli_tile_nudge_seen', '1'); } catch (_) {}
+  }, []);
+  return { nudgeActive: active, dismissNudge: dismiss, triggerNudge: trigger };
+}
+
+// Shared context so all TileInfoButtons can see the nudge state
+const TileNudgeContext = createContext({ nudgeActive: false, dismissNudge: () => {} });
+
 function TileInfoButton({ section, title, tileId }) {
   const guide = useContext(GuideContext);
+  const { nudgeActive, dismissNudge } = useContext(TileNudgeContext);
   const isMobile = useIsMobile();
   const [showHelp, setShowHelp] = useState(false);
+  const shouldNudge = nudgeActive && NUDGE_TILES.has(tileId);
   // Mobile: open the global guide modal (unchanged behavior)
   // Desktop: open the contextual per-tile help panel if tileId is provided
   function handleClick(e) {
     e.stopPropagation();
+    if (nudgeActive) dismissNudge();
     if (isMobile || !tileId || !TILE_HELP[tileId]) {
       guide?.openGuide(section);
     } else {
@@ -1991,17 +2009,20 @@ function TileInfoButton({ section, title, tileId }) {
     }
   }
   return (
-    <>
+    <span style={{position:'relative',display:'inline-flex',alignItems:'center'}}>
       <button
-        className="tile-info-btn"
+        className={`tile-info-btn${shouldNudge ? ' tile-info-btn--nudge' : ''}`}
         onClick={handleClick}
         title={`About: ${title}`}
         aria-label={`About ${title}`}
       >
         <IconHelp style={{ width: 12, height: 12 }} />
       </button>
+      {shouldNudge && (
+        <span className="tile-nudge-tooltip">Tap for details on this tile</span>
+      )}
       {showHelp && <TileHelpPanel tileId={tileId} onClose={()=>setShowHelp(false)}/>}
-    </>
+    </span>
   );
 }
 

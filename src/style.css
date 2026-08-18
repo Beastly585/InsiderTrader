@@ -2418,6 +2418,50 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .tile-info-btn:hover { color: var(--text-2); background: var(--surface-3); }
 
+/* ── Tile help nudge — one-time pulse after first onboard ────────────────── */
+.tile-info-btn--nudge {
+  position: relative;
+  color: var(--accent-strong);
+  animation: tile-nudge-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tile-nudge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-strong) 35%, transparent); }
+  50%      { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-strong) 0%, transparent); }
+}
+.tile-nudge-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: -4px;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 5px 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  pointer-events: none;
+  animation: tile-nudge-fade-in 0.3s ease-out;
+  z-index: 20;
+}
+.tile-nudge-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: 10px;
+  width: 7px;
+  height: 7px;
+  background: var(--surface);
+  border-top: 0.5px solid var(--border);
+  border-left: 0.5px solid var(--border);
+  transform: rotate(45deg);
+}
+@keyframes tile-nudge-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Tile contextual help panel (desktop only) ───────────────────────────── */
 .tile-help-overlay {
   position: fixed; inset: 0; z-index: 250;
