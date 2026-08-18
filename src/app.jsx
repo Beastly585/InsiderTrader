@@ -1446,15 +1446,17 @@ const GUIDE_SECTIONS = [
       <>
         <div className="guide-hero">
           <div className="guide-hero__mark" aria-hidden="true">
-            <span className="guide-hero__wordmark">Seli</span>
+            <img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
           </div>
+          <span className="guide-hero__wordmark">Seli</span>
+          <span className="guide-hero__beta">Private Beta</span>
         </div>
         <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as it's published, scores it, and makes it actionable.</p>
         <p>This guide walks you through what you're looking at, where the data comes from, and how to get the most out of it.</p>
-        <div style={{background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'14px 16px',margin:'12px 0'}}>
-          <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6}}>You're in the private beta</p>
-          <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5,marginBottom:0}}>
-            Everything here is built on real SEC filings and peer-reviewed methodology, but the product is still early. Please use the feedback button — <span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:20,height:20,borderRadius:4,background:'var(--surface)',border:'0.5px solid var(--border)',fontSize:'0.6875rem',verticalAlign:'middle',margin:'0 2px'}}>💬</span> in the top right — to report bugs or share thoughts.
+        <div className="guide-callout">
+          <p className="guide-callout__title">You're one of the first people here</p>
+          <p className="guide-callout__text">
+            Everything is built on real SEC filings and peer-reviewed methodology, but the product is still early. Use the feedback button <IconMessage style={{width:13,height:13,verticalAlign:'-2px',margin:'0 2px'}}/> in the status bar to report bugs or share thoughts.
           </p>
         </div>
       </>
@@ -1465,15 +1467,49 @@ const GUIDE_SECTIONS = [
     label: 'Using Seli',
     render: () => (
       <>
-        <p>Start on the <strong>Dashboard</strong> each day — it shows market sentiment, the strongest insider signals, top-performing insiders, and news. Think of it as your daily briefing.</p>
+        <div className="guide-env-row">
+          <div className="guide-env-icon"><IconHome style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Dashboard</p>
+            <p>Your daily briefing. Market sentiment, sector heatmap, the strongest insider signals, top-ranked insiders, and market news — all on one screen.</p>
+          </div>
+        </div>
+        <EnvPreview type="dashboard"/>
 
-        <p>When something catches your eye, dig deeper on <strong>Insights</strong>. That's the full scored signal feed — every ticker with recent insider activity, ranked by conviction. You can filter by sector, time window, and trade type.</p>
+        <div className="guide-env-row">
+          <div className="guide-env-icon" style={{color:'var(--accent-strong)'}}><IconInsights style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Insights</p>
+            <p>The full scored signal feed. Every ticker with recent insider activity, ranked by conviction. Filter by sector, time window, and trade type. The leaderboard shows which insiders have the best track records.</p>
+          </div>
+        </div>
+        <EnvPreview type="insights"/>
 
-        <p><strong>Data</strong> is the raw filing table. Every trade, every field, searchable and linked back to the original SEC filing. Use this when you want to draw your own conclusions.</p>
+        <div className="guide-env-row">
+          <div className="guide-env-icon"><IconData style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Data</p>
+            <p>Raw filing data. Every trade, searchable and filterable, with a link to the original SEC filing. Use this when you want to draw your own conclusions.</p>
+          </div>
+        </div>
+        <EnvPreview type="data"/>
 
-        <p>Found something worth tracking? Add it to your <strong>Watchlist</strong>. Watched tickers and insiders drive your instant alerts, email digests, and the activity feed. If you've linked a brokerage, portfolio-level insider activity shows up here too.</p>
+        <div className="guide-env-row">
+          <div className="guide-env-icon"><IconFavorites style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Watchlist</p>
+            <p>Tickers and insiders you follow. Their activity drives your instant alerts, email digests, and the activity feed. Link a brokerage to see insider activity on stocks you actually hold.</p>
+          </div>
+        </div>
+        <EnvPreview type="watchlist"/>
 
-        <p><strong>Settings</strong> has your plan, billing, notification preferences, and brokerage connection.</p>
+        <div className="guide-env-row">
+          <div className="guide-env-icon"><IconSettings style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Settings</p>
+            <p>Your plan, billing, notification preferences, and brokerage connection.</p>
+          </div>
+        </div>
       </>
     ),
   },
@@ -1482,13 +1518,45 @@ const GUIDE_SECTIONS = [
     label: 'The Data',
     render: () => (
       <>
-        <p>Seli tracks two official government sources:</p>
-        <ul>
-          <li><strong>Corporate insiders</strong> — SEC Form 4, filed by executives, directors, and major shareholders. These must be filed within <strong>2 business days</strong> of a trade.</li>
-          <li><strong>Congress</strong> — STOCK Act disclosures from senators and representatives. These have up to a <strong>45-day reporting lag</strong>, so they appear later.</li>
-        </ul>
-        <p>Seli checks for new filings throughout the trading day. A corporate disclosure typically shows up here <strong>within minutes</strong> of being published on SEC EDGAR.</p>
-        <p>Only <strong>open-market</strong> trades are included — someone choosing to buy or sell with their own money. Option exercises, RSU vests, gifts, and automatic plan transactions are filtered out.</p>
+        <p>Seli tracks two official government sources. Both are public record — Seli just makes them fast and legible.</p>
+
+        <div className="guide-data-flow">
+          <div className="guide-data-flow__source">
+            <div className="guide-data-flow__icon-wrap">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <span className="guide-data-flow__name">SEC Form 4</span>
+            <span className="guide-data-flow__who">Executives, directors, 10%+ owners</span>
+            <span className="guide-data-flow__lag">Filed within 2 business days</span>
+          </div>
+          <div className="guide-data-flow__connector">
+            <div className="guide-data-flow__line"/>
+            <span className="guide-data-flow__speed">Minutes</span>
+          </div>
+          <div className="guide-data-flow__center">
+            <img src={logoSimple} alt="" style={{width:28,height:28,objectFit:'contain'}}/>
+            <span className="guide-data-flow__name">Seli</span>
+          </div>
+          <div className="guide-data-flow__connector">
+            <div className="guide-data-flow__line"/>
+            <span className="guide-data-flow__speed">Hours–days</span>
+          </div>
+          <div className="guide-data-flow__source">
+            <div className="guide-data-flow__icon-wrap">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <span className="guide-data-flow__name">STOCK Act</span>
+            <span className="guide-data-flow__who">Senators & representatives</span>
+            <span className="guide-data-flow__lag">Up to 45-day reporting lag</span>
+          </div>
+        </div>
+
+        <div className="guide-callout" style={{marginTop:14}}>
+          <p className="guide-callout__title">Only open-market trades</p>
+          <p className="guide-callout__text">
+            Option exercises, RSU vests, gifts, and automatic plan transactions are filtered out. What you see is someone <strong>choosing</strong> to buy or sell with their own money.
+          </p>
+        </div>
       </>
     ),
   },
@@ -1497,32 +1565,86 @@ const GUIDE_SECTIONS = [
     label: 'Scoring',
     render: () => (
       <>
-        <p>Every trade gets a <strong>conviction score</strong> — a number that reflects how historically meaningful the trade's characteristics are. Higher score = more markers of a trade worth paying attention to.</p>
-        <p>The score is built from a few factors:</p>
-        <ul>
-          <li><strong>Who traded</strong> — C-suite executives and Congress members carry more weight than directors or 10% owners.</li>
-          <li><strong>Clustering</strong> — multiple insiders buying the same stock in a short window is a stronger signal than one trade alone.</li>
-          <li><strong>Position sizing</strong> — a trade that represents a large chunk of someone's holdings counts more than a routine top-up.</li>
-          <li><strong>Dollar value</strong> — larger trades get a modest boost.</li>
-        </ul>
-        <p>This is based on peer-reviewed research (Lakonishok & Lee, Cohen et al.) — not Seli's opinion. The scoring is identical for every user and every trade. It's informational, not a recommendation. See <a href="/terms">Terms</a>.</p>
+        <p>Every trade gets a <strong>conviction score</strong> — a number that reflects how historically meaningful its characteristics are.</p>
+
+        <div className="guide-score-factors">
+          <div className="guide-score-factor">
+            <div className="guide-score-factor__bar" style={{width:'85%'}}/>
+            <div className="guide-score-factor__info">
+              <span className="guide-score-factor__label">Who traded</span>
+              <span className="guide-score-factor__desc">C-suite executives and Congress members carry more weight</span>
+            </div>
+          </div>
+          <div className="guide-score-factor">
+            <div className="guide-score-factor__bar" style={{width:'70%'}}/>
+            <div className="guide-score-factor__info">
+              <span className="guide-score-factor__label">Clustering</span>
+              <span className="guide-score-factor__desc">Multiple insiders buying the same stock in a short window</span>
+            </div>
+          </div>
+          <div className="guide-score-factor">
+            <div className="guide-score-factor__bar" style={{width:'60%'}}/>
+            <div className="guide-score-factor__info">
+              <span className="guide-score-factor__label">Position sizing</span>
+              <span className="guide-score-factor__desc">Large chunk of their holdings, not a routine top-up</span>
+            </div>
+          </div>
+          <div className="guide-score-factor">
+            <div className="guide-score-factor__bar" style={{width:'40%'}}/>
+            <div className="guide-score-factor__info">
+              <span className="guide-score-factor__label">Dollar value</span>
+              <span className="guide-score-factor__desc">Larger trades get a modest boost</span>
+            </div>
+          </div>
+        </div>
+
+        <p style={{marginTop:14}}>Based on peer-reviewed research (Lakonishok & Lee, Cohen et al.). Identical for every user and every trade. Informational, not a recommendation. <a href="/terms">Terms</a>.</p>
       </>
     ),
   },
   {
     id: 'getting-help',
     label: 'Getting Help',
-    render: () => (
+    render: (helpers) => (
       <>
-        <p>Every tile in Seli has a <strong style={{display:'inline-flex',alignItems:'center',gap:4}}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:20,height:20,borderRadius:'50%',background:'var(--surface-2)',border:'0.5px solid var(--border)',fontSize:'0.6875rem',flexShrink:0}}>?</span></strong> button in its header.</p>
-        <p>Tap it to see exactly what that tile shows — every column defined, the methodology behind the numbers, and where the data comes from. If something doesn't make sense, start there.</p>
-        <div style={{background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'14px 16px',margin:'12px 0'}}>
-          <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6}}>You can always reopen this guide</p>
-          <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5,marginBottom:0}}>
-            The <strong style={{display:'inline-flex',alignItems:'center',gap:3}}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:18,height:18,borderRadius:'50%',background:'var(--surface)',border:'0.5px solid var(--border)',fontSize:'0.625rem'}}>?</span></strong> icon in the bottom status bar opens this guide from any page.
-          </p>
+        <p>Every tile in Seli has a help button in its header:</p>
+
+        <div className="guide-help-demo">
+          <div className="guide-help-demo__item">
+            <div className="guide-help-demo__icon-circle">
+              <IconHelp style={{width:12,height:12}}/>
+            </div>
+            <div className="guide-help-demo__body">
+              <span className="guide-help-demo__label">Tile help</span>
+              <span className="guide-help-demo__desc">Tap the <strong>?</strong> on any tile to see what each column means, the methodology, and where the data comes from.</span>
+            </div>
+          </div>
+          <div className="guide-help-demo__item">
+            <div className="guide-help-demo__icon-circle">
+              <IconMessage style={{width:12,height:12}}/>
+            </div>
+            <div className="guide-help-demo__body">
+              <span className="guide-help-demo__label">Send feedback</span>
+              <span className="guide-help-demo__desc">Report bugs, request features, or share thoughts. In the status bar at the bottom of every page.</span>
+            </div>
+          </div>
+          <div className="guide-help-demo__item">
+            <div className="guide-help-demo__icon-circle">
+              <IconHelp style={{width:12,height:12}}/>
+            </div>
+            <div className="guide-help-demo__body">
+              <span className="guide-help-demo__label">This guide</span>
+              <span className="guide-help-demo__desc">Reopen anytime from the status bar at the bottom of any page.</span>
+            </div>
+          </div>
         </div>
-        <p>For bugs or feedback, use the <strong>💬</strong> button in the top right corner of any page.</p>
+
+        <button
+          className="guide-flash-btn"
+          onClick={() => helpers?.flashHelpIcons?.()}
+        >
+          Need help finding them? Show me
+        </button>
       </>
     ),
   },
@@ -1538,13 +1660,13 @@ const GUIDE_SECTIONS = [
           <li><strong>Portfolio tracking</strong> — connect a brokerage (read-only) and see insider activity on stocks you actually hold.</li>
           <li><strong>Full history</strong> — scored signals and raw data going back to 2013.</li>
         </ul>
-        <div style={{background:'color-mix(in srgb, var(--accent-strong) 6%, transparent)',border:'0.5px solid color-mix(in srgb, var(--accent-strong) 20%, transparent)',borderRadius:'var(--radius-lg)',padding:'14px 16px',margin:'12px 0'}}>
-          <p style={{fontSize:'0.8125rem',fontWeight:600,marginBottom:6,color:'var(--accent-strong)'}}>Founding member pricing</p>
-          <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5,marginBottom:0}}>
+        <div className="guide-callout guide-callout--accent" style={{margin:'12px 0'}}>
+          <p className="guide-callout__title" style={{color:'var(--accent-strong)'}}>Founding member pricing</p>
+          <p className="guide-callout__text">
             As a beta user, you can lock in Pro at <strong>$6.99/mo — half off, forever</strong>. That rate stays as long as your subscription is active.
           </p>
         </div>
-        <p><strong>One-time data export</strong> — you can also purchase the entire database as a CSV download for a one-time fee.</p>
+        <p><strong>One-time data export</strong> — purchase the entire database as a CSV download for a one-time fee.</p>
       </>
     ),
   },
@@ -1735,6 +1857,7 @@ function GuideProvider({ children }) {
 
 function GuideModal({ initialSection, onClose }) {
   const [activeId, setActiveId] = useState(initialSection || 'welcome');
+  const [hidden, setHidden] = useState(false); // temporarily hide for flash
   const idx = GUIDE_SECTIONS.findIndex(s => s.id === activeId);
   const section = GUIDE_SECTIONS[idx] ?? GUIDE_SECTIONS[0];
 
@@ -1743,6 +1866,32 @@ function GuideModal({ initialSection, onClose }) {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
+
+  // "Show me" flash: briefly hide modal, pulse the status bar icons, return
+  const flashHelpIcons = useCallback(() => {
+    setHidden(true);
+    // Add flash class to status bar help icons
+    document.querySelectorAll('.status-bar__icon-btn').forEach(btn => {
+      btn.classList.add('status-bar__icon-btn--flash');
+    });
+    // Also flash any visible tile-info-btn
+    document.querySelectorAll('.tile-info-btn').forEach(btn => {
+      btn.classList.add('tile-info-btn--flash');
+    });
+    setTimeout(() => {
+      document.querySelectorAll('.status-bar__icon-btn--flash').forEach(btn => {
+        btn.classList.remove('status-bar__icon-btn--flash');
+      });
+      document.querySelectorAll('.tile-info-btn--flash').forEach(btn => {
+        btn.classList.remove('tile-info-btn--flash');
+      });
+      setHidden(false);
+    }, 2200);
+  }, []);
+
+  const helpers = { flashHelpIcons };
+
+  if (hidden) return null;
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -1772,7 +1921,7 @@ function GuideModal({ initialSection, onClose }) {
           </nav>
           <div className="guide-modal__content">
             <div className="guide-modal__content-inner">
-              {section.render()}
+              {section.render(helpers)}
             </div>
             <div className="guide-modal__footer">
               <button

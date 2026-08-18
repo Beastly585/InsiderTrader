@@ -2607,10 +2607,170 @@ td { padding:7px 11px; vertical-align:middle; }
   .guide-modal__footer { padding: 10px 18px; }
 }
 
-.guide-hero { display: flex; justify-content: center; margin-bottom: 18px; }
+.guide-hero {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 6px; margin-bottom: 20px; padding: 8px 0;
+}
 .guide-hero__mark {
-  width: 64px; height: 64px;
+  width: 48px; height: 48px;
   display: flex; align-items: center; justify-content: center;
+}
+.guide-hero__wordmark {
+  font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px;
+  color: var(--text);
+}
+.guide-hero__beta {
+  font-size: 0.625rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-strong) 12%, transparent);
+  padding: 2px 10px; border-radius: 4px;
+}
+
+/* ── Guide callout cards ─────────────────────────────────────────────────── */
+.guide-callout {
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg); padding: 14px 16px;
+}
+.guide-callout--accent {
+  background: color-mix(in srgb, var(--accent-strong) 6%, transparent);
+  border-color: color-mix(in srgb, var(--accent-strong) 20%, transparent);
+}
+.guide-callout__title {
+  font-size: 0.8125rem; font-weight: 600; margin-bottom: 6px; color: var(--text);
+}
+.guide-callout__text {
+  font-size: 0.8125rem; color: var(--text-2); line-height: 1.5; margin-bottom: 0;
+}
+
+/* ── Guide "Using Seli" — icon + label + description rows ────────────────── */
+.guide-env-row {
+  display: flex; gap: 12px; align-items: flex-start; margin: 16px 0 4px;
+}
+.guide-env-icon {
+  flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px;
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-2);
+}
+.guide-env-body { flex: 1; min-width: 0; }
+.guide-env-label {
+  display: block; font-size: 0.8125rem; font-weight: 700; color: var(--text);
+  margin-bottom: 2px;
+}
+.guide-env-body p { margin: 0; }
+
+/* ── Guide "The Data" — flow diagram ─────────────────────────────────────── */
+.guide-data-flow {
+  display: flex; align-items: center; gap: 0;
+  margin: 16px 0; padding: 18px 12px;
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.guide-data-flow__source,
+.guide-data-flow__center {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 4px; text-align: center; min-width: 0;
+}
+.guide-data-flow__icon-wrap {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: var(--surface); border: 0.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-2);
+}
+.guide-data-flow__center { gap: 2px; }
+.guide-data-flow__name {
+  font-size: 0.75rem; font-weight: 700; color: var(--text);
+}
+.guide-data-flow__who {
+  font-size: 0.625rem; color: var(--text-2); line-height: 1.3;
+}
+.guide-data-flow__lag {
+  font-size: 0.5625rem; font-weight: 600; color: var(--accent-strong);
+  margin-top: 2px;
+}
+.guide-data-flow__connector {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding: 0 4px; flex-shrink: 0;
+}
+.guide-data-flow__line {
+  width: 28px; height: 0; border-top: 1.5px solid var(--border-md);
+}
+.guide-data-flow__speed {
+  font-size: 0.5625rem; color: var(--text-3); white-space: nowrap;
+}
+
+/* ── Guide "Scoring" — factor bars ───────────────────────────────────────── */
+.guide-score-factors {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 14px 0;
+}
+.guide-score-factor {
+  display: flex; flex-direction: column; gap: 5px;
+}
+.guide-score-factor__bar {
+  height: 5px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--green-600), var(--accent-strong));
+  opacity: 0.6;
+}
+.guide-score-factor__info { display: flex; flex-direction: column; gap: 1px; }
+.guide-score-factor__label {
+  font-size: 0.75rem; font-weight: 600; color: var(--text);
+}
+.guide-score-factor__desc {
+  font-size: 0.6875rem; color: var(--text-2); line-height: 1.4;
+}
+
+/* ── Guide "Getting Help" — demo items ───────────────────────────────────── */
+.guide-help-demo {
+  display: flex; flex-direction: column; gap: 12px;
+  margin: 14px 0;
+}
+.guide-help-demo__item {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 12px 14px;
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.guide-help-demo__icon-circle {
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--surface); border: 0.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-2);
+}
+.guide-help-demo__body {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+}
+.guide-help-demo__label {
+  font-size: 0.75rem; font-weight: 600; color: var(--text);
+}
+.guide-help-demo__desc {
+  font-size: 0.6875rem; color: var(--text-2); line-height: 1.5;
+}
+
+/* ── "Show me" flash button ──────────────────────────────────────────────── */
+.guide-flash-btn {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; width: 100%; padding: 10px 16px;
+  font-size: 0.75rem; font-weight: 600; font-family: var(--font);
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-strong) 8%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--accent-strong) 25%, transparent);
+  border-radius: var(--radius-md); cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.guide-flash-btn:hover {
+  background: color-mix(in srgb, var(--accent-strong) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-strong) 40%, transparent);
+}
+
+/* ── Flash animation for status bar + tile icons ─────────────────────────── */
+.status-bar__icon-btn--flash,
+.tile-info-btn--flash {
+  animation: guide-icon-flash 0.5s ease-in-out 4;
+}
+@keyframes guide-icon-flash {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-strong) 40%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-strong) 0%, transparent); background: color-mix(in srgb, var(--accent-strong) 15%, transparent); }
 }
 
 /* Environment preview mockups — compact, abstracted stand-ins for the five
