@@ -16,6 +16,37 @@ import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
 // coverage for the exact date-parsing bug class that hit three times this
 // session, rather than living inline and untested here.)
 
+// ── Role abbreviation ─────────────────────────────────────────────────────────
+// Insider titles from SEC filings are verbose ("Chief Executive Officer",
+// "Executive Vice President and Chief Financial Officer"). Abbreviate for
+// compact display in profile headers and affiliation lists.
+function shortRole(title) {
+  if (!title) return '';
+  let t = title;
+  // Full title → abbreviation replacements (order matters — longest first)
+  t = t.replace(/Chief Executive Officer/gi, 'CEO');
+  t = t.replace(/Chief Financial Officer/gi, 'CFO');
+  t = t.replace(/Chief Operating Officer/gi, 'COO');
+  t = t.replace(/Chief Technology Officer/gi, 'CTO');
+  t = t.replace(/Chief Information Officer/gi, 'CIO');
+  t = t.replace(/Chief Marketing Officer/gi, 'CMO');
+  t = t.replace(/Chief Strategy Officer/gi, 'CSO');
+  t = t.replace(/Chief Legal Officer/gi, 'CLO');
+  t = t.replace(/Chief Revenue Officer/gi, 'CRO');
+  t = t.replace(/Chief People Officer/gi, 'CPO');
+  t = t.replace(/Chief Compliance Officer/gi, 'CCO');
+  t = t.replace(/Executive Vice President/gi, 'EVP');
+  t = t.replace(/Senior Vice President/gi, 'SVP');
+  t = t.replace(/Vice President/gi, 'VP');
+  t = t.replace(/General Counsel/gi, 'GC');
+  t = t.replace(/Chairman of the Board/gi, 'Chairman');
+  t = t.replace(/President and CEO/gi, 'President & CEO');
+  t = t.replace(/\band\b/gi, '&');
+  // Clean up double spaces, trailing commas
+  t = t.replace(/\s{2,}/g, ' ').replace(/,\s*$/, '').trim();
+  return t;
+}
+
 // ─── Company profile cache & hooks ───────────────────────────────────────────
 // Module-level cache so the same ticker only hits Finnhub once per page load.
 const _profileCache = {};
@@ -3004,7 +3035,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   };
 
   const header=()=>{
-    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.affiliations?.length>0&&<div className="td-muted" style={{fontSize:'0.6875rem',lineHeight:1.5}}>{traderStats.affiliations.map((a,i)=><span key={a.ticker}>{i>0&&<span style={{margin:'0 4px'}}>·</span>}{a.title||REL_LABELS[a.relationship]||'Director'} at <span className="ticker dp-clickable" style={{fontSize:'0.6875rem'}} onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span></span>)}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.affiliations?.length>0&&<div className="trader-aff-list">{traderStats.affiliations.map((a,i)=><span key={a.ticker} className="trader-aff-chip">{shortRole(a.title)||REL_LABELS[a.relationship]||'Director'} at <span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span></span>)}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
     if(d.type==='ticker')return(
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
@@ -3082,6 +3113,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                   <span className={`hero-chip ${traderStats.combinedHitRate>=60?'hero-chip--good':traderStats.combinedHitRate<40?'hero-chip--bad':''}`}>
                     {traderStats.combinedHitRate}% hit rate
                   </span>}
+                {traderStats.firstTrade&&<span className="hero-chip">{fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span>}
               </div>
               {/* Stats breakdown — inside the hero card. Collapsed in sidebar, open in explore. */}
               <details className="trader-stats-toggle" open={inline}>
@@ -3095,8 +3127,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                   {traderStats.avgRealizedReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgRealizedReturn>=0?'+':''}{traderStats.avgRealizedReturn}%</span></div>}
                   {traderStats.avgReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgReturn>=0?'+':''}{traderStats.avgReturn}%</span></div>}
                 </div>
-                {traderStats.sectors.length>0&&<div className="trader-meta-row"><span>Sectors</span><span style={{fontSize:'0.6875rem',textAlign:'right'}}>{traderStats.sectors.slice(0,3).join(' · ')}</span></div>}
-                {traderStats.firstTrade&&<div className="trader-meta-row"><span>Active</span><span style={{fontSize:'0.6875rem'}}>{fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span></div>}
               </details>
             </div>
           )}

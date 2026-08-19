@@ -1574,6 +1574,9 @@ td { padding:7px 11px; vertical-align:middle; }
 .trader-hero__top {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
 }
+.trader-hero__metrics {
+  display: flex; gap: 20px; flex-wrap: wrap; flex: 1;
+}
 .trader-hero__label {
   font-size: 0.6875rem; color: var(--text-3); font-weight: 500;
   text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;
@@ -1581,6 +1584,9 @@ td { padding:7px 11px; vertical-align:middle; }
 .trader-hero__value {
   font-size: 1.75rem; font-weight: 700; letter-spacing: -0.7px;
   font-family: var(--font-mono); line-height: 1.1;
+}
+.trader-hero__value--secondary {
+  font-size: 1.125rem;
 }
 .trader-hero__chips {
   display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
@@ -1593,25 +1599,18 @@ td { padding:7px 11px; vertical-align:middle; }
 .hero-chip--good { color: var(--green-600); border-color: var(--green-600); }
 .hero-chip--bad  { color: var(--red-600); border-color: var(--red-600); }
 
-/* ── Trader affiliations ──────────────────────────────────────────────────── */
-.trader-affiliations {
-  display: flex; flex-direction: column; gap: 6px;
-  padding: 8px 0 12px;
+/* ── Trader affiliation chips in header ───────────────────────────────────── */
+.trader-aff-list {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px;
 }
-.trader-affiliation {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; flex-wrap: wrap;
+.trader-aff-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 0.625rem; color: var(--text-2);
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: 4px; padding: 1px 7px;
+  white-space: nowrap;
 }
-.trader-affiliation__left {
-  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
-  font-size: 0.75rem; min-width: 0;
-}
-.trader-affiliation__title {
-  font-weight: 500; color: var(--text);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: 200px;
-}
-
+.trader-aff-chip .ticker { font-size: 0.625rem; }
 /* ── Sparse profile notice ───────────────────────────────────────────────── */
 .trader-sparse {
   padding: 16px 14px; margin: 4px 0 8px;
