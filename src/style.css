@@ -1623,14 +1623,15 @@ td { padding:7px 11px; vertical-align:middle; }
   font-size: 0.8125rem;
 }
 
-.trader-details-toggle { margin-bottom: 12px; }
-.trader-details-toggle summary {
+/* Stats toggle — lives inside the hero card */
+.trader-stats-toggle { margin-top: 10px; padding-top: 10px; border-top: 0.5px solid var(--border); }
+.trader-stats-toggle summary {
   cursor: pointer; font-size: 0.75rem; color: var(--blue-600);
-  font-weight: 500; padding: 4px 0; list-style: none;
+  font-weight: 500; padding: 2px 0; list-style: none;
 }
-.trader-details-toggle summary::-webkit-details-marker { display: none; }
-.trader-details-toggle summary::before { content: '▸ '; }
-.trader-details-toggle[open] summary::before { content: '▾ '; }
+.trader-stats-toggle summary::-webkit-details-marker { display: none; }
+.trader-stats-toggle summary::before { content: '▸ '; }
+.trader-stats-toggle[open] summary::before { content: '▾ '; }
 .trader-details-toggle summary:hover { text-decoration: underline; }
 
 /* ══════════════════════════════════════════════════════════════════════════

@@ -2918,7 +2918,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-trade-left__bottom">
                 <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
                 <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
-                {isOM&&<span className="dp-trade-om-label">Open market</span>}
                 {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
                 {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
               </div>
@@ -3005,7 +3004,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   };
 
   const header=()=>{
-    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.affiliations?.[0]&&<div className="td-muted" style={{fontSize:'0.6875rem',display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}><RelBadge rel={traderStats.affiliations[0].relationship}/><span>{traderStats.affiliations[0].title}{traderStats.affiliations[0].title?' at ':''}<span className="ticker dp-clickable" style={{fontSize:'0.6875rem'}} onClick={()=>nav('ticker',{ticker:traderStats.affiliations[0].ticker,company:traderStats.affiliations[0].company})}>{traderStats.affiliations[0].ticker}</span></span></div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.affiliations?.length>0&&<div className="td-muted" style={{fontSize:'0.6875rem',lineHeight:1.5}}>{traderStats.affiliations.map((a,i)=><span key={a.ticker}>{i>0&&<span style={{margin:'0 4px'}}>·</span>}{a.title||REL_LABELS[a.relationship]||'Director'} at <span className="ticker dp-clickable" style={{fontSize:'0.6875rem'}} onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span></span>)}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
     if(d.type==='ticker')return(
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
@@ -3036,24 +3035,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
         {d.type==='trader'&&(busy?<SkeletonRows count={6}/>:!traderStats?<div className="state-box" style={{padding:'2rem'}}><p>No trades found.</p></div>:(<>
 
-          {/* ── Affiliations — who they are at which companies ─────────── */}
-          {traderStats.affiliations?.length>0&&(
-            <div className="trader-affiliations">
-              {traderStats.affiliations.map((a,i)=>(
-                <div key={a.ticker} className={`trader-affiliation${i===0?' trader-affiliation--primary':''}`}>
-                  <div className="trader-affiliation__left">
-                    <RelBadge rel={a.relationship}/>
-                    <span className="trader-affiliation__title">{a.title||REL_LABELS[a.relationship]||'Director'}</span>
-                    <span className="td-muted">at</span>
-                    <span className="ticker dp-clickable" style={{fontSize:'0.75rem'}} onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span>
-                    <span className="td-muted" style={{fontSize:'0.6875rem'}}>{a.company!==a.ticker?a.company:''}</span>
-                  </div>
-                  {i===0&&traderStats.firstTrade&&<span className="td-muted" style={{fontSize:'0.625rem',whiteSpace:'nowrap'}}>Active {fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* ── Sparse profile gate — not enough OM trades for meaningful stats ── */}
           {traderStats.omBuys + traderStats.omSells < 2 ? (
             <div className="trader-sparse">
@@ -3066,10 +3047,11 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                   {traderStats.totalBuys + traderStats.sells} total filing{traderStats.totalBuys + traderStats.sells !== 1 ? 's' : ''} (including grants, exercises, and other non-market transactions)
                 </div>
               )}
+              {traderStats.firstTrade&&<div className="td-muted" style={{fontSize:'0.625rem',marginTop:6}}>Active {fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</div>}
             </div>
           ) : (<>
 
-          {/* ── Hero: P&L, position value, trust stars ────────────────── */}
+          {/* ── Account overview card — hero metrics + stats in one container ── */}
           {heroStats&&(
             <div className="trader-hero">
               <div className="trader-hero__top">
@@ -3101,22 +3083,23 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                     {traderStats.combinedHitRate}% hit rate
                   </span>}
               </div>
+              {/* Stats breakdown — inside the hero card. Collapsed in sidebar, open in explore. */}
+              <details className="trader-stats-toggle" open={inline}>
+                <summary>Stats breakdown</summary>
+                <div className="dp-summary" style={{marginTop:8}}>
+                  <div className="dp-sum-item"><span className="dp-sum-label">OM Buys</span><span className="val-buy dp-sum-val">{traderStats.omBuys}</span></div>
+                  <div className="dp-sum-item"><span className="dp-sum-label">OM Sells</span><span className="val-sell dp-sum-val">{traderStats.omSells}</span></div>
+                  <div className="dp-sum-item"><span className="dp-sum-label">Bought $</span><span className="dp-sum-val">{fmt.money(traderStats.totalBuyVal)}</span></div>
+                  <div className="dp-sum-item"><span className="dp-sum-label">Sold $</span><span className="dp-sum-val">{fmt.money(traderStats.totalSellVal)}</span></div>
+                  {traderStats.combinedHitRate!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate>=60?'val-buy':traderStats.combinedHitRate<40?'val-sell':''}`}>{traderStats.combinedHitRate}% <span style={{fontSize:'0.6875rem',opacity:.7}}>({traderStats.withReturn} events)</span></span></div>}
+                  {traderStats.avgRealizedReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgRealizedReturn>=0?'+':''}{traderStats.avgRealizedReturn}%</span></div>}
+                  {traderStats.avgReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgReturn>=0?'+':''}{traderStats.avgReturn}%</span></div>}
+                </div>
+                {traderStats.sectors.length>0&&<div className="trader-meta-row"><span>Sectors</span><span style={{fontSize:'0.6875rem',textAlign:'right'}}>{traderStats.sectors.slice(0,3).join(' · ')}</span></div>}
+                {traderStats.firstTrade&&<div className="trader-meta-row"><span>Active</span><span style={{fontSize:'0.6875rem'}}>{fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span></div>}
+              </details>
             </div>
           )}
-
-          <details className="trader-details-toggle">
-            <summary>Full stats breakdown</summary>
-            <div className="dp-summary" style={{marginTop:8}}>
-              <div className="dp-sum-item"><span className="dp-sum-label">OM Buys</span><span className="val-buy dp-sum-val">{traderStats.omBuys}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">OM Sells</span><span className="val-sell dp-sum-val">{traderStats.omSells}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">Bought $</span><span className="dp-sum-val">{fmt.money(traderStats.totalBuyVal)}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">Sold $</span><span className="dp-sum-val">{fmt.money(traderStats.totalSellVal)}</span></div>
-              {traderStats.combinedHitRate!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate>=60?'val-buy':traderStats.combinedHitRate<40?'val-sell':''}`}>{traderStats.combinedHitRate}% <span style={{fontSize:'0.6875rem',opacity:.7}}>({traderStats.withReturn} events)</span></span></div>}
-              {traderStats.avgRealizedReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgRealizedReturn>=0?'+':''}{traderStats.avgRealizedReturn}%</span></div>}
-              {traderStats.avgReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgReturn>=0?'+':''}{traderStats.avgReturn}%</span></div>}
-            </div>
-            {traderStats.sectors.length>0&&<div className="trader-meta-row"><span>Sectors</span><span style={{fontSize:'0.6875rem',textAlign:'right'}}>{traderStats.sectors.slice(0,3).join(' · ')}</span></div>}
-          </details>
 
           </>)}
 
