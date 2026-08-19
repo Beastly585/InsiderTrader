@@ -2662,20 +2662,20 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* ── Guide "Data & Scoring" — pipeline rows ──────────────────────────────── */
 .guide-pipeline {
-  display: flex; flex-direction: column; gap: 8px;
-  margin: 12px 0; padding: 14px 12px;
+  display: flex; flex-direction: column; gap: 14px;
+  margin: 12px 0; padding: 16px 14px;
   background: var(--surface-2); border: 0.5px solid var(--border);
   border-radius: var(--radius-lg);
 }
 .guide-pipeline__row {
-  display: flex; align-items: center; gap: 0;
+  display: flex; align-items: center; justify-content: center; gap: 0;
 }
 .guide-pipeline__step {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 6px 8px; min-width: 0; flex-shrink: 1;
+  padding: 4px 6px; flex-shrink: 0;
 }
 .guide-pipeline__step--source {
-  flex: 1.2; min-width: 0;
+  flex-shrink: 0; flex-grow: 0;
 }
 .guide-pipeline__step--seli {
   flex-shrink: 0; flex-direction: row; gap: 4px;
@@ -2695,17 +2695,17 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* ── Guide scoring flow — raw data → algorithm → signals ─────────────────── */
 .guide-scoring-flow {
-  display: flex; align-items: stretch; gap: 0;
-  margin: 12px 0; padding: 14px 10px;
+  display: flex; align-items: center; justify-content: center; gap: 0;
+  margin: 12px 0; padding: 16px 10px;
   background: var(--surface-2); border: 0.5px solid var(--border);
   border-radius: var(--radius-lg);
 }
 .guide-scoring-flow__stage {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  gap: 6px; text-align: center; padding: 4px 6px;
+  flex: 0 1 auto; display: flex; flex-direction: column; align-items: center;
+  gap: 6px; text-align: center; padding: 4px 10px;
 }
 .guide-scoring-flow__stage--algo {
-  flex: 1.5; text-align: left; align-items: flex-start;
+  flex: 0 1 auto; text-align: left; align-items: flex-start;
 }
 .guide-scoring-flow__stage-label {
   font-size: 0.6875rem; font-weight: 700; color: var(--text);
