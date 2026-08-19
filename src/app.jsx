@@ -1453,8 +1453,8 @@ const GUIDE_SECTIONS = [
         </div>
         <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as it's published, scores it, and makes it actionable.</p>
         <p>This guide walks you through what you're looking at, where the data comes from, and how to get the most out of it.</p>
-        <div className="guide-callout">
-          <p className="guide-callout__title">You're one of the first people here</p>
+        <div className="guide-callout guide-callout--accent">
+          <p className="guide-callout__title" style={{color:'var(--accent-strong)'}}>You're one of the first people here</p>
           <p className="guide-callout__text">
             Everything is built on real SEC filings and peer-reviewed methodology, but the product is still early. Use the feedback button <IconMessage style={{width:13,height:13,verticalAlign:'-2px',margin:'0 2px'}}/> in the status bar to report bugs or share thoughts.
           </p>
@@ -1524,43 +1524,41 @@ const GUIDE_SECTIONS = [
         <div className="guide-pipeline">
           <div className="guide-pipeline__row">
             <div className="guide-pipeline__step guide-pipeline__step--source">
-              <span className="guide-pipeline__icon">👔</span>
               <span className="guide-pipeline__label">Corporate insider trade</span>
             </div>
             <div className="guide-pipeline__arrow">
               <span className="guide-pipeline__timing">up to 2 days</span>
-              <div className="guide-pipeline__line"/>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
             <div className="guide-pipeline__step">
               <span className="guide-pipeline__label">SEC Form 4</span>
             </div>
             <div className="guide-pipeline__arrow">
               <span className="guide-pipeline__timing">minutes</span>
-              <div className="guide-pipeline__line"/>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
             <div className="guide-pipeline__step guide-pipeline__step--seli">
-              <img src={logoSimple} alt="" style={{width:18,height:18,objectFit:'contain'}}/>
+              <img src={logoSimple} alt="" style={{width:16,height:16,objectFit:'contain'}}/>
               <span className="guide-pipeline__label">Seli</span>
             </div>
           </div>
           <div className="guide-pipeline__row">
             <div className="guide-pipeline__step guide-pipeline__step--source">
-              <span className="guide-pipeline__icon">🏛</span>
               <span className="guide-pipeline__label">Political insider trade</span>
             </div>
             <div className="guide-pipeline__arrow">
               <span className="guide-pipeline__timing">up to 45 days</span>
-              <div className="guide-pipeline__line"/>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
             <div className="guide-pipeline__step">
               <span className="guide-pipeline__label">STOCK Act</span>
             </div>
             <div className="guide-pipeline__arrow">
               <span className="guide-pipeline__timing">minutes</span>
-              <div className="guide-pipeline__line"/>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
             <div className="guide-pipeline__step guide-pipeline__step--seli">
-              <img src={logoSimple} alt="" style={{width:18,height:18,objectFit:'contain'}}/>
+              <img src={logoSimple} alt="" style={{width:16,height:16,objectFit:'contain'}}/>
               <span className="guide-pipeline__label">Seli</span>
             </div>
           </div>
@@ -1573,10 +1571,12 @@ const GUIDE_SECTIONS = [
 
         <div className="guide-scoring-flow">
           <div className="guide-scoring-flow__stage">
-            <span className="guide-scoring-flow__stage-label">Raw data</span>
-            <span className="guide-scoring-flow__stage-sub">Filing details as reported</span>
+            <span className="guide-scoring-flow__stage-label">Raw filing</span>
+            <span className="guide-scoring-flow__stage-sub">As reported to SEC</span>
           </div>
-          <div className="guide-scoring-flow__arrow">→</div>
+          <div className="guide-scoring-flow__arrow">
+            <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
           <div className="guide-scoring-flow__stage guide-scoring-flow__stage--algo">
             <span className="guide-scoring-flow__stage-label">Scoring algorithm</span>
             <ul className="guide-scoring-flow__factors">
@@ -1586,13 +1586,24 @@ const GUIDE_SECTIONS = [
               <li><strong>Value</strong> — bigger trades score higher</li>
             </ul>
           </div>
-          <div className="guide-scoring-flow__arrow">→</div>
+          <div className="guide-scoring-flow__arrow">
+            <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
           <div className="guide-scoring-flow__stage">
             <span className="guide-scoring-flow__stage-label">Signals</span>
-            <div className="guide-scoring-flow__signals">
-              <span className="guide-signal-chip guide-signal-chip--strong">Strong</span>
-              <span className="guide-signal-chip guide-signal-chip--moderate">Moderate</span>
-              <span className="guide-signal-chip guide-signal-chip--weak">Weak</span>
+            <div className="guide-signal-examples">
+              <div className="guide-signal-ex">
+                <span className="guide-signal-ex__label" style={{color:'var(--green-600)'}}>Very High</span>
+                <ConvictionBar score={17} max={20}/>
+              </div>
+              <div className="guide-signal-ex">
+                <span className="guide-signal-ex__label" style={{color:'var(--amber-600)'}}>Medium</span>
+                <ConvictionBar score={9} max={20}/>
+              </div>
+              <div className="guide-signal-ex">
+                <span className="guide-signal-ex__label" style={{color:'var(--text-3)'}}>Low</span>
+                <ConvictionBar score={3} max={20}/>
+              </div>
             </div>
           </div>
         </div>
@@ -1761,15 +1772,19 @@ function EnvPreview({ type }) {
   if (type === 'watchlist') return (
     <div className="env-preview env-preview--watchlist">
       <div className="env-preview__wl-row">
-        <span className="env-preview__star env-preview__star--filled">★</span>
+        <svg viewBox="0 0 24 24" fill="var(--accent-strong)" stroke="var(--accent-strong)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{flexShrink:0}}>
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
         <span className="env-preview__wl-hint">Star a stock to track insider activity</span>
       </div>
       <div className="env-preview__wl-row">
-        <span className="env-preview__star env-preview__star--filled" style={{fontSize:'0.5rem'}}>👤</span>
+        <svg viewBox="0 0 24 24" fill="var(--accent-strong)" stroke="var(--accent-strong)" strokeWidth={2} width="14" height="14" style={{flexShrink:0}}>
+          <circle cx="12" cy="12" r="9"/>
+        </svg>
         <span className="env-preview__wl-hint">Follow an insider to track their trades</span>
       </div>
-      <div className="env-preview__wl-row" style={{opacity:0.5}}>
-        <span className="env-preview__wl-dot"/>
+      <div className="env-preview__wl-row" style={{opacity:0.45}}>
+        <IconLink style={{width:14,height:14,flexShrink:0}}/>
         <span className="env-preview__wl-hint">Link a brokerage for portfolio-level alerts</span>
       </div>
     </div>

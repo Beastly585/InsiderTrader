@@ -2680,21 +2680,17 @@ td { padding:7px 11px; vertical-align:middle; }
 .guide-pipeline__step--seli {
   flex-shrink: 0; flex-direction: row; gap: 4px;
 }
-.guide-pipeline__icon { font-size: 0.875rem; line-height: 1; }
 .guide-pipeline__label {
   font-size: 0.6875rem; font-weight: 600; color: var(--text);
   white-space: nowrap; text-align: center;
 }
 .guide-pipeline__arrow {
   display: flex; flex-direction: column; align-items: center;
-  gap: 3px; flex-shrink: 0; padding: 0 2px;
+  gap: 2px; flex-shrink: 0; padding: 0 2px;
 }
 .guide-pipeline__timing {
   font-size: 0.5625rem; color: var(--accent-strong); font-weight: 600;
   white-space: nowrap;
-}
-.guide-pipeline__line {
-  width: 20px; height: 0; border-top: 1.5px solid var(--border-md);
 }
 
 /* ── Guide scoring flow — raw data → algorithm → signals ─────────────────── */
@@ -2719,7 +2715,7 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .guide-scoring-flow__arrow {
   display: flex; align-items: center; flex-shrink: 0;
-  padding: 0 4px; color: var(--text-3); font-size: 0.875rem;
+  padding: 0 4px;
 }
 .guide-scoring-flow__factors {
   list-style: none; padding: 0; margin: 0;
@@ -2734,22 +2730,17 @@ td { padding:7px 11px; vertical-align:middle; }
 .guide-scoring-flow__signals {
   display: flex; flex-direction: column; gap: 4px; margin-top: 2px;
 }
-.guide-signal-chip {
-  display: inline-block; padding: 2px 10px; border-radius: 999px;
-  font-size: 0.5625rem; font-weight: 700; text-align: center;
+.guide-signal-examples {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 4px; width: 100%;
 }
-.guide-signal-chip--strong {
-  background: color-mix(in srgb, var(--green-600) 15%, transparent);
-  color: var(--green-600);
+.guide-signal-ex {
+  display: flex; flex-direction: column; gap: 3px;
 }
-.guide-signal-chip--moderate {
-  background: color-mix(in srgb, var(--amber-600) 15%, transparent);
-  color: var(--amber-600);
+.guide-signal-ex__label {
+  font-size: 0.5625rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.guide-signal-chip--weak {
-  background: var(--surface); color: var(--text-3);
-  border: 0.5px solid var(--border);
-}
+.guide-signal-ex .conv-bar-track { min-width: 60px; height: 6px; }
 
 /* ── Guide "Scoring" — factor bars ───────────────────────────────────────── */
 .guide-score-factors {
