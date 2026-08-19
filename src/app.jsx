@@ -2614,6 +2614,28 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     const holdings = Object.entries(holdingByTicker).map(([ticker,h])=>({ticker,...h,stillHolding:h.netShares>0}));
 
     const dates=traderRows.map(r=>r.transaction_date||r.filing_date).filter(Boolean).sort();
+
+    // Build affiliations: for each company this insider has filed at, capture
+    // their title, relationship, company name, and most recent activity date.
+    // An insider CAN be affiliated with multiple companies (e.g. director on
+    // multiple boards). Sort by most recent first — the top entry is their
+    // "primary" affiliation.
+    const affMap = {};
+    for (const r of traderRows) {
+      if (!r.ticker) continue;
+      const dt = r.transaction_date || r.filing_date || '';
+      if (!affMap[r.ticker] || dt > affMap[r.ticker].lastDate) {
+        affMap[r.ticker] = {
+          ticker: r.ticker,
+          company: r.company_name || r.ticker,
+          title: r.title || '',
+          relationship: r.relationship || 'weak',
+          lastDate: dt,
+        };
+      }
+    }
+    const affiliations = Object.values(affMap).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+
     return {
       totalBuys:buys.length, sells:sells.length, omBuys:omBuys.length, omSells:omSells.length,
       avgReturn:avgUnrealizedReturn, avgRealizedReturn, hitRate:combinedHitRate, combinedHitRate,
@@ -2622,7 +2644,9 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       totalSellVal:omSells.reduce((s,r)=>s+(r.value||0),0),
       companies:[...new Set(traderRows.map(r=>r.ticker).filter(Boolean))],
       sectors:[...new Set(traderRows.map(r=>r.sector).filter(Boolean))],
-      role:traderRows[0]?.relationship||'weak', title:traderRows[0]?.title||'',
+      role: affiliations[0]?.relationship || 'weak',
+      title: affiliations[0]?.title || '',
+      affiliations,
       bestTickers, holdings,
       firstTrade:dates[dates.length-1], lastTrade:dates[0],
     };
@@ -2981,7 +3005,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   };
 
   const header=()=>{
-    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.title&&<div className="td-muted" style={{fontSize:'0.6875rem'}}>{traderStats.title}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.affiliations?.[0]&&<div className="td-muted" style={{fontSize:'0.6875rem',display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}><RelBadge rel={traderStats.affiliations[0].relationship}/><span>{traderStats.affiliations[0].title}{traderStats.affiliations[0].title?' at ':''}<span className="ticker dp-clickable" style={{fontSize:'0.6875rem'}} onClick={()=>nav('ticker',{ticker:traderStats.affiliations[0].ticker,company:traderStats.affiliations[0].company})}>{traderStats.affiliations[0].ticker}</span></span></div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
     if(d.type==='ticker')return(
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
@@ -3012,12 +3036,40 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
         {d.type==='trader'&&(busy?<SkeletonRows count={6}/>:!traderStats?<div className="state-box" style={{padding:'2rem'}}><p>No trades found.</p></div>:(<>
 
-          {/* HERO: previously showed only one of Realized P&L or Est.
-              Position Value, with whichever wasn't primary buried in a
-              small chip below. No real reason to force a choice — show
-              both prominently when both apply, and gracefully fall back to
-              whichever one actually exists otherwise (e.g. a fully open
-              position with nothing realized yet has no P&L to show at all). */}
+          {/* ── Affiliations — who they are at which companies ─────────── */}
+          {traderStats.affiliations?.length>0&&(
+            <div className="trader-affiliations">
+              {traderStats.affiliations.map((a,i)=>(
+                <div key={a.ticker} className={`trader-affiliation${i===0?' trader-affiliation--primary':''}`}>
+                  <div className="trader-affiliation__left">
+                    <RelBadge rel={a.relationship}/>
+                    <span className="trader-affiliation__title">{a.title||REL_LABELS[a.relationship]||'Director'}</span>
+                    <span className="td-muted">at</span>
+                    <span className="ticker dp-clickable" style={{fontSize:'0.75rem'}} onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span>
+                    <span className="td-muted" style={{fontSize:'0.6875rem'}}>{a.company!==a.ticker?a.company:''}</span>
+                  </div>
+                  {i===0&&traderStats.firstTrade&&<span className="td-muted" style={{fontSize:'0.625rem',whiteSpace:'nowrap'}}>Active {fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Sparse profile gate — not enough OM trades for meaningful stats ── */}
+          {traderStats.omBuys + traderStats.omSells < 2 ? (
+            <div className="trader-sparse">
+              <div className="trader-sparse__notice">
+                <span style={{fontWeight:600}}>Limited data</span>
+                <span className="td-muted">This insider has {traderStats.omBuys + traderStats.omSells === 0 ? 'no' : 'only ' + (traderStats.omBuys + traderStats.omSells)} open-market trade{traderStats.omBuys + traderStats.omSells === 1 ? '' : 's'} on record — not enough to compute performance stats.</span>
+              </div>
+              {traderStats.totalBuys + traderStats.sells > 0 && (
+                <div className="td-muted" style={{fontSize:'0.6875rem',marginTop:4}}>
+                  {traderStats.totalBuys + traderStats.sells} total filing{traderStats.totalBuys + traderStats.sells !== 1 ? 's' : ''} (including grants, exercises, and other non-market transactions)
+                </div>
+              )}
+            </div>
+          ) : (<>
+
+          {/* ── Hero: P&L, position value, trust stars ────────────────── */}
           {heroStats&&(
             <div className="trader-hero">
               <div className="trader-hero__top">
@@ -3052,12 +3104,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             </div>
           )}
 
-          <div className="trader-quickfacts">
-            <span><RelBadge rel={traderStats.role}/></span>
-            <span className="td-muted">{traderStats.title}</span>
-            {traderStats.firstTrade&&<span className="td-muted">Active {fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span>}
-          </div>
-
           <details className="trader-details-toggle">
             <summary>Full stats breakdown</summary>
             <div className="dp-summary" style={{marginTop:8}}>
@@ -3069,9 +3115,10 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               {traderStats.avgRealizedReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgRealizedReturn>=0?'+':''}{traderStats.avgRealizedReturn}%</span></div>}
               {traderStats.avgReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgReturn>=0?'+':''}{traderStats.avgReturn}%</span></div>}
             </div>
-            {traderStats.companies.length>0&&<div className="trader-meta-row"><span>Companies</span><span style={{textAlign:'right'}}>{traderStats.companies.slice(0,6).map((tk,i)=><span key={tk} className="ticker dp-clickable" style={{fontSize:'0.6875rem',marginLeft:i>0?4:0}} onClick={()=>nav('ticker',{ticker:tk,company:''})}>{tk}</span>)}{traderStats.companies.length>6&&<span className="td-muted"> +{traderStats.companies.length-6}</span>}</span></div>}
             {traderStats.sectors.length>0&&<div className="trader-meta-row"><span>Sectors</span><span style={{fontSize:'0.6875rem',textAlign:'right'}}>{traderStats.sectors.slice(0,3).join(' · ')}</span></div>}
           </details>
+
+          </>)}
 
           {perStockBreakdown.length>0&&(<>
             <div className="dp-section-label" style={{marginTop:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>

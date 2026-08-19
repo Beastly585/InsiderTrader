@@ -1593,9 +1593,34 @@ td { padding:7px 11px; vertical-align:middle; }
 .hero-chip--good { color: var(--green-600); border-color: var(--green-600); }
 .hero-chip--bad  { color: var(--red-600); border-color: var(--red-600); }
 
-.trader-quickfacts {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 4px 0 10px; font-size: 0.75rem;
+/* ── Trader affiliations ──────────────────────────────────────────────────── */
+.trader-affiliations {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 0 12px;
+}
+.trader-affiliation {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; flex-wrap: wrap;
+}
+.trader-affiliation__left {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  font-size: 0.75rem; min-width: 0;
+}
+.trader-affiliation__title {
+  font-weight: 500; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 200px;
+}
+
+/* ── Sparse profile notice ───────────────────────────────────────────────── */
+.trader-sparse {
+  padding: 16px 14px; margin: 4px 0 8px;
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.trader-sparse__notice {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 0.8125rem;
 }
 
 .trader-details-toggle { margin-bottom: 12px; }
