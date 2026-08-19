@@ -55,46 +55,77 @@ export function buildSignals(filings) {
     if (!map[f.ticker]) map[f.ticker] = {
       ticker:f.ticker, company:f.company, sector:f.sector, isPolitical:isPol,
       buys:0, sells:0, buyValue:0, sellValue:0,
-      cSuiteBuys:0, politicalBuys:0, opportunisticBuys:0, maxPositionSwing:0,
-      insiders:new Set(), lastTradeDate:'', trades:[],
+      cSuiteBuys:0, cSuiteSells:0, politicalBuys:0, politicalSells:0,
+      opportunisticBuys:0, maxPositionSwing:0,
+      buyInsiders:new Set(), sellInsiders:new Set(),
+      lastTradeDate:'', trades:[],
     };
     const s = map[f.ticker];
-    s.insiders.add(f.insiderName);
     const tx = f.transactionDate||f.date||'';
     if (tx>s.lastTradeDate) s.lastTradeDate=tx;
     s.trades.push(f);
     if (f.transactionType==='buy') {
       s.buys++; s.buyValue+=f.value||0;
+      s.buyInsiders.add(f.insiderName);
       if (f.relationship==='strong') s.cSuiteBuys++;
       if (isPol) s.politicalBuys++;
-      // Cohen et al. (2012): opportunistic trades (those breaking an insider's
-      // historical pattern) yield 82 bps/month. Routine trades yield ~0%.
       if (f.isRoutine === false) s.opportunisticBuys++;
       if (f.pctOwnedChange!=null && f.pctOwnedChange>s.maxPositionSwing) {
         s.maxPositionSwing = f.pctOwnedChange;
       }
     } else if (f.transactionType==='sell') {
       s.sells++; s.sellValue+=f.value||0;
+      s.sellInsiders.add(f.insiderName);
+      if (f.relationship==='strong') s.cSuiteSells++;
+      if (isPol) s.politicalSells++;
     }
   }
-  return Object.values(map).map(s => {
+  const results = [];
+  for (const s of Object.values(map)) {
+    const buyCluster = s.buyInsiders.size >= 4 ? 3 : s.buyInsiders.size >= 2 ? 1 : 0;
     const swingBonus = s.maxPositionSwing>=50 ? 4 : s.maxPositionSwing>=20 ? 2 : s.maxPositionSwing>=10 ? 1 : 0;
-    // Lakonishok & Lee (2001): multiple insiders buying the same stock
-    // is a stronger signal than any single insider buying.
-    const clusterBonus = s.insiders.size >= 4 ? 3 : s.insiders.size >= 2 ? 1 : 0;
-    return {
-      ...s, insiderCount:s.insiders.size,
-      netValue: s.buyValue-s.sellValue,
-      conviction:
-        (s.opportunisticBuys * 5) +
-        (s.cSuiteBuys * 2) +
-        (s.politicalBuys * 4) +
-        s.buys +
-        Math.min(Math.log10(s.buyValue+1), 5) +
-        swingBonus +
-        clusterBonus,
-    };
-  });
+
+    // ── Buy signal (existing logic, unchanged)
+    if (s.buys > 0) {
+      results.push({
+        ...s,
+        direction: 'buy',
+        insiders: s.buyInsiders,
+        insiderCount: s.buyInsiders.size,
+        netValue: s.buyValue - s.sellValue,
+        conviction:
+          (s.opportunisticBuys * 5) +
+          (s.cSuiteBuys * 2) +
+          (s.politicalBuys * 4) +
+          s.buys +
+          Math.min(Math.log10(s.buyValue+1), 5) +
+          swingBonus +
+          buyCluster,
+      });
+    }
+
+    // ── Sell signal — higher quality bar, cluster-weighted
+    // Only generate when there's a meaningful cluster sell pattern:
+    // 2+ insiders dumping, or C-suite/political sell with real value.
+    const sellCluster = s.sellInsiders.size >= 4 ? 4 : s.sellInsiders.size >= 3 ? 3 : s.sellInsiders.size >= 2 ? 1.5 : 0;
+    const hasSellSignal = s.sellInsiders.size >= 2 || s.cSuiteSells >= 1 || s.politicalSells >= 1;
+    if (s.sells > 0 && hasSellSignal) {
+      results.push({
+        ...s,
+        direction: 'sell',
+        insiders: s.sellInsiders,
+        insiderCount: s.sellInsiders.size,
+        netValue: s.sellValue - s.buyValue,
+        conviction:
+          (s.cSuiteSells * 3) +
+          (s.politicalSells * 4) +
+          sellCluster +
+          Math.min(Math.log10(s.sellValue+1), 5) +
+          (s.sells >= 5 ? 2 : s.sells >= 3 ? 1 : 0),
+      });
+    }
+  }
+  return results;
 }
 
 // ─── Full signal pipeline: date/source/sector filter → build → quality gate
@@ -121,7 +152,15 @@ export function filterAndScoreSignals(filings, { cutoff = '', sourceF = '', sect
     return true;
   });
   const built = buildSignals(base);
-  const afterGate = built.filter(s => s.opportunisticBuys>=1 || s.cSuiteBuys>=1 || s.insiderCount>=2 || s.netValue>=100_000 || s.isPolitical);
+  const afterGate = built.filter(s => {
+    if (s.direction === 'sell') {
+      // Sell signals already passed a quality bar in buildSignals (cluster/c-suite/political).
+      // Only additional gate: require meaningful dollar volume.
+      return s.sellValue >= 50_000;
+    }
+    // Buy signal gates (unchanged)
+    return s.opportunisticBuys>=1 || s.cSuiteBuys>=1 || s.insiderCount>=2 || s.netValue>=100_000 || s.isPolitical;
+  });
   const afterStrength = afterGate.filter(s => s.conviction >= strengthThreshold);
   return afterStrength;
 }

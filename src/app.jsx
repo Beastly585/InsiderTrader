@@ -3104,7 +3104,11 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                     </div>
                   )}
                 </div>
-                <TrustStars score={score}/>
+                {score!=null&&<div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,minWidth:80}}>
+                  <span style={{fontSize:'0.625rem',color:'var(--text-3)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.04em'}}>Score</span>
+                  <span className="td-mono" style={{fontSize:'0.875rem',fontWeight:700}}>{score.toFixed(1)}</span>
+                  <ConvictionBar score={score} max={5}/>
+                </div>}
               </div>
               <div className="trader-hero__chips">
                 <span className="hero-chip">{heroStats.holdingCount} holding{heroStats.holdingCount!==1?'s':''}</span>
@@ -3990,7 +3994,10 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
       (f.transactionDate||f.date||'')>=cutoff
     );
     return buildSignals(base)
-      .filter(s=>s.netValue>=100_000||s.cSuiteBuys>=1||s.isPolitical)
+      .filter(s=>{
+        if (s.direction === 'sell') return s.sellValue >= 50_000;
+        return s.netValue>=100_000||s.cSuiteBuys>=1||s.isPolitical;
+      })
       .sort((a,b)=>b.conviction-a.conviction)
       .slice(0,30);
   },[filings,cutoff]);
@@ -4377,6 +4384,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 const spent=s.avgReturn!=null&&s.avgReturn>20, big=s.avgReturn!=null&&s.avgReturn>50;
                 const hasReversal=detectReversalForTicker(s.ticker,filings);
                 const isCongress=s.isPolitical;
+                const isSell = s.direction === 'sell';
                 const typeLabel=isCongress?'Congressional':'Corporate';
                 const convPct=Math.min((s.conviction/15)*100,100);
                 const tier=tierFromPct(convPct, appetite);
@@ -4403,7 +4411,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                       {!isMobile && s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:'0.6875rem'}}>{s.sector}</div>}
                     </div>
                     <div className="ins-sig-row__type">
-                      <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}`}>{typeLabel}</span>
+                      <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}${isSell?' ins-type-badge--sell':''}`}>{isSell?'Selling':'Buying'}</span>
+                      <span className="td-muted ins-sig-row__type-meta" style={{fontSize:'0.6rem'}}>{typeLabel}</span>
                       <div className="td-muted ins-sig-row__type-meta">
                         {s.insiderCount} insider{s.insiderCount!==1?'s':''}
                       </div>
@@ -4511,7 +4520,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // tile context (e.g. a deep-linked ticker/insider URL).
   const [search, setSearch]   = useState('');
   const [lbRows, setLbRows]   = useState(null);
-  const [lbSort, setLbSort]   = useState('hit_rate');
+  const [lbSort, setLbSort]   = useState('proxy_score');
   const [lbYearsBack, setLbYearsBack] = useState(2); // null = all-time
   const [lbSource, setLbSource] = useState(null); // null='all' | 'corporate' | 'congress'
   const [lbMinValue, setLbMinValue] = useState(50000); // minimum bought_value, filtered client-side — defaults to $50K rather than "Any" so a handful of small trades hitting 100% by chance doesn't dominate the default hit-rate sort
@@ -4565,7 +4574,10 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
       return true;
     });
     let s = buildSignals(base)
-      .filter(sig=>sig.cSuiteBuys>=1||sig.insiderCount>=2||sig.netValue>=100_000||sig.isPolitical)
+      .filter(sig=>{
+        if (sig.direction === 'sell') return sig.sellValue >= 50_000;
+        return sig.cSuiteBuys>=1||sig.insiderCount>=2||sig.netValue>=100_000||sig.isPolitical;
+      })
       .filter(sig=>sig.conviction>=strengthThreshold);
     if (minValue>0) s = s.filter(sig=>Math.abs(sig.netValue)>=minValue);
     if (search) { const q=search.toLowerCase(); s=s.filter(sig=>sig.ticker.toLowerCase().includes(q)||sig.company.toLowerCase().includes(q)); }
@@ -4777,7 +4789,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Sort by</span>
                 <div className="dash-tile-pills" style={{gap:2}}>
-                  {[['hit_rate','Hit rate'],['om_buys','Buys'],['bought_value','Bought'],['avg_return','Biggest return']].map(([k,l])=>(
+                  {[['proxy_score','Score'],['om_buys','Buys'],['bought_value','Bought'],['avg_return','Biggest return']].map(([k,l])=>(
                     <button key={k} className={`dash-tile-pill${lbSort===k?' dash-tile-pill--active':''}`}
                       onClick={()=>lbOnSort(k)}>{l}{lbSort===k&&(lbDir<0?'↓':'↑')}</button>
                   ))}
@@ -4865,17 +4877,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                           <div className="drawer__list-row__main">
                             <span className="td-muted" style={{fontSize:'0.6875rem',width:18}}>{i+1}</span>
                             <span style={{fontSize:'0.75rem',fontWeight:500,flex:1}}>{r.insider_name}</span>
-                            {r.hit_rate!=null
-                              ? <span
-                                  className={`td-mono ${r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}`}
-                                  style={{fontSize:13,fontWeight:700,cursor:r.avg_spy_return!=null?'help':'default'}}
-                                  title={r.avg_spy_return!=null
-                                    ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
-                                    : undefined}
-                                >{r.hit_rate}%</span>
-                              : <span className="td-muted" style={{fontSize:'0.6875rem',fontWeight:500,cursor:'help'}}
-                                  title="Congressional filings disclose only a dollar range — no share count or purchase price — so a price-based hit rate can't be computed. Ranked by buy activity instead.">n/a</span>
-                            }
+                            <span className="td-mono" style={{fontSize:13,fontWeight:700}}>{r.proxy_score.toFixed(1)}</span>
                           </div>
                           <div className="drawer__list-row__sub">
                             <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'Unknown'}</span>
@@ -5473,7 +5475,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro }) {
         <span className="ins-lb-col-hdr__spacer"/>
         <span className="ins-lb-col-hdr__name">Insider</span>
         <button className={`ins-lb-col-hdr__sort${sort==='om_buys'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('om_buys')}>Buys{sort==='om_buys'&&(dir<0?' ↓':' ↑')}</button>
-        <button className={`ins-lb-col-hdr__sort${sort==='hit_rate'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('hit_rate')}>Hit rate{sort==='hit_rate'&&(dir<0?' ↓':' ↑')}</button>
+        <button className={`ins-lb-col-hdr__sort${sort==='proxy_score'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('proxy_score')}>Score{sort==='proxy_score'&&(dir<0?' ↓':' ↑')}</button>
       </div>
       {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
       :rows===null?<SkeletonRows count={8}/>
@@ -5498,18 +5500,8 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro }) {
             </div>
             <div className="ins-lb-card__score">
               {watchlist&&<FollowBtn name={r.insider_name} watchlist={watchlist}/>}
-              {r.hit_rate!=null
-                ? <div
-                    className={`ins-lb-card__rate ${r.hit_rate>=70?'val-buy':r.hit_rate>=50?'':'val-sell'}`}
-                    style={{cursor:r.avg_spy_return!=null?'help':'default'}}
-                    title={r.avg_spy_return!=null
-                      ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
-                      : undefined}
-                  >{r.hit_rate}%</div>
-                : <div className="ins-lb-card__rate td-muted" style={{fontSize:'0.6875rem',cursor:'help'}}
-                    title="Congressional filings disclose only a dollar range — no share count or purchase price — so a price-based hit rate can't be computed. Ranked by buy activity instead.">n/a</div>
-              }
-              <ConvictionBar score={r.proxy_score} max={4}/>
+              <div className="ins-lb-card__rate td-mono" style={{fontWeight:700}}>{r.proxy_score.toFixed(1)}</div>
+              <ConvictionBar score={r.proxy_score} max={5}/>
             </div>
             {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
             {isExpanded && (
@@ -5517,9 +5509,8 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro }) {
                 <div className="ins-sig-row__expanded-grid">
                   <div><span className="td-muted">Sells</span><br/>{r.om_sells||0}</div>
                   <div><span className="td-muted">Bought value</span><br/>{fmt.money(r.bought_value)}</div>
+                  {r.hit_rate!=null && <div><span className="td-muted">Hit rate</span><br/><span className={r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}>{r.hit_rate}%</span></div>}
                   {r.avg_return!=null && <div><span className="td-muted">Avg return</span><br/><span className={r.avg_return>=0?'val-buy':'val-sell'}>{r.avg_return>=0?'+':''}{r.avg_return}%</span></div>}
-                  {r.avg_spy_return!=null && <div><span className="td-muted">S&amp;P 500 same period</span><br/>{r.avg_spy_return>=0?'+':''}{r.avg_spy_return.toFixed(1)}%</div>}
-                  <div><span className="td-muted">Conviction score</span><br/>{r.proxy_score.toFixed(1)} / 4</div>
                 </div>
               </div>
             )}
