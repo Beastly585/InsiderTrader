@@ -1515,90 +1515,89 @@ const GUIDE_SECTIONS = [
   },
   {
     id: 'data-source',
-    label: 'The Data',
+    label: 'Data & Scoring',
     render: () => (
       <>
-        <p>Seli tracks two official government sources. Both are public record — Seli just makes them fast and legible.</p>
+        <p style={{fontWeight:600,color:'var(--text)',marginBottom:4}}>Where the data comes from</p>
+        <p>Seli ingests trades from two official government sources — both public record.</p>
 
-        <div className="guide-data-flow">
-          <div className="guide-data-flow__source">
-            <div className="guide-data-flow__icon-wrap">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <div className="guide-pipeline">
+          <div className="guide-pipeline__row">
+            <div className="guide-pipeline__step guide-pipeline__step--source">
+              <span className="guide-pipeline__icon">👔</span>
+              <span className="guide-pipeline__label">Corporate insider trade</span>
             </div>
-            <span className="guide-data-flow__name">SEC Form 4</span>
-            <span className="guide-data-flow__who">Executives, directors, 10%+ owners</span>
-            <span className="guide-data-flow__lag">Filed within 2 business days</span>
-          </div>
-          <div className="guide-data-flow__connector">
-            <div className="guide-data-flow__line"/>
-            <span className="guide-data-flow__speed">Minutes</span>
-          </div>
-          <div className="guide-data-flow__center">
-            <img src={logoSimple} alt="" style={{width:28,height:28,objectFit:'contain'}}/>
-            <span className="guide-data-flow__name">Seli</span>
-          </div>
-          <div className="guide-data-flow__connector">
-            <div className="guide-data-flow__line"/>
-            <span className="guide-data-flow__speed">Hours–days</span>
-          </div>
-          <div className="guide-data-flow__source">
-            <div className="guide-data-flow__icon-wrap">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <div className="guide-pipeline__arrow">
+              <span className="guide-pipeline__timing">up to 2 days</span>
+              <div className="guide-pipeline__line"/>
             </div>
-            <span className="guide-data-flow__name">STOCK Act</span>
-            <span className="guide-data-flow__who">Senators & representatives</span>
-            <span className="guide-data-flow__lag">Up to 45-day reporting lag</span>
-          </div>
-        </div>
-
-        <div className="guide-callout" style={{marginTop:14}}>
-          <p className="guide-callout__title">Only open-market trades</p>
-          <p className="guide-callout__text">
-            Option exercises, RSU vests, gifts, and automatic plan transactions are filtered out. What you see is someone <strong>choosing</strong> to buy or sell with their own money.
-          </p>
-        </div>
-      </>
-    ),
-  },
-  {
-    id: 'insights-formula',
-    label: 'Scoring',
-    render: () => (
-      <>
-        <p>Every trade gets a <strong>conviction score</strong> — a number that reflects how historically meaningful its characteristics are.</p>
-
-        <div className="guide-score-factors">
-          <div className="guide-score-factor">
-            <div className="guide-score-factor__bar" style={{width:'85%'}}/>
-            <div className="guide-score-factor__info">
-              <span className="guide-score-factor__label">Who traded</span>
-              <span className="guide-score-factor__desc">C-suite executives and Congress members carry more weight</span>
+            <div className="guide-pipeline__step">
+              <span className="guide-pipeline__label">SEC Form 4</span>
+            </div>
+            <div className="guide-pipeline__arrow">
+              <span className="guide-pipeline__timing">minutes</span>
+              <div className="guide-pipeline__line"/>
+            </div>
+            <div className="guide-pipeline__step guide-pipeline__step--seli">
+              <img src={logoSimple} alt="" style={{width:18,height:18,objectFit:'contain'}}/>
+              <span className="guide-pipeline__label">Seli</span>
             </div>
           </div>
-          <div className="guide-score-factor">
-            <div className="guide-score-factor__bar" style={{width:'70%'}}/>
-            <div className="guide-score-factor__info">
-              <span className="guide-score-factor__label">Clustering</span>
-              <span className="guide-score-factor__desc">Multiple insiders buying the same stock in a short window</span>
+          <div className="guide-pipeline__row">
+            <div className="guide-pipeline__step guide-pipeline__step--source">
+              <span className="guide-pipeline__icon">🏛</span>
+              <span className="guide-pipeline__label">Political insider trade</span>
             </div>
-          </div>
-          <div className="guide-score-factor">
-            <div className="guide-score-factor__bar" style={{width:'60%'}}/>
-            <div className="guide-score-factor__info">
-              <span className="guide-score-factor__label">Position sizing</span>
-              <span className="guide-score-factor__desc">Large chunk of their holdings, not a routine top-up</span>
+            <div className="guide-pipeline__arrow">
+              <span className="guide-pipeline__timing">up to 45 days</span>
+              <div className="guide-pipeline__line"/>
             </div>
-          </div>
-          <div className="guide-score-factor">
-            <div className="guide-score-factor__bar" style={{width:'40%'}}/>
-            <div className="guide-score-factor__info">
-              <span className="guide-score-factor__label">Dollar value</span>
-              <span className="guide-score-factor__desc">Larger trades get a modest boost</span>
+            <div className="guide-pipeline__step">
+              <span className="guide-pipeline__label">STOCK Act</span>
+            </div>
+            <div className="guide-pipeline__arrow">
+              <span className="guide-pipeline__timing">minutes</span>
+              <div className="guide-pipeline__line"/>
+            </div>
+            <div className="guide-pipeline__step guide-pipeline__step--seli">
+              <img src={logoSimple} alt="" style={{width:18,height:18,objectFit:'contain'}}/>
+              <span className="guide-pipeline__label">Seli</span>
             </div>
           </div>
         </div>
 
-        <p style={{marginTop:14}}>Based on peer-reviewed research (Lakonishok & Lee, Cohen et al.). Identical for every user and every trade. Informational, not a recommendation. <a href="/terms">Terms</a>.</p>
+        <p style={{fontSize:'0.75rem',color:'var(--text-3)',margin:'6px 0 16px'}}>Only open-market trades — option exercises, RSU vests, gifts, and plan transactions are filtered out.</p>
+
+        <p style={{fontWeight:600,color:'var(--text)',marginBottom:4}}>How scoring works</p>
+        <p>Every trade runs through the same algorithm. Raw data becomes a <strong>conviction score</strong> — higher means more markers of a historically meaningful trade.</p>
+
+        <div className="guide-scoring-flow">
+          <div className="guide-scoring-flow__stage">
+            <span className="guide-scoring-flow__stage-label">Raw data</span>
+            <span className="guide-scoring-flow__stage-sub">Filing details as reported</span>
+          </div>
+          <div className="guide-scoring-flow__arrow">→</div>
+          <div className="guide-scoring-flow__stage guide-scoring-flow__stage--algo">
+            <span className="guide-scoring-flow__stage-label">Scoring algorithm</span>
+            <ul className="guide-scoring-flow__factors">
+              <li><strong>Who</strong> — C-suite / Congress weigh more</li>
+              <li><strong>Clustering</strong> — multiple insiders, same stock</li>
+              <li><strong>Position %</strong> — large share of holdings</li>
+              <li><strong>Value</strong> — bigger trades score higher</li>
+            </ul>
+          </div>
+          <div className="guide-scoring-flow__arrow">→</div>
+          <div className="guide-scoring-flow__stage">
+            <span className="guide-scoring-flow__stage-label">Signals</span>
+            <div className="guide-scoring-flow__signals">
+              <span className="guide-signal-chip guide-signal-chip--strong">Strong</span>
+              <span className="guide-signal-chip guide-signal-chip--moderate">Moderate</span>
+              <span className="guide-signal-chip guide-signal-chip--weak">Weak</span>
+            </div>
+          </div>
+        </div>
+
+        <p style={{fontSize:'0.75rem',color:'var(--text-3)',marginTop:8}}>Based on Lakonishok & Lee, Cohen et al. Identical for every user. Not a recommendation. <a href="/terms">Terms</a>.</p>
       </>
     ),
   },
@@ -1761,24 +1760,18 @@ function EnvPreview({ type }) {
   );
   if (type === 'watchlist') return (
     <div className="env-preview env-preview--watchlist">
-      <div className="env-preview__wl-head">
-        <span className="env-preview__wl-dot"/>
-        <span className="env-preview__wl-acct">Brokerage linked</span>
+      <div className="env-preview__wl-row">
+        <span className="env-preview__star env-preview__star--filled">★</span>
+        <span className="env-preview__wl-hint">Star a stock to track insider activity</span>
       </div>
-      {[
-        {held:true,  buy:true},
-        {held:true,  buy:false},
-        {held:false, buy:true},
-      ].map((r,i) => (
-        <div key={i} className="env-preview__wl-row">
-          <span className={`env-preview__star${r.held?' env-preview__star--filled':''}`}>★</span>
-          <span className="env-preview__ticker env-preview__ticker--lg"/>
-          <span className="env-preview__wl-name"/>
-          <span className={`env-preview__wl-signal${r.buy?' env-preview__wl-signal--buy':' env-preview__wl-signal--sell'}`}>
-            {r.buy ? '▲ Buying' : '▼ Selling'}
-          </span>
-        </div>
-      ))}
+      <div className="env-preview__wl-row">
+        <span className="env-preview__star env-preview__star--filled" style={{fontSize:'0.5rem'}}>👤</span>
+        <span className="env-preview__wl-hint">Follow an insider to track their trades</span>
+      </div>
+      <div className="env-preview__wl-row" style={{opacity:0.5}}>
+        <span className="env-preview__wl-dot"/>
+        <span className="env-preview__wl-hint">Link a brokerage for portfolio-level alerts</span>
+      </div>
     </div>
   );
   if (type === 'settings') return (
@@ -1886,7 +1879,7 @@ function GuideModal({ initialSection, onClose }) {
         btn.classList.remove('tile-info-btn--flash');
       });
       setHidden(false);
-    }, 2200);
+    }, 2800);
   }, []);
 
   const helpers = { flashHelpIcons };
@@ -1966,25 +1959,18 @@ function GuideModal({ initialSection, onClose }) {
 
 const TILE_HELP = {
   'sentiment': {
-    title: 'Market Sentiment',
-    what: 'Aggregate insider buying vs selling across all open-market SEC filings in the last 30 days.',
-    methodology: 'The score is the ratio of net insider buying to total transaction volume, scaled 0–100. Above 50 means more dollars flowing into insider purchases than sales. The label (Fear → Extreme Greed) maps to fixed score ranges.',
+    title: 'Market Overview',
+    what: 'Aggregate insider sentiment and real-time benchmark prices at a glance.',
+    methodology: 'The sentiment score is the ratio of net insider buying to total transaction volume across all open-market SEC filings in the last 30 days, scaled 0–100. Above 50 means more dollars flowing into insider purchases than sales. The label (Fear → Extreme Greed) maps to fixed score ranges.',
     columns: [
       { term: 'Score (0–100)', def: 'Net insider buy ratio. 0 = all selling, 100 = all buying.' },
       { term: 'Label', def: '0–25 Fear, 25–45 Caution, 45–55 Neutral, 55–75 Greed, 75–100 Extreme Greed.' },
-    ],
-    source: 'Calculated from all open-market Form 4 filings in the last 30 days. Updates as new filings are ingested.',
-  },
-  'market-indexes': {
-    title: 'Market Indexes',
-    what: 'Real-time prices and daily returns for three major U.S. equity benchmarks.',
-    columns: [
       { term: 'SPY', def: 'SPDR S&P 500 ETF — tracks the 500 largest U.S. companies by market cap. The most widely followed U.S. equity benchmark.' },
       { term: 'QQQ', def: 'Invesco Nasdaq-100 ETF — tracks the 100 largest non-financial Nasdaq-listed companies. Heavily tech-weighted.' },
       { term: 'IWM', def: 'iShares Russell 2000 ETF — tracks 2,000 small-cap U.S. stocks. Indicator of broader market health beyond mega-caps.' },
       { term: 'Return %', def: 'Intraday percentage change from previous close.' },
     ],
-    source: 'Market data via financial data APIs. Prices update throughout the trading day.',
+    source: 'Sentiment calculated from all open-market Form 4 filings in the last 30 days. Market data via financial data APIs, updating throughout the trading day.',
   },
   'data-filings': {
     title: 'All Filings',
@@ -3380,7 +3366,7 @@ function SentimentStrip({ filings }) {
     <div className="mkt-tile mkt-tile--strip-only">
       <div className="mkt-tile__strip">
         <div className="mkt-stat mkt-stat--fg">
-          <span className="mkt-stat__label">Sentiment <TileInfoButton section="insights-formula" title="Sentiment" tileId="sentiment"/></span>
+          <span className="mkt-stat__label">Sentiment <TileInfoButton section="data-source" title="Market overview" tileId="sentiment"/></span>
           {fgScore!=null?<>
             <div className="mkt-fg-row">
               <span className="mkt-stat__val" style={{color:fgColor}}>{fgScore}</span>
@@ -3393,7 +3379,6 @@ function SentimentStrip({ filings }) {
           </>:<span className="mkt-stat__loading">{mkt?.err?'—':'...'}</span>}
         </div>
         <div className="mkt-divider"/>
-        <TileInfoButton section="insights-formula" title="Market indexes" tileId="market-indexes"/>
         {INDEX_SYMS.map(sym=>{
           const d=indices[sym];
           return (
@@ -3437,7 +3422,7 @@ function HeatmapOnly() {
       <div className="mkt-heatmap-label">
         S&amp;P 500 sectors
         <span className="td-muted" style={{fontWeight:400,marginLeft:6}}>day return · by weight · ETF proxy</span>
-        <TileInfoButton section="insights-formula" title="S&P 500 sector heatmap" tileId="sector-heatmap"/>
+        <TileInfoButton section="data-source" title="S&P 500 sector heatmap" tileId="sector-heatmap"/>
         {Object.keys(sectors).length===0&&(
           <span className="td-muted" style={{marginLeft:'auto',fontSize:'0.6875rem'}}>
             {mkt?.err?'unavailable':'loading…'}
@@ -3949,7 +3934,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--signals">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Insider signals</span>
-              <TileInfoButton section="insights-formula" title="Insider signals" tileId="dashboard-signals"/>
+              <TileInfoButton section="data-source" title="Insider signals" tileId="dashboard-signals"/>
               <div className="dash-tile__hdr-controls">
                 <div className="dash-tile-pills">
                   {DASH_DATE_OPTS.map(o=>{
@@ -4016,7 +4001,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <div className="dash-tile dash-tile--top-insiders">
             <div className="dash-tile__hdr">
               <span className="dash-tile__title">Top insiders</span>
-              <TileInfoButton section="insights-formula" title="Top insiders" tileId="top-insiders"/>
+              <TileInfoButton section="data-source" title="Top insiders" tileId="top-insiders"/>
               <div className="dash-tile__hdr-controls">
                 <button className="btn btn--ghost btn--icon" onClick={()=>setInsidersExpanded(true)} title="Open full insiders view">⤢</button>
               </div>
@@ -4210,7 +4195,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         <div className="ins-sig-panel ins-3col__signals">
           <div className="ins-sig-panel__hdr">
             <span className="ins-sig-panel__title">Insider signals</span>
-            <TileInfoButton section="insights-formula" title="Insider signals" tileId="insights-signals"/>
+            <TileInfoButton section="data-source" title="Insider signals" tileId="insights-signals"/>
             {!isMobile && (
               <div className="dash-tile__hdr-controls">
                 <button className="btn btn--ghost btn--icon" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('signals');}} title="Open full Explore view">⤢</button>
@@ -4403,7 +4388,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             <div className="ins-lb-panel-wrap" style={{flex:1}}>
               <div className="ins-sig-panel__hdr">
                 <span className="ins-sig-panel__title">Top insiders</span>
-                <TileInfoButton section="insights-formula" title="Top insiders" tileId="top-insiders"/>
+                <TileInfoButton section="data-source" title="Top insiders" tileId="top-insiders"/>
                 <div className="dash-tile__hdr-controls">
                   <button className="btn btn--ghost btn--icon" onClick={()=>{setModal('insiders');setModalInitial(null);}} title="Open full insiders view">⤢</button>
                 </div>
@@ -6573,7 +6558,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           {activeFilterCount > 0 || search || dPreset !== 7 || dateFrom || dateTo ? (
             <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
           ) : null}
-          <TileInfoButton section="insights-formula" title="All filings" tileId="data-filings"/>
+          <TileInfoButton section="data-source" title="All filings" tileId="data-filings"/>
           <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
             onClick={()=>onUpgrade('data_export')}>
             Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>
