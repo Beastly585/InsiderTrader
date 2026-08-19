@@ -1422,7 +1422,7 @@ function clusterTrades(rows, windowDays = 5) {
 // not just "did the stock go up since they bought." A net seller with bad
 // realized P&L will no longer score well just because their few buys are green.
 function trustScore(st) {
-  if (!st||(st.omBuys+st.omSells)<2) return null;
+  if (!st||st.omBuys<2) return null;
   let s=0;
   // Combined hit rate (buys priced correctly + profitable sells), weighted more
   if (st.combinedHitRate!=null){if(st.combinedHitRate>=70)s+=2;else if(st.combinedHitRate>=50)s+=1;}else s+=0.5;
@@ -3035,7 +3035,13 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   };
 
   const header=()=>{
-    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.affiliations?.length>0&&<div className="trader-aff-list">{traderStats.affiliations.map((a,i)=><span key={a.ticker} className="trader-aff-chip">{shortRole(a.title)||REL_LABELS[a.relationship]||'Director'} at <span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span></span>)}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+    if(d.type==='trader'){
+      const affs = traderStats?.affiliations || [];
+      const maxChips = inline ? affs.length : 3; // inline = explore, show all
+      const visibleAffs = affs.slice(0, maxChips);
+      const hiddenCount = affs.length - visibleAffs.length;
+      return <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{affs.length>0&&<div className="trader-aff-list">{visibleAffs.map((a)=><span key={a.ticker} className="trader-aff-chip" title={`${a.title||REL_LABELS[a.relationship]||'Director'} at ${a.ticker}`}><span className="trader-aff-chip__role">{shortRole(a.title)||REL_LABELS[a.relationship]||'Director'}</span> at <span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span></span>)}{hiddenCount>0&&<span className="trader-aff-chip trader-aff-chip--more">+{hiddenCount} more</span>}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+    }
     if(d.type==='ticker')return(
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
@@ -3066,12 +3072,12 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
         {d.type==='trader'&&(busy?<SkeletonRows count={6}/>:!traderStats?<div className="state-box" style={{padding:'2rem'}}><p>No trades found.</p></div>:(<>
 
-          {/* ── Sparse profile gate — not enough OM trades for meaningful stats ── */}
-          {traderStats.omBuys + traderStats.omSells < 2 ? (
+          {/* ── Sparse profile gate — need OM buys for meaningful stats ── */}
+          {traderStats.omBuys < 2 ? (
             <div className="trader-sparse">
               <div className="trader-sparse__notice">
                 <span style={{fontWeight:600}}>Limited data</span>
-                <span className="td-muted">This insider has {traderStats.omBuys + traderStats.omSells === 0 ? 'no' : 'only ' + (traderStats.omBuys + traderStats.omSells)} open-market trade{traderStats.omBuys + traderStats.omSells === 1 ? '' : 's'} on record — not enough to compute performance stats.</span>
+                <span className="td-muted">This insider has {traderStats.omBuys === 0 ? 'no' : 'only ' + traderStats.omBuys} open-market buy{traderStats.omBuys === 1 ? '' : 's'} on record — not enough to compute performance stats.{traderStats.omSells > 0 ? ` (${traderStats.omSells} sell${traderStats.omSells !== 1 ? 's' : ''} recorded)` : ''}</span>
               </div>
               {traderStats.totalBuys + traderStats.sells > 0 && (
                 <div className="td-muted" style={{fontSize:'0.6875rem',marginTop:4}}>
@@ -3141,10 +3147,12 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             <div className="dp-section-label" style={{marginTop:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <span>Positions</span>
               <div style={{display:'flex',gap:10}}>
-                <label className="bundle-toggle" title="Bundle consecutive same-direction trades by this insider within a few days into one row.">
-                  <input type="checkbox" checked={bundleOn} onChange={e=>setBundleOn(e.target.checked)}/>
-                  Bundle nearby
-                </label>
+                {inline && (
+                  <label className="bundle-toggle" title="Bundle consecutive same-direction trades by this insider within a few days into one row.">
+                    <input type="checkbox" checked={bundleOn} onChange={e=>setBundleOn(e.target.checked)}/>
+                    Bundle nearby
+                  </label>
+                )}
                 <label className="bundle-toggle" title="When on, every number on this page — position, hold-time, P&L, and the transactions listed below — uses ONLY open-market (real cash) buys and sells. Grants, exercises, and gifts are excluded entirely. When off, current position uses the insider's own SEC-reported total holdings, but hold-time/P&L still only ever use priced trades.">
                   <input type="checkbox" checked={omOnly} onChange={e=>setOmOnly(e.target.checked)}/>
                   Own-money purchases only
@@ -3152,7 +3160,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               </div>
             </div>
             {perStockBreakdown.map((s,i)=>{
-              const displayRows = bundleOn ? clusterTrades(s.rows) : s.rows;
+              const displayRows = (inline ? bundleOn : true) ? clusterTrades(s.rows) : s.rows;
               return (
               <div key={i} className="position-card">
                 <div className="position-card__top">

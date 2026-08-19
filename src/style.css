@@ -1611,6 +1611,13 @@ td { padding:7px 11px; vertical-align:middle; }
   white-space: nowrap;
 }
 .trader-aff-chip .ticker { font-size: 0.625rem; }
+.trader-aff-chip__role {
+  max-width: 120px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; display: inline-block; vertical-align: bottom;
+}
+.trader-aff-chip--more {
+  color: var(--text-3); cursor: default; font-style: italic;
+}
 /* ── Sparse profile notice ───────────────────────────────────────────────── */
 .trader-sparse {
   padding: 16px 14px; margin: 4px 0 8px;
