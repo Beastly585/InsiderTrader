@@ -104,24 +104,26 @@ export function buildSignals(filings) {
       });
     }
 
-    // ── Sell signal — higher quality bar, cluster-weighted
-    // Only generate when there's a meaningful cluster sell pattern:
-    // 2+ insiders dumping, or C-suite/political sell with real value.
-    const sellCluster = s.sellInsiders.size >= 4 ? 4 : s.sellInsiders.size >= 3 ? 3 : s.sellInsiders.size >= 2 ? 1.5 : 0;
-    const hasSellSignal = s.sellInsiders.size >= 2 || s.cSuiteSells >= 1 || s.politicalSells >= 1;
+    // ── Sell signal — requires CLUSTER sells (2+ distinct insiders, not
+    // just multiple moves by one person). Conviction scaled down vs buys
+    // per Seyhun (1986): individual sells are mostly diversification noise,
+    // but coordinated selling by multiple insiders is informative.
+    const hasSellSignal = s.sellInsiders.size >= 2;
     if (s.sells > 0 && hasSellSignal) {
+      const sellClusterBonus = s.sellInsiders.size >= 4 ? 3 : s.sellInsiders.size >= 3 ? 2 : 1;
       results.push({
         ...s,
         direction: 'sell',
         insiders: s.sellInsiders,
         insiderCount: s.sellInsiders.size,
-        netValue: s.sellValue - s.buyValue,
+        // netValue = buyValue - sellValue → negative for net-selling tickers,
+        // so the display naturally shows red with a minus sign.
+        netValue: s.buyValue - s.sellValue,
         conviction:
-          (s.cSuiteSells * 3) +
-          (s.politicalSells * 4) +
-          sellCluster +
-          Math.min(Math.log10(s.sellValue+1), 5) +
-          (s.sells >= 5 ? 2 : s.sells >= 3 ? 1 : 0),
+          (s.cSuiteSells * 2) +
+          (s.politicalSells * 3) +
+          sellClusterBonus * 2 +
+          Math.min(Math.log10(s.sellValue+1), 4),
       });
     }
   }

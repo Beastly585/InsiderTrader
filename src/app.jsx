@@ -4411,7 +4411,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                       {!isMobile && s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:'0.6875rem'}}>{s.sector}</div>}
                     </div>
                     <div className="ins-sig-row__type">
-                      <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}${isSell?' ins-type-badge--sell':''}`}>{isSell?'Selling':'Buying'}</span>
+                      <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}${isSell?' ins-type-badge--sell':' ins-type-badge--buy'}`}>{isSell?'Selling':'Buying'}</span>
                       <span className="td-muted ins-sig-row__type-meta" style={{fontSize:'0.6rem'}}>{typeLabel}</span>
                       <div className="td-muted ins-sig-row__type-meta">
                         {s.insiderCount} insider{s.insiderCount!==1?'s':''}
@@ -4528,7 +4528,11 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const [srcF,   setSrcF]     = useState(initialFilters?.sourceF ?? '');
   const [secF,   setSecF]     = useState(initialFilters?.sectorF ?? '');
   const [minStr, setMinStr]   = useState(initialFilters?.minStrength ?? 1);
-  const [daysBack, setDaysBack] = useState(initialFilters?.days ?? 30); // null = All time
+  const [daysBack, setDaysBack] = useState(() => {
+    const initial = initialFilters?.days ?? 7;
+    if (!pro && (initial === null || initial > 7)) return 7;
+    return initial;
+  });
   const [minValue, setMinValue] = useState(0);  // $ net value floor — tile has no equivalent to seed from
 
   // ── right pane nav stack ─────────────────────────────────────────────────
@@ -4703,10 +4707,16 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Window</span>
                 <div className="dash-tile-pills" style={{gap:2}}>
-                  {[{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
+                  {[{v:3,l:'3d'},{v:7,l:'7d'}].map(o=>(
                     <button key={o.l} className={`dash-tile-pill${daysBack===o.v?' dash-tile-pill--active':''}`}
                       onClick={()=>{setDaysBack(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
                   ))}
+                  {pro ? [{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
+                    <button key={o.l} className={`dash-tile-pill${daysBack===o.v?' dash-tile-pill--active':''}`}
+                      onClick={()=>{setDaysBack(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
+                  )) : (
+                    <button className="dash-tile-pill dash-tile-pill--locked" onClick={()=>{}}>More <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>
+                  )}
                 </div>
               </div>
 
