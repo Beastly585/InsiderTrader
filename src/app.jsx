@@ -6649,15 +6649,30 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           </button>
         </div>
 
-      <FilterPanel
-        sectors={sectors}
-        openMkt={openMkt} setOpenMkt={setOpenMkt}
-        fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
-        sectorF={sectorF} setSectorF={setSectorF}
-        sourceF={sourceF} setSourceF={setSourceF}
-        relF={relF} setRelF={setRelF}
-        typeF={typeF} setTypeF={setTypeF}
-      />
+      {isMobile ? (
+        <details className="data-filter-collapse">
+          <summary>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</summary>
+          <FilterPanel
+            sectors={sectors}
+            openMkt={openMkt} setOpenMkt={setOpenMkt}
+            fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
+            sectorF={sectorF} setSectorF={setSectorF}
+            sourceF={sourceF} setSourceF={setSourceF}
+            relF={relF} setRelF={setRelF}
+            typeF={typeF} setTypeF={setTypeF}
+          />
+        </details>
+      ) : (
+        <FilterPanel
+          sectors={sectors}
+          openMkt={openMkt} setOpenMkt={setOpenMkt}
+          fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
+          sectorF={sectorF} setSectorF={setSectorF}
+          sourceF={sourceF} setSourceF={setSourceF}
+          relF={relF} setRelF={setRelF}
+          typeF={typeF} setTypeF={setTypeF}
+        />
+      )}
       </div>
 
       <div className="data-layout">
