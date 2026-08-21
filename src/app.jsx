@@ -3873,9 +3873,9 @@ function NewsDrawer({ watchlist, filings, onClose }) {
 // other page already uses (usePortfolio, filterAndScoreSignals) rather
 // than a parallel, simplified data path that could quietly drift from
 // what the full pages actually show.
-function HomeTile({ title, onSeeAll, children }) {
+function HomeTile({ title, onSeeAll, children, className }) {
   return (
-    <div className="home-tile">
+    <div className={`home-tile${className ? ' ' + className : ''}`}>
       <div className="home-tile__hdr">
         <span className="home-tile__title">{title}</span>
         {onSeeAll && <button className="home-tile__see-all" onClick={onSeeAll}>See all →</button>}
@@ -3980,7 +3980,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
           version. "See all" goes to Dashboard, which is where this same
           component already lives full-size; there's no separate dedicated
           Top Insiders page to link to instead. */}
-      <HomeTile title="Top Insiders">
+      <HomeTile title="Top Insiders" className="home-tile--expanded">
         <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro} expandedHome/>
       </HomeTile>
     </div>
@@ -8440,7 +8440,7 @@ function SettingsPage({ user, onUpgrade }) {
               </div>
               <div className="settings-section__desc">
                 Scheduled summaries delivered to your inbox. Choose your frequency and what to include.
-                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}> Upgrade to Pro to enable email digests.</button>}
+                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}> Upgrade to Pro to enable email digests.</button>}
               </div>
 
               {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
@@ -8564,7 +8564,7 @@ function SettingsPage({ user, onUpgrade }) {
                   {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
                   {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
                   {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
-                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}>Upgrade to Pro to save</button>}
+                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}>Upgrade to Pro to save</button>}
                 </div>
               </>)}
             </div>
@@ -8579,7 +8579,7 @@ function SettingsPage({ user, onUpgrade }) {
               </div>
               <div className="settings-section__desc">
                 Real-time emails fired within minutes of a filing. Each trigger is independent.
-                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}> Upgrade to Pro to enable instant alerts.</button>}
+                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}> Upgrade to Pro to enable instant alerts.</button>}
               </div>
 
               {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
@@ -8660,7 +8660,7 @@ function SettingsPage({ user, onUpgrade }) {
                   {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
                   {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
                   {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
-                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}>Upgrade to Pro to save</button>}
+                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}>Upgrade to Pro to save</button>}
                 </div>
               </>)}
             </div>
@@ -8676,7 +8676,7 @@ function SettingsPage({ user, onUpgrade }) {
               </div>
               <div className="settings-section__desc">
                 Connect your brokerage via SnapTrade to see insider activity on your holdings. Read-only — Seli never trades on your behalf, and your login credentials go directly to your brokerage, never to Seli.
-                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('portfolio')}> Upgrade to Pro to connect a brokerage.</button>}
+                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}> Upgrade to Pro to connect a brokerage.</button>}
               </div>
 
               {pro && (

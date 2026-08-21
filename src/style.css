@@ -1129,6 +1129,10 @@ td { padding:7px 11px; vertical-align:middle; }
   border-radius: var(--radius-lg); padding: 14px 16px;
   max-height: 260px; display: flex; flex-direction: column;
 }
+.home-tile--expanded { max-height: none; }
+@media (max-width: 640px) {
+  .home-tile--expanded { min-height: 50vh; }
+}
 .home-tile__hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-shrink: 0; }
 .home-tile__title { font-size: 0.8125rem; font-weight: 700; letter-spacing: -0.1px; color: var(--text); }
 .home-tile__see-all { background: none; border: none; color: var(--accent-strong); font-size: 0.75rem; font-weight: 600; font-family: var(--font); cursor: pointer; padding: 4px; }
@@ -4600,7 +4604,14 @@ td { padding:7px 11px; vertical-align:middle; }
   min-width: 0;
   padding: 32px 36px 48px;
   overflow-y: auto;
-  flex: 1;
+  /* Block display, not flex — sparse tabs (Billing, Link Portfolio) have
+     little content. In a flex/grid child that stretches to fill the full
+     viewport-height grid row, block-level children center themselves
+     vertically on some engines. Explicit block + align-self: start pins
+     the content to the top of the scrollable area regardless. */
+  display: block;
+  align-self: start;
+  height: 100%;
 }
 @media (max-width: 640px) {
   .settings-content { padding: 20px 16px 40px; }
