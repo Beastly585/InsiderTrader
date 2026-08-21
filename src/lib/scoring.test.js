@@ -255,6 +255,7 @@ describe('buildSignals — sell signal generation', () => {
     const sellSig = buildSignals(sellFilings).find(s => s.direction === 'sell');
     expect(sellSig.conviction).toBeLessThan(buySig.conviction);
   });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('tierFromPct — appetite thresholds', () => {
