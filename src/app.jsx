@@ -3980,8 +3980,8 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
           version. "See all" goes to Dashboard, which is where this same
           component already lives full-size; there's no separate dedicated
           Top Insiders page to link to instead. */}
-      <HomeTile title="Top Insiders" onSeeAll={()=>onSeeAll('dashboard')}>
-        <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
+      <HomeTile title="Top Insiders">
+        <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro} expandedHome/>
       </HomeTile>
     </div>
   );
@@ -5446,7 +5446,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
 // Active insiders — who has been most active in the selected window
 
 // ─── Leaderboard sidebar ────────────────────────────────────────────────────────
-function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro }) {
+function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [yearsBack, setYearsBack] = useState(2); // 2yr default — fast enough for sidebar preview
@@ -5499,7 +5499,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro }) {
       :rows===null?<SkeletonRows count={8}/>
       :rows.length===0?<div className="ins-empty">Not enough data yet</div>
       :<div className="ins-lb-list">
-        {sorted.slice(0,15).map((r,i)=>{
+        {sorted.slice(0, expandedHome ? 30 : 15).map((r,i)=>{
           const isExpanded = isMobile && expandedKey===r.insider_name;
           return (
           <div key={i} className={`ins-lb-card${isExpanded?' ins-lb-card--expanded':''}`}

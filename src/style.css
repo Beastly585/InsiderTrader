@@ -2679,6 +2679,26 @@ td { padding:7px 11px; vertical-align:middle; }
   }
   .guide-modal__content-inner { padding: 16px 18px; }
   .guide-modal__footer { padding: 10px 18px; }
+  /* Page 3: pipeline and scoring flow — stack vertically on mobile */
+  .guide-pipeline__row {
+    flex-direction: column; align-items: stretch; gap: 4px;
+  }
+  .guide-pipeline__row > .guide-pipeline__arrow {
+    flex-direction: row; padding: 2px 0;
+  }
+  .guide-pipeline__step { flex-direction: row; gap: 6px; justify-content: center; }
+  .guide-scoring-flow {
+    flex-direction: column; align-items: stretch; gap: 8px; padding: 14px;
+  }
+  .guide-scoring-flow__arrow {
+    justify-content: center; padding: 0; transform: rotate(90deg);
+  }
+  .guide-scoring-flow__stage { align-items: center; text-align: center; padding: 4px 0; }
+  .guide-scoring-flow__stage--algo { align-items: center; text-align: left; }
+  .guide-signal-examples { align-items: center; }
+  .guide-signal-ex .conv-bar-track { min-width: 80px; }
+  /* Page 5: callout cards */
+  .guide-callout { padding: 12px 14px; }
 }
 
 .guide-hero {
@@ -3826,7 +3846,12 @@ td { padding:7px 11px; vertical-align:middle; }
   padding: 20px; overflow: hidden;
 }
 @media (max-width: 640px) {
-  .lp-benefit-snippet-box { padding: 10px; aspect-ratio: auto; max-height: 240px; }
+  .lp-benefit-snippet-box {
+    padding: 10px 10px 14px;
+    aspect-ratio: auto;
+    overflow: visible;
+    border-bottom: 3px solid var(--border);
+  }
   /* Data preview: drop Insider and Value columns on mobile — too many columns for narrow screens */
   .env-preview__thead { grid-template-columns: 1fr 36px 18px; }
   .env-preview__trow--data { grid-template-columns: 1fr 36px 18px; }
@@ -4575,11 +4600,7 @@ td { padding:7px 11px; vertical-align:middle; }
   min-width: 0;
   padding: 32px 36px 48px;
   overflow-y: auto;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
+  flex: 1;
 }
 @media (max-width: 640px) {
   .settings-content { padding: 20px 16px 40px; }
