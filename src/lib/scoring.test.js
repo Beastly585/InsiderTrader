@@ -94,7 +94,7 @@ describe('buildSignals — open-market filtering (regression test for tonight\'s
     expect(signals[0].conviction).toBeGreaterThanOrEqual(5);
   });
 
-  it('a sell-heavy congressional ticker still gets positive conviction from a real buy, instead of the sell imbalance alone driving it negative — this was the actual bug: 3 sells + 1 buy previously computed to a negative score with no offsetting term available', () => {
+  it('a sell-heavy congressional ticker produces both a buy signal and a sell signal — the buy has positive conviction, the sell reflects the cluster', () => {
     const filings = [
       { ticker:'AAPL', insiderName:'Rep. A', relationship:'weak', transactionCode:'CONGRESS_P',
         transactionType:'buy', isOpenMarket:true, value:100_000, transactionDate:'2026-01-01' },
@@ -104,9 +104,15 @@ describe('buildSignals — open-market filtering (regression test for tonight\'s
       })),
     ];
     const signals = buildSignals(filings);
-    expect(signals[0].buys).toBe(1);
-    expect(signals[0].sells).toBe(3);
-    expect(signals[0].conviction).toBeGreaterThan(0);
+    const buySig = signals.find(s => s.direction === 'buy');
+    const sellSig = signals.find(s => s.direction === 'sell');
+    expect(buySig).toBeDefined();
+    expect(buySig.buys).toBe(1);
+    expect(buySig.conviction).toBeGreaterThan(0);
+    // 3 distinct sell insiders → sell signal generated
+    expect(sellSig).toBeDefined();
+    expect(sellSig.insiderCount).toBe(3);
+    expect(sellSig.conviction).toBeGreaterThan(0);
   });
 });
 
@@ -169,9 +175,15 @@ describe('buildSignals — basic aggregation', () => {
       { ticker:'AAPL', insiderName:'B', relationship:'weak', transactionType:'sell',
         isOpenMarket:true, value:100_000, transactionDate:'2026-01-02' },
     ];
-    const s = buildSignals(filings)[0];
-    expect(s.netValue).toBe(200_000);
-    expect(s.insiderCount).toBe(2);
+    // buildSignals now produces separate buy/sell entries per ticker.
+    // Only the buy signal appears here — a single sell insider doesn't
+    // meet the cluster threshold (2+ sell insiders required).
+    const signals = buildSignals(filings);
+    const buySig = signals.find(s => s.direction === 'buy');
+    expect(buySig).toBeDefined();
+    expect(buySig.netValue).toBe(200_000); // buyValue - sellValue = 300k - 100k
+    expect(buySig.insiderCount).toBe(1);   // only buy-side insiders counted
+    expect(signals.filter(s => s.direction === 'sell')).toHaveLength(0);
   });
 
   it('groups by ticker independently', () => {
@@ -193,6 +205,56 @@ describe('buildSignals — basic aggregation', () => {
     expect(buildSignals(filings)).toHaveLength(0);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('buildSignals — sell signal generation', () => {
+  it('a single insider selling does NOT generate a sell signal', () => {
+    const filings = [
+      { ticker:'AAPL', insiderName:'A', relationship:'strong', transactionType:'sell',
+        isOpenMarket:true, value:500_000, transactionDate:'2026-01-01' },
+    ];
+    const signals = buildSignals(filings);
+    expect(signals.filter(s => s.direction === 'sell')).toHaveLength(0);
+  });
+
+  it('2+ insiders selling the same ticker generates a sell signal', () => {
+    const filings = [
+      { ticker:'AAPL', insiderName:'A', relationship:'strong', transactionType:'sell',
+        isOpenMarket:true, value:300_000, transactionDate:'2026-01-01' },
+      { ticker:'AAPL', insiderName:'B', relationship:'weak', transactionType:'sell',
+        isOpenMarket:true, value:200_000, transactionDate:'2026-01-02' },
+    ];
+    const signals = buildSignals(filings);
+    const sellSig = signals.find(s => s.direction === 'sell');
+    expect(sellSig).toBeDefined();
+    expect(sellSig.insiderCount).toBe(2);
+    expect(sellSig.sellValue).toBe(500_000);
+  });
+
+  it('sell signal netValue is negative (buyValue - sellValue)', () => {
+    const filings = [
+      { ticker:'AAPL', insiderName:'A', relationship:'weak', transactionType:'sell',
+        isOpenMarket:true, value:300_000, transactionDate:'2026-01-01' },
+      { ticker:'AAPL', insiderName:'B', relationship:'weak', transactionType:'sell',
+        isOpenMarket:true, value:200_000, transactionDate:'2026-01-02' },
+    ];
+    const sellSig = buildSignals(filings).find(s => s.direction === 'sell');
+    expect(sellSig.netValue).toBeLessThan(0);
+    expect(sellSig.netValue).toBe(-500_000); // 0 buys - 500k sells
+  });
+
+  it('sell signals have lower conviction than equivalent buy signals', () => {
+    const buyFilings = [
+      { ticker:'AAPL', insiderName:'A', relationship:'strong', transactionType:'buy',
+        isOpenMarket:true, value:300_000, transactionDate:'2026-01-01' },
+      { ticker:'AAPL', insiderName:'B', relationship:'strong', transactionType:'buy',
+        isOpenMarket:true, value:200_000, transactionDate:'2026-01-02' },
+    ];
+    const sellFilings = buyFilings.map(f => ({ ...f, transactionType:'sell' }));
+    const buySig = buildSignals(buyFilings).find(s => s.direction === 'buy');
+    const sellSig = buildSignals(sellFilings).find(s => s.direction === 'sell');
+    expect(sellSig.conviction).toBeLessThan(buySig.conviction);
+  });
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('tierFromPct — appetite thresholds', () => {
