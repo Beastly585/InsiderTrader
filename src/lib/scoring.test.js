@@ -82,7 +82,7 @@ describe('buildSignals — open-market filtering (regression test for tonight\'s
     expect(signals[0].isPolitical).toBe(true);
   });
 
-  it('a congressional buy gets real conviction weight, not just a pass through the quality gate — without this, congressional-only tickers were structurally locked out of any C-suite-equivalent bonus, since relationship is never "strong" for a member of Congress', () => {
+  it('a congressional buy gets real conviction weight, not just a quality-gate pass', () => {
     const filings = [
       { ticker:'AAPL', insiderName:'Rep. Someone', relationship:'weak', transactionCode:'CONGRESS_P',
         transactionType:'buy', isOpenMarket:true, value:250_000, transactionDate:'2026-01-01' },
@@ -94,7 +94,7 @@ describe('buildSignals — open-market filtering (regression test for tonight\'s
     expect(signals[0].conviction).toBeGreaterThanOrEqual(5);
   });
 
-  it('a sell-heavy congressional ticker produces both a buy signal and a sell signal — the buy has positive conviction, the sell reflects the cluster', () => {
+  it('a sell-heavy congressional ticker produces both buy and sell signals', () => {
     const filings = [
       { ticker:'AAPL', insiderName:'Rep. A', relationship:'weak', transactionCode:'CONGRESS_P',
         transactionType:'buy', isOpenMarket:true, value:100_000, transactionDate:'2026-01-01' },
@@ -307,7 +307,7 @@ describe('processLeaderboardRows', () => {
     expect(r.hit_rate).toBeNull();
   });
 
-  it('hit_rate is null with too few priced trades, even a perfect or 50/50 record — a 1-2 trade sample is noise, not a track record', () => {
+  it('hit_rate is null with fewer than 5 priced trades', () => {
     const onePriced = processLeaderboardRows([{ insider_name:'A', wins:1, priced:1, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:20 }])[0];
     const twoPriced = processLeaderboardRows([{ insider_name:'B', wins:1, priced:2, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:0 }])[0];
     expect(onePriced.hit_rate).toBeNull();
@@ -328,7 +328,7 @@ describe('processLeaderboardRows', () => {
     expect(unproven.proxy_score).toBeLessThanOrEqual(knownMediocre.proxy_score);
   });
 
-  it('weighs relationship tier — a C-suite executive should outrank a director/10%-owner with an identical trading record otherwise', () => {
+  it('weighs relationship tier — C-suite outranks director with same record', () => {
     const base = { wins:5, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:10 };
     const strong = processLeaderboardRows([{ ...base, insider_name:'CEO', relationship:'strong' }])[0];
     const weak   = processLeaderboardRows([{ ...base, insider_name:'TenPctOwner', relationship:'weak' }])[0];
@@ -403,7 +403,7 @@ describe('filterAndScoreSignals — the full pipeline behind this session\'s con
     expect(result).toHaveLength(2);
   });
 
-  it('a high strengthThreshold can still filter out a real congressional signal — confirms the threshold stage is a real, working gate, not silently bypassed', () => {
+  it('a high strengthThreshold filters out signals below it', () => {
     const result = filterAndScoreSignals([congressionalBuy], { cutoff: '2020-01-01', strengthThreshold: 999 });
     expect(result).toHaveLength(0);
   });
