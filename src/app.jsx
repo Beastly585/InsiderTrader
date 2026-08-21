@@ -3938,7 +3938,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
       </HomeTile>
 
       <HomeTile title="Portfolio" onSeeAll={pro && portfolio.connected ? () => onSeeAll('signals') : null}>
-        {!pro && <p className="home-tile__empty">Portfolio linking is a Pro feature.</p>}
+        {!pro && <p className="home-tile__empty">Pro feature — <button className="home-tile__link" onClick={()=>onSeeAll('settings')}>upgrade</button> to connect your brokerage.</p>}
         {pro && portfolio.connected === false && (
           <p className="home-tile__empty">No brokerage connected — <button className="home-tile__link" onClick={()=>onSeeAll('settings')}>link your account</button> to see your real holdings.</p>
         )}
@@ -5449,7 +5449,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
 function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
-  const [yearsBack, setYearsBack] = useState(null); // null = all-time, matches the previous fixed default
+  const [yearsBack, setYearsBack] = useState(2); // 2yr default — fast enough for sidebar preview
   const [source, setSource] = useState(null); // null='all' | 'corporate' | 'congress'
   const [sort, setSort] = useState('proxy_score');
   const [dir, setDir] = useState(-1);
@@ -9839,7 +9839,7 @@ function AppInner() {
   // Only seeAllFromHome (used by Home's own "See all →" links) sets it.
   const [cameFromHome, setCameFromHome] = useState(false);
   function navTo(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);setCameFromHome(false);}
-  function seeAllFromHome(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);setCameFromHome(true);}
+  function seeAllFromHome(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);setCameFromHome(false);}
 
   // Sort state for the shared full-drawer explorer — independent from
   // InsightsPage's own internal sort state, since this instance is opened

@@ -3826,7 +3826,7 @@ td { padding:7px 11px; vertical-align:middle; }
   padding: 20px; overflow: hidden;
 }
 @media (max-width: 640px) {
-  .lp-benefit-snippet-box { padding: 10px; }
+  .lp-benefit-snippet-box { padding: 10px; aspect-ratio: auto; max-height: 240px; }
   /* Data preview: drop Insider and Value columns on mobile — too many columns for narrow screens */
   .env-preview__thead { grid-template-columns: 1fr 36px 18px; }
   .env-preview__trow--data { grid-template-columns: 1fr 36px 18px; }
@@ -4576,6 +4576,13 @@ td { padding:7px 11px; vertical-align:middle; }
   padding: 32px 36px 48px;
   overflow-y: auto;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+@media (max-width: 640px) {
+  .settings-content { padding: 20px 16px 40px; }
 }
 
 /* Section header — consistent across all tabs */
@@ -5031,6 +5038,12 @@ td { padding:7px 11px; vertical-align:middle; }
 .upgrade-hero__cards {
   display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
   padding: 0 28px; margin-bottom: 20px;
+}
+@media (max-width: 640px) {
+  .upgrade-hero__cards { grid-template-columns: 1fr; padding: 0 16px; }
+  .upgrade-modal--hero { max-width: 100vw; width: 100%; margin: 0; border-radius: 0; min-height: 100vh; }
+  .upgrade-hero__header { padding: 16px 16px 12px; }
+  .upgrade-hero__title { font-size: 1.125rem; }
 }
 .upgrade-hero__card {
   padding: 20px; border-radius: 12px; text-align: left;
