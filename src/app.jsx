@@ -7654,8 +7654,8 @@ function DataDownloadPage() {
         <h1 style={{fontSize:'clamp(1.375rem, 5vw, 2.25rem)',fontWeight:800,letterSpacing:'-1px',lineHeight:1.1,marginBottom:20}}>Download 10+ Years of SEC Insider Trading Data</h1>
         <p style={{fontSize:'0.9375rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:8}}>
           The same insider trading data that powers Bloomberg terminals and institutional research desks — structured, clean, and
-          a fraction of the cost. Every SEC Form 4 filing from corporate executives, directors, and 10% owners,
-          plus congressional stock disclosures from the STOCK Act. One-time purchase, yours forever.
+          a fraction of the cost. Every SEC Form 4 filing from corporate executives, directors, and 10% owners.
+          One-time purchase, yours forever.
         </p>
         <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginBottom:12}}>
           Compressed ZIP · one CSV per calendar year · {COLUMNS.length} fields per transaction · Excel, Python, R, or any tool that reads CSV
@@ -7664,6 +7664,7 @@ function DataDownloadPage() {
           Researchers, quants, and serious investors use insider trading data to build models, screen for
           investment ideas, and backtest strategies. Academic studies show insider purchases outperform the
           market by 4–5% annually. This is the raw data behind those findings — ready for your own analysis.
+          Congressional disclosures are available for free within the app but are not included in the data export.
         </p>
 
         {buyCTA}
@@ -10114,7 +10115,7 @@ const SEO_TITLES = {
 const SEO_DESCRIPTIONS = {
   '/':              'Track insider trading in real time. See what CEOs, CFOs, directors, and members of Congress are buying and selling. SEC Form 4 filings scored by conviction, with instant alerts and portfolio integration.',
   '/about':         'The peer-reviewed research behind insider trading signals. How corporate insider buying outperforms the market by 4-5% annually, and how Seli scores each trade using findings from Seyhun, Lakonishok & Lee, and Cohen et al.',
-  '/data-download': 'Download the complete SEC Form 4 insider trading dataset. 10+ years of corporate executive trades and congressional stock disclosures as structured CSV. One-time purchase, $39.99. Works with Excel, Python, R.',
+  '/data-download': 'Download the complete SEC Form 4 insider trading dataset. 10+ years of corporate executive trades as structured CSV. One-time purchase, $39.99. Works with Excel, Python, R.',
 };
 
 function useSEO() {

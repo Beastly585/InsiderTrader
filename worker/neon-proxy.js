@@ -583,6 +583,12 @@ async function buildExportCSV(env) {
           rows: 0,
         };
       }
+      // Exclude congressional/political trades from the paid CSV export.
+      // Congressional disclosures are public record and free to view in the
+      // app, but packaging them into a commercial data product crosses a line
+      // we don't want to cross. Corporate Form 4 filings only.
+      const txCode = row.transaction_code || '';
+      if (txCode.startsWith('CONGRESS')) continue;
       channels[year].pendingLines.push(ndjsonRowToCSV(row));
       channels[year].rows++;
       state.totalRows++;
@@ -803,7 +809,7 @@ async function handleGuestCSVCheckout(request, env, origin) {
           currency: 'usd',
           product_data: {
             name: 'Seli Insider Trading Dataset (CSV Export)',
-            description: 'Complete SEC Form 4 and congressional trading dataset. 10+ years of insider filings, 18 fields per transaction, one CSV per year. One-time purchase.',
+            description: 'Complete SEC Form 4 insider trading dataset. 10+ years of corporate insider filings, 18 fields per transaction, one CSV per year. One-time purchase.',
           },
           unit_amount: 3999,
         },
