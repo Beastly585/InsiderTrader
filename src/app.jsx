@@ -7650,15 +7650,20 @@ function DataDownloadPage() {
       </nav>
       <div className="legal-content" style={{maxWidth:960}}>
 
-        <div className="lp-info__eyebrow">Data Export</div>
-        <h1 style={{fontSize:'clamp(1.375rem, 5vw, 2.25rem)',fontWeight:800,letterSpacing:'-1px',lineHeight:1.1,marginBottom:20}}>Download the Full SEC Insider Trading Dataset</h1>
+        <div className="lp-info__eyebrow">Insider Trading Data Export</div>
+        <h1 style={{fontSize:'clamp(1.375rem, 5vw, 2.25rem)',fontWeight:800,letterSpacing:'-1px',lineHeight:1.1,marginBottom:20}}>Download 10+ Years of SEC Insider Trading Data</h1>
         <p style={{fontSize:'0.9375rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:8}}>
-          Every SEC Form 4 insider filing and congressional stock disclosure Seli has ingested.
-          10+ years of open-market purchases, insider sales, executive trades, and congressional
-          disclosures, delivered as structured CSVs organized by year. One-time purchase, no subscription.
+          The same insider trading data that powers Bloomberg terminals and institutional research desks — structured, clean, and
+          a fraction of the cost. Every SEC Form 4 filing from corporate executives, directors, and 10% owners,
+          plus congressional stock disclosures from the STOCK Act. One-time purchase, yours forever.
         </p>
-        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginBottom:28}}>
-          Compressed ZIP · one CSV per calendar year · {COLUMNS.length} fields per transaction · Excel, Python, R
+        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginBottom:12}}>
+          Compressed ZIP · one CSV per calendar year · {COLUMNS.length} fields per transaction · Excel, Python, R, or any tool that reads CSV
+        </p>
+        <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:28}}>
+          Researchers, quants, and serious investors use insider trading data to build models, screen for
+          investment ideas, and backtest strategies. Academic studies show insider purchases outperform the
+          market by 4–5% annually. This is the raw data behind those findings — ready for your own analysis.
         </p>
 
         {buyCTA}
@@ -9175,32 +9180,32 @@ function LandingPage({ onEnter, dark, setDark }) {
   // no hedging, no forced enthusiasm.
   const WHATS_INSIDE = [
     {
+      icon: 'IconInsights',
+      eyebrow: 'Signals',
+      title: 'Know which insider trades actually matter',
+      body: 'Not every insider trade is meaningful — most are routine. Seli scores each one against peer-reviewed research to surface the trades with markers of historically successful positions. Corporate insider buying, cluster purchases, and congressional stock moves, ranked by conviction.',
+      env: 'insights',
+    },
+    {
       icon: 'IconLink',
       eyebrow: 'Portfolio',
-      title: 'Keep up with what you own',
-      body: 'Link your brokerage and see insider buying and selling on stocks in your portfolio. When executives or directors trade something you hold, you\'ll know.',
+      title: 'See insider activity on stocks you own',
+      body: 'Link your brokerage (read-only) and Seli watches for insider buying and selling on your actual holdings. When a CEO, CFO, or director trades something in your portfolio, you\'ll know before the market reacts.',
       env: 'watchlist',
     },
     {
       icon: 'IconZap',
       eyebrow: 'Alerts',
-      title: 'Get notified the moment it happens',
-      body: 'When someone you follow files a Form 4, or a stock you hold gets a cluster of executive trades, you\'ll get notified. Customizable alerts to keep you as updated as you want to be.',
+      title: 'Get notified the moment insiders move',
+      body: 'Instant alerts when someone you follow files a new trade, or when a stock you hold gets a cluster of executive purchases. Daily and weekly email digests to stay on top of insider trading activity without refreshing a page.',
       env: 'settings',
     },
     {
       icon: 'IconData',
       eyebrow: 'Data',
-      title: `Every filing since ${dataSinceYear}`,
-      body: `House, Senate, and corporate insider trades — Form 4 filings, director trades, and congressional disclosures pulled straight from SEC EDGAR and STOCK Act reports. Sorted, transparent, easy to read.`,
+      title: `Every insider trade filing since ${dataSinceYear}`,
+      body: 'Corporate executive trades, director purchases, 10% owner transactions, and congressional stock disclosures — all pulled from SEC EDGAR and STOCK Act reports. Searchable, filterable, and linked to the original government filing.',
       env: 'data',
-    },
-    {
-      icon: 'IconInsights',
-      eyebrow: 'Signals',
-      title: 'Conviction scoring built on real research',
-      body: 'Insider buying patterns scored against peer-reviewed data. Corporate and political insiders ranked by their actual trading history. See which executive trades have markers of historically successful positions.',
-      env: 'insights',
     },
   ];
   useEffect(() => {
@@ -9277,16 +9282,16 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Hero */}
       <section className="lp-hero">
         <div className="lp-hero-bg" aria-hidden="true"/>
-        <p className="lp-hero__eyebrow reveal reveal--delay-1">Insider Trade Intelligence</p>
+        <p className="lp-hero__eyebrow reveal reveal--delay-1">Insider Trading Tracker</p>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Insiders disclose their trades.<br/>
-          <span className="lp-hero__h1-accent">Most investors never see them.</span>{' '}
-          <span className="lp-hero__h1-punch">Make sure you do.</span>
+          When a CEO buys millions in their own stock,<br/>
+          <span className="lp-hero__h1-accent">they usually know something.</span>{' '}
+          <span className="lp-hero__h1-punch">Now you can see it too.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          Seli monitors every SEC Form 4 and congressional trading disclosure within minutes
-          of publication. Connect your portfolio, follow the executives and insiders you care about,
-          and get alerted when something moves.
+          Every SEC Form 4 insider trade and congressional stock disclosure, scored by conviction
+          and delivered within minutes of filing. Track what executives, directors, and members of
+          Congress are buying and selling — and get alerted when it matters to you.
         </p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
@@ -9386,7 +9391,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Features */}
       <section className="lp-features" id="features">
         <div className="lp-section-label reveal">What's inside</div>
-        <h2 className="lp-section-h2 reveal reveal--delay-1">Public data, actually easy to use.</h2>
+        <h2 className="lp-section-h2 reveal reveal--delay-1">Insider trading data that's actually useful</h2>
         <div className="lp-benefit-list">
           {WHATS_INSIDE.map((f,i)=>{
             const Icon = LP_FEATURE_ICON_MAP[f.icon];
@@ -9412,7 +9417,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Pricing */}
       <section className="lp-pricing" id="pricing">
         <div className="lp-section-label reveal">Pricing</div>
-        <h2 className="lp-section-h2 reveal reveal--delay-1">Simple, transparent pricing.</h2>
+        <h2 className="lp-section-h2 reveal reveal--delay-1">Start tracking insider trades for free</h2>
 
         {/* Main plans — two vertical cards */}
         <div className="lp-pricing-top">
@@ -9483,11 +9488,13 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-about-teaser reveal reveal--delay-1" id="about-teaser">
         <div className="lp-about-teaser__grid">
           <div className="lp-about-teaser__lead">
-            <h2 className="lp-section-h2">The research is real. The filings are public.</h2>
+            <h2 className="lp-section-h2">Insider buying outperforms the market. The research proves it.</h2>
             <p className="lp-about-teaser__intro">
-              This isn't a hunch or a marketing angle. It's decades of financial economics research,
-              hiding behind filings almost nobody reads. Federal law forces every insider to disclose their
-              trades. Seli reads every single one, the moment it lands, so you don't have to.
+              When corporate executives and members of Congress trade stocks, they're required by
+              federal law to disclose it publicly. Decades of financial research shows these insider
+              trades consistently outperform the broader market — especially when multiple insiders
+              buy the same stock. Seli reads every filing as it lands, scores it, and puts it in
+              front of you.
             </p>
           </div>
           <div className="lp-about-teaser__advantages">
@@ -10096,18 +10103,18 @@ function AppErrorFallback({ error }) {
 // homepage." This sets it correctly per route so /about, /data-download, etc.
 // get indexed as separate pages.
 const SEO_TITLES = {
-  '/':              'Seli — Insider Trading Intelligence',
-  '/about':         'How Insider Trades Beat the Market — Seli',
-  '/data-download': 'Download SEC Insider Trading Data (CSV) — Seli',
+  '/':              'Seli — Insider Trading Tracker | SEC Form 4 & Congressional Stock Trades',
+  '/about':         'How Insider Trades Beat the Market | Research & Methodology — Seli',
+  '/data-download': 'Download SEC Insider Trading Data (CSV) | 10+ Years of Form 4 Filings — Seli',
   '/terms':         'Terms of Service — Seli',
   '/privacy':       'Privacy Policy — Seli',
   '/cookies':       'Cookie Policy — Seli',
   '/help':          'Help Center — Seli',
 };
 const SEO_DESCRIPTIONS = {
-  '/':              'Track SEC Form 4 insider trading signals in real time. Conviction scoring, congressional trades, and portfolio integration. Built for serious retail investors.',
-  '/about':         'The peer-reviewed research behind insider trading signals. How Seli scores Form 4 filings using findings from Seyhun, Lakonishok & Lee, and Cohen, Malloy & Pomorski.',
-  '/data-download': 'Download the complete SEC Form 4 insider trading dataset as CSV. 10+ years of corporate and congressional stock trades, structured for Excel, Python, and R. One-time purchase, $39.99.',
+  '/':              'Track insider trading in real time. See what CEOs, CFOs, directors, and members of Congress are buying and selling. SEC Form 4 filings scored by conviction, with instant alerts and portfolio integration.',
+  '/about':         'The peer-reviewed research behind insider trading signals. How corporate insider buying outperforms the market by 4-5% annually, and how Seli scores each trade using findings from Seyhun, Lakonishok & Lee, and Cohen et al.',
+  '/data-download': 'Download the complete SEC Form 4 insider trading dataset. 10+ years of corporate executive trades and congressional stock disclosures as structured CSV. One-time purchase, $39.99. Works with Excel, Python, R.',
 };
 
 function useSEO() {

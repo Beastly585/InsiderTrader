@@ -1,0 +1,57 @@
+<!-- 
+  SEO NOSCRIPT BLOCK
+  Add this inside <body> of public/index.html, right after <div id="root"></div>.
+  Google's crawler will see this content since the React app renders in JS.
+  This gives the landing page real indexable text without requiring SSR.
+-->
+<noscript>
+  <div style="max-width:800px;margin:0 auto;padding:40px 20px;font-family:system-ui,sans-serif;color:#e8e8ec;">
+    <h1>Seli — Insider Trading Tracker</h1>
+    <p>Track SEC Form 4 insider trades and congressional stock disclosures in real time. 
+    See what CEOs, CFOs, directors, and members of Congress are buying and selling — 
+    scored by conviction and delivered within minutes of filing.</p>
+
+    <h2>Why Insider Trading Data Matters</h2>
+    <p>When corporate executives spend millions buying their own company's stock, they usually 
+    know something the market doesn't. Academic research shows insider purchases outperform the 
+    broader market by 4–5% annually (Seyhun 1986, Lakonishok &amp; Lee 2001). The signal is even 
+    stronger when multiple insiders buy the same stock independently.</p>
+    <p>Federal law requires every insider to disclose their trades within 2 business days via SEC 
+    Form 4 filings. Members of Congress must disclose stock trades under the STOCK Act within 45 days. 
+    Seli ingests every one of these filings within minutes and scores them for you.</p>
+
+    <h2>Insider Trading Signals</h2>
+    <p>Every trade gets a conviction score based on peer-reviewed research — who traded (C-suite 
+    executives and Congress members carry more weight), whether multiple insiders are buying the 
+    same stock (cluster buying), how much of their own holdings the trade represents, and the 
+    dollar value. Higher conviction = more markers of a historically meaningful insider trade.</p>
+
+    <h2>Congressional Stock Trading Tracker</h2>
+    <p>Track what senators and representatives are buying and selling. STOCK Act disclosures from 
+    every member of Congress, searchable and scored alongside corporate insider trades. See 
+    congressional trading activity, committee assignments, and portfolio positions.</p>
+
+    <h2>Portfolio Integration &amp; Insider Alerts</h2>
+    <p>Connect your brokerage account (read-only) and see insider buying and selling on stocks in 
+    your portfolio. Get instant alerts when executives trade something you hold. Daily and weekly 
+    email digests keep you informed without constant checking.</p>
+
+    <h2>SEC Form 4 Data — Every Filing Since 2013</h2>
+    <p>Every corporate insider trade, director purchase, 10% owner transaction, and congressional 
+    stock disclosure. Searchable, filterable, and linked to the original government filing on 
+    SEC EDGAR. Download the complete dataset as structured CSV for your own analysis.</p>
+
+    <h2>Free Insider Trading Screener</h2>
+    <p>The free tier gives you the last 7 days of scored insider trading signals, the full raw 
+    filing table (last 12 months), and the top insiders leaderboard. Pro unlocks instant alerts, 
+    portfolio tracking, and full historical data going back to 2013.</p>
+
+    <p><a href="https://seli.app">Sign up free at seli.app</a> — no credit card required.</p>
+
+    <h2>Download Insider Trading Data (CSV)</h2>
+    <p>The complete SEC Form 4 insider trading dataset: 10+ years of corporate executive trades 
+    as structured CSV files. 18 fields per transaction including ticker, insider name, title, 
+    trade type, shares, price, value, and position change. One-time purchase for $39.99. 
+    <a href="https://seli.app/data-download">Learn more and buy the dataset</a>.</p>
+  </div>
+</noscript>
