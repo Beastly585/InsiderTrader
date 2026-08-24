@@ -3518,7 +3518,7 @@ td { padding:7px 11px; vertical-align:middle; }
 .lp-btn-primary--lg {
   padding: 13px 28px; font-size: 0.9375rem; border-radius: 999px;
 }
-.lp-btn-primary--full { width: 100%; text-align: center; border-radius: var(--radius-md); padding: 11px; }
+.lp-btn-primary--full { width: 100%; text-align: center; border-radius: 999px; padding: 11px; }
 .lp-btn-ghost {
   padding: 7px 14px; font-size: 0.8125rem; font-family: var(--font); font-weight: 500;
   background: transparent; color: var(--text-2);
@@ -3558,7 +3558,7 @@ td { padding:7px 11px; vertical-align:middle; }
   color: var(--text); border-color: var(--accent); background: var(--surface-2);
   box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 20%, transparent);
 }
-.lp-btn-ghost--full { width: 100%; text-align: center; border-radius: var(--radius-md); padding: 11px; }
+.lp-btn-ghost--full { width: 100%; text-align: center; border-radius: 999px; padding: 11px; }
 
 
 /* Hero */

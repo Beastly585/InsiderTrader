@@ -9182,30 +9182,30 @@ function LandingPage({ onEnter, dark, setDark }) {
   const WHATS_INSIDE = [
     {
       icon: 'IconInsights',
-      eyebrow: 'Research',
-      title: 'See what insiders know that you don\'t',
-      body: 'Before you buy a stock, see if the people running the company are buying too — or quietly selling. Every insider trade scored against peer-reviewed research, so the noise is stripped away and what\'s left are the trades worth your attention.',
+      eyebrow: 'Scored signals',
+      title: 'Cut through the noise',
+      body: 'Thousands of insider trades are filed every week. Most are routine. Seli scores each one against peer-reviewed research — who traded, how much of their position they moved, whether other insiders are buying the same stock — and surfaces the ones with real conviction behind them.',
       env: 'insights',
     },
     {
-      icon: 'IconFavorites',
-      eyebrow: 'Watch',
-      title: 'Follow the companies and people that matter to you',
-      body: 'Build a watchlist of tickers and insiders. When something changes — a new cluster of executive purchases, a director selling a large position — it surfaces immediately. Stop manually checking SEC filings.',
-      env: 'watchlist',
-    },
-    {
       icon: 'IconZap',
-      eyebrow: 'Know',
-      title: 'Never miss an insider move',
-      body: 'Instant alerts when a watched stock gets insider activity, or when someone you follow files a new trade. Daily and weekly digests by email. Connect your brokerage and Seli watches your actual portfolio for insider activity.',
+      eyebrow: 'Instant alerts',
+      title: 'Be the first to know, not the last to react',
+      body: 'Get notified the moment a filing lands — not hours later when the market has already moved. Follow specific tickers or insiders. Instant alerts, daily digests, or weekly summaries — your call.',
       env: 'settings',
     },
     {
+      icon: 'IconFavorites',
+      eyebrow: 'Watchlist & portfolio',
+      title: 'Track what matters to you',
+      body: 'Build a watchlist of tickers and insiders you care about. Connect your brokerage (read-only) and Seli watches your actual holdings for insider activity. When a CEO or director trades something in your portfolio, you\'ll know.',
+      env: 'watchlist',
+    },
+    {
       icon: 'IconData',
-      eyebrow: 'Dig in',
-      title: `Every filing since ${dataSinceYear}, searchable`,
-      body: 'Corporate executive trades, congressional stock disclosures, and everything in between — searchable, filterable, and linked to the original government filing. When you want to draw your own conclusions, the raw data is here.',
+      eyebrow: 'Deep-dive data',
+      title: `Every filing since ${dataSinceYear}, at your fingertips`,
+      body: 'Corporate executive trades, congressional stock disclosures, insider profiles, and transaction history — searchable, filterable, and linked to the original government filing. When you want to dig deeper and draw your own conclusions, the full dataset is here.',
       env: 'data',
     },
   ];
@@ -9285,13 +9285,13 @@ function LandingPage({ onEnter, dark, setDark }) {
         <div className="lp-hero-bg" aria-hidden="true"/>
         <p className="lp-hero__eyebrow reveal reveal--delay-1">Insider Trading Tracker</p>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Know when insiders move.<br/>
-          <span className="lp-hero__h1-accent">Before the market catches up.</span>
+          Politicians and CEOs regularly beat the market.<br/>
+          <span className="lp-hero__h1-accent">Research their trades</span>{' '}
+          <span className="lp-hero__h1-punch">and get notified within minutes of new ones.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          CEOs, directors, and members of Congress are required by law to disclose their stock trades.
-          These trades <strong>outperform the market by 4–5% annually</strong>. Seli watches every filing
-          within minutes, scores it, and tells you which ones matter.
+          Every SEC Form 4 insider trade and congressional stock disclosure — scored by conviction,
+          searchable back to 2010, and delivered to you the moment it's filed.
         </p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
@@ -9390,8 +9390,8 @@ function LandingPage({ onEnter, dark, setDark }) {
 
       {/* Features */}
       <section className="lp-features" id="features">
-        <div className="lp-section-label reveal">Research · Watch · Know</div>
-        <h2 className="lp-section-h2 reveal reveal--delay-1">See what you'd otherwise miss</h2>
+        <div className="lp-section-label reveal">What Seli does</div>
+        <h2 className="lp-section-h2 reveal reveal--delay-1">Signals. Alerts. Data.</h2>
         <div className="lp-benefit-list">
           {WHATS_INSIDE.map((f,i)=>{
             const Icon = LP_FEATURE_ICON_MAP[f.icon];
