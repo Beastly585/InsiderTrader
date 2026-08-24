@@ -7654,8 +7654,8 @@ function DataDownloadPage() {
         <h1 style={{fontSize:'clamp(1.375rem, 5vw, 2.25rem)',fontWeight:800,letterSpacing:'-1px',lineHeight:1.1,marginBottom:20}}>Download 10+ Years of SEC Insider Trading Data</h1>
         <p style={{fontSize:'0.9375rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:8}}>
           The same insider trading data that powers Bloomberg terminals and institutional research desks — structured, clean, and
-          a fraction of the cost. Every SEC Form 4 filing from corporate executives, directors, and 10% owners.
-          One-time purchase, yours forever.
+          a fraction of the cost. Every open-market SEC Form 4 filing from corporate executives, directors, and 10% owners,
+          with routine-trade flags for separating signal from noise. One-time purchase, yours forever.
         </p>
         <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginBottom:12}}>
           Compressed ZIP · one CSV per calendar year · {COLUMNS.length} fields per transaction · Excel, Python, R, or any tool that reads CSV
@@ -7936,8 +7936,17 @@ function RedownloadPage() {
     try {
       const r = await fetchPromise;
       if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        throw new Error(d.error || 'Download failed');
+        // Try to parse a JSON error body — but the response might be HTML
+        // (e.g. a 404 page) or empty, so fall back gracefully.
+        let msg = `Server returned ${r.status}`;
+        try {
+          const ct = r.headers.get('content-type') || '';
+          if (ct.includes('json')) {
+            const d = await r.json();
+            if (d.error) msg = d.error;
+          }
+        } catch {}
+        throw new Error(msg);
       }
       const total = parseInt(r.headers.get('content-length') || '0', 10);
       const reader = r.body.getReader();
@@ -7967,7 +7976,7 @@ function RedownloadPage() {
       setTimeout(() => setDownloadProgress(null), 3000);
     } catch (e) {
       setDownloadProgress(null);
-      setErrorMsg(e.message);
+      setErrorMsg(e.message || 'Download failed — try again in a moment.');
       setLookupStatus('error');
     }
   }
@@ -7976,7 +7985,7 @@ function RedownloadPage() {
     (async () => {
       const token = await getToken();
       await downloadBlob(
-        fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/billing/csv-download', {
+        fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/export/csv', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ mode: 'redownload', purchaseId: purchase.stripe_payment_intent_id }),
@@ -8076,19 +8085,30 @@ function RedownloadPage() {
                 </div>
               ) : (
                 <div style={{border:'0.5px solid var(--border)',borderRadius:8,overflow:'hidden'}}>
-                  {history.map((p, i) => (
-                    <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:i < history.length - 1 ? '0.5px solid var(--border)' : 'none'}}>
-                      <div>
-                        <div style={{fontWeight:600,fontSize:'0.875rem'}}>{fmt.date(p.purchased_at)}</div>
-                        <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:2}}>${(p.amount_cents / 100).toFixed(2)}{p.downloaded_at ? ' · downloaded' : ''}</div>
+                  {history.map((p, i) => {
+                    const dateStr = p.purchased_at ? p.purchased_at.slice(0, 10) : null;
+                    return (
+                      <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:i < history.length - 1 ? '0.5px solid var(--border)' : 'none'}}>
+                        <div>
+                          <div style={{fontWeight:600,fontSize:'0.875rem'}}>Insider Trading Dataset</div>
+                          <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:2}}>
+                            {dateStr ? fmt.date(dateStr) : '—'} · ${(p.amount_cents / 100).toFixed(2)}
+                            {p.downloaded_at ? ' · downloaded' : ''}
+                          </div>
+                        </div>
+                        <button
+                          className="btn btn--primary btn--sm"
+                          onClick={() => handleRedownload(p)}
+                          disabled={downloadProgress != null}
+                        >Re-download</button>
                       </div>
-                      <button
-                        className="btn btn--primary btn--sm"
-                        onClick={() => handleRedownload(p)}
-                        disabled={downloadProgress != null}
-                      >Re-download</button>
-                    </div>
-                  ))}
+                    );
+                  })}
+                </div>
+              )}
+              {isSignedIn && history && history.length > 0 && errorMsg && (
+                <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6,marginTop:12}}>
+                  {errorMsg}
                 </div>
               )}
               {isSignedIn && history && history.length > 0 && (
@@ -9283,15 +9303,15 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Hero */}
       <section className="lp-hero">
         <div className="lp-hero-bg" aria-hidden="true"/>
-        <p className="lp-hero__eyebrow reveal reveal--delay-1">Insider Trading Tracker</p>
+        <p className="lp-hero__eyebrow reveal reveal--delay-1">SEC Insider Trading & Congressional Stock Tracker</p>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Politicians and CEOs regularly beat the market.<br/>
-          <span className="lp-hero__h1-accent">Research their trades</span>{' '}
-          <span className="lp-hero__h1-punch">and get notified within minutes of new ones.</span>
+          See what insiders are buying<br/>
+          <span className="lp-hero__h1-accent">before the market reacts.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          Every SEC Form 4 insider trade and congressional stock disclosure — scored by conviction,
-          searchable back to 2010, and delivered to you the moment it's filed.
+          CEOs, directors, and members of Congress are legally required to disclose their stock trades.
+          Seli watches every SEC Form 4 filing and STOCK Act disclosure, scores each trade by conviction,
+          and alerts you within minutes — not hours.
         </p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
@@ -9303,7 +9323,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Explore Seli →</button>
           </SignedIn>
         </div>
-        <p className="lp-hero__trust reveal reveal--delay-3">SEC EDGAR · STOCK Act · Real-time alerts · Free to start</p>
+        <p className="lp-hero__trust reveal reveal--delay-3">SEC Form 4 filings · STOCK Act disclosures · Real-time alerts · Free to start</p>
 
         {/* Product preview strip */}
         <div className="lp-preview reveal reveal--delay-4">
@@ -9391,7 +9411,7 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Features */}
       <section className="lp-features" id="features">
         <div className="lp-section-label reveal">What Seli does</div>
-        <h2 className="lp-section-h2 reveal reveal--delay-1">Signals. Alerts. Data.</h2>
+        <h2 className="lp-section-h2 reveal reveal--delay-1">Insider trading signals, alerts, and data</h2>
         <div className="lp-benefit-list">
           {WHATS_INSIDE.map((f,i)=>{
             const Icon = LP_FEATURE_ICON_MAP[f.icon];
@@ -10113,7 +10133,7 @@ const SEO_TITLES = {
   '/help':          'Help Center — Seli',
 };
 const SEO_DESCRIPTIONS = {
-  '/':              'Track insider trading in real time. See what CEOs, CFOs, directors, and members of Congress are buying and selling. SEC Form 4 filings scored by conviction, with instant alerts and portfolio integration.',
+  '/':              'Track SEC Form 4 insider trades and congressional stock disclosures in real time. Scored by conviction, with instant alerts and portfolio integration. Free to start.',
   '/about':         'The peer-reviewed research behind insider trading signals. How corporate insider buying outperforms the market by 4-5% annually, and how Seli scores each trade using findings from Seyhun, Lakonishok & Lee, and Cohen et al.',
   '/data-download': 'Download the complete SEC Form 4 insider trading dataset. 10+ years of corporate executive trades as structured CSV. One-time purchase, $39.99. Works with Excel, Python, R.',
 };
