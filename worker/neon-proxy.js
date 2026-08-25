@@ -444,7 +444,7 @@ const CSV_BUILD_STATE_KEY = 'filings-csv-build-state.json';
 // With Workers Paid's default CPU budget, processing a whole 20,000-row
 // NDJSON part in one tick is trivial — no need for a tight per-line bound.
 // Set well above RAW_CHUNK_ROWS so, in practice, one tick = one whole part.
-const CSV_LINES_PER_TICK = 25000;
+const CSV_LINES_PER_TICK = 10000;
 
 // R2's multipart upload requires every NON-FINAL part to be the exact same
 // byte length (not merely >=5MB — genuinely equal). Uploading whenever
@@ -454,10 +454,10 @@ const CSV_LINES_PER_TICK = 25000;
 // buffers bytes across ticks and slices off EXACTLY FIXED_PART_BYTES each
 // time — only the true last part (any size, including the small remainder)
 // is allowed to differ.
-const FIXED_PART_BYTES = 8 * 1024 * 1024; // exactly 8MB per non-final part
+const FIXED_PART_BYTES = 5 * 1024 * 1024; // 5MB per non-final part (R2 minimum)
 
 const CSV_BUILD_LOCK_KEY = 'filings-csv-build-lock.json';
-const CSV_BUILD_LOCK_TTL_MS = 2 * 60 * 1000; // comfortably longer than any single tick should take
+const CSV_BUILD_LOCK_TTL_MS = 15 * 1000; // short TTL — a 1102 crash shouldn't block retries for 2 minutes
 
 async function buildExportCSV(env) {
   if (!env.EXPORT_SNAPSHOTS) return { ok: false, error: 'R2 not configured' };
@@ -538,11 +538,22 @@ async function buildExportCSV(env) {
     // whenever it shows up, in any order.
     const channels = {};
     for (const [year, saved] of Object.entries(state.channels)) {
+      // Buffers are now stored as separate R2 objects, not base64 in the state.
+      // Fall back to legacy bufferB64 for in-progress builds started before this change.
+      let buffer;
+      if (saved.bufferKey) {
+        const bufObj = await env.EXPORT_SNAPSHOTS.get(saved.bufferKey);
+        buffer = bufObj ? new Uint8Array(await bufObj.arrayBuffer()) : new Uint8Array(0);
+      } else if (saved.bufferB64) {
+        buffer = Buffer.from(saved.bufferB64, 'base64');
+      } else {
+        buffer = new Uint8Array(0);
+      }
       channels[year] = {
         upload: await env.EXPORT_SNAPSHOTS.resumeMultipartUpload(`${CSV_EXPORT_PREFIX}${year}.csv`, saved.uploadId),
         uploadedParts: saved.uploadedParts || [],
         nextPartNumber: saved.nextPartNumber || 1,
-        buffer: saved.bufferB64 ? Buffer.from(saved.bufferB64, 'base64') : new Uint8Array(0),
+        buffer,
         pendingLines: [],
         rows: saved.rows || 0,
       };
@@ -588,10 +599,11 @@ async function buildExportCSV(env) {
       // app, but packaging them into a commercial data product crosses a line
       // we don't want to cross. Corporate Form 4 filings only.
       const txCode = row.transaction_code || '';
-      if (txCode.startsWith('CONGRESS')) continue;
-      channels[year].pendingLines.push(ndjsonRowToCSV(row));
-      channels[year].rows++;
-      state.totalRows++;
+      if (!txCode.startsWith('CONGRESS')) {
+        channels[year].pendingLines.push(ndjsonRowToCSV(row));
+        channels[year].rows++;
+        state.totalRows++;
+      }
     }
 
     // Merges pending lines + slices off full parts for every channel touched
@@ -603,11 +615,16 @@ async function buildExportCSV(env) {
       for (const [year, ch] of Object.entries(channels)) {
         flushPendingLines(ch);
         await flushFullParts(ch);
+        // Store the buffer as a separate R2 object — keeps the state JSON tiny
+        const bufferKey = `csv-export/buffer-${year}.bin`;
+        if (ch.buffer.length > 0) {
+          await env.EXPORT_SNAPSHOTS.put(bufferKey, ch.buffer);
+        }
         state.channels[year] = {
           uploadId: ch.upload.uploadId,
           uploadedParts: ch.uploadedParts,
           nextPartNumber: ch.nextPartNumber,
-          bufferB64: Buffer.from(ch.buffer).toString('base64'),
+          bufferKey: ch.buffer.length > 0 ? bufferKey : null,
           rows: ch.rows,
         };
       }
@@ -709,6 +726,10 @@ async function buildExportCSV(env) {
       updatedAt: new Date().toISOString(),
     }));
     await env.EXPORT_SNAPSHOTS.delete(CSV_BUILD_STATE_KEY).catch(()=>{});
+    // Clean up externalized buffer files
+    for (const year of Object.keys(channels)) {
+      await env.EXPORT_SNAPSHOTS.delete(`csv-export/buffer-${year}.bin`).catch(()=>{});
+    }
 
     console.log(`[Worker] CSV export built: ${state.totalRows.toLocaleString()} rows across ${finishedYears.length} years (+ ${undatedRows} undated), through ${state.targetBuiltThrough}`);
     return { ok: true, done: true, totalRows: state.totalRows, years: finishedYears.length, undatedRows };
@@ -1450,7 +1471,7 @@ async function handleExport(request, env, origin) {
 // server-side (the scheduled snapshot builder) where there's no client
 // request to supply selectCols the way handleExport's live path works.
 function exportSelectCols(todayStr) {
-  const dateExpr = col => `CASE WHEN ${col}::date >= '2015-01-01'::date AND ${col}::date <= '${todayStr}'::date THEN ${col} END AS ${col}`;
+  const dateExpr = col => `CASE WHEN ${col}::date >= '2009-01-01'::date AND ${col}::date <= '${todayStr}'::date THEN ${col} END AS ${col}`;
   const cols = ['transaction_date','filing_date','ticker','company_name','insider_name','insider_title',
     'transaction_type','transaction_code','is_open_market','shares','price_per_share',
     'value','pct_owned_change','relationship','sector','footnotes'];
@@ -1491,12 +1512,12 @@ function exportSelectCols(todayStr) {
 // ticks. History: started at 5000, dropped to 2000 while still on Bundled
 // CPU limits, now raised well past the original value since 30s is orders
 // of magnitude more headroom than either Bundled tier ever offered.
-const RAW_CHUNK_ROWS = 20000;
-// Same reasoning — compacting 10 raw parts (~10 x 20000-row chunks) is
-// trivial CPU under Unbound. Kept modest rather than maximal since total
-// part count barely matters anymore (exports serve a single pre-built CSV,
-// not the individual parts), so there's no upside to pushing this further.
-const COMPACT_GROUP_SIZE = 10;
+const RAW_CHUNK_ROWS = 10000;
+// Compacting fewer raw parts per tick keeps string concatenation well under
+// the Worker CPU limit, even on dense recent years where rows are larger.
+// The comment below originally said "~10MB at 5 parts" — at 10 parts with
+// dense data it was hitting ~40MB, which exceeds the limit. 5 is safe.
+const COMPACT_GROUP_SIZE = 5;
 
 // One small, bounded increment of the snapshot build. Meant to be called
 // repeatedly (by a frequent cron, or manually for testing) — each call
@@ -1527,7 +1548,7 @@ async function continueSnapshotBuild(env) {
     } else {
       const metaObj = await env.EXPORT_SNAPSHOTS.get('filings-snapshot.meta.json');
       const meta = metaObj ? JSON.parse(await metaObj.text()) : null;
-      const builtThrough = meta?.builtThrough || '2019-12-31'; // no snapshot yet — start from before the real data begins
+      const builtThrough = meta?.builtThrough || '2009-12-31'; // no snapshot yet — start from before the earliest backfilled data (2010)
       if (builtThrough >= targetCutoff) {
         return { ok: true, idle: true, builtThrough }; // already current, nothing to do
       }
@@ -1546,21 +1567,26 @@ async function continueSnapshotBuild(env) {
     // ALSO do a Neon fetch in the same tick. Each operation alone fits within
     // the Worker CPU budget; doing both in one invocation intermittently
     // exceeds it (the "Exceeded CPU Limit" errors at ~every 5th tick).
+    // Only take the first COMPACT_GROUP_SIZE keys — if there are more pending
+    // (e.g. leftover from a previous run with a larger group size), the
+    // remainder stays pending and gets compacted on the next tick.
     const shouldCompactEarly = state.pendingRawKeys.length >= COMPACT_GROUP_SIZE;
     if (shouldCompactEarly) {
+      const batch = state.pendingRawKeys.slice(0, COMPACT_GROUP_SIZE);
+      const rest  = state.pendingRawKeys.slice(COMPACT_GROUP_SIZE);
       const compactedKey = `filings-snapshot-parts/${String(state.nextCompactedIndex).padStart(6, '0')}.ndjson`;
       let combined = '';
-      for (const key of state.pendingRawKeys) {
+      for (const key of batch) {
         const obj = await env.EXPORT_SNAPSHOTS.get(key);
         if (obj) combined += await obj.text();
       }
       await env.EXPORT_SNAPSHOTS.put(compactedKey, combined);
 
-      for (const key of state.pendingRawKeys) {
+      for (const key of batch) {
         await env.EXPORT_SNAPSHOTS.delete(key).catch(()=>{});
       }
       state.nextCompactedIndex += 1;
-      state.pendingRawKeys = [];
+      state.pendingRawKeys = rest;
       await env.EXPORT_SNAPSHOTS.put('filings-snapshot-build-state.json', JSON.stringify(state));
       return {
         ok: true, done: false,
@@ -1611,11 +1637,8 @@ async function continueSnapshotBuild(env) {
     const shouldCompact = reachedEnd && state.pendingRawKeys.length > 0;
 
     if (shouldCompact) {
-      // With COMPACT_GROUP_SIZE = 5, this concatenates ~10MB — well within
-      // Worker memory limits. The TransformStream approach crashed the
-      // runtime (not a JS exception — our try/catch couldn't catch it),
-      // and at this size it's unnecessary. The original OOM was from
-      // concatenating 20 parts (~40MB); 5 parts is fine.
+      // Final compaction — fewer than COMPACT_GROUP_SIZE pending keys remain
+      // (at most 4), so this is always a small concatenation (~4-8MB max).
       const compactedKey = `filings-snapshot-parts/${String(state.nextCompactedIndex).padStart(6, '0')}.ndjson`;
       let combined = '';
       for (const key of state.pendingRawKeys) {
