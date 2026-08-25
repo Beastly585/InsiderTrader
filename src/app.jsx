@@ -10116,6 +10116,7 @@ function AppInner() {
     </GuideProvider>
     </>
   );
+}
 
 // Sentry.init at module level — runs once, on import, before AppInner ever
 // renders. Ideally this lives in a separate entry file that runs before
