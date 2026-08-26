@@ -7089,11 +7089,15 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
 // Entirely localStorage-backed — no auth needed.
 function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow, user }) {
   const pro = isPro(user);
-  const [days, setDays]       = useState(30);
+  const [days, setDays]       = useState(null); // null = All time — show full last activity
   const [tab, setTab]         = useState('tickers');
   const [sortKey, setSortKey] = useState('lastTradeDate');
   const [sortDir, setSortDir] = useState(-1);
-  const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
+  // null days = no cutoff (show all-time last activity so watchlist is always populated)
+  const cutoff = useMemo(()=>{
+    if (days===null) return null;
+    const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];
+  },[days]);
   const isMobile = useIsMobile();
   const [feedCollapsed, setFeedCollapsed] = useState(false);
 
@@ -7113,7 +7117,8 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
     const allForWatched=filings.filter(f=>watchedTickers.includes(f.ticker));
     const absLast={};
     allForWatched.forEach(f=>{const d=f.transactionDate||f.date||'';if(!absLast[f.ticker]||d>absLast[f.ticker].d)absLast[f.ticker]={d,type:f.transactionType};});
-    const base=allForWatched.filter(f=>(f.transactionDate||f.date||'')>=cutoff);
+    // null cutoff = all-time, so no date filter on base
+    const base=cutoff?allForWatched.filter(f=>(f.transactionDate||f.date||'')>=cutoff):allForWatched;
     const built=buildSignals(base);
     const iwLast={};
     base.forEach(f=>{const d=f.transactionDate||f.date||'';if(!iwLast[f.ticker]||d>iwLast[f.ticker].d)iwLast[f.ticker]={d,type:f.transactionType};});
@@ -7128,7 +7133,8 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
     const absLast={};
     filings.forEach(f=>{if(!watchedInsiders.includes(f.insiderName))return;const d=f.transactionDate||f.date||'';if(!absLast[f.insiderName]||d>absLast[f.insiderName].d)absLast[f.insiderName]={d,type:f.transactionType};});
     const byName={};
-    filings.filter(f=>watchedInsiders.includes(f.insiderName)&&(f.transactionDate||f.date||'')>=cutoff)
+    // null cutoff = all-time
+    filings.filter(f=>watchedInsiders.includes(f.insiderName)&&(!cutoff||(f.transactionDate||f.date||'')>=cutoff))
       .forEach(f=>{if(!byName[f.insiderName])byName[f.insiderName]={name:f.insiderName,title:f.title||'',trades:0,netValue:0,lastDate:null,lastType:null};byName[f.insiderName].trades++;byName[f.insiderName].netValue+=(f.transactionType==='buy'?1:-1)*(f.value||0);const d=f.transactionDate||f.date;if(!byName[f.insiderName].lastDate||d>byName[f.insiderName].lastDate){byName[f.insiderName].lastDate=d;byName[f.insiderName].lastType=f.transactionType;}});
     watchedInsiders.forEach(n=>{if(!byName[n]){const ab=absLast[n];byName[n]={name:n,title:'',trades:0,netValue:0,lastDate:ab?.d||null,lastType:ab?.type||null};}});
     return Object.values(byName);
@@ -7172,10 +7178,11 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                 </button>
               </div>
               <div className="ws-filter-group">
-                <span className="ws-filter-label">Window</span>
+                <span className="ws-filter-label">Activity</span>
                 <div className="ws-pills">
-                  {[7,30,90].map(d=>(
-                    <button key={d} className={`ws-pill${days===d?' ws-pill--active':''}`} onClick={()=>{setDays(d);ensureFilingsWindow&&ensureFilingsWindow(d);}}>{d}d</button>
+                  {[{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
+                    <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`}
+                      onClick={()=>{setDays(o.v);if(o.v)ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
                   ))}
                 </div>
               </div>
@@ -7253,7 +7260,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
         <div className="ws-home-right">
           {!isMobile&&(
             <div style={{marginBottom:14}}>
-              <InsightsPortfolioBar filings={filings} cutoff={cutoff} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
+              <InsightsPortfolioBar filings={filings} cutoff={cutoff||'2010-01-01'} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
             </div>
           )}
           <div className="ws-tile">
@@ -8583,342 +8590,271 @@ function SettingsPage({ user, onUpgrade }) {
   const [notifTab, setNotifTab] = useState('digests'); // sub-tab within Notifications
 
   return (
-    <div className="settings-page">
-      <div className="settings-layout">
+    <div className="ws-page ws-page--narrow">
 
-        {/* ── Left sidebar nav ─────────────────────────────────────────── */}
-        <div className="settings-sidenav">
-          {SECTIONS.map(s=>(
-            <button key={s.id}
-              className={`settings-sidenav__item${section===s.id?' settings-sidenav__item--active':''}`}
-              onClick={()=>setSection(s.id)}
-              title={s.label}
-              aria-label={s.label}>
-              <span className="settings-sidenav__icon">{s.Icon ? <s.Icon style={{width:14,height:14}}/> : s.icon}</span>
-              {s.label}
-            </button>
-          ))}
-        </div>
+      {/* Page header */}
+      <div style={{marginBottom:20}}>
+        <h1 className="ws-page-title">Settings</h1>
+        <p className="ws-page-sub">Manage your plan, alerts, and connected accounts.</p>
+      </div>
 
-        {/* ── Content ──────────────────────────────────────────────────── */}
-        <div className="settings-content">
+      {/* Horizontal tab nav — replaces left sidebar */}
+      <div className="ws-settings-tabs">
+        {SECTIONS.map(s=>(
+          <button key={s.id}
+            className={`ws-settings-tab${section===s.id?' ws-settings-tab--active':''}`}
+            onClick={()=>setSection(s.id)}>
+            <span className="ws-settings-tab__icon">{s.Icon ? <s.Icon style={{width:13,height:13}}/> : s.icon}</span>
+            {s.label}
+          </button>
+        ))}
+      </div>
 
-          {/* BILLING */}
-          {section==='billing'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">Billing</div>
-              <div className="settings-section__desc">Manage your plan, payment, and data export purchases.</div>
+      {/* Content — each section is a ws-tile */}
+      <div>
+
+        {/* BILLING */}
+        {section==='billing'&&(
+          <div className="ws-tile">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Billing</span>
+                <span className="ws-tile__sub">Plan, payment, and data export</span>
+              </div>
+            </div>
+            <div className="ws-tile__body">
               <BillingSection user={user} />
             </div>
-          )}
+          </div>
+        )}
 
-          {/* NOTIFICATIONS — digests and instant alerts as sub-tabs */}
-          {section==='notifications'&&(<>
-            <div className="settings-tabs" style={{marginBottom:14}}>
-              <button className={`settings-tab${notifTab==='digests'?' settings-tab--active':''}`} onClick={()=>setNotifTab('digests')}>Email digests</button>
-              <button className={`settings-tab${notifTab==='instant'?' settings-tab--active':''}`} onClick={()=>setNotifTab('instant')}>Instant alerts</button>
+        {/* NOTIFICATIONS */}
+        {section==='notifications'&&(<>
+          {/* Sub-tabs for digests vs instant */}
+          <div className="ws-toolbar-hdr" style={{background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',marginBottom:14,overflow:'hidden'}}>
+            <div className="ws-toolbar-tabs">
+              <button className={`ws-toolbar-tab${notifTab==='digests'?' ws-toolbar-tab--active':''}`} onClick={()=>setNotifTab('digests')}>Email digests</button>
+              <button className={`ws-toolbar-tab${notifTab==='instant'?' ws-toolbar-tab--active':''}`} onClick={()=>setNotifTab('instant')}>Instant alerts</button>
             </div>
+            {!pro&&(
+              <div className="ws-toolbar-right">
+                <span style={{fontSize:11,color:'var(--text-3)'}}>Pro required · </span>
+                <button className="ws-tile__action" style={{fontSize:11}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
+              </div>
+            )}
+          </div>
 
           {/* EMAIL DIGESTS */}
           {notifTab==='digests'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">
-                Email digests
-                {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
+            <div className="ws-tile">
+              <div className="ws-tile__hdr">
+                <div className="ws-tile__hdr-left">
+                  <span className="ws-tile__title">Email digests</span>
+                  {!pro&&<span className="settings-pro-badge" style={{marginLeft:8,fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:999,background:'var(--accent-50)',color:'var(--accent)'}}>Pro</span>}
+                </div>
               </div>
-              <div className="settings-section__desc">
-                Scheduled summaries delivered to your inbox. Choose your frequency and what to include.
-                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}> Upgrade to Pro to enable email digests.</button>}
-              </div>
-
-              {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
-
-                {/* Frequency — independent toggles, not mutually exclusive */}
-                <div className="settings-group">
-                  <div className="settings-group__label">Frequency</div>
-                  <SettingsToggle
-                    label="Daily digest"
-                    sub="Every weekday morning at 8am ET"
-                    checked={local.daily_digest}
-                    onChange={e=>upd('daily_digest', e.target.checked)}
-                    pro={pro}
-                  />
-                  <SettingsToggle
-                    label="Weekly digest"
-                    sub="Every Monday morning at 8am ET"
-                    checked={local.weekly_digest}
-                    onChange={e=>upd('weekly_digest', e.target.checked)}
-                    pro={pro}
-                  />
-                </div>
-
-                {/* Content — what to include in digests */}
-                <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
-                  <div className="settings-group__label">What to include</div>
-                  <SettingsToggle
-                    label="Top insider signals"
-                    sub="Highest-scoring buys from the selected window"
-                    checked={local.digest_top_signals}
-                    onChange={e=>upd('digest_top_signals', e.target.checked)}
-                    pro={pro}
-                    disabled={!local.daily_digest && !local.weekly_digest}
-                  />
-                  <SettingsToggle
-                    label="Corporate trades (Form 4)"
-                    sub="C-suite and officer open-market transactions"
-                    checked={local.digest_corporate}
-                    onChange={e=>upd('digest_corporate', e.target.checked)}
-                    pro={pro}
-                    disabled={!local.daily_digest && !local.weekly_digest}
-                  />
-                  <SettingsToggle
-                    label="Congressional trades (STOCK Act)"
-                    sub="Senator and representative disclosures"
-                    checked={local.digest_congressional}
-                    onChange={e=>upd('digest_congressional', e.target.checked)}
-                    pro={pro}
-                    disabled={!local.daily_digest && !local.weekly_digest}
-                  />
-                  <SettingsToggle
-                    label="Watchlist activity only"
-                    sub="Limit digest to tickers and insiders you follow"
-                    checked={local.digest_watchlist_only}
-                    onChange={e=>upd('digest_watchlist_only', e.target.checked)}
-                    pro={pro}
-                    disabled={!local.daily_digest && !local.weekly_digest}
-                  />
-                </div>
-
-                {/* Score filter */}
-                <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
-                  <div className="settings-group__label">Minimum signal strength</div>
-                  <div className="settings-group__desc">Only include trades scoring above this level</div>
-                  <div className="settings-pills" style={{marginTop:10}}>
-                    {[
-                      {v:'any',    l:'Any signal',  d:'All open-market trades'},
-                      {v:'medium', l:'Medium+',     d:'Exec participation or $100K+'},
-                      {v:'high',   l:'High only',   d:'C-suite clusters above $1M'},
-                    ].map(o=>(
-                      <button key={o.v}
-                        className={`settings-pill${local.digest_min_conviction===o.v?' settings-pill--active':''}${!pro?' settings-pill--locked':''}`}
-                        onClick={()=>pro&&upd('digest_min_conviction', o.v)}
-                        title={o.d}>
-                        {o.l}
-                      </button>
-                    ))}
+              <div className="ws-tile__body">
+                {!pro&&(
+                  <div className="ws-settings-upgrade-banner">
+                    Scheduled digests are a Pro feature. Upgrade to get daily or weekly summaries delivered to your inbox.
+                    <button className="ws-tile__action" style={{marginLeft:10}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
                   </div>
-                </div>
+                )}
 
-                {/* Volume & sizing controls */}
-                <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
-                  <div className="settings-group__label">Digest size</div>
-                  <div className="settings-row">
-                    <div style={{flex:1}}>
-                      <div className="settings-row__label">Max tickers per digest</div>
-                      <div className="settings-row__sub">Caps how many tickers appear in one email, ranked by net flow</div>
+                {!local ? (
+                  <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+                ) : (<>
+                  <div className="ws-settings-group">
+                    <div className="ws-settings-group__label">Frequency</div>
+                    <SettingsToggle label="Daily digest" sub="Every weekday morning at 8am ET" checked={local.daily_digest} onChange={e=>upd('daily_digest',e.target.checked)} pro={pro}/>
+                    <SettingsToggle label="Weekly digest" sub="Every Monday morning at 8am ET" checked={local.weekly_digest} onChange={e=>upd('weekly_digest',e.target.checked)} pro={pro}/>
+                  </div>
+
+                  <div className={`ws-settings-group${((!local.daily_digest&&!local.weekly_digest)||!pro)?' ws-settings-group--dimmed':''}`}>
+                    <div className="ws-settings-group__label">Include in digests</div>
+                    <SettingsToggle label="Top insider signals" sub="Highest-scoring buys from the selected window" checked={local.digest_top_signals} onChange={e=>upd('digest_top_signals',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
+                    <SettingsToggle label="Corporate trades (Form 4)" sub="C-suite and officer open-market transactions" checked={local.digest_corporate} onChange={e=>upd('digest_corporate',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
+                    <SettingsToggle label="Congressional trades (STOCK Act)" sub="Senator and representative disclosures" checked={local.digest_congressional} onChange={e=>upd('digest_congressional',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
+                    <SettingsToggle label="Watchlist activity only" sub="Limit digest to tickers and insiders you follow" checked={local.digest_watchlist_only} onChange={e=>upd('digest_watchlist_only',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
+                  </div>
+
+                  <div className={`ws-settings-group${((!local.daily_digest&&!local.weekly_digest)||!pro)?' ws-settings-group--dimmed':''}`}>
+                    <div className="ws-settings-group__label">Filters</div>
+                    <div className="ws-settings-row">
+                      <div style={{flex:1}}>
+                        <div className="ws-settings-row__label">Minimum conviction score</div>
+                        <div className="ws-settings-row__sub">Only include signals at or above this score</div>
+                      </div>
+                      <select className="ws-select" value={local.digest_min_conviction} disabled={!pro} onChange={e=>upd('digest_min_conviction',Number(e.target.value))}>
+                        <option value={0}>Any score</option>
+                        <option value={5}>5+</option>
+                        <option value={7}>7+</option>
+                        <option value={9}>9+</option>
+                        <option value={11}>11+</option>
+                      </select>
                     </div>
-                    <select className="settings-select" value={local.digest_max_signals} disabled={!pro}
-                      onChange={e=>upd('digest_max_signals', Number(e.target.value))}>
-                      {[5,10,20,50].map(n=><option key={n} value={n}>{n}</option>)}
-                      <option value={0}>Unlimited</option>
-                    </select>
-                  </div>
-                  <div className="settings-row">
-                    <div style={{flex:1}}>
-                      <div className="settings-row__label">Minimum trade value</div>
-                      <div className="settings-row__sub">Skip tickers where no single trade reaches this size</div>
+                    <div className="ws-settings-row">
+                      <div style={{flex:1}}>
+                        <div className="ws-settings-row__label">Minimum trade value</div>
+                        <div className="ws-settings-row__sub">Skip tickers where no single trade reaches this size</div>
+                      </div>
+                      <select className="ws-select" value={local.digest_min_value} disabled={!pro} onChange={e=>upd('digest_min_value',Number(e.target.value))}>
+                        <option value={0}>Any amount</option>
+                        <option value={10000}>$10K+</option>
+                        <option value={50000}>$50K+</option>
+                        <option value={250000}>$250K+</option>
+                        <option value={1000000}>$1M+</option>
+                      </select>
                     </div>
-                    <select className="settings-select" value={local.digest_min_value} disabled={!pro}
-                      onChange={e=>upd('digest_min_value', Number(e.target.value))}>
-                      <option value={0}>Any amount</option>
-                      <option value={10000}>$10K+</option>
-                      <option value={50000}>$50K+</option>
-                      <option value={250000}>$250K+</option>
-                      <option value={1000000}>$1M+</option>
-                    </select>
                   </div>
-                </div>
 
-                <div className="settings-save-row">
-                  <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
-                    {saving?'Saving…':saved?'✓ Saved':'Save digest settings'}
-                  </button>
-                  {pro&&(
-                    <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>
-                      {testState==='sending'?'Sending…':'Send test email'}
+                  <div className="ws-settings-save-row">
+                    <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
+                      {saving?'Saving…':saved?'✓ Saved':'Save digest settings'}
                     </button>
-                  )}
-                  {saved&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Saved</span>}
-                  {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
-                  {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
-                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
-                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}>Upgrade to Pro to save</button>}
-                </div>
-              </>)}
+                    {pro&&<button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>{testState==='sending'?'Sending…':'Send test email'}</button>}
+                    {saved&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Saved</span>}
+                    {testState==='sent'&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Test sent</span>}
+                    {testState&&testState!=='sending'&&testState!=='sent'&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{testState}</span>}
+                    {error&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{error}</span>}
+                  </div>
+                </>)}
+              </div>
             </div>
           )}
 
           {/* INSTANT ALERTS */}
           {notifTab==='instant'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">
-                Instant alerts
-                {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
-              </div>
-              <div className="settings-section__desc">
-                Real-time emails fired within minutes of a filing. Each trigger is independent.
-                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}> Upgrade to Pro to enable instant alerts.</button>}
-              </div>
-
-              {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
-
-                <div className="settings-group">
-                  <div className="settings-group__label">Watchlist triggers</div>
-                  <SettingsToggle
-                    label="Watched ticker traded"
-                    sub="Any insider trades a stock on your watchlist"
-                    checked={local.instant_watchlist_ticker}
-                    onChange={e=>upd('instant_watchlist_ticker', e.target.checked)}
-                    pro={pro}
-                  />
-                  <SettingsToggle
-                    label="Followed insider filed"
-                    sub="Someone you follow submits a new Form 4"
-                    checked={local.instant_followed_insider}
-                    onChange={e=>upd('instant_followed_insider', e.target.checked)}
-                    pro={pro}
-                  />
-                  <div className="settings-row">
-                    <div style={{flex:1}}>
-                      <div className="settings-row__label">Minimum trade value</div>
-                      <div className="settings-row__sub">Applies to both watchlist triggers above — skip anything smaller</div>
-                    </div>
-                    <select className="settings-select" value={local.instant_min_value} disabled={!pro}
-                      onChange={e=>upd('instant_min_value', Number(e.target.value))}>
-                      <option value={0}>Any amount</option>
-                      <option value={10000}>$10K+</option>
-                      <option value={50000}>$50K+</option>
-                      <option value={250000}>$250K+</option>
-                    </select>
-                  </div>
+            <div className="ws-tile">
+              <div className="ws-tile__hdr">
+                <div className="ws-tile__hdr-left">
+                  <span className="ws-tile__title">Instant alerts</span>
+                  {!pro&&<span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:999,background:'var(--accent-50)',color:'var(--accent)',marginLeft:8}}>Pro</span>}
                 </div>
-
-                <div className="settings-group">
-                  <div className="settings-group__label">Signal triggers</div>
-                  <SettingsToggle
-                    label="Large executive buy"
-                    sub="C-suite open-market buy at or above the threshold below — regardless of watchlist"
-                    checked={local.instant_high_conviction}
-                    onChange={e=>upd('instant_high_conviction', e.target.checked)}
-                    pro={pro}
-                  />
-                  <div className="settings-row">
-                    <div style={{flex:1}}>
-                      <div className="settings-row__label">Minimum trade size</div>
-                      <div className="settings-row__sub">Single-trade size required to trigger this alert</div>
-                    </div>
-                    <select className="settings-select" value={local.instant_high_conviction_threshold} disabled={!pro}
-                      onChange={e=>upd('instant_high_conviction_threshold', Number(e.target.value))}>
-                      <option value={250000}>$250K+</option>
-                      <option value={500000}>$500K+</option>
-                      <option value={1000000}>$1M+</option>
-                      <option value={2000000}>$2M+</option>
-                      <option value={5000000}>$5M+</option>
-                    </select>
+              </div>
+              <div className="ws-tile__body">
+                {!pro&&(
+                  <div className="ws-settings-upgrade-banner">
+                    Real-time email alerts are a Pro feature. Upgrade to get notified within minutes of a filing.
+                    <button className="ws-tile__action" style={{marginLeft:10}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
                   </div>
-                  <SettingsToggle
-                    label="Reversal detected"
-                    sub="An insider on a watched ticker changes direction"
-                    checked={local.instant_reversal}
-                    onChange={e=>upd('instant_reversal', e.target.checked)}
-                    pro={pro}
-                  />
-                </div>
+                )}
 
-                <div className="settings-save-row">
-                  <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
-                    {saving?'Saving…':saved?'✓ Saved':'Save alert settings'}
-                  </button>
-                  {pro&&(
-                    <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>
-                      {testState==='sending'?'Sending…':'Send test email'}
+                {!local?(
+                  <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+                ):(<>
+                  <div className="ws-settings-group">
+                    <div className="ws-settings-group__label">Watchlist triggers</div>
+                    <SettingsToggle label="Watched ticker traded" sub="Any insider trades a stock on your watchlist" checked={local.instant_watchlist_ticker} onChange={e=>upd('instant_watchlist_ticker',e.target.checked)} pro={pro}/>
+                    <SettingsToggle label="Followed insider filed" sub="Someone you follow submits a new Form 4" checked={local.instant_followed_insider} onChange={e=>upd('instant_followed_insider',e.target.checked)} pro={pro}/>
+                    <div className="ws-settings-row">
+                      <div style={{flex:1}}>
+                        <div className="ws-settings-row__label">Minimum trade value</div>
+                        <div className="ws-settings-row__sub">Applies to both watchlist triggers above</div>
+                      </div>
+                      <select className="ws-select" value={local.instant_min_value} disabled={!pro} onChange={e=>upd('instant_min_value',Number(e.target.value))}>
+                        <option value={0}>Any amount</option>
+                        <option value={10000}>$10K+</option>
+                        <option value={50000}>$50K+</option>
+                        <option value={250000}>$250K+</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="ws-settings-group">
+                    <div className="ws-settings-group__label">Signal triggers</div>
+                    <SettingsToggle label="Large executive buy" sub="C-suite open-market buy at or above the threshold below" checked={local.instant_high_conviction} onChange={e=>upd('instant_high_conviction',e.target.checked)} pro={pro}/>
+                    <div className="ws-settings-row">
+                      <div style={{flex:1}}>
+                        <div className="ws-settings-row__label">Minimum trade size</div>
+                        <div className="ws-settings-row__sub">Single-trade size required to trigger this alert</div>
+                      </div>
+                      <select className="ws-select" value={local.instant_high_conviction_threshold} disabled={!pro} onChange={e=>upd('instant_high_conviction_threshold',Number(e.target.value))}>
+                        <option value={250000}>$250K+</option>
+                        <option value={500000}>$500K+</option>
+                        <option value={1000000}>$1M+</option>
+                        <option value={2000000}>$2M+</option>
+                        <option value={5000000}>$5M+</option>
+                      </select>
+                    </div>
+                    <SettingsToggle label="Reversal detected" sub="An insider on a watched ticker changes direction" checked={local.instant_reversal} onChange={e=>upd('instant_reversal',e.target.checked)} pro={pro}/>
+                  </div>
+
+                  <div className="ws-settings-save-row">
+                    <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
+                      {saving?'Saving…':saved?'✓ Saved':'Save alert settings'}
                     </button>
-                  )}
-                  {saved&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Saved</span>}
-                  {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
-                  {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
-                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
-                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}>Upgrade to Pro to save</button>}
-                </div>
-              </>)}
+                    {pro&&<button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>{testState==='sending'?'Sending…':'Send test email'}</button>}
+                    {saved&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Saved</span>}
+                    {testState==='sent'&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Test sent</span>}
+                    {testState&&testState!=='sending'&&testState!=='sent'&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{testState}</span>}
+                    {error&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{error}</span>}
+                  </div>
+                </>)}
+              </div>
             </div>
           )}
-          </>)}
+        </>)}
 
-          {/* LINK PORTFOLIO */}
-          {section==='brokers'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">
-                Link Portfolio
-                {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
+        {/* LINK PORTFOLIO */}
+        {section==='brokers'&&(
+          <div className="ws-tile">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Link Portfolio</span>
+                {!pro&&<span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:999,background:'var(--accent-50)',color:'var(--accent)',marginLeft:8}}>Pro</span>}
               </div>
-              <div className="settings-section__desc">
-                Connect your brokerage via SnapTrade to see insider activity on your holdings. Read-only — Seli never trades on your behalf, and your login credentials go directly to your brokerage, never to Seli.
-                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('default')}> Upgrade to Pro to connect a brokerage.</button>}
-              </div>
-
-              {pro && (
-                <div className="settings-group">
-                  {snaptrade.status===null ? (
-                    <div className="settings-broker-card"><span className="td-muted">Checking connection status…</span></div>
-                  ) : !snaptrade.status.connection ? (
-                    <div className="settings-broker-card">
-                      <div className="settings-broker-card__left">
-                        <div className="settings-broker-card__name">No brokerage connected</div>
-                        <div className="settings-broker-card__sub">Fidelity, Alpaca, and 400M+ other accounts supported via SnapTrade</div>
-                      </div>
-                      <div className="settings-broker-card__right">
-                        <button className="btn btn--primary btn--sm" onClick={snaptrade.connect} disabled={snaptrade.connecting}>
-                          {snaptrade.connecting?'Redirecting…':'Connect'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="settings-broker-card">
-                      <div className="settings-broker-card__left">
-                        <div className="settings-broker-card__name">{snaptrade.status.connection.broker || 'Brokerage connected'}</div>
-                        <div className="settings-broker-card__sub">
-                          Read-only · Connected {new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})}
-                        </div>
-                      </div>
-                      <div className="settings-broker-card__right">
-                        <span className="settings-broker-status settings-broker-status--connected">Connected</span>
-                        <button className="btn btn--ghost btn--sm" onClick={snaptrade.disconnect}>Disconnect</button>
-                      </div>
-                    </div>
-                  )}
+            </div>
+            <div className="ws-tile__body">
+              {!pro&&(
+                <div className="ws-settings-upgrade-banner">
+                  Portfolio linking is a Pro feature. Connect your brokerage to see insider activity on your holdings.
+                  <button className="ws-tile__action" style={{marginLeft:10}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
                 </div>
               )}
 
-              {snaptrade.error && (
-                <p className="settings-section__note" style={{color:'var(--red-600)'}}>{snaptrade.error}</p>
-              )}
+              {pro&&(<>
+                {snaptrade.status===null?(
+                  <div className="ws-settings-broker-card"><span className="td-muted">Checking connection status…</span></div>
+                ):!snaptrade.status.connection?(
+                  <div className="ws-settings-broker-card">
+                    <div className="ws-settings-broker-card__left">
+                      <div className="ws-settings-broker-card__name">No brokerage connected</div>
+                      <div className="ws-settings-broker-card__sub">Fidelity, Alpaca, and 400M+ other accounts supported via SnapTrade</div>
+                    </div>
+                    <button className="btn btn--primary btn--sm" onClick={snaptrade.connect} disabled={snaptrade.connecting}>
+                      {snaptrade.connecting?'Redirecting…':'Connect brokerage'}
+                    </button>
+                  </div>
+                ):(
+                  <div className="ws-settings-broker-card ws-settings-broker-card--connected">
+                    <div className="ws-settings-broker-card__left">
+                      <div className="ws-settings-broker-card__name">{snaptrade.status.connection.broker||'Brokerage connected'}</div>
+                      <div className="ws-settings-broker-card__sub">
+                        Read-only · Connected {new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})}
+                      </div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <span className="settings-broker-status settings-broker-status--connected">● Connected</span>
+                      <button className="btn btn--ghost btn--sm" onClick={snaptrade.disconnect}>Disconnect</button>
+                    </div>
+                  </div>
+                )}
+                {snaptrade.error&&<p style={{color:'var(--red-600)',fontSize:12,marginTop:10}}>{snaptrade.error}</p>}
+              </>)}
 
-              <p className="settings-section__note">
-                Fidelity and Alpaca live-account access is pending broker approval — testing now via Alpaca Paper (no real account needed).
-                Connections are read-only — positions and balances only, no trading access.
+              <p style={{fontSize:12,color:'var(--text-3)',marginTop:14,lineHeight:1.6}}>
+                Connections are read-only — positions and balances only, no trading access. Your login credentials go directly to your brokerage, never to Seli.
+                Fidelity and Alpaca live-account access is pending broker approval — testing via Alpaca Paper (no real account needed).
               </p>
             </div>
-          )}
+          </div>
+        )}
 
-        </div>
       </div>
 
-      {/* Fixed bar, independent of whichever tab's content is showing above it
-          (and however tall that content is) — sits right above the app
-          footer instead of scrolling with the active tab's content, which
-          is what put it at wildly different heights depending on section. */}
-      <div className="settings-legal-bar">
+      {/* Legal links */}
+      <div className="ws-footer" style={{marginTop:24,border:'none',paddingTop:0}}>
         <a href="/help" target="_blank" rel="noreferrer">Help</a>
         <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
         <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
