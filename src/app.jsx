@@ -4363,7 +4363,73 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 }
 
 
-// ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
+// Helper — does this ticker have a reversal in the last 30d?
+// Cheap per-row check using cached reversal list passed in.
+function detectReversalForTicker(ticker, filings) {
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
+  const iso = cutoff.toISOString().split('T')[0];
+  const rows = filings.filter(f=>f.ticker===ticker&&f.isOpenMarket&&(f.transactionDate||f.date||'')>=iso);
+  const types = new Set(rows.map(f=>f.transactionType));
+  return types.has('buy')&&types.has('sell');
+}
+
+
+// ─── SIGNALS ──────────────────────────────────────────────────────────────────
+const DATE_PRESETS=[{label:'3d',days:3},{label:'7d',days:7},{label:'14d',days:14},{label:'30d',days:30},{label:'All',days:null}];
+
+// ─── INSIGHTS — multi-environment: Snapshot / Signals / Leaderboard / Sector Flow ──
+const INSIGHTS_ENVS = [
+  {id:'snapshot',    label:'Snapshot'},
+  {id:'signals',     label:'Signals'},
+  {id:'leaderboard', label:'Insider Leaderboard'},
+  {id:'sectorflow',  label:'Sector Money Flow'},
+];
+
+// Detects insiders who reversed direction on a ticker within the last 12mo
+// (bought then sold, or sold then bought), with the most recent leg inside
+// the last 30 days. Exit signals (sell-after-buy) are surfaced first since
+// they're the stronger "this insider changed their mind" signal.
+function detectReversals(filings) {
+  const cutoffRecent = new Date(); cutoffRecent.setDate(cutoffRecent.getDate()-30);
+  const cutoffWindow = new Date(); cutoffWindow.setMonth(cutoffWindow.getMonth()-12);
+  const recentISO = cutoffRecent.toISOString().split('T')[0];
+  const windowISO = cutoffWindow.toISOString().split('T')[0];
+
+  const byPair = {};
+  for (const f of filings) {
+    if (!f.isOpenMarket || !f.ticker || !f.insiderName) continue;
+    const dt = f.transactionDate||f.date;
+    if (!dt || dt<windowISO) continue;
+    const key = `${f.insiderName}::${f.ticker}`;
+    if (!byPair[key]) byPair[key] = [];
+    byPair[key].push(f);
+  }
+
+  const reversals = [];
+  for (const [key, trades] of Object.entries(byPair)) {
+    const sorted = [...trades].sort((a,b)=>(a.transactionDate||a.date||'').localeCompare(b.transactionDate||b.date||''));
+    const types = [...new Set(sorted.map(t=>t.transactionType))];
+    if (types.length<2) continue; // needs both a buy and a sell to be a reversal
+    const last = sorted[sorted.length-1];
+    const lastDt = last.transactionDate||last.date;
+    if (!lastDt || lastDt<recentISO) continue; // most recent leg must be within 30d
+    const prior = [...sorted].reverse().find(t=>t.transactionType!==last.transactionType);
+    if (!prior) continue;
+    reversals.push({
+      insiderName: last.insiderName, title: last.title,
+      ticker: last.ticker, company: last.company,
+      priorType: prior.transactionType, priorDate: prior.transactionDate||prior.date,
+      recentType: last.transactionType, recentDate: lastDt,
+      recentValue: last.value, isExit: last.transactionType==='sell',
+    });
+  }
+  return reversals.sort((a,b)=>{
+    if (a.isExit!==b.isExit) return a.isExit?-1:1; // exits first
+    return (b.recentDate||'').localeCompare(a.recentDate||'');
+  });
+}
+
+
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
 function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow, watchlist, onUpgrade }) {
   const pro = isPro(user);
