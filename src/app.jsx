@@ -4071,6 +4071,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [sigDir, setSigDir]   = useState(-1);
   const [rawSort, setRawSort] = useState('date');
   const [rawDir, setRawDir]   = useState(-1);
+  const [rawRoleF, setRawRoleF]           = useState('');     // raw tab role filter
   const [expandedSig, setExpandedSig]     = useState(null);  // ticker string
   const [expandedRaw, setExpandedRaw]     = useState(null);  // index number
   const [modal, setModal]                 = useState(null);   // 'signals'|'raw'
@@ -4103,16 +4104,24 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   [allSignals, sigSort, sigDir]);
 
   // ── Raw filings ───────────────────────────────────────────────────────────
+  // Raw cutoff — uses shared days state when on raw tab
+  const rawCutoff = useMemo(() => {
+    if (days == null) return null;
+    const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split('T')[0];
+  }, [days]);
+
   const allRaw = useMemo(() => {
     const q = search.toLowerCase();
     return filings.filter(f => {
       if (!f.isOpenMarket) return false;
       if (sectorF && f.sector!==sectorF) return false;
       if (txType!=='all' && f.transactionType!==txType) return false;
+      if (rawRoleF && f.relationship!==rawRoleF) return false;
+      if (rawCutoff && (f.transactionDate||f.date||'')<rawCutoff) return false;
       if (q && !f.ticker?.toLowerCase().includes(q) && !(f.company||'').toLowerCase().includes(q) && !(f.insiderName||'').toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [filings, sectorF, txType, search]);
+  }, [filings, sectorF, txType, rawRoleF, rawCutoff, search]);
 
   const rawFilings = useMemo(() =>
     [...allRaw].sort((a,b)=>{
@@ -4124,8 +4133,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
   function onSigSort(col) { if(sigSort===col)setSigDir(d=>-d);else{setSigSort(col);setSigDir(-1);} }
   function onRawSort(col) { if(rawSort===col)setRawDir(d=>-d);else{setRawSort(col);setRawDir(-1);} }
-  const hasFilters = search||sectorF||sourceF||minStr>1||days!==7||(tab==='raw'&&txType!=='all');
-  function resetFilters(){ setSearch('');setSectorF('');setSourceF('');setMinStr(1);setDays(7);setTxType('all'); }
+  const hasFilters = search||sectorF||sourceF||minStr>1||days!==7||(tab==='raw'&&(txType!=='all'||rawRoleF!==''));
+  function resetFilters(){ setSearch('');setSectorF('');setSourceF('');setMinStr(1);setDays(7);setTxType('all');setRawRoleF(''); }
 
   const SortIcon = ({col,active,dir}) => active?(dir<0?'↓':'↑'):'';
 
@@ -4202,16 +4211,33 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             </div>
           </>}
 
-          {tab==='raw'&&(
+          {tab==='raw'&&<>
             <div className="ws-filter-group">
-              <span className="ws-filter-label">Direction</span>
+              <span className="ws-filter-label">Date</span>
               <div className="ws-pills">
-                {[['all','Buy & Sell'],['buy','Buys'],['sell','Sells']].map(([v,l])=>(
+                {[{v:1,l:'1d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:null,l:'All'}].map(o=>(
+                  <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`} onClick={()=>setDays(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Type</span>
+              <div className="ws-pills">
+                {[['all','All'],['buy','Buys'],['sell','Sells']].map(([v,l])=>(
                   <button key={v} className={`ws-pill${txType===v?' ws-pill--active':''}`} onClick={()=>setTxType(v)}>{l}</button>
                 ))}
               </div>
             </div>
-          )}
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Role</span>
+              <div className="ws-pills">
+                {[['','All'],['strong','C-Suite'],['medium','Officer']].map(([v,l])=>(
+                  <button key={v} className={`ws-pill${(tab==='raw'?rawRoleF:'')===(v)?' ws-pill--active':''}`}
+                    onClick={()=>setRawRoleF(v)}>{l}</button>
+                ))}
+              </div>
+            </div>
+          </>}
 
           <select className="ws-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
             <option value="">All sectors</option>
@@ -4299,7 +4325,11 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             <div className="ws-empty">No filings match these filters.</div>
           ):(
             <>
-              <div className="ws-col-hdrs" style={{gridTemplateColumns:isMobile?'64px 80px 1fr 80px 90px':'80px 80px 1fr 90px 70px 90px 120px'}}>
+              {/* Desktop columns: Date | Ticker + Insider | Role | Type | Shares | Value | Actions */}
+              {/* Mobile columns:  Date | Ticker | Type | Value */}
+              <div className="ws-col-hdrs" style={{gridTemplateColumns:isMobile
+                ?'72px 1fr 54px 80px'
+                :'88px 80px 1fr 96px 64px 80px 96px 108px'}}>
                 <button className={`ws-col-sort${rawSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('date')}>Date{rawSort==='date'&&(rawDir<0?' ↓':' ↑')}</button>
                 <span className="ws-col-sort">Ticker</span>
                 {!isMobile&&<span className="ws-col-sort">Insider</span>}
@@ -4307,7 +4337,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                 <span className="ws-col-sort">Type</span>
                 {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${rawSort==='shares'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('shares')}>Shares{rawSort==='shares'&&(rawDir<0?' ↓':' ↑')}</button>}
                 <button className={`ws-col-sort ws-col-sort--right${rawSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('value')}>Value{rawSort==='value'&&(rawDir<0?' ↓':' ↑')}</button>
-                <span className="ws-col-sort" style={{textAlign:'right',justifyContent:'flex-end',cursor:'default'}}>SEC / Explore</span>
+                {!isMobile&&<span className="ws-col-sort" style={{textAlign:'right',cursor:'default'}}>SEC</span>}
+                <span className="ws-col-sort" style={{textAlign:'right',cursor:'default'}}>Explore</span>
               </div>
               <div>
                 {rawFilings.map((f,i)=>{
@@ -4316,20 +4347,38 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                   const secUrl=secFilingUrl(f.accessionNumber,f.cikIssuer);
                   return (
                     <div key={i} className={`ws-data-row${isExp?' ws-data-row--expanded':''}`} style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
-                      <div className="ws-data-row__main ws-data-row__main--raw" style={{gridTemplateColumns:isMobile?'64px 80px 1fr 80px 90px':'80px 80px 1fr 90px 70px 90px 120px'}}
+                      <div className="ws-data-row__main" style={{gridTemplateColumns:isMobile
+                          ?'72px 1fr 54px 80px'
+                          :'88px 80px 1fr 96px 64px 80px 96px 108px',cursor:'pointer'}}
                         onClick={()=>setExpandedRaw(x=>x===i?null:i)}>
-                        <div className="ws-data-row__cell ws-data-row__cell--muted">{fmt.dateShort(f.transactionDate||f.date)}</div>
-                        <div className="ws-data-row__cell"><span className="ticker">{f.ticker}</span>{isMobile&&<div style={{fontSize:10,color:'var(--text-3)'}}>{f.insiderName}</div>}</div>
-                        {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--overflow">{f.insiderName}</div>}
+                        {/* Date */}
+                        <div className="ws-data-row__cell ws-data-row__cell--muted" style={{fontSize:11}}>{fmt.dateShort(f.transactionDate||f.date)}</div>
+                        {/* Ticker */}
+                        <div className="ws-data-row__cell">
+                          <span className="ticker">{f.ticker}</span>
+                          {isMobile&&<div style={{fontSize:10,color:'var(--text-3)',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName}</div>}
+                        </div>
+                        {/* Insider name */}
+                        {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--overflow" style={{fontSize:12}}>{f.insiderName}</div>}
+                        {/* Role */}
                         {!isMobile&&<div className="ws-data-row__cell"><Badge type={`rel-${f.relationship||'weak'}`}>{f.relationship==='strong'?'C-Suite':f.relationship==='medium'?'Officer':'Dir'}</Badge></div>}
+                        {/* Type */}
                         <div className="ws-data-row__cell"><span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span></div>
-                        {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--right"><span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-2)'}}>{f.shares?fmt.number(f.shares):'—'}</span></div>}
-                        <div className="ws-data-row__cell ws-data-row__cell--right"><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
-                        <div className="ws-data-row__explore-split">
-                          {secUrl&&<a href={secUrl} target="_blank" rel="noopener noreferrer" className="ws-sec-link" onClick={e=>e.stopPropagation()} title="SEC filing">↗ SEC</a>}
-                          <button className="ws-data-row__explore ws-data-row__explore--compact" onClick={e=>{e.stopPropagation();onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company});}}>
-                            <span className="ws-data-row__explore-label">Explore</span>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                        {/* Shares */}
+                        {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--right ws-data-row__cell--muted" style={{fontFamily:'var(--font-mono)',fontSize:11}}>{f.shares?fmt.number(f.shares):'—'}</div>}
+                        {/* Value */}
+                        <div className="ws-data-row__cell ws-data-row__cell--right">
+                          <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                        </div>
+                        {/* SEC link */}
+                        {!isMobile&&<div className="ws-data-row__cell" style={{textAlign:'right'}} onClick={e=>e.stopPropagation()}>
+                          {secUrl?<a href={secUrl} target="_blank" rel="noopener noreferrer" className="ws-sec-link" title="View SEC filing">↗ SEC</a>:<span style={{color:'var(--text-3)',fontSize:11}}>—</span>}
+                        </div>}
+                        {/* Explore */}
+                        <div className="ws-data-row__cell" style={{textAlign:'right'}} onClick={e=>e.stopPropagation()}>
+                          <button className="ws-raw-explore-btn" onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company})}>
+                            Explore
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{marginLeft:3}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
                           </button>
                         </div>
                       </div>
@@ -4340,7 +4389,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                             <div><span className="ws-data-label">Title</span><div>{f.title||'—'}</div></div>
                             <div><span className="ws-data-label">Shares</span><div>{f.shares?fmt.number(f.shares):'—'}</div></div>
                             <div><span className="ws-data-label">Price/share</span><div>{f.price?fmt.price(f.price):'—'}</div></div>
-                            <div><span className="ws-data-label">Company</span><div>{f.company}</div></div>
+                            <div><span className="ws-data-label">Total value</span><div className={isBuy?'val-buy':'val-sell'}>{isBuy?'+':'−'}{fmt.money(f.value)}</div></div>
                             <div><span className="ws-data-label">Sector</span><div>{f.sector||'—'}</div></div>
                           </div>
                           <button className="ws-data-row__full-btn" onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company})}>Open ticker profile →</button>
@@ -4541,21 +4590,32 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           </div>
           <div className="ws-tile__body ws-chart-wrap">
             <div className="ws-chart-label">
-              {chartMode==='score'?'Composite score (max 5)':chartMode==='hitrate'?'Hit rate %':'Total bought ($M)'}
+              {chartMode==='score'
+                ?'Composite score (0–5) — weighted hit rate, returns, buy count & role'
+                :chartMode==='hitrate'
+                ?'Hit rate % — trades that were profitable within 6 months'
+                :'Total open-market buy value ($M)'}
             </div>
             <div className="ws-bar-chart">
               {chartData.map((d,i)=>{
-                const pct=Math.max(4,(d.value/chartMax)*100);
+                // When all values are equal (e.g. everyone scores 5.0), show proportional bars
+                // offset from a baseline so they're visually distinguishable
+                const minVal=Math.min(...chartData.map(x=>x.value));
+                const range=chartMax-minVal;
+                const pct=range<0.01
+                  ? 80 - i*2  // all equal: staircase so bars are visible
+                  : Math.max(12,((d.value-minVal)/range)*80+15);
                 const isExp=expanded.has(d.full);
+                const valLabel=chartMode==='value'?`$${d.value.toFixed(1)}M`:chartMode==='hitrate'?`${Math.round(d.value)}%`:d.value.toFixed(1);
                 return (
                   <div key={i} className={`ws-bar-item${isExp?' ws-bar-item--active':''}`}
                     onClick={()=>toggleExpand(d.full)}
-                    title={`${d.full}: ${chartMode==='value'?'$'+d.value.toFixed(1)+'M':chartMode==='hitrate'?d.value+'%':d.value.toFixed(1)}`}>
+                    title={`${d.full}: ${valLabel}`}>
                     <div className="ws-bar-item__fill-wrap">
-                      <div className="ws-bar-item__fill" style={{height:`${pct}%`,background:isExp?'var(--accent)':'var(--accent-50)',borderColor:'var(--accent)'}}/>
+                      <div className="ws-bar-item__fill" style={{height:`${pct}%`,background:isExp?'var(--accent)':'var(--accent-50)',borderColor:'var(--accent)',opacity:isExp?1:0.7+i*-0.02}}/>
                     </div>
                     <div className="ws-bar-item__name">{d.name}</div>
-                    <div className="ws-bar-item__val">{chartMode==='value'?'$'+d.value.toFixed(1)+'M':chartMode==='hitrate'?d.value+'%':d.value.toFixed(1)}</div>
+                    <div className="ws-bar-item__val">{valLabel}</div>
                   </div>
                 );
               })}
@@ -4600,16 +4660,20 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           </div>
         </div>
 
-        {/* Column headers */}
-        <div className="ws-col-hdrs" style={{gridTemplateColumns:isMobile?'36px 1fr 56px 100px 52px':'36px 1fr 60px 90px 80px 90px 110px 52px'}}>
-          <span className="ws-col-sort" style={{textAlign:'center',cursor:'default'}}>#</span>
+        {/* Column headers
+            Desktop: # | Insider name (+ title + badge) | Buys | Buy value ($) | Hit rate | Avg return | Score | Explore
+            Mobile:  Insider | Buys | Score | Explore
+        */}
+        <div className="ws-col-hdrs" style={{gridTemplateColumns:isMobile
+          ?'1fr 48px 90px 68px'
+          :'1fr 52px 100px 76px 82px 110px 76px'}}>
           <button className={`ws-col-sort${sort==='insider_name'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('insider_name')}>Insider{sort==='insider_name'&&(dir<0?' ↓':' ↑')}</button>
           <button className={`ws-col-sort ws-col-sort--right${sort==='om_buys'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('om_buys')}>Buys{sort==='om_buys'&&(dir<0?' ↓':' ↑')}</button>
-          {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='bought_value'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('bought_value')}>Value{sort==='bought_value'&&(dir<0?' ↓':' ↑')}</button>}
+          {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='bought_value'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('bought_value')}>Buy value{sort==='bought_value'&&(dir<0?' ↓':' ↑')}</button>}
           {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='hit_rate'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('hit_rate')}>Hit rate{sort==='hit_rate'&&(dir<0?' ↓':' ↑')}</button>}
           {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='avg_return'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('avg_return')}>Avg ret.{sort==='avg_return'&&(dir<0?' ↓':' ↑')}</button>}
           <button className={`ws-col-sort ws-col-sort--right${sort==='proxy_score'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('proxy_score')}>Score{sort==='proxy_score'&&(dir<0?' ↓':' ↑')}</button>
-          <span className="ws-col-sort" style={{textAlign:'right',justifyContent:'flex-end',cursor:'default'}}>Explore</span>
+          <span className="ws-col-sort" style={{textAlign:'right',cursor:'default'}}>Explore</span>
         </div>
 
         {lbError?(
@@ -4626,34 +4690,51 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               const retC=(r.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
               return (
                 <div key={r.insider_name} className={`ws-data-row${isExp?' ws-data-row--expanded':''}`}>
-                  <div className="ws-data-row__main" style={{gridTemplateColumns:isMobile?'36px 1fr 56px 100px 52px':'36px 1fr 60px 90px 80px 90px 110px 52px'}}
+                  <div className="ws-data-row__main" style={{gridTemplateColumns:isMobile
+                      ?'1fr 48px 90px 68px'
+                      :'1fr 52px 100px 76px 82px 110px 76px',cursor:'pointer'}}
                     onClick={()=>toggleExpand(r.insider_name)}>
-                    <div className="ws-data-row__cell" style={{textAlign:'center',color:'var(--text-3)',fontSize:11,fontWeight:600}}>{i+1}</div>
-                    <div className="ws-data-row__cell">
-                      <div style={{display:'flex',alignItems:'center',gap:6}}>
-                        <FollowBtn name={r.insider_name} watchlist={watchlist}/>
-                        <div style={{minWidth:0}}>
-                          <div style={{fontWeight:600,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:isMobile?160:280}}>{r.insider_name}</div>
-                          <div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
+
+                    {/* Insider: rank + name + badge + title + follow */}
+                    <div className="ws-data-row__cell" style={{paddingRight:8}}>
+                      <div style={{display:'flex',alignItems:'center',gap:7}}>
+                        {/* Rank number */}
+                        <span style={{color:'var(--text-3)',fontSize:11,fontWeight:600,minWidth:18,flexShrink:0,textAlign:'right'}}>{i+1}</span>
+                        {/* Name + badge + title */}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:600,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.insider_name}</div>
+                          <div style={{display:'flex',alignItems:'center',gap:5,marginTop:2,flexWrap:'wrap'}}>
                             <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
-                            {!isMobile&&r.insider_title&&<span style={{fontSize:11,color:'var(--text-3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:160}}>{r.insider_title}</span>}
+                            {!isMobile&&r.insider_title&&<span style={{fontSize:11,color:'var(--text-3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}}>{r.insider_title}</span>}
                           </div>
+                        </div>
+                        {/* Follow button — right of name, stops click propagation */}
+                        <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
+                          <FollowBtn name={r.insider_name} watchlist={watchlist}/>
                         </div>
                       </div>
                     </div>
+
+                    {/* Buys */}
                     <div className="ws-data-row__cell ws-data-row__cell--right" style={{fontFamily:'var(--font-mono)',fontSize:12}}>{r.om_buys}</div>
+                    {/* Buy value */}
                     {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--right" style={{fontFamily:'var(--font-mono)',fontSize:12}}>{fmt.money(r.bought_value)}</div>}
+                    {/* Hit rate */}
                     {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--right"><span style={{fontFamily:'var(--font-mono)',fontWeight:700,fontSize:12,color:hrC}}>{r.hit_rate!=null?`${r.hit_rate}%`:'—'}</span></div>}
+                    {/* Avg return */}
                     {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--right"><span style={{fontFamily:'var(--font-mono)',fontWeight:700,fontSize:12,color:retC}}>{r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—'}</span></div>}
-                    <div className="ws-data-row__cell" style={{minWidth:100}}>
-                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    {/* Score + bar */}
+                    <div className="ws-data-row__cell">
+                      <div style={{display:'flex',alignItems:'center',gap:5}}>
                         <span style={{fontFamily:'var(--font-mono)',fontWeight:700,fontSize:12}}>{r.proxy_score?.toFixed(1)??'—'}</span>
-                        <div style={{flex:1,minWidth:32}}><ConvictionBar score={r.proxy_score??0} max={5} showLabel={false}/></div>
+                        <div style={{flex:1,minWidth:28}}><ConvictionBar score={r.proxy_score??0} max={5} showLabel={false}/></div>
                       </div>
                     </div>
-                    <div className="ws-data-row__explore ws-data-row__explore--compact" onClick={e=>{e.stopPropagation();onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title});}}>
-                      <span className="ws-data-row__explore-label">Explore</span>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                    {/* Explore */}
+                    <div className="ws-data-row__cell" style={{textAlign:'right'}} onClick={e=>{e.stopPropagation();onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title});}}>
+                      <button className="ws-raw-explore-btn">
+                        Explore <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{marginLeft:2}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                      </button>
                     </div>
                   </div>
                   {isExp&&(
