@@ -964,41 +964,76 @@ async function handleGuestCSVDownload(request, env, origin) {
     };
 
     // Stream the ZIP in the background
+    const guestEncoder = new TextEncoder();
     (async () => {
       try {
         for (const y of yearsToInclude) {
           const key = `${CSV_EXPORT_PREFIX}${y.year}.csv`;
           const obj = await env.EXPORT_BUCKET.get(key);
           if (!obj) continue;
-          let bytes;
-          if (Number(y.year) === cutoffYear) {
-            const text = await obj.text();
-            const lines = text.split('\n');
-            const kept = [lines[0]];
-            for (let i = 1; i < lines.length; i++) {
-              const line = lines[i];
-              if (!line) continue;
-              const comma1 = line.indexOf(',');
-              const comma2 = line.indexOf(',', comma1 + 1);
-              const txDate = line.slice(0, comma1);
-              const filingDate = line.slice(comma1 + 1, comma2);
-              const effectiveDate = txDate || filingDate;
-              if (!effectiveDate || effectiveDate <= cutoffDate) kept.push(line);
-            }
-            bytes = new TextEncoder().encode(kept.join('\n'));
-          } else {
-            bytes = new Uint8Array(await obj.arrayBuffer());
-          }
+
           const entry = new ZipPassThrough(`seli_insider_trades_${y.year}.csv`);
           zip.add(entry);
-          entry.push(bytes, true);
+
+          if (Number(y.year) === cutoffYear) {
+            const reader = obj.body.getReader();
+            const decoder = new TextDecoder();
+            let leftover = '';
+            let headerSent = false;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              const chunk = leftover + decoder.decode(value, { stream: true });
+              const lines = chunk.split('\n');
+              leftover = lines.pop();
+              const kept = [];
+              for (const line of lines) {
+                if (!headerSent) { kept.push(line); headerSent = true; continue; }
+                if (!line) continue;
+                const comma1 = line.indexOf(',');
+                const comma2 = line.indexOf(',', comma1 + 1);
+                const txDate = line.slice(0, comma1);
+                const filingDate = line.slice(comma1 + 1, comma2);
+                const effectiveDate = txDate || filingDate;
+                if (!effectiveDate || effectiveDate <= cutoffDate) kept.push(line);
+              }
+              if (kept.length > 0) {
+                entry.push(guestEncoder.encode(kept.join('\n') + '\n'), false);
+              }
+            }
+            if (leftover) {
+              const comma1 = leftover.indexOf(',');
+              const comma2 = leftover.indexOf(',', comma1 + 1);
+              const txDate = leftover.slice(0, comma1);
+              const filingDate = leftover.slice(comma1 + 1, comma2);
+              const effectiveDate = txDate || filingDate;
+              if (!effectiveDate || effectiveDate <= cutoffDate) {
+                entry.push(guestEncoder.encode(leftover), false);
+              }
+            }
+            entry.push(new Uint8Array(0), true);
+          } else {
+            const reader = obj.body.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              entry.push(value, false);
+            }
+            entry.push(new Uint8Array(0), true);
+          }
         }
         if (manifest.undatedRows > 0) {
           const undatedObj = await env.EXPORT_BUCKET.get(`${CSV_EXPORT_PREFIX}unknown.csv`);
           if (undatedObj) {
             const entry = new ZipPassThrough('seli_insider_trades_undated.csv');
             zip.add(entry);
-            entry.push(new Uint8Array(await undatedObj.arrayBuffer()), true);
+            const reader = undatedObj.body.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              entry.push(value, false);
+            }
+            entry.push(new Uint8Array(0), true);
           }
         }
         zip.end();
@@ -1134,42 +1169,74 @@ async function handleCSVDownload(request, env, origin) {
         const obj = await env.EXPORT_SNAPSHOTS.get(key);
         if (!obj) continue;
 
-        let bytes;
-        if (Number(y.year) === cutoffYear) {
-          // The in-progress/current year — filter out rows newer than the
-          // purchase date. Date columns are never comma/quote-escaped, so a
-          // plain split is safe.
-          const text = await obj.text();
-          const lines = text.split('\n');
-          const kept = [lines[0]]; // header
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i];
-            if (!line) continue;
-            const comma1 = line.indexOf(',');
-            const comma2 = line.indexOf(',', comma1 + 1);
-            const txDate = line.slice(0, comma1);
-            const filingDate = line.slice(comma1 + 1, comma2);
-            const effectiveDate = txDate || filingDate;
-            if (!effectiveDate || effectiveDate <= cutoffDate) kept.push(line);
-          }
-          bytes = csvDownloadEncoder.encode(kept.join('\n'));
-        } else {
-          bytes = new Uint8Array(await obj.arrayBuffer());
-        }
-
         const entry = new ZipPassThrough(`seli_insider_trades_${y.year}.csv`);
         zip.add(entry);
-        entry.push(bytes, true);
+
+        if (Number(y.year) === cutoffYear) {
+          // Cutoff year needs row-level filtering — stream through a line
+          // buffer so we never load the whole file at once.
+          const reader = obj.body.getReader();
+          const decoder = new TextDecoder();
+          let leftover = '';
+          let headerSent = false;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = leftover + decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            leftover = lines.pop(); // incomplete last line
+            const kept = [];
+            for (const line of lines) {
+              if (!headerSent) { kept.push(line); headerSent = true; continue; }
+              if (!line) continue;
+              const comma1 = line.indexOf(',');
+              const comma2 = line.indexOf(',', comma1 + 1);
+              const txDate = line.slice(0, comma1);
+              const filingDate = line.slice(comma1 + 1, comma2);
+              const effectiveDate = txDate || filingDate;
+              if (!effectiveDate || effectiveDate <= cutoffDate) kept.push(line);
+            }
+            if (kept.length > 0) {
+              entry.push(csvDownloadEncoder.encode(kept.join('\n') + '\n'), false);
+            }
+          }
+          // Handle the final leftover line
+          if (leftover) {
+            const comma1 = leftover.indexOf(',');
+            const comma2 = leftover.indexOf(',', comma1 + 1);
+            const txDate = leftover.slice(0, comma1);
+            const filingDate = leftover.slice(comma1 + 1, comma2);
+            const effectiveDate = txDate || filingDate;
+            if (!effectiveDate || effectiveDate <= cutoffDate) {
+              entry.push(csvDownloadEncoder.encode(leftover), false);
+            }
+          }
+          entry.push(new Uint8Array(0), true); // signal end of entry
+        } else {
+          // Non-cutoff years — stream the R2 object body directly, no filtering needed
+          const reader = obj.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            entry.push(value, false);
+          }
+          entry.push(new Uint8Array(0), true); // signal end of entry
+        }
       }
 
-      // Undated rows (bad/missing source dates) — no date to filter on, so
-      // include unconditionally, same as any fully-past year would be.
+      // Undated rows — stream the same way
       if (manifest.undatedRows > 0) {
         const undatedObj = await env.EXPORT_SNAPSHOTS.get(`${CSV_EXPORT_PREFIX}unknown.csv`);
         if (undatedObj) {
           const entry = new ZipPassThrough('seli_insider_trades_undated.csv');
           zip.add(entry);
-          entry.push(new Uint8Array(await undatedObj.arrayBuffer()), true);
+          const reader = undatedObj.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            entry.push(value, false);
+          }
+          entry.push(new Uint8Array(0), true);
         }
       }
 
