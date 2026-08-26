@@ -5600,16 +5600,12 @@ td { padding:7px 11px; vertical-align:middle; }
   display: block !important;
 }
 
-
 /* ══════════════════════════════════════════════════════════════════════
    SELI WEBSITE-STYLE LAYOUT — append to style.css
    All existing tokens (--bg, --accent, --surface, etc.) unchanged.
 ══════════════════════════════════════════════════════════════════════ */
 
 /* ── Shell ─────────────────────────────────────────────────────────── */
-.ws-shell { display:flex; flex-direction:column; min-height:100dvh; background:var(--bg); }
-.ws-shell--panel-open .ws-main { margin-right:var(--panel-w); }
-@media(max-width:900px){ .ws-shell--panel-open .ws-main{ margin-right:0; } }
 
 /* ── Top Nav ───────────────────────────────────────────────────────── */
 .topnav {
@@ -5671,12 +5667,10 @@ td { padding:7px 11px; vertical-align:middle; }
   .topnav__links,.topnav__upgrade{ display:none; }
   .topnav{ padding:0 14px; }
   .topnav__logo{ margin-right:0; }
-  .ws-main{ padding-bottom:60px; }
   .topnav__settings-fab{ display:none; }
 }
 
 /* ── Main + background wash ────────────────────────────────────────── */
-.ws-main { flex:1; overflow-y:auto; overflow-x:hidden; position:relative; }
 .ws-main::before {
   content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
   background:
@@ -5863,9 +5857,6 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-empty { padding:28px 20px; text-align:center; color:var(--text-3); font-size:12px; line-height:1.6; }
 
 /* ── Footer ────────────────────────────────────────────────────────── */
-.ws-footer { border-top:0.5px solid var(--border); padding:14px 20px; display:flex; align-items:center; justify-content:center; gap:20px; font-size:11px; color:var(--text-3); position:relative; z-index:1; }
-.ws-footer a { color:var(--text-3); text-decoration:none; }
-.ws-footer a:hover { color:var(--text); }
 
 /* ── Clerk avatar ──────────────────────────────────────────────────── */
 .clerk-avatar { width:28px !important; height:28px !important; }
