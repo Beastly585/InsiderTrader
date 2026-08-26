@@ -9958,12 +9958,10 @@ function AppInner() {
         <div className="modal-panel stale-modal">
           <div className="modal-panel__hdr">
             <span className="modal-panel__title">Data isn't updating</span>
-            <button className="modal-close" onClick={()=>setShowStaleDataModal(false)} title="Close (Esc)">
-              <IconClose style={{width:12,height:12}}/>
-            </button>
+            <button className="modal-close" onClick={()=>setShowStaleDataModal(false)} title="Close (Esc)"><IconClose style={{width:12,height:12}}/></button>
           </div>
           <div className="modal-body stale-modal__body">
-            <p>Live filing data hasn't updated in a few days. We're aware and working on it — nothing you need to do on your end.</p>
+            <p>Live filing data hasn't updated in a few days. We're aware and working on it.</p>
             <p className="stale-modal__timestamp">
               Last new filing: <strong>{lastFilingDate ? fmt.dateShort(lastFilingDate) : 'unknown'}</strong>
               {daysSinceLastFiling != null && ` (${daysSinceLastFiling} day${daysSinceLastFiling===1?'':'s'} ago)`}
@@ -9973,121 +9971,42 @@ function AppInner() {
       </div>
     )}
     <GuideProvider>
-    <div className={`app-shell${panelOpen?' app-shell--panel-open':''}${page==='settings'?' app-shell--settings':''}`}>
-      <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>
-      <main className="main-area">
-        <div className="status-bar">
-          {/* Page title — left */}
-          <span className="status-bar__info">
-            {PAGE_TITLES[page] || 'Seli'}
-            <span className="beta-tag beta-tag--status" title="Seli is in private beta">BETA</span>
-          </span>
-          <div className="status-bar__meta">
-            {/* Data freshness */}
-            {lastFilingDate&&(
-              <span className={isDataStale?'status-bar__stale':''} title={isDataStale?`Data through ${lastFilingDate} — may be behind`:`Data current through ${lastFilingDate}`}>
-                <span className="status-bar__dot" style={isDataStale?{background:'var(--amber-600)'}:{}}/>
-                {isDataStale?<><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{`Data through ${fmt.dateShort(lastFilingDate)}`}</>:`Through ${fmt.dateShort(lastFilingDate)}`}
-              </span>
-            )}
-            {!lastFilingDate&&<span title={loading?'Syncing…':'Ready'}><span className="status-bar__dot"/>{loading?'Syncing…':'Ready'}</span>}
-            {/* Feedback — real destination (Worker endpoint, stored in a
-                table), not a mailto link that's easy to lose track of.
-                Placed alongside Guide since both are "get help / weigh
-                in" actions. */}
-            <FeedbackButton page={page}/>
-            <GuideStatusBarButton/>
-            {/* Theme toggle — moved here from the sidebar */}
-            <button className="status-bar__icon-btn" onClick={()=>setDark(d=>!d)}
-              title={dark?'Switch to light mode':'Switch to dark mode'}
-              aria-label={dark?'Switch to light mode':'Switch to dark mode'}>
-              {dark ? <IconSun style={{width:16,height:16}}/> : <IconMoon style={{width:16,height:16}}/>}
-            </button>
-            {/* Avatar — Clerk's own dropdown (manage account, sign out, etc).
-                Settings/billing are reachable via the gear icon in the sidebar. */}
-            <SignedIn>
-              <UserButton
-                afterSignOutUrl="/"
-                appearance={{
-                  elements: {
-                    avatarBox:          'clerk-avatar',
-                    userButtonTrigger:  'clerk-avatar-trigger',
-                    userButtonAvatarBox:'clerk-avatar-box',
-                  }
-                }}
-              />
-            </SignedIn>
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="auth-btn">Sign in</button>
-              </SignInButton>
-            </SignedOut>
-          </div>
-        </div>
-        <div className="content-area">
-          {cameFromHome && page !== 'home' && (
-            // Mobile-only via CSS (see .home-breadcrumb) — a person who
-            // reached this page any other way (bottom nav, a shared link)
-            // never set cameFromHome, so this simply doesn't render for them.
-            <button className="home-breadcrumb" onClick={()=>navTo('home')}>
-              <span className="home-breadcrumb__arrow">←</span>
-              Home <span className="home-breadcrumb__sep">›</span> {PAGE_TITLES[page]}
-            </button>
-          )}
-          {page==='home'     &&<HomePage filings={filings} loading={loading} watchlist={watchlist} user={user}
-            onOpenDetail={openDetail} onSeeAll={seeAllFromHome}/>}
-          {page==='dashboard'&&<DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-          {page==='signals'  &&<InsightsPage   filings={filings} loading={loading}
-            highlightTicker={hlTicker} setHighlightTicker={setHlTick}
-            onSelectSignal={selectSignal} selectedSignal={selSignal}
-            onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user}
-            ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist}
-            onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-          {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'data_export')}/>}
-          {page==='settings'  &&<SettingsPage user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-          {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow} user={user}/>}
-        </div>
-        <footer className="footer">
-          <span className="footer__center">Private Beta · Not financial advice.</span>
-          <a href="/help" target="_blank" rel="noreferrer" className="footer__right">Help</a>
+    <div className={`ws-shell${panelOpen?' ws-shell--panel-open':''}${page==='settings'?' ws-shell--settings':''}`}>
+      <TopNav
+        page={page} setPage={navTo} dark={dark} setDark={setDark} user={user}
+        onUpgrade={(f) => setShowUpgradeModal(f || 'default')}
+        lastFilingDate={lastFilingDate} isDataStale={isDataStale} loading={loading}
+      />
+      <main className="ws-main">
+        {cameFromHome && page !== 'home' && (
+          <button className="home-breadcrumb" onClick={() => navTo('home')}>
+            <span className="home-breadcrumb__arrow">←</span>
+            Home <span className="home-breadcrumb__sep">›</span> {PAGE_TITLES[page]}
+          </button>
+        )}
+        {page==='home'      && <HomePage filings={filings} loading={loading} watchlist={watchlist} user={user} onOpenDetail={openDetail} onSeeAll={seeAllFromHome}/>}
+        {page==='dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
+        {page==='signals'   && <InsightsPage filings={filings} loading={loading} highlightTicker={hlTicker} setHighlightTicker={setHlTick} onSelectSignal={selectSignal} selectedSignal={selSignal} onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user} ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
+        {page==='data'      && <DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'data_export')}/>}
+        {page==='settings'  && <SettingsPage user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
+        {page==='watchlist' && <WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow} user={user}/>}
+        <footer className="ws-footer">
+          <span>Private Beta · Not financial advice.</span>
+          <a href="/help" target="_blank" rel="noreferrer">Help</a>
         </footer>
       </main>
-      {watchlist.showUpgrade&&(
-        <UpgradeModal feature={watchlist.showUpgrade} pro={isPro(user)} onClose={()=>watchlist.setShowUpgrade(null)}/>
-      )}
-      {showUpgradeModal&&(
-        <UpgradeModal feature={showUpgradeModal} pro={isPro(user)} onClose={()=>setShowUpgradeModal(null)}/>
-      )}
-      {panelOpen&&!detailFull&&(
+      {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={isPro(user)} onClose={()=>watchlist.setShowUpgrade(null)}/>}
+      {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={isPro(user)} onClose={()=>setShowUpgradeModal(null)}/>}
+      {panelOpen && !detailFull && (
         <>
           <div className="panel-overlay" onClick={closeDetail}/>
           <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
         </>
       )}
-      {panelOpen&&detailFull&&(
+      {panelOpen && detailFull && (
         detail?.dataFilters
-          ? <DataDrawer
-              initialDetail={detail}
-              initialDetailStack={detailStack}
-              filterState={detail.dataFilters}
-              onClose={closeDetail}
-              watchlist={watchlist}
-              portfolioTickers={portfolioTickers}
-              pro={isPro(user)}
-              onUpgrade={(f)=>setShowUpgradeModal(f||'default')}
-            />
-          : <InsightsDrawer
-              type={detail?.type==='trader' ? 'insiders' : 'signals'}
-              filings={filings}
-              onClose={closeDetail}
-              initialDetail={detail}
-              initialDetailStack={detailStack}
-              sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort}
-              ensureFilingsWindow={ensureFilingsWindow}
-              filingsLoading={loading}
-              watchlist={watchlist}
-              pro={isPro(user)}
-            />
+          ? <DataDrawer initialDetail={detail} initialDetailStack={detailStack} filterState={detail.dataFilters} onClose={closeDetail} watchlist={watchlist} portfolioTickers={portfolioTickers} pro={isPro(user)} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>
+          : <InsightsDrawer type={detail?.type==='trader'?'insiders':'signals'} filings={filings} onClose={closeDetail} initialDetail={detail} initialDetailStack={detailStack} sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort} ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading} watchlist={watchlist} pro={isPro(user)}/>
       )}
     </div>
     </GuideProvider>
@@ -10189,78 +10108,8 @@ function useSEO() {
 export default function App() {
   useSEO();
   return (
-    <>
-    {isDataStale && !error && (
-      <button className="stale-banner" onClick={() => setShowStaleDataModal(true)}>
-        <IconWarning style={{width:14,height:14}}/>
-        Live data isn't updating right now — tap for details
-      </button>
-    )}
-    {error && (
-      <div className="stale-banner stale-banner--error" role="alert">
-        <IconWarning style={{width:14,height:14}}/>
-        <span>Failed to load filing data. <button className="stale-banner__retry" onClick={()=>load(filingsWindowDays)}>Retry</button></span>
-      </div>
-    )}
-    {showStaleDataModal && (
-      <div className="modal-overlay" onClick={(e)=>{if(e.target===e.currentTarget)setShowStaleDataModal(false);}}>
-        <div className="modal-panel stale-modal">
-          <div className="modal-panel__hdr">
-            <span className="modal-panel__title">Data isn't updating</span>
-            <button className="modal-close" onClick={()=>setShowStaleDataModal(false)} title="Close (Esc)"><IconClose style={{width:12,height:12}}/></button>
-          </div>
-          <div className="modal-body stale-modal__body">
-            <p>Live filing data hasn't updated in a few days. We're aware and working on it.</p>
-            <p className="stale-modal__timestamp">
-              Last new filing: <strong>{lastFilingDate ? fmt.dateShort(lastFilingDate) : 'unknown'}</strong>
-              {daysSinceLastFiling != null && ` (${daysSinceLastFiling} day${daysSinceLastFiling===1?'':'s'} ago)`}
-            </p>
-          </div>
-        </div>
-      </div>
-    )}
-    <GuideProvider>
-    <div className={`ws-shell${panelOpen?' ws-shell--panel-open':''}${page==='settings'?' ws-shell--settings':''}`}>
-      <TopNav
-        page={page} setPage={navTo} dark={dark} setDark={setDark} user={user}
-        onUpgrade={(f) => setShowUpgradeModal(f || 'default')}
-        lastFilingDate={lastFilingDate} isDataStale={isDataStale} loading={loading}
-      />
-      <main className="ws-main">
-        {cameFromHome && page !== 'home' && (
-          <button className="home-breadcrumb" onClick={() => navTo('home')}>
-            <span className="home-breadcrumb__arrow">←</span>
-            Home <span className="home-breadcrumb__sep">›</span> {PAGE_TITLES[page]}
-          </button>
-        )}
-        {page==='home'      && <HomePage filings={filings} loading={loading} watchlist={watchlist} user={user} onOpenDetail={openDetail} onSeeAll={seeAllFromHome}/>}
-        {page==='dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-        {page==='signals'   && <InsightsPage filings={filings} loading={loading} highlightTicker={hlTicker} setHighlightTicker={setHlTick} onSelectSignal={selectSignal} selectedSignal={selSignal} onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user} ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-        {page==='data'      && <DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'data_export')}/>}
-        {page==='settings'  && <SettingsPage user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-        {page==='watchlist' && <WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow} user={user}/>}
-        <footer className="ws-footer">
-          <span>Private Beta · Not financial advice.</span>
-          <a href="/help" target="_blank" rel="noreferrer">Help</a>
-        </footer>
-      </main>
-      {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={isPro(user)} onClose={()=>watchlist.setShowUpgrade(null)}/>}
-      {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={isPro(user)} onClose={()=>setShowUpgradeModal(null)}/>}
-      {panelOpen && !detailFull && (
-        <>
-          <div className="panel-overlay" onClick={closeDetail}/>
-          <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
-        </>
-      )}
-      {panelOpen && detailFull && (
-        detail?.dataFilters
-          ? <DataDrawer initialDetail={detail} initialDetailStack={detailStack} filterState={detail.dataFilters} onClose={closeDetail} watchlist={watchlist} portfolioTickers={portfolioTickers} pro={isPro(user)} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>
-          : <InsightsDrawer type={detail?.type==='trader'?'insiders':'signals'} filings={filings} onClose={closeDetail} initialDetail={detail} initialDetailStack={detailStack} sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort} ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading} watchlist={watchlist} pro={isPro(user)}/>
-      )}
-    </div>
-    </GuideProvider>
-    </>
+    <Sentry.ErrorBoundary fallback={AppErrorFallback}>
+      <AppInner/>
+    </Sentry.ErrorBoundary>
   );
-
 }
-

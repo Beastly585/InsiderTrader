@@ -5616,7 +5616,7 @@ td { padding:7px 11px; vertical-align:middle; }
   position:sticky; top:0; z-index:100; height:52px;
   display:flex; align-items:center; padding:0 24px;
   background:var(--surface);
-  box-shadow:0 1px 0 var(--border); /* no hard border-bottom, just shadow */
+  box-shadow:none;
   flex-shrink:0;
 }
 .topnav__logo { display:flex; align-items:center; gap:7px; margin-right:auto; flex-shrink:0; cursor:pointer; }
