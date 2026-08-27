@@ -3884,91 +3884,156 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
   const pro = isPro(user);
   const isMobile = useIsMobile();
   const [sigDays, setSigDays] = useState(3);
-  const [sigSort, setSigSort] = useState('conviction');
-  const [sigDir,  setSigDir]  = useState(-1);
-  const [filSort, setFilSort] = useState('date');
-  const [filDir,  setFilDir]  = useState(-1);
 
   const cutoff = useMemo(() => {
     const d = new Date(); d.setDate(d.getDate() - sigDays);
     return d.toISOString().split('T')[0];
   }, [sigDays]);
 
+  // 24h stats for pulse strip
   const ydCutoff = useMemo(() => {
     const d = new Date(); d.setDate(d.getDate() - 1);
     return d.toISOString().split('T')[0];
   }, []);
 
-  const allSignals = useMemo(() => {
+  const signals = useMemo(() => {
     const base = filings.filter(f =>
       f.isOpenMarket && f.transactionType === 'buy' &&
       (f.transactionDate || f.date || '') >= cutoff
     );
     return buildSignals(base)
-      .filter(s => s.netValue >= 100_000 || s.cSuiteBuys >= 1 || s.isPolitical);
+      .filter(s => s.netValue >= 100_000 || s.cSuiteBuys >= 1 || s.isPolitical)
+      .sort((a, b) => b.conviction - a.conviction);
   }, [filings, cutoff]);
 
-  const signals = useMemo(() => {
-    return [...allSignals].sort((a, b) => {
-      const av = a[sigSort] ?? -Infinity, bv = b[sigSort] ?? -Infinity;
-      const r = typeof av === 'number' ? (av < bv ? -1 : av > bv ? 1 : 0)
-              : String(av).localeCompare(String(bv));
-      return sigDir > 0 ? r : -r;
-    });
-  }, [allSignals, sigSort, sigDir]);
+  const recentFilings = useMemo(() =>
+    [...filings].filter(f => f.isOpenMarket)
+      .sort((a, b) => (b.transactionDate||b.date||'') > (a.transactionDate||a.date||'') ? 1 : -1)
+      .slice(0, 20),
+  [filings]);
 
-  function onSigSort(col) {
-    if (sigSort === col) setSigDir(d => -d);
-    else { setSigSort(col); setSigDir(-1); }
-  }
-
-  const recentFilings = useMemo(() => {
-    return [...filings].filter(f => f.isOpenMarket).sort((a, b) => {
-      if (filSort === 'date') {
-        const av = a.transactionDate||a.date||'', bv = b.transactionDate||b.date||'';
-        return filDir > 0 ? av.localeCompare(bv) : bv.localeCompare(av);
-      }
-      if (filSort === 'value') return filDir > 0 ? (a.value||0)-(b.value||0) : (b.value||0)-(a.value||0);
-      return 0;
-    }).slice(0, 12);
-  }, [filings, filSort, filDir]);
-
-  function onFilSort(col) {
-    if (filSort === col) setFilDir(d => -d);
-    else { setFilSort(col); setFilDir(-1); }
-  }
-
-  const stats = useMemo(() => {
+  // Quick pulse numbers — yesterday so they feel live and change daily
+  const pulse = useMemo(() => {
     const yd = filings.filter(f => f.isOpenMarket && (f.transactionDate||f.date||'') >= ydCutoff);
-    const w3 = filings.filter(f => f.isOpenMarket && (f.transactionDate||f.date||'') >= cutoff);
     return {
-      buyValYd:  yd.filter(f => f.transactionType==='buy').reduce((s,f) => s+(f.value||0), 0),
-      buyCntYd:  yd.filter(f => f.transactionType==='buy').length,
-      highConv3: allSignals.filter(s => s.conviction >= 10).length,
-      tickers3:  new Set(w3.map(f => f.ticker)).size,
+      buyVal: yd.filter(f => f.transactionType==='buy').reduce((s,f) => s+(f.value||0), 0),
+      buys:   yd.filter(f => f.transactionType==='buy').length,
+      sells:  yd.filter(f => f.transactionType==='sell').length,
     };
-  }, [filings, allSignals, ydCutoff, cutoff]);
+  }, [filings, ydCutoff]);
 
   return (
     <div className="ws-page">
-      {/* Stat strip */}
-      <div className="ws-stat-strip">
-        <div className="ws-stat"><div className="ws-stat__label">Buy value · 24h</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{loading?'—':fmt.money(stats.buyValYd)}</div><div className="ws-stat__sub">{stats.buyCntYd} transactions</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">High-conviction · 3d</div><div className="ws-stat__value">{loading?'—':stats.highConv3}</div><div className="ws-stat__sub">Score ≥10/15</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Tickers active · 3d</div><div className="ws-stat__value">{loading?'—':stats.tickers3}</div><div className="ws-stat__sub">With open-market trades</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Data freshness</div><div className="ws-stat__value" style={{fontSize:15}}>{loading?'Syncing…':'Live'}</div><div className="ws-stat__sub">SEC Form 4 · STOCK Act</div></div>
+      {/* Minimal pulse bar — yesterday's market in one line */}
+      <div className="ws-pulse-bar">
+        <span className="ws-pulse-bar__item">
+          <span className="ws-pulse-bar__label">24h buy flow</span>
+          <span className="ws-pulse-bar__val val-buy">{loading?'—':fmt.money(pulse.buyVal)}</span>
+        </span>
+        <span className="ws-pulse-bar__sep"/>
+        <span className="ws-pulse-bar__item">
+          <span className="ws-pulse-bar__label">Buys</span>
+          <span className="ws-pulse-bar__val">{loading?'—':pulse.buys}</span>
+        </span>
+        <span className="ws-pulse-bar__sep"/>
+        <span className="ws-pulse-bar__item">
+          <span className="ws-pulse-bar__label">Sells</span>
+          <span className="ws-pulse-bar__val">{loading?'—':pulse.sells}</span>
+        </span>
+        <span className="ws-pulse-bar__sep"/>
+        <span className="ws-pulse-bar__item">
+          <span className="ws-pulse-bar__label">Signals · {sigDays}d</span>
+          <span className="ws-pulse-bar__val">{loading?'—':signals.length}</span>
+        </span>
+        <div className="ws-pulse-bar__right">
+          <SentimentStrip filings={filings} compact/>
+        </div>
       </div>
 
-      {/* Sentiment strip */}
-      <div style={{marginBottom:16}}><SentimentStrip filings={filings}/></div>
+      <div className={`ws-home-centered${isMobile?' ws-home-centered--mobile':''}`}>
 
-      {/* ── Centered narrow column: Recent filings ABOVE signals, then market news fills right ── */}
-      <div className="ws-home-centered">
-
-        {/* LEFT CENTER — narrow column (60%) */}
+        {/* LEFT: Insider signals — hero column */}
         <div className="ws-home-main">
+          <div className="ws-tile">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Insider signals</span>
+                {!loading&&<span className="ws-tile__count">{signals.length}</span>}
+                <span className="ws-tile__sub">Ranked by conviction</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div className="ws-pills">
+                  {[{l:'1d',v:1},{l:'3d',v:3},{l:'7d',v:7}].map(o=>(
+                    <button key={o.v} className={`ws-pill ws-pill--sm${sigDays===o.v?' ws-pill--active':''}`}
+                      onClick={()=>setSigDays(o.v)}>{o.l}</button>
+                  ))}
+                </div>
+                <button className="ws-tile__action" onClick={()=>onSeeAll('dashboard')}>See all →</button>
+              </div>
+            </div>
 
-          {/* 1. Recent filings tile — ABOVE signals */}
+            {/* Signal rows — generous padding, clear hierarchy */}
+            <div className="ws-home-signals-body">
+              {loading ? <SkeletonRows count={7}/> : signals.length===0 ? (
+                <div className="ws-empty">No signals in this window. Form 4s file 1–2 days after trades.</div>
+              ) : signals.map(s => {
+                const isBuy = s.direction !== 'sell';
+                const hasRev = detectReversalForTicker(s.ticker, filings);
+                return (
+                  <div key={s.ticker} className="ws-home-sig-row" onClick={()=>onOpenDetail({type:'signal',...s})}
+                    style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                    {/* Left: ticker + company + badges */}
+                    <div className="ws-home-sig-row__main">
+                      <div className="ws-home-sig-row__top">
+                        <span className="ticker">{s.ticker}</span>
+                        {s.cSuiteBuys>0 && <span className="ws-home-badge ws-home-badge--exec">{s.cSuiteBuys} exec</span>}
+                        {hasRev && <span className="ws-home-badge ws-home-badge--rev">↺ reversal</span>}
+                        <StarBtn ticker={s.ticker} watchlist={watchlist}/>
+                      </div>
+                      <div className="ws-home-sig-row__company">{s.company}</div>
+                      <div className="ws-home-sig-row__meta">
+                        {s.insiderCount} insider{s.insiderCount!==1?'s':''} · {fmt.ago(s.lastTradeDate)} · {s.sector}
+                      </div>
+                    </div>
+                    {/* Right: value + conviction */}
+                    <div className="ws-home-sig-row__right">
+                      <div className={`ws-home-sig-row__val${isBuy?' val-buy':' val-sell'}`}>
+                        {isBuy?'+':''}{fmt.money(s.netValue)}
+                      </div>
+                      <div className="ws-home-sig-row__score">
+                        <ConvictionBar score={s.conviction} max={15} showLabel/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="ws-tile__footer">
+              <button className="ws-tile__see-all-btn" onClick={()=>onSeeAll('dashboard')}>
+                View all signals with full filters →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT: news + filings feed + top insiders */}
+        <div className="ws-home-side">
+
+          {/* Market news */}
+          <div className="ws-tile" style={{marginBottom:14}}>
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Market news</span>
+                <span className="ws-tile__sub">Finance &amp; macro</span>
+              </div>
+            </div>
+            <div style={{maxHeight:240,overflowY:'auto'}}>
+              <MarketNews watchlist={watchlist} filings={filings} limit={8}/>
+            </div>
+          </div>
+
+          {/* Recent filings — compact feed */}
           <div className="ws-tile" style={{marginBottom:14}}>
             <div className="ws-tile__hdr">
               <div className="ws-tile__hdr-left">
@@ -3977,119 +4042,34 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
               </div>
               <button className="ws-tile__action" onClick={()=>onSeeAll('dashboard')}>See all →</button>
             </div>
-            {/* Sortable column headers */}
-            <div className="ws-home-fil-hdrs">
-              <span className="ws-col-sort ws-col-sort--sm">Ticker</span>
-              <button className={`ws-col-sort ws-col-sort--sm${filSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onFilSort('date')}>Date{filSort==='date'&&(filDir<0?' ↓':' ↑')}</button>
-              <span className="ws-col-sort ws-col-sort--sm">Type</span>
-              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${filSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onFilSort('value')}>Value{filSort==='value'&&(filDir<0?' ↓':' ↑')}</button>
-            </div>
-            <div style={{maxHeight:240,overflowY:'auto',overflowX:'hidden'}}>
-              {loading?<SkeletonRows count={5}/>:recentFilings.map((f,i)=>{
-                const isBuy=f.transactionType==='buy';
+            <div style={{maxHeight:200,overflowY:'auto'}}>
+              {loading ? <SkeletonRows count={4}/> : recentFilings.map((f,i) => {
+                const isBuy = f.transactionType==='buy';
                 return (
-                  <div key={i} className="ws-fil-compact-row" onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company})}
-                    style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
-                    <div className="ws-fil-compact-row__ticker">
-                      <span className="ticker">{f.ticker}</span>
-                      <div style={{fontSize:10,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName?.split(' ').slice(0,2).join(' ')}</div>
+                  <div key={i} className="ws-feed-row" onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company})}>
+                    <div className="ws-feed-row__bar" style={{background:isBuy?'var(--green-600)':'var(--red-600)'}}/>
+                    <div className="ws-feed-row__body">
+                      <div className="ws-feed-row__top">
+                        <span className="ticker">{f.ticker}</span>
+                        <span className={`ws-feed-row__type${isBuy?' val-buy':' val-sell'}`}>{isBuy?'▲':'▼'}</span>
+                        <span style={{fontSize:11,color:'var(--text-3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName?.split(' ').slice(-1)[0]}</span>
+                        <span className={`ws-feed-row__val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                      </div>
+                      <div className="ws-feed-row__meta">{fmt.ago(f.transactionDate||f.date)}</div>
                     </div>
-                    <div className="ws-fil-compact-row__date">{fmt.dateShort(f.transactionDate||f.date)}</div>
-                    <div className="ws-fil-compact-row__type"><span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span></div>
-                    <div className="ws-fil-compact-row__val"><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* 2. Insider signals tile — below recent filings, scrollable */}
-          <div className="ws-tile">
-            <div className="ws-tile__hdr">
-              <div className="ws-tile__hdr-left">
-                <span className="ws-tile__title">Insider signals</span>
-                {!loading&&<span className="ws-tile__count">{signals.length}</span>}
-                <span className="ws-tile__sub">Scored by conviction</span>
-              </div>
-              <button className="ws-tile__action" onClick={()=>onSeeAll('dashboard')}>See all →</button>
-            </div>
-            {/* Capped at 7d — keep it fresh, daily-return habit */}
-            <div className="ws-tile__filters">
-              <div className="ws-pills">
-                {[{l:'1d',v:1},{l:'3d',v:3},{l:'7d',v:7}].map(o=>(
-                  <button key={o.v} className={`ws-pill${sigDays===o.v?' ws-pill--active':''}`}
-                    onClick={()=>setSigDays(o.v)}>{o.l}</button>
-                ))}
-              </div>
-            </div>
-            {/* Sortable column headers */}
-            <div className="ws-home-sig-hdrs">
-              <button className={`ws-col-sort ws-col-sort--sm${sigSort==='ticker'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('ticker')}>Ticker{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
-              {!isMobile&&<button className={`ws-col-sort ws-col-sort--sm${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}>Ins.{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>}
-              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}>Net value{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
-              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}>Conviction{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
-            </div>
-            {/* Scrollable body — max height so it doesn't dominate page */}
-            <div style={{maxHeight:400,overflowY:'auto',overflowX:'hidden'}}>
-              {loading?<SkeletonRows count={6}/>:signals.length===0?(
-                <div className="ws-empty" style={{padding:'20px 16px'}}>No signals in this window — Form 4s are filed 1–2 days after trades.</div>
-              ):(
-                <div>
-                  {signals.map(s=>{
-                    const isBuy = s.direction!=='sell';
-                    const hasRev = detectReversalForTicker(s.ticker, filings);
-                    return (
-                      <div key={s.ticker} className="ws-sig-compact-row" onClick={()=>onOpenDetail({type:'signal',...s})}
-                        style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
-                        <div className="ws-sig-compact-row__left">
-                          <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',marginBottom:2}}>
-                            <span className="ticker">{s.ticker}</span>
-                            {s.cSuiteBuys>0&&<span className="badge badge--rel-strong" style={{fontSize:10,padding:'1px 5px'}}>{s.cSuiteBuys} exec</span>}
-                            {hasRev&&<span className="reversal-badge" style={{fontSize:9}}><IconReversal className="reversal-badge__icon"/>rev</span>}
-                            <StarBtn ticker={s.ticker} watchlist={watchlist}/>
-                          </div>
-                          <div style={{fontSize:11,color:'var(--text-2)',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.company}</div>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            {!isMobile&&<span style={{fontSize:11,color:'var(--text-3)'}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>}
-                            <ConvictionBar score={s.conviction} max={15} showLabel/>
-                          </div>
-                        </div>
-                        <div className="ws-sig-compact-row__right">
-                          <div className={`ws-sig-row__val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</div>
-                          <div style={{fontSize:10,color:'var(--text-3)',marginTop:2}}>{fmt.ago(s.lastTradeDate)}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <div className="ws-tile__footer">
-              <button className="ws-tile__see-all-btn" onClick={()=>onSeeAll('dashboard')}>View all signals with full filters →</button>
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT — market news + top insiders */}
-        <div className="ws-home-side">
-
-          {/* Market news — sleek, replaces the old recent filings sidebar */}
-          <div className="ws-tile" style={{marginBottom:14}}>
-            <div className="ws-tile__hdr">
-              <div className="ws-tile__hdr-left">
-                <span className="ws-tile__title">Market news</span>
-                <span className="ws-tile__sub">General &amp; finance</span>
-              </div>
-            </div>
-            <div style={{maxHeight:260,overflowY:'auto',overflowX:'hidden'}}>
-              <MarketNews watchlist={watchlist} filings={filings} limit={10}/>
-            </div>
-          </div>
-
           {/* Top insiders */}
           <div className="ws-tile">
             <div className="ws-tile__hdr">
-              <div className="ws-tile__hdr-left"><span className="ws-tile__title">Top insiders</span><span className="ws-tile__sub">By composite score</span></div>
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Top insiders</span>
+                <span className="ws-tile__sub">By composite score</span>
+              </div>
               <button className="ws-tile__action" onClick={()=>onSeeAll('signals')}>Full leaderboard →</button>
             </div>
             <div className="ws-tile__body">
@@ -4613,65 +4593,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
     <div className="ws-page">
       <div style={{marginBottom:20}}>
         <h1 className="ws-page-title">Insider Profiles</h1>
-        <p className="ws-page-sub">Top insiders ranked by composite score. Click any row to expand metrics, multiple rows open simultaneously.</p>
+        <p className="ws-page-sub">Top insiders ranked by composite score — hit rate, returns, volume, and role. Click any row to expand.</p>
       </div>
-
-      <div className="ws-stat-strip">
-        <div className="ws-stat"><div className="ws-stat__label">Tracked insiders</div><div className="ws-stat__value">{rows?stats.count:'—'}</div><div className="ws-stat__sub">Open-market traders</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Avg hit rate</div><div className="ws-stat__value" style={{color:stats.avgHit>=60?'var(--green-600)':undefined}}>{stats.avgHit!=null?`${stats.avgHit}%`:'—'}</div><div className="ws-stat__sub">Profitable trades</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Top score</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{rows?stats.topScore:'—'}</div><div className="ws-stat__sub">Out of 5.0</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Total buy value</div><div className="ws-stat__value" style={{fontSize:16}}>{rows?totalValDisplay:'—'}</div><div className="ws-stat__sub">{yearsBack?`${yearsBack}yr window`:'All time'}</div></div>
-      </div>
-
-      {/* Bar chart tile */}
-      {!isMobile&&rows&&sorted.length>0&&(
-        <div className="ws-tile" style={{marginBottom:16}}>
-          <div className="ws-tile__hdr">
-            <div className="ws-tile__hdr-left">
-              <span className="ws-tile__title">Insider comparison</span>
-              <span className="ws-tile__sub">Top 20 · click bar to highlight row</span>
-            </div>
-            <div className="ws-pills">
-              {[{v:'score',l:'Score'},{v:'hitrate',l:'Hit rate'},{v:'value',l:'Buy value'}].map(o=>(
-                <button key={o.v} className={`ws-pill${chartMode===o.v?' ws-pill--active':''}`} onClick={()=>setChartMode(o.v)}>{o.l}</button>
-              ))}
-            </div>
-          </div>
-          <div className="ws-tile__body ws-chart-wrap">
-            <div className="ws-chart-label">
-              {chartMode==='score'
-                ?'Composite score (0–5) — weighted hit rate, returns, buy count & role'
-                :chartMode==='hitrate'
-                ?'Hit rate % — trades that were profitable within 6 months'
-                :'Total open-market buy value ($M)'}
-            </div>
-            <div className="ws-bar-chart">
-              {chartData.map((d,i)=>{
-                // When all values are equal (e.g. everyone scores 5.0), show proportional bars
-                // offset from a baseline so they're visually distinguishable
-                const minVal=Math.min(...chartData.map(x=>x.value));
-                const range=chartMax-minVal;
-                const pct=range<0.01
-                  ? 80 - i*2  // all equal: staircase so bars are visible
-                  : Math.max(12,((d.value-minVal)/range)*80+15);
-                const isExp=expanded.has(d.full);
-                const valLabel=chartMode==='value'?`$${d.value.toFixed(1)}M`:chartMode==='hitrate'?`${Math.round(d.value)}%`:d.value.toFixed(1);
-                return (
-                  <div key={i} className={`ws-bar-item${isExp?' ws-bar-item--active':''}`}
-                    onClick={()=>toggleExpand(d.full)}
-                    title={`${d.full}: ${valLabel}`}>
-                    <div className="ws-bar-item__fill-wrap">
-                      <div className="ws-bar-item__fill" style={{height:`${pct}%`,background:isExp?'var(--accent)':'var(--accent-50)',borderColor:'var(--accent)',opacity:isExp?1:0.7+i*-0.02}}/>
-                    </div>
-                    <div className="ws-bar-item__name">{d.name}</div>
-                    <div className="ws-bar-item__val">{valLabel}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Leaderboard tile */}
       <div className="ws-tile">
@@ -4709,20 +4632,14 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           </div>
         </div>
 
-        {/* Column headers
-            Desktop: # | Insider name (+ title + badge) | Buys | Buy value ($) | Hit rate | Avg return | Score | Explore
-            Mobile:  Insider | Buys | Score | Explore
-        */}
-        <div className="ws-col-hdrs" style={{gridTemplateColumns:isMobile
-          ?'1fr 48px 90px 68px'
-          :'1fr 52px 100px 76px 82px 110px 76px'}}>
+        {/* Column headers */}
+        <div className="ws-ins-col-hdrs">
           <button className={`ws-col-sort${sort==='insider_name'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('insider_name')}>Insider{sort==='insider_name'&&(dir<0?' ↓':' ↑')}</button>
           <button className={`ws-col-sort ws-col-sort--right${sort==='om_buys'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('om_buys')}>Buys{sort==='om_buys'&&(dir<0?' ↓':' ↑')}</button>
           {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='bought_value'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('bought_value')}>Buy value{sort==='bought_value'&&(dir<0?' ↓':' ↑')}</button>}
           {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='hit_rate'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('hit_rate')}>Hit rate{sort==='hit_rate'&&(dir<0?' ↓':' ↑')}</button>}
           {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='avg_return'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('avg_return')}>Avg ret.{sort==='avg_return'&&(dir<0?' ↓':' ↑')}</button>}
           <button className={`ws-col-sort ws-col-sort--right${sort==='proxy_score'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('proxy_score')}>Score{sort==='proxy_score'&&(dir<0?' ↓':' ↑')}</button>
-          <span className="ws-col-sort" style={{textAlign:'right',cursor:'default'}}>Explore</span>
         </div>
 
         {lbError?(
@@ -4738,67 +4655,51 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               const hrC=r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-2)';
               const retC=(r.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
               return (
-                <div key={r.insider_name} className={`ws-data-row${isExp?' ws-data-row--expanded':''}`}>
-                  <div className="ws-data-row__main" style={{gridTemplateColumns:isMobile
-                      ?'1fr 48px 90px 68px'
-                      :'1fr 52px 100px 76px 82px 110px 76px',cursor:'pointer'}}
+                <div key={r.insider_name} className={`ws-ins-row${isExp?' ws-ins-row--expanded':''}`}>
+                  <div className={`ws-ins-row__main${isMobile?' ws-ins-row__main--mobile':''}`}
                     onClick={()=>toggleExpand(r.insider_name)}>
 
-                    {/* Insider: rank + name + badge + title + follow */}
-                    <div className="ws-data-row__cell" style={{paddingRight:8}}>
-                      <div style={{display:'flex',alignItems:'center',gap:7}}>
-                        {/* Rank number */}
-                        <span style={{color:'var(--text-3)',fontSize:11,fontWeight:600,minWidth:18,flexShrink:0,textAlign:'right'}}>{i+1}</span>
-                        {/* Name + badge + title */}
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontWeight:600,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.insider_name}</div>
-                          <div style={{display:'flex',alignItems:'center',gap:5,marginTop:2,flexWrap:'wrap'}}>
-                            <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
-                            {!isMobile&&r.insider_title&&<span style={{fontSize:11,color:'var(--text-3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:200}}>{r.insider_title}</span>}
-                          </div>
+                    {/* Insider cell — rank + name + badge + title + follow */}
+                    <div className="ws-ins-row__who">
+                      <span className="ws-ins-row__rank">{i+1}</span>
+                      <div className="ws-ins-row__info">
+                        <div className="ws-ins-row__name">{r.insider_name}</div>
+                        <div className="ws-ins-row__meta">
+                          <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
+                          {!isMobile&&r.insider_title&&<span className="ws-ins-row__title">{r.insider_title}</span>}
                         </div>
-                        {/* Follow button — right of name, stops click propagation */}
-                        <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
-                          <FollowBtn name={r.insider_name} watchlist={watchlist}/>
-                        </div>
+                      </div>
+                      <div onClick={e=>e.stopPropagation()} className="ws-ins-row__follow">
+                        <FollowBtn name={r.insider_name} watchlist={watchlist}/>
                       </div>
                     </div>
 
-                    {/* Buys */}
-                    <div className="ws-data-row__cell ws-data-row__cell--right" style={{fontFamily:'var(--font-mono)',fontSize:12}}>{r.om_buys}</div>
-                    {/* Buy value */}
-                    {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--right" style={{fontFamily:'var(--font-mono)',fontSize:12}}>{fmt.money(r.bought_value)}</div>}
-                    {/* Hit rate */}
-                    {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--right"><span style={{fontFamily:'var(--font-mono)',fontWeight:700,fontSize:12,color:hrC}}>{r.hit_rate!=null?`${r.hit_rate}%`:'—'}</span></div>}
-                    {/* Avg return */}
-                    {!isMobile&&<div className="ws-data-row__cell ws-data-row__cell--right"><span style={{fontFamily:'var(--font-mono)',fontWeight:700,fontSize:12,color:retC}}>{r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—'}</span></div>}
-                    {/* Score + bar */}
-                    <div className="ws-data-row__cell">
-                      <div style={{display:'flex',alignItems:'center',gap:5}}>
-                        <span style={{fontFamily:'var(--font-mono)',fontWeight:700,fontSize:12}}>{r.proxy_score?.toFixed(1)??'—'}</span>
-                        <div style={{flex:1,minWidth:28}}><ConvictionBar score={r.proxy_score??0} max={5} showLabel={false}/></div>
-                      </div>
+                    {/* Data cells */}
+                    <div className="ws-ins-row__num">{r.om_buys}</div>
+                    {!isMobile&&<div className="ws-ins-row__num">{fmt.money(r.bought_value)}</div>}
+                    {!isMobile&&<div className="ws-ins-row__num" style={{color:hrC,fontWeight:700}}>{r.hit_rate!=null?`${r.hit_rate}%`:'—'}</div>}
+                    {!isMobile&&<div className="ws-ins-row__num" style={{color:retC,fontWeight:700}}>{r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—'}</div>}
+                    <div className="ws-ins-row__score">
+                      <span className="ws-ins-row__score-val">{r.proxy_score?.toFixed(1)??'—'}</span>
+                      <ConvictionBar score={r.proxy_score??0} max={5} showLabel={false}/>
                     </div>
-                    {/* Explore */}
-                    <div className="ws-data-row__cell" style={{textAlign:'right'}} onClick={e=>{e.stopPropagation();onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title});}}>
-                      <button className="ws-raw-explore-btn">
-                        Explore <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{marginLeft:2}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-                      </button>
-                    </div>
+                    {/* Explore — plain text link, not a pill */}
+                    <button className="ws-ins-row__explore" onClick={e=>{e.stopPropagation();onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title});}}>
+                      Profile →
+                    </button>
                   </div>
                   {isExp&&(
-                    <div className="ws-data-row__expanded" onClick={e=>e.stopPropagation()}>
-                      <div className="ws-data-row__expanded-grid">
-                        <div><span className="ws-data-label">Title</span><div>{r.insider_title||'—'}</div></div>
-                        <div><span className="ws-data-label">OM buys</span><div>{r.om_buys}</div></div>
-                        <div><span className="ws-data-label">OM sells</span><div>{r.om_sells||0}</div></div>
-                        <div><span className="ws-data-label">Value purchased</span><div>{fmt.money(r.bought_value)}</div></div>
-                        <div><span className="ws-data-label">Hit rate</span><div style={{color:hrC,fontWeight:600}}>{r.hit_rate!=null?`${r.hit_rate}%`:'—'}</div></div>
-                        <div><span className="ws-data-label">Avg return</span><div style={{color:retC,fontWeight:600}}>{r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—'}</div></div>
-                        <div><span className="ws-data-label">Score</span><div style={{fontWeight:700}}>{r.proxy_score?.toFixed(1)??'—'} / 5.0</div></div>
-                        {yearsBack&&<div><span className="ws-data-label">Window</span><div>{yearsBack}yr</div></div>}
+                    <div className="ws-ins-row__expanded-body" onClick={e=>e.stopPropagation()}>
+                      <div><span className="ws-data-label">Title</span><div style={{fontSize:12}}>{r.insider_title||'—'}</div></div>
+                      <div><span className="ws-data-label">OM buys</span><div style={{fontSize:12,fontFamily:'var(--font-mono)'}}>{r.om_buys}</div></div>
+                      <div><span className="ws-data-label">OM sells</span><div style={{fontSize:12,fontFamily:'var(--font-mono)'}}>{r.om_sells||0}</div></div>
+                      <div><span className="ws-data-label">Value purchased</span><div style={{fontSize:12,fontFamily:'var(--font-mono)'}}>{fmt.money(r.bought_value)}</div></div>
+                      <div><span className="ws-data-label">Hit rate</span><div style={{color:hrC,fontWeight:700,fontSize:13,fontFamily:'var(--font-mono)'}}>{r.hit_rate!=null?`${r.hit_rate}%`:'—'}</div></div>
+                      <div><span className="ws-data-label">Avg return</span><div style={{color:retC,fontWeight:700,fontSize:13,fontFamily:'var(--font-mono)'}}>{r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—'}</div></div>
+                      <div><span className="ws-data-label">Score</span><div style={{fontWeight:700,fontSize:13,fontFamily:'var(--font-mono)'}}>{r.proxy_score?.toFixed(1)??'—'} / 5.0</div></div>
+                      <div>
+                        <button className="ws-data-row__full-btn" style={{marginTop:4}} onClick={()=>onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>Open full profile →</button>
                       </div>
-                      <button className="ws-data-row__full-btn" onClick={()=>onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>Open full profile →</button>
                     </div>
                   )}
                 </div>
@@ -7163,29 +7064,65 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 
   const signals = useMemo(()=>{
     if(!watchedTickers.length)return[];
-    const allForWatched=filings.filter(f=>watchedTickers.includes(f.ticker));
+    const allForWatched=filings.filter(f=>watchedTickers.includes(f.ticker)&&f.isOpenMarket);
+    // Always track absolute last trade for each ticker regardless of cutoff
     const absLast={};
-    allForWatched.forEach(f=>{const d=f.transactionDate||f.date||'';if(!absLast[f.ticker]||d>absLast[f.ticker].d)absLast[f.ticker]={d,type:f.transactionType};});
-    // null cutoff = all-time, so no date filter on base
-    const base=cutoff?allForWatched.filter(f=>(f.transactionDate||f.date||'')>=cutoff):allForWatched;
-    const built=buildSignals(base);
+    allForWatched.forEach(f=>{
+      const d=f.transactionDate||f.date||'';
+      if(!absLast[f.ticker]||d>absLast[f.ticker].d) absLast[f.ticker]={d,type:f.transactionType};
+    });
+    // Apply date filter only for signal scoring; null = all-time
+    const base = cutoff ? allForWatched.filter(f=>(f.transactionDate||f.date||'')>=cutoff) : allForWatched;
+    const built = buildSignals(base);
     const iwLast={};
     base.forEach(f=>{const d=f.transactionDate||f.date||'';if(!iwLast[f.ticker]||d>iwLast[f.ticker].d)iwLast[f.ticker]={d,type:f.transactionType};});
-    built.forEach(s=>{const iw=iwLast[s.ticker];const ab=absLast[s.ticker];s.lastTradeType=iw?.type||ab?.type||null;if(!s.lastTradeDate&&ab)s.lastTradeDate=ab.d;});
+    // Annotate with last trade info — always use absLast so "No activity" never shows when All is selected
+    built.forEach(s=>{
+      const ab=absLast[s.ticker];
+      s.lastTradeType=ab?.type||null;
+      if(!s.lastTradeDate&&ab) s.lastTradeDate=ab.d;
+    });
+    // Ensure every watched ticker appears even if it has no signals in window
     const seen=new Set(built.map(s=>s.ticker));
-    watchedTickers.forEach(t=>{if(!seen.has(t)){const ab=absLast[t];built.push({ticker:t,company:'',conviction:0,netValue:0,cSuiteBuys:0,insiderCount:0,lastTradeDate:ab?.d||null,lastTradeType:ab?.type||null,buys:0,sells:0,sector:''});}});
+    watchedTickers.forEach(t=>{
+      if(!seen.has(t)){
+        const ab=absLast[t];
+        built.push({ticker:t,company:'',conviction:0,netValue:0,cSuiteBuys:0,insiderCount:0,
+          lastTradeDate:ab?.d||null,lastTradeType:ab?.type||null,buys:0,sells:0,sector:''});
+      }
+    });
     return built;
   },[filings,watchedTickers,cutoff]);
 
   const insiderRows = useMemo(()=>{
     if(!watchedInsiders.length)return[];
+    // Always compute absLast across ALL filings so last activity shows regardless of window
     const absLast={};
-    filings.forEach(f=>{if(!watchedInsiders.includes(f.insiderName))return;const d=f.transactionDate||f.date||'';if(!absLast[f.insiderName]||d>absLast[f.insiderName].d)absLast[f.insiderName]={d,type:f.transactionType};});
+    filings.filter(f=>watchedInsiders.includes(f.insiderName)&&f.isOpenMarket).forEach(f=>{
+      const d=f.transactionDate||f.date||'';
+      if(!absLast[f.insiderName]||d>absLast[f.insiderName].d) absLast[f.insiderName]={d,type:f.transactionType};
+    });
     const byName={};
-    // null cutoff = all-time
-    filings.filter(f=>watchedInsiders.includes(f.insiderName)&&(!cutoff||(f.transactionDate||f.date||'')>=cutoff))
-      .forEach(f=>{if(!byName[f.insiderName])byName[f.insiderName]={name:f.insiderName,title:f.title||'',trades:0,netValue:0,lastDate:null,lastType:null};byName[f.insiderName].trades++;byName[f.insiderName].netValue+=(f.transactionType==='buy'?1:-1)*(f.value||0);const d=f.transactionDate||f.date;if(!byName[f.insiderName].lastDate||d>byName[f.insiderName].lastDate){byName[f.insiderName].lastDate=d;byName[f.insiderName].lastType=f.transactionType;}});
-    watchedInsiders.forEach(n=>{if(!byName[n]){const ab=absLast[n];byName[n]={name:n,title:'',trades:0,netValue:0,lastDate:ab?.d||null,lastType:ab?.type||null};}});
+    // For trade counts / net flow, apply cutoff; for last activity, use absLast
+    filings.filter(f=>watchedInsiders.includes(f.insiderName)&&f.isOpenMarket&&(!cutoff||(f.transactionDate||f.date||'')>=cutoff))
+      .forEach(f=>{
+        if(!byName[f.insiderName]) byName[f.insiderName]={name:f.insiderName,title:f.title||'',trades:0,netValue:0,lastDate:null,lastType:null};
+        byName[f.insiderName].trades++;
+        byName[f.insiderName].netValue+=(f.transactionType==='buy'?1:-1)*(f.value||0);
+        const d=f.transactionDate||f.date;
+        if(!byName[f.insiderName].lastDate||d>byName[f.insiderName].lastDate){
+          byName[f.insiderName].lastDate=d;byName[f.insiderName].lastType=f.transactionType;
+        }
+      });
+    // Add any watched insiders with no trades in window — still show last activity from absLast
+    watchedInsiders.forEach(n=>{
+      if(!byName[n]){
+        const ab=absLast[n];
+        byName[n]={name:n,title:'',trades:0,netValue:0,lastDate:ab?.d||null,lastType:ab?.type||null};
+      } else if(!byName[n].lastDate&&absLast[n]) {
+        byName[n].lastDate=absLast[n].d; byName[n].lastType=absLast[n].type;
+      }
+    });
     return Object.values(byName);
   },[filings,watchedInsiders,cutoff]);
 
