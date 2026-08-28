@@ -6283,30 +6283,44 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-row__detail-cta--secondary:hover { color: var(--text); }
 
 
-/* ── Shared data grid: same columns for both signals and raw tabs ─── */
-/* Desktop: chevron+ticker | company | insiders | net value/pos | conviction | */
+/* ── Table grids: signals (5-col) and raw (7-col) — same outer tile width ─ */
+/* Both tables stretch the full ws-tile width. The difference is column count.  */
+
+/* SIGNALS: chevron+ticker | company | insiders | net value | conviction */
 .ws-col-hdrs--data {
   display: grid;
-  grid-template-columns: 160px 1fr 90px 100px 130px;
+  grid-template-columns: 160px 1fr 90px 110px 140px;
   border-bottom: 0.5px solid var(--border-md);
   background: var(--surface);
 }
 .ws-row__main--data {
   display: grid;
-  grid-template-columns: 160px 1fr 90px 100px 130px;
+  grid-template-columns: 160px 1fr 90px 110px 140px;
   align-items: center;
   min-height: 44px;
 }
-/* Raw filings has one extra column (role) on desktop */
-.ws-col-hdrs--data.ws-col-hdrs--raw-grid {
-  grid-template-columns: 100px 90px 1fr 100px 70px 110px 110px;
+@media (max-width: 900px) {
+  .ws-col-hdrs--data  { grid-template-columns: 120px 1fr 72px 100px; }
+  .ws-row__main--data { grid-template-columns: 120px 1fr 72px 100px; }
 }
-.ws-row__main--data.ws-row__main--raw-grid {
-  grid-template-columns: 100px 90px 1fr 100px 70px 110px 110px;
+
+/* RAW FILINGS: date | ticker | insider (flex) | role | type | ±position | value */
+.ws-col-hdrs--raw {
+  display: grid;
+  grid-template-columns: 90px 72px 1fr 90px 54px 110px 100px;
+  border-bottom: 0.5px solid var(--border-md);
+  background: var(--surface);
+}
+.ws-row__main--raw {
+  display: grid;
+  grid-template-columns: 90px 72px 1fr 90px 54px 110px 100px;
+  align-items: center;
+  min-height: 44px;
 }
 @media (max-width: 900px) {
-  .ws-col-hdrs--data   { grid-template-columns: 130px 1fr 80px 100px; }
-  .ws-row__main--data  { grid-template-columns: 130px 1fr 80px 100px; }
+  /* Mobile: date | ticker | type | value */
+  .ws-col-hdrs--raw  { grid-template-columns: 78px 1fr 54px 84px; }
+  .ws-row__main--raw { grid-template-columns: 78px 1fr 54px 84px; }
 }
 
 /* Larger, more visible expand chevron */

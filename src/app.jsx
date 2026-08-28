@@ -4434,7 +4434,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             <div className="ws-empty">No filings match these filters.</div>
           ):(
             <>
-              <div className="ws-col-hdrs ws-col-hdrs--data">
+              {/* Same outer width as signals. 7-col grid: chevron+date | ticker | insider | role | type | ±position | value */}
+              <div className="ws-col-hdrs ws-col-hdrs--raw">
                 <button className={`ws-col-sort${rawSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('date')}>Date{rawSort==='date'&&(rawDir<0?' ↓':' ↑')}</button>
                 <span className="ws-col-sort">Ticker</span>
                 {!isMobile&&<span className="ws-col-sort">Insider</span>}
@@ -4454,7 +4455,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                     <div key={i} className={`ws-row${isExp?' ws-row--open':''}`}
                       style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
 
-                      <div className="ws-row__main ws-row__main--data" style={{cursor:'pointer'}}
+                      <div className="ws-row__main ws-row__main--raw" style={{cursor:'pointer'}}
                         onClick={()=>toggleRaw(i)}>
                         <div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>
                           <span className="ws-row__chevron ws-row__chevron--lg">{isExp?'▾':'▸'}</span>
