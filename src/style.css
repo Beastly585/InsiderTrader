@@ -5676,7 +5676,7 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 
 /* ── Main + background wash ────────────────────────────────────────── */
-.ws-main { flex:1; overflow-y:auto; overflow-x:hidden; position:relative; }
+.ws-main { flex:1; overflow-y:scroll; overflow-x:hidden; position:relative; display:flex; flex-direction:column; scrollbar-width:none; -ms-overflow-style:none; }
 .ws-main::before {
   content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
   background:
@@ -5773,29 +5773,17 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-clear-btn { padding:4px 9px; font-size:11px; color:var(--text-3); background:none; border:0.5px solid var(--border); border-radius:var(--radius-md); cursor:pointer; font-family:var(--font); white-space:nowrap; transition:color .1s; }
 .ws-clear-btn:hover { color:var(--text); }
 
-/* ── Column headers ────────────────────────────────────────────────── */
-.ws-col-hdrs { display:grid; padding:0 0; border-bottom:0.5px solid var(--border-md); background:var(--surface); }
-.ws-col-hdrs--signals { grid-template-columns:140px 1fr 120px 80px 90px 120px 68px; }
-.ws-col-hdrs--raw     { grid-template-columns:80px 80px 1fr 90px 70px 90px 100px; }
-.ws-col-hdrs--insiders{ grid-template-columns:40px 1fr 60px 90px 80px 90px 110px 68px; }
-.ws-col-hdrs--watchlist{ grid-template-columns:1fr 110px 90px; }
-@media(max-width:900px){
-  .ws-col-hdrs--signals { grid-template-columns:120px 80px 90px 120px 68px; }
-  .ws-col-hdrs--raw     { grid-template-columns:70px 80px 70px 90px 100px; }
-  .ws-col-hdrs--insiders{ grid-template-columns:40px 1fr 60px 110px 68px; }
-}
+/* ── Column header base ────────────────────────────────────────────── */
+/* Specific column templates defined in the DATA PAGE section below.   */
+.ws-col-hdrs { display:grid; border-bottom:0.5px solid var(--border-md); background:var(--surface); }
 .ws-col-sort { padding:8px 13px; font-size:10px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:.04em; text-align:left; background:none; border:none; cursor:pointer; transition:color .1s; white-space:nowrap; font-family:var(--font); }
 .ws-col-sort:hover,.ws-col-sort--active { color:var(--text); }
 .ws-col-sort--right { text-align:right; }
 
-/* ── Data rows (expandable) ────────────────────────────────────────── */
+/* ── Data rows (expandable) — see DATA PAGE section for specific grids ─ */
 .ws-data-row { border-bottom:0.5px solid var(--border); transition:background .07s; border-left:3px solid transparent; }
 .ws-data-row:last-child { border-bottom:none; }
 .ws-data-row__main { display:grid; align-items:center; cursor:pointer; }
-.ws-data-row__main--signals  { grid-template-columns:140px 1fr 120px 80px 90px 120px 68px; }
-.ws-data-row__main--raw      { grid-template-columns:80px 80px 1fr 90px 70px 90px 100px; }
-.ws-data-row__main--insiders { grid-template-columns:40px 1fr 60px 90px 80px 90px 110px 68px; }
-.ws-data-row__main--watchlist{ grid-template-columns:1fr 110px 90px; }
 @media(max-width:900px){
   .ws-data-row__main--signals  { grid-template-columns:120px 80px 90px 120px 68px; }
   .ws-data-row__main--raw      { grid-template-columns:70px 80px 70px 90px 100px; }
@@ -6015,14 +6003,6 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 
 /* ws-main scrolls; footer sits outside it, so footer is always at bottom */
-.ws-main {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
 
 /* Pinned footer — always 44px, always at bottom, same on every page */
 .ws-footer {
@@ -6283,44 +6263,50 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-row__detail-cta--secondary:hover { color: var(--text); }
 
 
-/* ── Table grids: signals (5-col) and raw (7-col) — same outer tile width ─ */
-/* Both tables stretch the full ws-tile width. The difference is column count.  */
+/* ══════════════════════════════════════════════════════════════════════
+   AUTHORITATIVE TABLE GRIDS
+   All tables live inside .ws-tile inside .ws-page (max-width 1180px,
+   padding 0 20px). ws-tile has overflow:hidden and no fixed width —
+   it stretches to fill ws-page. Every grid here uses the same
+   approach: fixed-width columns on the sides, 1fr in the middle.
+   The 1fr expands identically for every table because the outer
+   container is always the same width.
+══════════════════════════════════════════════════════════════════════ */
 
-/* SIGNALS: chevron+ticker | company | insiders | net value | conviction */
-.ws-col-hdrs--data {
-  display: grid;
-  grid-template-columns: 160px 1fr 90px 110px 140px;
-  border-bottom: 0.5px solid var(--border-md);
-  background: var(--surface);
-}
+/* ── SIGNALS tab: chevron+ticker | company (flex) | insiders | net value | conviction ── */
+.ws-col-hdrs--data,
 .ws-row__main--data {
   display: grid;
-  grid-template-columns: 160px 1fr 90px 110px 140px;
+  grid-template-columns: 160px 1fr 90px 120px 150px;
   align-items: center;
   min-height: 44px;
 }
-@media (max-width: 900px) {
-  .ws-col-hdrs--data  { grid-template-columns: 120px 1fr 72px 100px; }
-  .ws-row__main--data { grid-template-columns: 120px 1fr 72px 100px; }
-}
-
-/* RAW FILINGS: date | ticker | insider (flex) | role | type | ±position | value */
-.ws-col-hdrs--raw {
-  display: grid;
-  grid-template-columns: 90px 72px 1fr 90px 54px 110px 100px;
+.ws-col-hdrs--data {
   border-bottom: 0.5px solid var(--border-md);
   background: var(--surface);
+  min-height: 0;
 }
+
+/* ── RAW FILINGS tab: date | ticker | insider (flex) | role | type | ±position | value ── */
+.ws-col-hdrs--raw,
 .ws-row__main--raw {
   display: grid;
-  grid-template-columns: 90px 72px 1fr 90px 54px 110px 100px;
+  grid-template-columns: 88px 70px 1fr 92px 56px 106px 100px;
   align-items: center;
   min-height: 44px;
 }
+.ws-col-hdrs--raw {
+  border-bottom: 0.5px solid var(--border-md);
+  background: var(--surface);
+  min-height: 0;
+}
+
+/* ── Mobile ── */
 @media (max-width: 900px) {
-  /* Mobile: date | ticker | type | value */
-  .ws-col-hdrs--raw  { grid-template-columns: 78px 1fr 54px 84px; }
-  .ws-row__main--raw { grid-template-columns: 78px 1fr 54px 84px; }
+  .ws-col-hdrs--data,
+  .ws-row__main--data { grid-template-columns: 120px 1fr 80px 100px; }
+  .ws-col-hdrs--raw,
+  .ws-row__main--raw  { grid-template-columns: 76px 1fr 54px 84px; }
 }
 
 /* Larger, more visible expand chevron */
