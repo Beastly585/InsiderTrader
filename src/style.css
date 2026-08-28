@@ -6263,6 +6263,18 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-row__detail-cta--secondary:hover { color: var(--text); }
 
 
+
+/* ── Watchlist bottom row: Portfolio + Recent activity ── */
+.ws-wl-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .ws-wl-bottom { grid-template-columns: 1fr; }
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    AUTHORITATIVE TABLE GRIDS
    All tables live inside .ws-tile inside .ws-page (max-width 1180px,

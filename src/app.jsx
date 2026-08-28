@@ -7299,138 +7299,131 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   return (
     <div className="ws-page">
       <div style={{marginBottom:20}}><h1 className="ws-page-title">Watchlist</h1></div>
-      <div className={`ws-home-grid${isMobile?' ws-home-grid--mobile':''}`}>
 
-        {/* LEFT: ticker / insider table */}
-        <div className="ws-home-left">
-          <div className="ws-tile">
-            <div className="ws-filter-bar">
-              <div className="ws-pills">
-                <button className={`ws-pill${tab==='tickers'?' ws-pill--active':''}`} onClick={()=>setTab('tickers')}>
-                  Tickers{watchedTickers.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedTickers.length}</span>}
-                </button>
-                <button className={`ws-pill${tab==='insiders'?' ws-pill--active':''}`} onClick={()=>setTab('insiders')}>
-                  Insiders{watchedInsiders.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedInsiders.length}</span>}
-                </button>
-              </div>
-              <div className="ws-filter-group">
-                <span className="ws-filter-label">Activity</span>
-                <div className="ws-pills">
-                  {[{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
-                    <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`}
-                      onClick={()=>{setDays(o.v);if(o.v)ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
-                  ))}
-                </div>
-              </div>
-              <span style={{marginLeft:'auto',fontSize:11,color:'var(--text-3)'}}>{(tab==='tickers'?sortedTickerRows:sortedInsiderRows).length} {tab}</span>
-            </div>
-
-            {emptyNow?(
-              <div className="ws-empty">{tab==='tickers'?'No tickers watched. Star any ticker from Data or Insiders.':'No insiders followed. Follow any insider from the leaderboard.'}</div>
-            ):(
-              <>
-                {/* Column headers */}
-                <div className="ws-col-hdrs ws-col-hdrs--wl">
-                  <button className="ws-col-sort" onClick={()=>onSort(tab==='tickers'?'ticker':'name')}>
-                    {tab==='tickers'?'Ticker · Company':'Insider'}
-                    {(sortKey==='ticker'||sortKey==='name')&&(sortDir<0?' ↓':' ↑')}
-                  </button>
-                  <button className="ws-col-sort" onClick={()=>onSort('lastTradeDate')}>Last activity{sortKey==='lastTradeDate'&&(sortDir<0?' ↓':' ↑')}</button>
-                  <button className="ws-col-sort ws-col-sort--right" onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
-                </div>
-
-                <div>
-                  {tab==='tickers' ? sortedTickerRows.map(s=>{
-                    const lastType=s.lastTradeType;
-                    return (
-                      <div key={s.ticker} className="ws-data-row" style={{cursor:'pointer'}}
-                        onClick={()=>onOpenDetail({type:'ticker',ticker:s.ticker,company:s.company,expand:true})}>
-                        <div className="ws-data-row__main ws-row__main--wl">
-                          <div className="ws-data-row__cell">
-                            <div style={{display:'flex',alignItems:'center',gap:5}}><span className="ticker">{s.ticker}</span><StarBtn ticker={s.ticker} watchlist={watchlist}/></div>
-                            <div style={{fontSize:11,color:'var(--text-2)',marginTop:1}}>{s.company}</div>
-                          </div>
-                          <div className="ws-data-row__cell">
-                            {s.lastTradeDate?(
-                              <span style={{display:'flex',alignItems:'center',gap:5,fontSize:'0.75rem'}}>
-                                <span className="td-muted">{fmt.ago(s.lastTradeDate)}</span>
-                                {lastType&&<span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{lastType==='buy'?'Buy':'Sell'}</span>}
-                              </span>
-                            ):<span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>}
-                          </div>
-                          <div className="ws-data-row__cell ws-data-row__cell--right">
-                            <span className={`ws-data-mono${s.netValue>=0?' val-buy':' val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }) : sortedInsiderRows.map(r=>(
-                    <div key={r.name} className="ws-data-row" style={{cursor:'pointer'}}
-                      onClick={()=>onOpenDetail({type:'trader',name:r.name,title:r.title,expand:true})}>
-                      <div className="ws-data-row__main ws-row__main--wl">
-                        <div className="ws-data-row__cell">
-                          <div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontWeight:600,fontSize:13}}>{r.name}</span><FollowBtn name={r.name} watchlist={watchlist}/></div>
-                          {r.title&&<div style={{fontSize:11,color:'var(--text-2)',marginTop:1}}>{r.title}</div>}
-                        </div>
-                        <div className="ws-data-row__cell">
-                          {r.lastDate?(
-                            <span style={{display:'flex',alignItems:'center',gap:5,fontSize:'0.75rem'}}>
-                              <span className="td-muted">{fmt.ago(r.lastDate)}</span>
-                              {r.lastType&&<span className={`wl-feed__badge wl-feed__badge--${r.lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{r.lastType==='buy'?'Buy':'Sell'}</span>}
-                            </span>
-                          ):<span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>}
-                        </div>
-                        <div className="ws-data-row__cell ws-data-row__cell--right">
-                          <span className="ws-data-mono">{r.trades} trade{r.trades!==1?'s':''}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
+      {/* Main table — full width, same as Data / Insiders pages */}
+      <div className="ws-tile" style={{marginBottom:16}}>
+        <div className="ws-filter-bar">
+          <div className="ws-pills">
+            <button className={`ws-pill${tab==='tickers'?' ws-pill--active':''}`} onClick={()=>setTab('tickers')}>
+              Tickers{watchedTickers.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedTickers.length}</span>}
+            </button>
+            <button className={`ws-pill${tab==='insiders'?' ws-pill--active':''}`} onClick={()=>setTab('insiders')}>
+              Insiders{watchedInsiders.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedInsiders.length}</span>}
+            </button>
           </div>
+          <div className="ws-filter-group">
+            <span className="ws-filter-label">Activity</span>
+            <div className="ws-pills">
+              {[{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
+                <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`}
+                  onClick={()=>{setDays(o.v);if(o.v)ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
+              ))}
+            </div>
+          </div>
+          <span style={{marginLeft:'auto',fontSize:11,color:'var(--text-3)'}}>{(tab==='tickers'?sortedTickerRows:sortedInsiderRows).length} {tab}</span>
         </div>
 
-        {/* RIGHT: Portfolio + activity feed */}
-        <div className="ws-home-right">
-          {!isMobile&&(
-            <div style={{marginBottom:14}}>
-              <InsightsPortfolioBar filings={filings} cutoff={cutoff||'2010-01-01'} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
+        {emptyNow?(
+          <div className="ws-empty">{tab==='tickers'?'No tickers watched. Star any ticker from Data or Insiders.':'No insiders followed. Follow any insider from the leaderboard.'}</div>
+        ):(
+          <>
+            <div className="ws-col-hdrs ws-col-hdrs--wl">
+              <button className="ws-col-sort" onClick={()=>onSort(tab==='tickers'?'ticker':'name')}>
+                {tab==='tickers'?'Ticker · Company':'Insider'}
+                {(sortKey==='ticker'||sortKey==='name')&&(sortDir<0?' ↓':' ↑')}
+              </button>
+              <button className="ws-col-sort" onClick={()=>onSort('lastTradeDate')}>Last activity{sortKey==='lastTradeDate'&&(sortDir<0?' ↓':' ↑')}</button>
+              <button className="ws-col-sort ws-col-sort--right" onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
             </div>
-          )}
-          <div className="ws-tile">
-            <div className="ws-tile__hdr">
-              <div className="ws-tile__hdr-left">
-                <span className="ws-tile__title">Recent activity</span>
-                {recentActivity.length>0&&<span className="ws-tile__count">{recentActivity.length}</span>}
-              </div>
-              {recentActivity.length>0&&<button className="ws-tile__action" onClick={()=>setFeedCollapsed(c=>!c)}>{feedCollapsed?'Show':'Hide'}</button>}
-            </div>
-            {!feedCollapsed&&(
-              recentActivity.length===0?(
-                <div className="ws-empty" style={{padding:'20px 14px'}}>No trades from your watched items yet.</div>
-              ):(
-                <div>
-                  {recentActivity.map((f,i)=>(
-                    <div key={`${f.accessionNumber||i}-${f.insiderName}`} className="ws-filing-row"
-                      onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company,expand:true})}>
-                      <div className="ws-filing-row__bar" style={{background:f.transactionType==='buy'?'var(--green-600)':'var(--red-600)'}}/>
-                      <div className="ws-filing-row__body">
-                        <div className="ws-filing-row__top">
-                          <span className="td-muted" style={{fontSize:10,minWidth:44}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
-                          <span className="ticker">{f.ticker}</span>
-                          <span className={`wl-feed__badge wl-feed__badge--${f.transactionType==='buy'?'buy':'sell'}`} style={{marginLeft:'auto'}}>{f.transactionType==='buy'?'Buy':'Sell'}</span>
-                          <span style={{fontWeight:600,fontSize:11,minWidth:52,textAlign:'right'}}>{f.value?fmt.money(f.value):'—'}</span>
-                        </div>
-                        <div className="ws-filing-row__meta">{f.insiderName}</div>
+
+            <div>
+              {tab==='tickers' ? sortedTickerRows.map(s=>{
+                const lastType=s.lastTradeType;
+                return (
+                  <div key={s.ticker} className="ws-data-row" style={{cursor:'pointer'}}
+                    onClick={()=>onOpenDetail({type:'ticker',ticker:s.ticker,company:s.company,expand:true})}>
+                    <div className="ws-data-row__main ws-row__main--wl">
+                      <div className="ws-data-row__cell">
+                        <div style={{display:'flex',alignItems:'center',gap:5}}><span className="ticker">{s.ticker}</span><StarBtn ticker={s.ticker} watchlist={watchlist}/></div>
+                        <div style={{fontSize:11,color:'var(--text-2)',marginTop:1}}>{s.company}</div>
+                      </div>
+                      <div className="ws-data-row__cell">
+                        {s.lastTradeDate?(
+                          <span style={{display:'flex',alignItems:'center',gap:5,fontSize:'0.75rem'}}>
+                            <span className="td-muted">{fmt.ago(s.lastTradeDate)}</span>
+                            {lastType&&<span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{lastType==='buy'?'Buy':'Sell'}</span>}
+                          </span>
+                        ):<span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>}
+                      </div>
+                      <div className="ws-data-row__cell ws-data-row__cell--right">
+                        <span className={`ws-data-mono${s.netValue>=0?' val-buy':' val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                );
+              }) : sortedInsiderRows.map(r=>(
+                <div key={r.name} className="ws-data-row" style={{cursor:'pointer'}}
+                  onClick={()=>onOpenDetail({type:'trader',name:r.name,title:r.title,expand:true})}>
+                  <div className="ws-data-row__main ws-row__main--wl">
+                    <div className="ws-data-row__cell">
+                      <div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontWeight:600,fontSize:13}}>{r.name}</span><FollowBtn name={r.name} watchlist={watchlist}/></div>
+                      {r.title&&<div style={{fontSize:11,color:'var(--text-2)',marginTop:1}}>{r.title}</div>}
+                    </div>
+                    <div className="ws-data-row__cell">
+                      {r.lastDate?(
+                        <span style={{display:'flex',alignItems:'center',gap:5,fontSize:'0.75rem'}}>
+                          <span className="td-muted">{fmt.ago(r.lastDate)}</span>
+                          {r.lastType&&<span className={`wl-feed__badge wl-feed__badge--${r.lastType==='buy'?'buy':'sell'}`} style={{fontSize:'0.625rem'}}>{r.lastType==='buy'?'Buy':'Sell'}</span>}
+                        </span>
+                      ):<span className="td-muted" style={{fontSize:'0.6875rem'}}>No activity</span>}
+                    </div>
+                    <div className="ws-data-row__cell ws-data-row__cell--right">
+                      <span className="ws-data-mono">{r.trades} trade{r.trades!==1?'s':''}</span>
+                    </div>
+                  </div>
                 </div>
-              )
-            )}
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Bottom row — portfolio + recent activity side by side, same full width */}
+      <div className="ws-wl-bottom">
+        {!isMobile&&(
+          <InsightsPortfolioBar filings={filings} cutoff={cutoff||'2010-01-01'} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
+        )}
+        <div className="ws-tile">
+          <div className="ws-tile__hdr">
+            <div className="ws-tile__hdr-left">
+              <span className="ws-tile__title">Recent activity</span>
+              {recentActivity.length>0&&<span className="ws-tile__count">{recentActivity.length}</span>}
+            </div>
+            {recentActivity.length>0&&<button className="ws-tile__action" onClick={()=>setFeedCollapsed(c=>!c)}>{feedCollapsed?'Show':'Hide'}</button>}
           </div>
+          {!feedCollapsed&&(
+            recentActivity.length===0?(
+              <div className="ws-empty" style={{padding:'20px 14px'}}>No trades from your watched items yet.</div>
+            ):(
+              <div>
+                {recentActivity.map((f,i)=>(
+                  <div key={`${f.accessionNumber||i}-${f.insiderName}`} className="ws-filing-row"
+                    onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company,expand:true})}>
+                    <div className="ws-filing-row__bar" style={{background:f.transactionType==='buy'?'var(--green-600)':'var(--red-600)'}}/>
+                    <div className="ws-filing-row__body">
+                      <div className="ws-filing-row__top">
+                        <span className="td-muted" style={{fontSize:10,minWidth:44}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                        <span className="ticker">{f.ticker}</span>
+                        <span className={`wl-feed__badge wl-feed__badge--${f.transactionType==='buy'?'buy':'sell'}`} style={{marginLeft:'auto'}}>{f.transactionType==='buy'?'Buy':'Sell'}</span>
+                        <span style={{fontWeight:600,fontSize:11,minWidth:52,textAlign:'right'}}>{f.value?fmt.money(f.value):'—'}</span>
+                      </div>
+                      <div className="ws-filing-row__meta">{f.insiderName}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
         </div>
       </div>
     </div>
