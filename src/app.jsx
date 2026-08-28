@@ -5612,13 +5612,13 @@ function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
     const r = PORTFOLIO_CHART_RANGES.find(r=>r.key===range);
     if (!r || r.days==null) return { display: points, fellBack: false };
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-r.days);
-    const iso = cutoff.toISOString().split('T')[0];
-    const inRange = points.filter(p=>p.date>=iso);
-    // Fewer than 2 points for the selected range isn't really "no data" —
-    // it just means the position or the available history doesn't go back
-    // that far yet. Show whatever data does exist (the life of the
-    // position) rather than an empty state, but say so explicitly instead
-    // of silently displaying something different from what was selected.
+    const iso = cutoff.toISOString().split('T')[0]; // YYYY-MM-DD
+    // Normalize each point's date to YYYY-MM-DD before comparing —
+    // API may return full ISO timestamps or already-trimmed date strings.
+    const inRange = points.filter(p=>{
+      const d = p.date ? String(p.date).slice(0,10) : '';
+      return d >= iso;
+    });
     return inRange.length>=2 ? { display: inRange, fellBack: false } : { display: points, fellBack: points.length>=2 };
   }, [points, range]);
 
@@ -7223,6 +7223,95 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
 // ─── WATCHLIST PAGE ───────────────────────────────────────────────────────────
 // Shows all recent insider activity for tickers the user has starred.
 // Entirely localStorage-backed — no auth needed.
+// ─── WatchlistPortfolioFull ───────────────────────────────────────────────────
+// Full-width portfolio tile: chart left, scrollable position list right.
+// Only rendered for pro users.
+function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
+  const pro = true; // only rendered for pro
+  const { port, err, connected, refresh, refreshing, lastRefreshed, perf } = usePortfolio(pro);
+
+  const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[port]);
+  const activeSignalTickers = useMemo(()=>{
+    const relevant = filings.filter(f=>posSymbols.includes(f.ticker)&&(f.transactionDate||f.date||'')>=cutoff&&f.isOpenMarket);
+    return new Set(relevant.map(f=>f.ticker));
+  },[filings,cutoff,posSymbols.join(',')]);
+
+  // Not connected or no data — show compact connect prompt
+  if (!cfg.NEON_PROXY_URL) return null;
+  if (connected===false) return (
+    <div style={{padding:'20px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+      <div>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>Portfolio</div>
+        <div style={{fontSize:12,color:'var(--text-3)'}}>Link your brokerage to see insider activity on your real holdings.</div>
+      </div>
+      <button className="btn btn--primary btn--sm" onClick={()=>window.dispatchEvent(new CustomEvent('seli:nav',{detail:'settings'}))}>Link brokerage →</button>
+    </div>
+  );
+
+  const pos = port?.positions||[];
+  const totalPnl = pos.reduce((s,p)=>s+(p.openPnl||0),0);
+  const totalCost = pos.reduce((s,p)=>s+((p.marketValue||0)-(p.openPnl||0)),0);
+  const totalPnlPct = totalCost>0?(totalPnl/totalCost)*100:null;
+  const sorted = [...pos].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0));
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="ws-tile__hdr">
+        <div className="ws-tile__hdr-left">
+          <span className="ws-tile__title">Portfolio</span>
+          {port&&<span className="ws-tile__sub">{fmt.money(port.totalValue)}{totalPnlPct!=null?` · ${totalPnl>=0?'+':''}${totalPnlPct.toFixed(1)}%`:''}</span>}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {lastRefreshed&&<span style={{fontSize:11,color:'var(--text-3)'}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
+          <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} style={{width:26,height:26}} title="Refresh">
+            <span style={{fontSize:13,display:'inline-block',animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
+          </button>
+        </div>
+      </div>
+
+      {!port ? (
+        <div style={{padding:'24px',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
+      ) : (
+        <div style={{display:'grid',gridTemplateColumns:'1fr 280px',gap:0}}>
+          {/* Left: chart */}
+          <div style={{padding:'12px 16px',borderRight:'0.5px solid var(--border)'}}>
+            {perf===undefined ? (
+              <div style={{display:'flex',justifyContent:'center',padding:'2rem'}}><Spinner size={14}/></div>
+            ) : perf===null||perf.length<2 ? (
+              <div style={{padding:'2rem',textAlign:'center',color:'var(--text-3)',fontSize:12}}>Performance history will appear here once available.</div>
+            ) : (
+              <PortfolioChartWithRanges points={perf} compact onExplore={()=>{}}/>
+            )}
+          </div>
+          {/* Right: scrollable position list */}
+          <div style={{maxHeight:320,overflowY:'auto',padding:'8px 0'}}>
+            <div style={{padding:'0 14px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',color:'var(--text-3)',display:'flex',justifyContent:'space-between'}}>
+              <span>Holding</span><span>Value · P&amp;L</span>
+            </div>
+            {sorted.length===0?(
+              <div style={{padding:'12px 14px',fontSize:12,color:'var(--text-3)'}}>No open positions.</div>
+            ):sorted.map((p,i)=>{
+              const hasActivity=activeSignalTickers.has(p.symbol);
+              return (
+                <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',borderBottom:'0.5px solid var(--border)',cursor:'pointer',transition:'background .07s'}}
+                  onMouseEnter={e=>e.currentTarget.style.background='var(--surface-2)'}
+                  onMouseLeave={e=>e.currentTarget.style.background=''}
+                  onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:p.company,expand:true})}>
+                  <span className="ticker" style={{fontSize:12,minWidth:46}}>{p.symbol}</span>
+                  {hasActivity&&<span style={{fontSize:9,fontWeight:700,padding:'1px 4px',borderRadius:3,background:'var(--accent-50)',color:'var(--accent)'}}>activity</span>}
+                  <span style={{marginLeft:'auto',fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-2)'}}>{fmt.money(p.marketValue)}</span>
+                  {p.openPnl!=null&&<span className={p.openPnl>=0?'val-buy':'val-sell'} style={{fontFamily:'var(--font-mono)',fontSize:11,minWidth:54,textAlign:'right'}}>{p.openPnl>=0?'+':''}{p.openPnlPct?.toFixed(1)}%</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow, user }) {
   const pro = isPro(user);
   const [days, setDays]       = useState(null); // null = All time
@@ -7250,8 +7339,10 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
     const d=new Date(); d.setDate(d.getDate()-days); return d.toISOString().split('T')[0];
   },[days]);
 
-  const watchedTickers  = watchlist.tickers;
-  const watchedInsiders = watchlist.insiders || [];
+  const watchedTickers  = useMemo(()=>[...new Set(watchlist.tickers)], [watchlist.tickers]);
+  // Filter out any values that look like ticker symbols (all-caps, ≤5 chars) — these
+  // shouldn't be in the insider list but can appear due to old data or sync bugs
+  const watchedInsiders = useMemo(()=>[...new Set((watchlist.insiders||[]).filter(n=>n&&n.length>5&&!/^[A-Z0-9]{1,5}$/.test(n)))], [watchlist.insiders]);
 
   // Recent activity — open-market only, all-time so it's never empty for watched items
   const recentActivity = useMemo(()=>{
@@ -7423,6 +7514,11 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
     <div className="ws-page">
       <div style={{marginBottom:20}}><h1 className="ws-page-title">Watchlist</h1></div>
 
+      {/* ── Portfolio — full width at top for pro users with chart left + ticker list right ── */}
+      <div className="ws-tile" style={{marginBottom:16}}>
+        <WatchlistPortfolioFull filings={filings} cutoff={cutoff||'2010-01-01'} onOpenDetail={onOpenDetail}/>
+      </div>
+
       {/* ── Main table — full width ── */}
       <div className="ws-tile" style={{marginBottom:16}}>
         <div className="ws-filter-bar">
@@ -7520,8 +7616,8 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
       </div>
 
       {/* ── Bottom row: Portfolio + Recent activity ── */}
+      {/* ── Recent activity (capped height) + alert settings ── */}
       <div className="ws-wl-bottom" style={{marginBottom:16}}>
-        <InsightsPortfolioBar filings={filings} cutoff={cutoff||'2010-01-01'} days={days} onOpenDetail={onOpenDetail} onExpand={()=>{}} pro={pro}/>
         <div className="ws-tile">
           <div className="ws-tile__hdr">
             <div className="ws-tile__hdr-left">
