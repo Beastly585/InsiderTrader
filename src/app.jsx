@@ -4804,9 +4804,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             Desktop: # | Insider name (+ title + badge) | Buys | Buy value ($) | Hit rate | Avg return | Score | Explore
             Mobile:  Insider | Buys | Score | Explore
         */}
-        <div className="ws-col-hdrs" style={{gridTemplateColumns:isMobile
-          ?'1fr 48px 90px 68px'
-          :'1fr 52px 100px 76px 82px 110px 76px'}}>
+        <div className={`ws-col-hdrs ws-col-hdrs--ins${isMobile?' ws-col-hdrs--ins-mobile':''}`}>
           <button className={`ws-col-sort${sort==='insider_name'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('insider_name')}>Insider{sort==='insider_name'&&(dir<0?' ↓':' ↑')}</button>
           <button className={`ws-col-sort ws-col-sort--right${sort==='om_buys'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('om_buys')}>Buys{sort==='om_buys'&&(dir<0?' ↓':' ↑')}</button>
           {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='bought_value'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('bought_value')}>Buy value{sort==='bought_value'&&(dir<0?' ↓':' ↑')}</button>}
@@ -4830,9 +4828,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               const retC=(r.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
               return (
                 <div key={r.insider_name} className={`ws-data-row${isExp?' ws-data-row--expanded':''}`}>
-                  <div className="ws-data-row__main" style={{gridTemplateColumns:isMobile
-                      ?'1fr 48px 90px 68px'
-                      :'1fr 52px 100px 76px 82px 110px 76px',cursor:'pointer'}}
+                  <div className={`ws-data-row__main ws-row__main--ins${isMobile?' ws-row__main--ins-mobile':''}`} style={{cursor:'pointer'}}
                     onClick={()=>toggleExpand(r.insider_name)}>
 
                     {/* Insider: rank + name + badge + title + follow */}
@@ -7334,7 +7330,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
             ):(
               <>
                 {/* Column headers */}
-                <div className="ws-col-hdrs" style={{gridTemplateColumns:'1fr 110px 88px'}}>
+                <div className="ws-col-hdrs ws-col-hdrs--wl">
                   <button className="ws-col-sort" onClick={()=>onSort(tab==='tickers'?'ticker':'name')}>
                     {tab==='tickers'?'Ticker · Company':'Insider'}
                     {(sortKey==='ticker'||sortKey==='name')&&(sortDir<0?' ↓':' ↑')}
@@ -7349,7 +7345,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                     return (
                       <div key={s.ticker} className="ws-data-row" style={{cursor:'pointer'}}
                         onClick={()=>onOpenDetail({type:'ticker',ticker:s.ticker,company:s.company,expand:true})}>
-                        <div className="ws-data-row__main" style={{gridTemplateColumns:'1fr 110px 88px'}}>
+                        <div className="ws-data-row__main ws-row__main--wl">
                           <div className="ws-data-row__cell">
                             <div style={{display:'flex',alignItems:'center',gap:5}}><span className="ticker">{s.ticker}</span><StarBtn ticker={s.ticker} watchlist={watchlist}/></div>
                             <div style={{fontSize:11,color:'var(--text-2)',marginTop:1}}>{s.company}</div>
@@ -7371,7 +7367,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                   }) : sortedInsiderRows.map(r=>(
                     <div key={r.name} className="ws-data-row" style={{cursor:'pointer'}}
                       onClick={()=>onOpenDetail({type:'trader',name:r.name,title:r.title,expand:true})}>
-                      <div className="ws-data-row__main" style={{gridTemplateColumns:'1fr 110px 88px'}}>
+                      <div className="ws-data-row__main ws-row__main--wl">
                         <div className="ws-data-row__cell">
                           <div style={{display:'flex',alignItems:'center',gap:5}}><span style={{fontWeight:600,fontSize:13}}>{r.name}</span><FollowBtn name={r.name} watchlist={watchlist}/></div>
                           {r.title&&<div style={{fontSize:11,color:'var(--text-2)',marginTop:1}}>{r.title}</div>}

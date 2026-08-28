@@ -6309,6 +6309,44 @@ td { padding:7px 11px; vertical-align:middle; }
   .ws-row__main--raw  { grid-template-columns: 76px 1fr 54px 84px; }
 }
 
+/* ── INSIDERS table: insider(1fr) | buys | buy value | hit rate | avg ret | score | explore ── */
+.ws-col-hdrs--ins,
+.ws-row__main--ins {
+  display: grid;
+  grid-template-columns: 1fr 56px 100px 78px 82px 110px 68px;
+  align-items: center;
+  min-height: 44px;
+}
+.ws-col-hdrs--ins {
+  border-bottom: 0.5px solid var(--border-md);
+  background: var(--surface);
+  min-height: 0;
+}
+.ws-col-hdrs--ins-mobile,
+.ws-row__main--ins-mobile {
+  grid-template-columns: 1fr 56px 100px 68px;
+}
+
+/* ── WATCHLIST table: ticker+company(1fr) | last activity | net flow ── */
+.ws-col-hdrs--wl,
+.ws-row__main--wl {
+  display: grid;
+  grid-template-columns: 1fr 130px 110px;
+  align-items: center;
+  min-height: 44px;
+}
+.ws-col-hdrs--wl {
+  border-bottom: 0.5px solid var(--border-md);
+  background: var(--surface);
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .ws-col-hdrs--ins,
+  .ws-row__main--ins { grid-template-columns: 1fr 56px 100px 68px; }
+  .ws-col-hdrs--wl,
+  .ws-row__main--wl  { grid-template-columns: 1fr 100px 88px; }
+}
+
 /* Larger, more visible expand chevron */
 .ws-row__chevron--lg {
   font-size: 12px;
