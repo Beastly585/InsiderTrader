@@ -6282,6 +6282,50 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .ws-row__detail-cta--secondary:hover { color: var(--text); }
 
+
+/* ── Shared data grid: same columns for both signals and raw tabs ─── */
+/* Desktop: chevron+ticker | company | insiders | net value/pos | conviction | */
+.ws-col-hdrs--data {
+  display: grid;
+  grid-template-columns: 160px 1fr 90px 100px 130px;
+  border-bottom: 0.5px solid var(--border-md);
+  background: var(--surface);
+}
+.ws-row__main--data {
+  display: grid;
+  grid-template-columns: 160px 1fr 90px 100px 130px;
+  align-items: center;
+  min-height: 44px;
+}
+/* Raw filings has one extra column (role) on desktop */
+.ws-col-hdrs--data.ws-col-hdrs--raw-grid {
+  grid-template-columns: 100px 90px 1fr 100px 70px 110px 110px;
+}
+.ws-row__main--data.ws-row__main--raw-grid {
+  grid-template-columns: 100px 90px 1fr 100px 70px 110px 110px;
+}
+@media (max-width: 900px) {
+  .ws-col-hdrs--data   { grid-template-columns: 130px 1fr 80px 100px; }
+  .ws-row__main--data  { grid-template-columns: 130px 1fr 80px 100px; }
+}
+
+/* Larger, more visible expand chevron */
+.ws-row__chevron--lg {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-right: 5px;
+  flex-shrink: 0;
+  transition: color .1s, transform .15s;
+  line-height: 1;
+}
+.ws-row--open .ws-row__chevron--lg { color: var(--accent); }
+
+/* Position change column (signed share count) */
+.ws-row__pos-change {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
 /* ══════════════════════════════════════════════════════════════════════
    DRAWER / PANEL Z-INDEX FIX: never overlap the topnav (52px)
 ══════════════════════════════════════════════════════════════════════ */
