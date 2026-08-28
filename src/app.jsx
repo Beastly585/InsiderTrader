@@ -7238,6 +7238,13 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   useEffect(()=>{ if(prefs&&!localPrefs) setLocalPrefs({...prefs}); },[prefs]);
   function updPref(key,val){ setLocalPrefs(p=>({...p,[key]:val})); }
 
+  // CRITICAL: ensure full history is loaded on mount so "Last activity" is
+  // never blank — the app only fetches 7d by default, but watchlist needs all-time
+  useEffect(()=>{
+    if (ensureFilingsWindow) ensureFilingsWindow(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const cutoff = useMemo(()=>{
     if(days===null) return null;
     const d=new Date(); d.setDate(d.getDate()-days); return d.toISOString().split('T')[0];
@@ -7525,9 +7532,9 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
           </div>
           {!feedCollapsed&&(
             recentActivity.length===0?(
-              <div className="ws-empty" style={{padding:'16px 14px'}}>No open-market trades from your watched items yet.</div>
+              <div className="ws-empty" style={{padding:'16px 14px'}}>{loading?'Loading…':'No open-market trades from your watched items yet.'}</div>
             ):(
-              <div>
+              <div style={{maxHeight:280,overflowY:'auto'}}>
                 {recentActivity.map((f,i)=>(
                   <div key={`${f.accessionNumber||i}`} className="ws-filing-row"
                     onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company,expand:true})}>
@@ -7549,29 +7556,38 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
         </div>
       </div>
 
-      {/* ── Alert settings — pro only ── */}
-      <div className="ws-tile">
-        <div className="ws-tile__hdr">
-          <div className="ws-tile__hdr-left">
-            <span className="ws-tile__title">Alert settings</span>
-            <span className="ws-tile__sub">Email alerts for your watched items</span>
-          </div>
-        </div>
-        {!localPrefs?(
-          <div className="ws-empty" style={{padding:'16px 14px'}}>Loading preferences…</div>
-        ):(
-          <div style={{padding:'4px 0'}}>
-            <SettingsToggle label="Watched ticker traded" sub="Any insider makes an open-market trade on a stock you follow" checked={localPrefs.instant_watchlist_ticker} onChange={e=>updPref('instant_watchlist_ticker',e.target.checked)} pro={pro}/>
-            <SettingsToggle label="Followed insider filed" sub="Someone you follow submits a new Form 4" checked={localPrefs.instant_followed_insider} onChange={e=>updPref('instant_followed_insider',e.target.checked)} pro={pro}/>
-            <SettingsToggle label="Daily digest" sub="Weekday morning summary of activity on your watchlist" checked={localPrefs.daily_digest} onChange={e=>updPref('daily_digest',e.target.checked)} pro={pro}/>
-            <div style={{padding:'12px 16px',borderTop:'0.5px solid var(--border)',display:'flex',alignItems:'center',gap:10}}>
-              <button className="btn btn--primary" style={{padding:'7px 16px',fontSize:12}} onClick={()=>save(localPrefs)} disabled={saving}>
-                {saving?'Saving…':saved?'✓ Saved':'Save alerts'}
-              </button>
-              <span style={{fontSize:11,color:'var(--text-3)'}}>More alert options in Settings →</span>
+      {/* ── Alert settings — half-width left, empty right ── */}
+      <div className="ws-wl-bottom">
+        <div className="ws-tile">
+          <div className="ws-tile__hdr">
+            <div className="ws-tile__hdr-left">
+              <span className="ws-tile__title">Alert settings</span>
+              <span className="ws-tile__sub">Email alerts for your watchlist</span>
             </div>
           </div>
-        )}
+          {!localPrefs?(
+            <div className="ws-empty" style={{padding:'16px 14px'}}>Loading…</div>
+          ):(
+            <div style={{padding:'4px 0'}}>
+              <SettingsToggle label="Watched ticker traded" sub="Any insider makes an open-market buy or sell on a stock you follow" checked={localPrefs.instant_watchlist_ticker} onChange={e=>updPref('instant_watchlist_ticker',e.target.checked)} pro={pro}/>
+              <SettingsToggle label="Signal on followed ticker" sub="A new high-conviction signal appears for a stock you watch" checked={localPrefs.instant_high_conviction||false} onChange={e=>updPref('instant_high_conviction',e.target.checked)} pro={pro}/>
+              <SettingsToggle label="Followed insider files" sub="Someone you follow submits a new Form 4 to the SEC" checked={localPrefs.instant_followed_insider} onChange={e=>updPref('instant_followed_insider',e.target.checked)} pro={pro}/>
+              <div style={{padding:'12px 16px',borderTop:'0.5px solid var(--border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                <button className="btn btn--primary" style={{padding:'7px 16px',fontSize:12}} onClick={()=>save(localPrefs)} disabled={saving}>
+                  {saving?'Saving…':saved?'✓ Saved':'Save alerts'}
+                </button>
+                <button
+                  className="ws-tile__action"
+                  style={{fontSize:11,background:'none',border:'none',cursor:'pointer',padding:0,animation:'wl-blink 2s ease-in-out 3'}}
+                  onClick={()=>{ const e=new CustomEvent('seli:nav',{detail:'settings'}); window.dispatchEvent(e); }}>
+                  More alert options in Settings →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* Right column intentionally empty — keeps alert tile at 50% width */}
+        <div/>
       </div>
     </div>
   );
@@ -10111,6 +10127,14 @@ function AppInner() {
     }
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // Listen for cross-component navigation events (e.g. watchlist → settings)
+  useEffect(()=>{
+    function onSeliNav(e){ if(e.detail) navTo(e.detail); }
+    window.addEventListener('seli:nav', onSeliNav);
+    return ()=>window.removeEventListener('seli:nav', onSeliNav);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // How far back the currently-loaded `filings` array actually covers.

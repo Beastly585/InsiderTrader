@@ -6469,3 +6469,9 @@ td { padding:7px 11px; vertical-align:middle; }
 /* Clickable data row — shows cursor and explore hint */
 .ws-data-row--clickable { cursor: pointer; }
 .ws-data-row--clickable:hover { background: var(--surface-2); }
+
+/* Watchlist alert link blink — draws attention then stops */
+@keyframes wl-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
