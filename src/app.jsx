@@ -3896,8 +3896,7 @@ function HomeTile({ title, onSeeAll, children, className }) {
 function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll }) {
   const pro = isPro(user);
   const isMobile = useIsMobile();
-  const [sigDays, setSigDays] = useState(3);
-  const [sigSort, setSigSort] = useState('conviction');
+  const [myNews, setMyNews] = useState(false);
   const [sigDir,  setSigDir]  = useState(-1);
   const [filSort, setFilSort] = useState('date');
   const [filDir,  setFilDir]  = useState(-1);
@@ -3982,7 +3981,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
         <div className="ws-home-main">
 
           {/* 1. Recent filings tile — ABOVE signals */}
-          <div className="ws-tile" style={{marginBottom:14}}>
+          <div className="ws-tile">
             <div className="ws-tile__hdr">
               <div className="ws-tile__hdr-left">
                 <span className="ws-tile__title">Recent filings</span>
@@ -4083,33 +4082,42 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
           </div>
         </div>
 
-        {/* RIGHT — market news + top insiders */}
+        {/* RIGHT — market news fills the full column height */}
         <div className="ws-home-side">
-
-          {/* Market news — sleek, replaces the old recent filings sidebar */}
-          <div className="ws-tile" style={{marginBottom:14}}>
+          <div className="ws-tile ws-tile--news">
             <div className="ws-tile__hdr">
               <div className="ws-tile__hdr-left">
                 <span className="ws-tile__title">Market news</span>
-                <span className="ws-tile__sub">General &amp; finance</span>
+              </div>
+              {/* My news filter — pro only */}
+              <div className="ws-pills">
+                <button className={`ws-pill ws-pill--sm${!myNews?' ws-pill--active':''}`}
+                  onClick={()=>setMyNews(false)}>All</button>
+                <button className={`ws-pill ws-pill--sm${myNews?' ws-pill--active':''}`}
+                  onClick={()=>pro?setMyNews(true):null}
+                  title={pro?'News for your watchlist tickers and followed insiders':'Pro feature'}>
+                  {pro?'My news':'My news ✦'}
+                </button>
               </div>
             </div>
-            <div style={{maxHeight:260,overflowY:'auto',overflowX:'hidden'}}>
-              <MarketNews watchlist={watchlist} filings={filings} limit={10}/>
+            <div className="home-news-body">
+              <MarketNews watchlist={watchlist} filings={filings} limit={30} myNewsOn={myNews}/>
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Top insiders */}
-          <div className="ws-tile">
-            <div className="ws-tile__hdr">
-              <div className="ws-tile__hdr-left"><span className="ws-tile__title">Top insiders</span><span className="ws-tile__sub">By composite score</span></div>
-              <button className="ws-tile__action" onClick={()=>onSeeAll('signals')}>Full leaderboard →</button>
-            </div>
-            <div className="ws-tile__body">
-              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
-            </div>
+      {/* Top insiders — below the two left tiles, full width */}
+      <div className="ws-tile" style={{marginTop:18}}>
+        <div className="ws-tile__hdr">
+          <div className="ws-tile__hdr-left">
+            <span className="ws-tile__title">Top insiders</span>
+            <span className="ws-tile__sub">By composite score</span>
           </div>
-
+          <button className="ws-tile__action" onClick={()=>onSeeAll('signals')}>Full leaderboard →</button>
+        </div>
+        <div className="ws-tile__body">
+          <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
         </div>
       </div>
     </div>
@@ -4139,6 +4147,13 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [expandedRaws, setExpandedRaws] = useState(new Set()); // Set of indices
   // Full-screen explore drawer (top-right button)
   const [drawer, setDrawer]     = useState(null); // null | 'signals' | 'raw'
+
+  // Lock body scroll when a local drawer is open
+  useEffect(()=>{
+    if (drawer) document.body.classList.add('drawer-open');
+    else document.body.classList.remove('drawer-open');
+    return ()=>document.body.classList.remove('drawer-open');
+  },[drawer]);
 
   const cutoff = useMemo(() => {
     if (days == null) return '2021-01-01';
@@ -10474,7 +10489,16 @@ function AppInner() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  // Listen for cross-component navigation events (e.g. watchlist → settings)
+  // Lock body scroll and adjust z-index when any explore drawer is open
+  const anyDrawerOpen = panelOpen && detailFull;
+  useEffect(()=>{
+    if (anyDrawerOpen) {
+      document.body.classList.add('drawer-open');
+    } else {
+      document.body.classList.remove('drawer-open');
+    }
+    return ()=>document.body.classList.remove('drawer-open');
+  }, [anyDrawerOpen]);
   useEffect(()=>{
     function onSeliNav(e){ if(e.detail) navTo(e.detail); }
     window.addEventListener('seli:nav', onSeliNav);

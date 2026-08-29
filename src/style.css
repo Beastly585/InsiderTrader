@@ -6069,17 +6069,7 @@ td { padding:7px 11px; vertical-align:middle; }
 ══════════════════════════════════════════════════════════════════════ */
 
 /* 60/40 split — main column is signals+filings, side is news+leaderboard */
-.ws-home-centered {
-  display: grid;
-  grid-template-columns: 3fr 2fr;
-  gap: 18px;
-  align-items: start;
-}
-@media (max-width: 900px) {
-  .ws-home-centered { grid-template-columns: 1fr; }
-}
-.ws-home-main { min-width: 0; }
-.ws-home-side  { min-width: 0; }
+/* ws-home-centered: authoritative definition below */
 
 /* Compact filing row — 4-col grid inside the home filings tile */
 .ws-home-fil-hdrs {
@@ -6412,8 +6402,11 @@ td { padding:7px 11px; vertical-align:middle; }
    DRAWER / PANEL Z-INDEX FIX: never overlap the topnav (52px)
 ══════════════════════════════════════════════════════════════════════ */
 
-/* Drawer overlay — behind topnav (z-index 100), covers full screen */
-.drawer-overlay { z-index: 95; }  /* topnav at 100 paints on top naturally */
+/* Drawer overlay — above topnav (100→94) when drawer-open class is on body */
+.drawer-overlay { z-index: 95; }
+body.drawer-open .topnav,
+body.drawer-open .bottomnav { z-index: 94; }  /* step below overlay */
+body.drawer-open { overflow: hidden; }        /* lock background scroll */
 
 /* DetailPanel slide-in */
 .panel-overlay { z-index: 90; }
@@ -6778,4 +6771,27 @@ td { padding:7px 11px; vertical-align:middle; }
   color: var(--text);
   font-weight: 700;
   border-bottom-color: var(--accent);
+}
+
+.ws-home-centered {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 18px;
+  align-items: stretch;   /* both columns same height */
+}
+@media(max-width:900px){ .ws-home-centered{ grid-template-columns:1fr; align-items:start; } }
+.ws-home-centered--mobile { grid-template-columns:1fr; }
+.ws-home-main { min-width:0; display:flex; flex-direction:column; gap:14px; }
+.ws-home-side  { min-width:0; display:flex; flex-direction:column; }
+/* News tile fills remaining height of side column */
+.ws-home-side .ws-tile--news {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ws-home-side .ws-tile--news .home-news-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
