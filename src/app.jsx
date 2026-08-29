@@ -10415,6 +10415,9 @@ function AppInner() {
   // Watchlist (which have their own separate, untouched drawer triggers)
   // don't need this distinction at all.
   const [detailFull,setDetailFull] = useState(()=>!!appStateFromPath(window.location.pathname).detail);
+  // drawerMode tracks which explore tab is active when detailFull is open.
+  // 'auto' = derive from detail type (default), 'signals'|'insiders'|'data' = forced.
+  const [drawerMode, setDrawerMode] = useState('auto');
   const [portfolioTickers, setPortfolioTickers] = useState([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(null); // null | 'default' | 'data_export' | 'portfolio' | 'notifications' | 'risk_management'
 
@@ -10589,6 +10592,7 @@ function AppInner() {
     setDetailStack(prev => detail ? [...prev, detail] : prev);
     setDetail(d);
     setDetailFull(opts.expand ? true : false);
+    setDrawerMode('auto');
   }
   function goBackDetail(){
     setDetailStack(prev=>{
@@ -10598,8 +10602,8 @@ function AppInner() {
       return next;
     });
   }
-  function expandDetail(){setDetailFull(true);}
-  function closeDetail(){setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);}
+  function expandDetail(){setDetailFull(true);setDrawerMode('auto');}
+  function closeDetail(){setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setDrawerMode('auto');}
   // cameFromHome powers the "Home › Section" breadcrumb bar on mobile —
   // any *other* way of reaching a page (bottom nav, a shared link, the
   // desktop sidebar) should not show a breadcrumb back to a Home the
@@ -10710,11 +10714,41 @@ function AppInner() {
           <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
         </>
       )}
-      {panelOpen && detailFull && (
-        detail?.dataFilters
-          ? <DataDrawer initialDetail={detail} initialDetailStack={detailStack} filterState={detail.dataFilters} onClose={closeDetail} watchlist={watchlist} portfolioTickers={portfolioTickers} pro={isPro(user)} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>
-          : <InsightsDrawer type={detail?.type==='trader'?'insiders':'signals'} filings={filings} onClose={closeDetail} initialDetail={detail} initialDetailStack={detailStack} sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort} ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading} watchlist={watchlist} pro={isPro(user)}/>
-      )}
+      {panelOpen && detailFull && (()=>{
+        // Determine which drawer to show based on drawerMode + detail type
+        const autoMode = detail?.dataFilters ? 'data' : detail?.type==='trader' ? 'insiders' : 'signals';
+        const activeMode = drawerMode==='auto' ? autoMode : drawerMode;
+
+        function switchToData(){ setDrawerMode('data'); }
+        function switchFromData(tab){ setDrawerMode(tab); }
+
+        if (activeMode==='data') {
+          return <DataDrawer
+            initialDetail={detail}
+            initialDetailStack={detailStack}
+            filterState={detail?.dataFilters||{}}
+            onClose={()=>{closeDetail();setDrawerMode('auto');}}
+            onSwitchTab={switchFromData}
+            watchlist={watchlist}
+            portfolioTickers={portfolioTickers}
+            pro={isPro(user)}
+            onUpgrade={(f)=>setShowUpgradeModal(f||'default')}
+          />;
+        }
+        return <InsightsDrawer
+          type={activeMode}
+          filings={filings}
+          onClose={()=>{closeDetail();setDrawerMode('auto');}}
+          onSwitchToData={switchToData}
+          initialDetail={detail}
+          initialDetailStack={detailStack}
+          sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort}
+          ensureFilingsWindow={ensureFilingsWindow}
+          filingsLoading={loading}
+          watchlist={watchlist}
+          pro={isPro(user)}
+        />;
+      })()}
     </div>
     </GuideProvider>
     </>
