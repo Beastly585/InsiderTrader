@@ -4694,20 +4694,27 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   },[rows]);
   const totalValDisplay = isNaN(stats.totalVal) ? '—' : fmt.money(stats.totalVal||0);
 
-  // Transactions for selected insider
+  // Load full history on mount so profileTrades has data
+  useEffect(()=>{
+    if (ensureFilingsWindow) ensureFilingsWindow(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+  // Transactions for selected insider — case-insensitive name match, all types
   const profileTrades = useMemo(()=>{
     if (!selected) return [];
+    const name = (selected.insider_name||'').toLowerCase();
     return filings
-      .filter(f=>f.isOpenMarket&&f.insiderName===selected.insider_name)
+      .filter(f=>(f.insiderName||'').toLowerCase()===name)
       .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
       .slice(0,30);
   },[filings, selected?.insider_name]);
 
-  // Companies this insider has traded at
+  // Companies this insider has traded at — all transaction types
   const profileCompanies = useMemo(()=>{
     const map={};
     profileTrades.forEach(f=>{
-      if(!map[f.ticker]) map[f.ticker]={ticker:f.ticker,company:f.company,buys:0,sells:0,lastDate:''};
+      if(!map[f.ticker]) map[f.ticker]={ticker:f.ticker,company:f.company||f.ticker,buys:0,sells:0,lastDate:''};
       if(f.transactionType==='buy') map[f.ticker].buys++;
       else map[f.ticker].sells++;
       const d=f.transactionDate||f.date||'';
@@ -4962,12 +4969,18 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // via the same back-button stack DetailPanel already supports.
 function InsiderProfileDrawer({ name, title, filings, watchlist, lbRows, onOpenDetail }) {
   const [txExpanded, setTxExpanded] = useState(new Set());
-  const r = useMemo(()=>lbRows?.find(x=>x.insider_name===name)||null, [lbRows, name]);
-  const profileTrades = useMemo(()=>
-    filings.filter(f=>f.isOpenMarket&&f.insiderName===name)
+  const r = useMemo(()=>{
+    if (!lbRows) return null;
+    const nameLower = (name||'').toLowerCase();
+    return lbRows.find(x=>(x.insider_name||'').toLowerCase()===nameLower)||null;
+  }, [lbRows, name]);
+  const profileTrades = useMemo(()=>{
+    const nameLower = (name||'').toLowerCase();
+    return filings
+      .filter(f=>(f.insiderName||'').toLowerCase()===nameLower)
       .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
-      .slice(0,30),
-  [filings, name]);
+      .slice(0,30);
+  },[filings, name]);
   const profileCompanies = useMemo(()=>{
     const map={};
     profileTrades.forEach(f=>{
