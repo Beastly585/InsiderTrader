@@ -4664,6 +4664,136 @@ function detectReversals(filings) {
 
 
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
+// ─── Shared insider profile components (module-level, no closure) ─────────────
+function ScoreRing({ score=0, size=76 }) {
+  const pct=Math.min((score||0)/5,1);
+  const r2=(size-8)/2, circ=2*Math.PI*r2, dash=pct*circ;
+  const color=score>=4?'var(--green-600)':score>=2.5?'var(--accent)':'var(--amber-600)';
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{flexShrink:0}}>
+      <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke="var(--surface-3)" strokeWidth={6}/>
+      <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke={color} strokeWidth={6}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        transform={`rotate(-90 ${size/2} ${size/2})`}
+        style={{transition:'stroke-dasharray .4s ease'}}/>
+      <text x={size/2} y={size/2-4} textAnchor="middle" dominantBaseline="middle"
+        style={{fontSize:size*0.22,fontWeight:700,fontFamily:'var(--font-mono)',fill:color,userSelect:'none'}}>
+        {score!=null?score.toFixed(1):'—'}
+      </text>
+      <text x={size/2} y={size/2+size*0.2} textAnchor="middle" dominantBaseline="middle"
+        style={{fontSize:size*0.13,fill:'var(--text-3)',fontFamily:'var(--font)',userSelect:'none'}}>
+        /5.0
+      </text>
+    </svg>
+  );
+}
+
+function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpanded, onOpenDetail, watchlist, loading, setInsiderDrawerDetail }) {
+  if (!r) return (
+    <div className="ip-profile-empty">
+      <div style={{fontSize:40,marginBottom:12,opacity:.25}}>◎</div>
+      <div style={{fontSize:13,color:'var(--text-3)'}}>Select an insider from the list</div>
+    </div>
+  );
+  const hrC=r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-2)';
+  const retC=(r.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
+  const initials=(r.insider_name||'').split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  return (
+    <div className="ip-profile">
+      <div className="ip-profile__head">
+        <div className="ip-profile__avatar">{initials}</div>
+        <div className="ip-profile__identity">
+          <div className="ip-profile__name">{r.insider_name}</div>
+          <div className="ip-profile__meta">
+            <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
+            {r.insider_title&&<span className="ip-profile__title">{r.insider_title}</span>}
+          </div>
+          <div style={{marginTop:10}} onClick={e=>e.stopPropagation()}>
+            <FollowBtn name={r.insider_name} watchlist={watchlist}/>
+          </div>
+        </div>
+        <ScoreRing score={r.proxy_score??0} size={76}/>
+      </div>
+
+      <div className="ip-profile__stats">
+        {[
+          {label:'Hit rate',val:r.hit_rate!=null?`${r.hit_rate}%`:'—',color:hrC},
+          {label:'Avg return',val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—',color:retC},
+          {label:'OM buys',val:r.om_buys,color:'var(--text)'},
+          {label:'OM sells',val:r.om_sells||0,color:'var(--text)'},
+          {label:'Priced trades',val:r.priced!=null?r.priced:'—',color:'var(--text)'},
+          {label:'Total bought',val:fmt.money(r.bought_value),color:'var(--text)'},
+        ].map(s=>(
+          <div key={s.label} className="ip-stat">
+            <span className="ip-stat__val" style={{color:s.color,fontFamily:'var(--font-mono)'}}>{s.val}</span>
+            <span className="ip-stat__label">{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {profileCompanies.length>0&&(
+        <div className="ip-profile__section">
+          <div className="ip-profile__section-label">Companies traded</div>
+          <div className="ip-profile__companies">
+            {profileCompanies.slice(0,8).map(c=>(
+              <div key={c.ticker} className="ip-company-chip"
+                onClick={()=>onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company||c.ticker,expand:true})}>
+                <span className="ticker" style={{fontSize:11}}>{c.ticker}</span>
+                <span className="ip-company-chip__name">{c.company||c.ticker}</span>
+                <div className="ip-company-chip__counts">
+                  {c.buys>0&&<span className="val-buy" style={{fontSize:10,fontWeight:700}}>+{c.buys}</span>}
+                  {c.sells>0&&<span className="val-sell" style={{fontSize:10,fontWeight:700}}>−{c.sells}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="ip-profile__section" style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
+        <div className="ip-profile__section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span>Transactions{profileTrades.length?` · ${profileTrades.length} found`:''}</span>
+          <button className="ws-tile__action" style={{fontSize:11,fontWeight:600}}
+            onClick={()=>setInsiderDrawerDetail&&setInsiderDrawerDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
+            Full deep-dive →
+          </button>
+        </div>
+        {profileTrades.length===0?(
+          <div className="ws-empty" style={{padding:'16px 0',fontSize:12}}>
+            {loading?'Loading…':'No transactions found.'}
+          </div>
+        ):(
+          <div className="ip-tx-list">
+            {profileTrades.map((f,i)=>{
+              const isBuy=f.transactionType==='buy', isExpTx=txExpanded.has(i);
+              return (
+                <div key={i} className="ip-tx-row" style={{borderLeft:`2px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                  <div className="ip-tx-row__main" onClick={()=>setTxExpanded(s=>{const n=new Set(s);n.has(i)?n.delete(i):n.add(i);return n;})}>
+                    <span className="ip-tx-row__date">{fmt.dateShort(f.transactionDate||f.date)}</span>
+                    <span className="ticker" style={{fontSize:12,minWidth:40}}>{f.ticker}</span>
+                    <span style={{fontSize:11,color:'var(--text-3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',margin:'0 8px'}}>{f.company}</span>
+                    <span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span>
+                    <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`} style={{minWidth:72,textAlign:'right'}}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                    <span className="ip-tx-row__chevron">{isExpTx?'▾':'▸'}</span>
+                  </div>
+                  {isExpTx&&(
+                    <div className="ip-tx-row__detail">
+                      <div><span className="ws-data-label">Shares</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.shares?fmt.number(f.shares):'—'}</span></div>
+                      <div><span className="ws-data-label">Price</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.price?fmt.price(f.price):'—'}</span></div>
+                      <div><span className="ws-data-label">Total</span><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
+                      {f.accessionNumber&&f.cikIssuer&&<div><span className="ws-data-label">SEC</span><a href={secFilingUrl(f.accessionNumber,f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">View →</a></div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow, watchlist, onUpgrade }) {
   const pro = isPro(user);
   const isMobile = useIsMobile();
@@ -4738,146 +4868,6 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
     return Object.values(map).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));
   },[profileTrades]);
 
-  // Score ring SVG
-  function ScoreRing({score,size=76}){
-    const pct=Math.min((score||0)/5,1);
-    const r=(size-8)/2, circ=2*Math.PI*r, dash=pct*circ;
-    const color=score>=4?'var(--green-600)':score>=2.5?'var(--accent)':'var(--amber-600)';
-    return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{flexShrink:0}}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={6}/>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={6}
-          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
-          transform={`rotate(-90 ${size/2} ${size/2})`}
-          style={{transition:'stroke-dasharray .4s ease'}}/>
-        <text x={size/2} y={size/2-4} textAnchor="middle" dominantBaseline="middle"
-          style={{fontSize:size*0.22,fontWeight:700,fontFamily:'var(--font-mono)',fill:color,userSelect:'none'}}>
-          {score!=null?score.toFixed(1):'—'}
-        </text>
-        <text x={size/2} y={size/2+size*0.2} textAnchor="middle" dominantBaseline="middle"
-          style={{fontSize:size*0.13,fill:'var(--text-3)',fontFamily:'var(--font)',userSelect:'none'}}>
-          /5.0
-        </text>
-      </svg>
-    );
-  }
-
-  // Profile card component
-  function ProfileCard({r}){
-    if(!r) return (
-      <div className="ip-profile-empty">
-        <div style={{fontSize:40,marginBottom:12,opacity:.25}}>◎</div>
-        <div style={{fontSize:13,color:'var(--text-3)'}}>Select an insider from the list</div>
-      </div>
-    );
-    const hrC=r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-2)';
-    const retC=(r.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
-    const initials=(r.insider_name||'').split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
-    return (
-      <div className="ip-profile">
-        {/* ── Head: avatar · identity · score ring ── */}
-        <div className="ip-profile__head">
-          <div className="ip-profile__avatar">{initials}</div>
-          <div className="ip-profile__identity">
-            <div className="ip-profile__name">{r.insider_name}</div>
-            <div className="ip-profile__meta">
-              <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
-              {r.insider_title&&<span className="ip-profile__title">{r.insider_title}</span>}
-            </div>
-            <div style={{marginTop:10}} onClick={e=>e.stopPropagation()}>
-              <FollowBtn name={r.insider_name} watchlist={watchlist}/>
-            </div>
-          </div>
-          <ScoreRing score={r.proxy_score??0} size={76}/>
-        </div>
-
-        {/* ── Stat row ── */}
-        <div className="ip-profile__stats">
-          {[
-            {label:'Hit rate', val:r.hit_rate!=null?`${r.hit_rate}%`:'—', color:hrC},
-            {label:'Avg return', val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—', color:retC},
-            {label:'OM buys', val:r.om_buys, color:'var(--text)'},
-            {label:'OM sells', val:r.om_sells||0, color:'var(--text)'},
-            {label:'Priced trades', val:r.priced!=null?r.priced:'—', color:'var(--text)'},
-            {label:'Total bought', val:fmt.money(r.bought_value), color:'var(--text)'},
-          ].map(s=>(
-            <div key={s.label} className="ip-stat">
-              <span className="ip-stat__val" style={{color:s.color,fontFamily:'var(--font-mono)'}}>{s.val}</span>
-              <span className="ip-stat__label">{s.label}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Affiliated companies ── */}
-        {profileCompanies.length>0&&(
-          <div className="ip-profile__section">
-            <div className="ip-profile__section-label">Companies traded</div>
-            <div className="ip-profile__companies">
-              {profileCompanies.slice(0,8).map(c=>(
-                <div key={c.ticker} className="ip-company-chip"
-                  onClick={()=>onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company,expand:true})}>
-                  <span className="ticker" style={{fontSize:11}}>{c.ticker}</span>
-                  <span className="ip-company-chip__name">{c.company}</span>
-                  <div className="ip-company-chip__counts">
-                    {c.buys>0&&<span className="val-buy" style={{fontSize:10,fontWeight:700}}>+{c.buys}</span>}
-                    {c.sells>0&&<span className="val-sell" style={{fontSize:10,fontWeight:700}}>−{c.sells}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Transaction history ── */}
-        <div className="ip-profile__section" style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
-          <div className="ip-profile__section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span>Transactions <span style={{fontWeight:400,color:'var(--text-3)'}}>{profileTrades.length ? `· ${profileTrades.length} found` : ''}</span></span>
-            <button className="ws-tile__action" style={{fontSize:11,fontWeight:600}}
-              onClick={()=>setInsiderDrawerDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
-              Full deep-dive →
-            </button>
-          </div>
-          {profileTrades.length===0?(
-            <div className="ws-empty" style={{padding:'16px 0',fontSize:12}}>
-              {loading?'Loading…':'No open-market trades found.'}
-            </div>
-          ):(
-            <div className="ip-tx-list">
-              {profileTrades.map((f,i)=>{
-                const isBuy=f.transactionType==='buy';
-                const isExpTx=txExpanded.has(i);
-                return (
-                  <div key={i} className="ip-tx-row"
-                    style={{borderLeft:`2px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
-                    <div className="ip-tx-row__main"
-                      onClick={()=>setTxExpanded(s=>{const n=new Set(s);n.has(i)?n.delete(i):n.add(i);return n;})}>
-                      <span className="ip-tx-row__date">{fmt.dateShort(f.transactionDate||f.date)}</span>
-                      <span className="ticker" style={{fontSize:12,minWidth:40}}>{f.ticker}</span>
-                      <span style={{fontSize:11,color:'var(--text-3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',margin:'0 8px'}}>{f.company}</span>
-                      <span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span>
-                      <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`} style={{minWidth:72,textAlign:'right'}}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
-                      <span className="ip-tx-row__chevron">{isExpTx?'▾':'▸'}</span>
-                    </div>
-                    {isExpTx&&(
-                      <div className="ip-tx-row__detail">
-                        <div><span className="ws-data-label">Shares</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.shares?fmt.number(f.shares):'—'}</span></div>
-                        <div><span className="ws-data-label">Price</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.price?fmt.price(f.price):'—'}</span></div>
-                        <div><span className="ws-data-label">Total</span><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
-                        {f.accessionNumber&&f.cikIssuer&&(
-                          <div><span className="ws-data-label">SEC</span><a href={secFilingUrl(f.accessionNumber,f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ View</a></div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="ws-page">
       <div style={{marginBottom:20}}>
@@ -4898,7 +4888,17 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 
         {/* Profile viewer — 80% width */}
         <div className="ws-tile ip-profile-tile">
-          <ProfileCard r={selected}/>
+          <ProfileCard
+            r={selected}
+            profileCompanies={profileCompanies}
+            profileTrades={profileTrades}
+            txExpanded={txExpanded}
+            setTxExpanded={setTxExpanded}
+            onOpenDetail={onOpenDetail}
+            watchlist={watchlist}
+            loading={loading}
+            setInsiderDrawerDetail={setInsiderDrawerDetail}
+          />
         </div>
 
         {/* Insider rail — 20% width, scrollable */}
@@ -5009,21 +5009,7 @@ function InsiderProfileDrawer({ name, title, filings, watchlist, lbRows, onOpenD
   const initials = name.split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
   const hrC = r?.hit_rate>=70?'var(--green-600)':r?.hit_rate<50?'var(--red-600)':'var(--text-2)';
   const retC = (r?.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
-  function ScoreRing({score=0,size=72}){
-    const pct=Math.min(score/5,1),r2=(size-8)/2,circ=2*Math.PI*r2,dash=pct*circ;
-    const color=score>=4?'var(--green-600)':score>=2.5?'var(--accent)':'var(--amber-600)';
-    return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{flexShrink:0}}>
-        <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke="var(--surface-3)" strokeWidth={6}/>
-        <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke={color} strokeWidth={6}
-          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform={`rotate(-90 ${size/2} ${size/2})`}/>
-        <text x={size/2} y={size/2-4} textAnchor="middle" dominantBaseline="middle"
-          style={{fontSize:size*.22,fontWeight:700,fontFamily:'var(--font-mono)',fill:color,userSelect:'none'}}>{score.toFixed(1)}</text>
-        <text x={size/2} y={size/2+size*.2} textAnchor="middle" dominantBaseline="middle"
-          style={{fontSize:size*.13,fill:'var(--text-3)',fontFamily:'var(--font)',userSelect:'none'}}>/5.0</text>
-      </svg>
-    );
-  }
+
   return (
     <div className="ip-profile" style={{padding:'20px 24px',gap:18,overflowY:'auto',height:'100%'}}>
       <div className="ip-profile__head">
