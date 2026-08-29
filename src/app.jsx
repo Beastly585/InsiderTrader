@@ -4554,6 +4554,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           filings={filings}
           initialDetail={drawerInitSignal}
           onClose={()=>{setDrawer(null);setDrawerInitSignal(null);}}
+          onSwitchToData={()=>{setDrawer(null);setDrawerInitSignal(null);setTimeout(()=>setDrawer('raw'),50);}}
           sigSort={sigSort} sigDir={sigDir} sigOnSort={onSigSort}
           ensureFilingsWindow={()=>{}} filingsLoading={loading}
           watchlist={watchlist}
@@ -4567,6 +4568,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           initialDetailStack={[]}
           filterState={{days,sectorF,txType,rawRoleF}}
           onClose={()=>{setDrawer(null);setDrawerInitTicker(null);}}
+          onSwitchTab={(tab)=>{setDrawer(null);setDrawerInitTicker(null);setTimeout(()=>setDrawer(tab==='signals'?'signals':'insiders'),50);}}
           watchlist={watchlist}
           portfolioTickers={[]}
           pro={pro}
@@ -4772,7 +4774,6 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           {[
             {label:'Hit rate', val:r.hit_rate!=null?`${r.hit_rate}%`:'—', color:hrC},
             {label:'Avg return', val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—', color:retC},
-            {label:'vs S&P 500', val:r.avg_spy_return!=null?(r.avg_spy_return>=0?'+':'')+r.avg_spy_return.toFixed(1)+'%':'—', color:(r.avg_spy_return??0)>=0?'var(--green-600)':'var(--red-600)'},
             {label:'OM buys', val:r.om_buys, color:'var(--text)'},
             {label:'OM sells', val:r.om_sells||0, color:'var(--text)'},
             {label:'Priced trades', val:r.priced!=null?r.priced:'—', color:'var(--text)'},
@@ -4959,7 +4960,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // Clicking any row in the left pane drives the right pane without closing.
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
-function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, initialDetailStack, ensureFilingsWindow, filingsLoading, watchlist, initialFilters, pro }) {
+function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, initialDetailStack, ensureFilingsWindow, filingsLoading, watchlist, initialFilters, pro, onSwitchToData }) {
   const [appetite] = React.useContext(RiskAppetiteContext);
 
   // Tab switcher — user can pivot between views within the drawer
@@ -4968,6 +4969,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // Reset detail when switching tabs so the pane doesn't show stale content
   function switchTab(tab) {
     if (tab === activeTab) return;
+    if (tab === 'data' && onSwitchToData) { onSwitchToData(); return; }
     setActiveTab(tab);
     setDetail(null);
     setDetailStack([]);
@@ -5108,7 +5110,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const scrolledOnOpenRef = useRef(false);
   useEffect(()=>{
     if (scrolledOnOpenRef.current || !detail) return;
-    const key = detail.activeTab==='trader' ? detail.name : detail.ticker;
+    const key = detail.type==='trader' ? detail.name : detail.ticker;
     if (!key) return;
     const el = listRef.current?.querySelector(`[data-row-key="${CSS.escape(key)}"]`);
     if (el) {
@@ -5343,7 +5345,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   : sortedLb.length===0
                     ? <div className="drawer__empty">No insiders match</div>
                     : sortedLb.map((r,i)=>{
-                      const isActive = detail?.name===r.insider_name && detail?.activeTab==='trader';
+                      const isActive = detail?.type==='trader' && detail?.name===r.insider_name;
                       return (
                         <div key={i}
                           data-row-key={r.insider_name}
@@ -6709,7 +6711,7 @@ function FilterPanel({
 // already done — same reasoning InsightsDrawer already uses for its own
 // initialFilters. Runs its own query rather than reading DataPage's state
 // directly, since DataPage may since have unmounted.
-function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers, pro, onUpgrade }) {
+function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers, pro, onUpgrade, onSwitchTab }) {
   const f = filterState || {};
   const [search,   setSearch]   = useState(f.search || '');
   const [typeF,    setTypeF]    = useState(f.typeF || '');
@@ -6805,7 +6807,14 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
     <div className="drawer-overlay" onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="drawer">
         <div className="drawer__hdr-row1">
-          <span className="drawer__title">Filings</span>
+          {/* Same tab switcher as InsightsDrawer so the explore nav is consistent */}
+          <div className="drawer__tabs">
+            {[['signals','Signals'],['insiders','Insiders'],['data','Raw Data']].map(([k,l])=>(
+              <button key={k}
+                className={`drawer__tab${k==='data'?' drawer__tab--active':''}`}
+                onClick={()=>{ if(k!=='data' && onSwitchTab) onSwitchTab(k); }}>{l}</button>
+            ))}
+          </div>
           <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>
         </div>
 
