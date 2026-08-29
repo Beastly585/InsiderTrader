@@ -4824,7 +4824,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='hit_rate'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('hit_rate')}>Hit rate{sort==='hit_rate'&&(dir<0?' ↓':' ↑')}</button>}
           {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sort==='avg_return'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('avg_return')}>Avg ret.{sort==='avg_return'&&(dir<0?' ↓':' ↑')}</button>}
           <button className={`ws-col-sort ws-col-sort--right${sort==='proxy_score'?' ws-col-sort--active':''}`} onClick={()=>onSortClick('proxy_score')}>Score{sort==='proxy_score'&&(dir<0?' ↓':' ↑')}</button>
-          <span className="ws-col-sort" style={{textAlign:'right',cursor:'default'}}>Explore</span>
+          <span className="ws-col-sort" style={{textAlign:'right',cursor:'default',width:36}}></span>
         </div>
 
         {lbError?(
@@ -4879,10 +4879,15 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                         <div style={{flex:1,minWidth:28}}><ConvictionBar score={r.proxy_score??0} max={5} showLabel={false}/></div>
                       </div>
                     </div>
-                    {/* Explore */}
-                    <div className="ws-data-row__cell" style={{textAlign:'right'}} onClick={e=>{e.stopPropagation();onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title});}}>
-                      <button className="ws-raw-explore-btn">
-                        Explore <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{marginLeft:2}}><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                    {/* Explore — icon only */}
+                    <div className="ws-data-row__cell" style={{textAlign:'right',paddingRight:12}} onClick={e=>{e.stopPropagation();onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title});}}>
+                      <button className="ws-ins-explore-icon" title="Open profile">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="8"/>
+                          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                          <line x1="11" y1="8" x2="11" y2="14"/>
+                          <line x1="8" y1="11" x2="14" y2="11"/>
+                        </svg>
                       </button>
                     </div>
                   </div>

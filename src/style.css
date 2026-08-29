@@ -5837,15 +5837,22 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-bar-chart { display:flex; align-items:flex-end; gap:6px; height:140px; overflow-x:auto; padding-bottom:2px; }
 .ws-bar-item {
   display:flex; flex-direction:column; align-items:center;
-  flex:0 0 auto; width:36px; cursor:pointer;
+  flex:0 0 auto; width:36px; cursor:pointer; height:100%;
   transition:opacity .1s;
 }
 .ws-bar-item:hover { opacity:.85; }
 .ws-bar-item--active .ws-bar-item__fill { background:var(--accent) !important; }
-.ws-bar-item__fill-wrap { flex:1; width:100%; display:flex; align-items:flex-end; }
+.ws-bar-item__fill-wrap {
+  /* Must fill remaining column height so child's height:% resolves correctly */
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-height: 0;
+}
 .ws-bar-item__fill { width:100%; border-radius:4px 4px 0 0; border:1px solid var(--accent); background:var(--accent-50); transition:height .25s,background .15s; min-height:4px; }
-.ws-bar-item__name { font-size:9px; color:var(--text-3); margin-top:4px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:36px; }
-.ws-bar-item__val { font-size:9px; font-family:var(--font-mono); color:var(--text-2); font-weight:600; }
+.ws-bar-item__name { font-size:9px; color:var(--text-3); margin-top:4px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:36px; flex-shrink:0; }
+.ws-bar-item__val { font-size:9px; font-family:var(--font-mono); color:var(--text-2); font-weight:600; flex-shrink:0; }
 
 /* ── Empty state ───────────────────────────────────────────────────── */
 .ws-empty { padding:28px 20px; text-align:center; color:var(--text-3); font-size:12px; line-height:1.6; }
@@ -6269,7 +6276,19 @@ td { padding:7px 11px; vertical-align:middle; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  align-items: start;
+  align-items: stretch; /* both tiles same height */
+}
+/* Cap tile height and scroll internally so page doesn't grow unbounded */
+.ws-wl-bottom .ws-tile {
+  max-height: 520px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ws-wl-bottom .ws-tile > div:last-child {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 @media (max-width: 900px) { .ws-wl-bottom { grid-template-columns: 1fr; } }
 @media (max-width: 900px) {
@@ -6318,10 +6337,10 @@ td { padding:7px 11px; vertical-align:middle; }
   grid-template-columns: 8% 7% minmax(0,1fr) 9% 6% 10% 9%;
 }
 
-/* ── INSIDERS: insider(flex) | buys(6%) | value(10%) | hit rate(8%) | avg ret(8%) | score(11%) | explore(7%) ── */
+/* ── INSIDERS: insider(flex) | buys(6%) | value(10%) | hit rate(8%) | avg ret(8%) | score(11%) | icon(44px) ── */
 .ws-col-hdrs--ins,
 .ws-row__main--ins {
-  grid-template-columns: minmax(0,1fr) 6% 10% 8% 8% 11% 7%;
+  grid-template-columns: minmax(0,1fr) 6% 10% 8% 8% 11% 44px;
 }
 
 /* ── WATCHLIST: ticker·company(flex) | last activity | net flow ── */
@@ -6477,4 +6496,23 @@ td { padding:7px 11px; vertical-align:middle; }
 @keyframes wl-blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.35; }
+}
+
+/* Insiders explore icon button */
+.ws-ins-explore-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.ws-ins-explore-icon:hover {
+  background: var(--accent-50);
+  color: var(--accent);
 }
