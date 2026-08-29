@@ -2474,9 +2474,22 @@ function StarBtn({ ticker, watchlist }) {
 }
 
 // Follow button for insiders — same pattern as StarBtn
-function FollowBtn({ name, watchlist }) {
+function FollowBtn({ name, watchlist, compact=false }) {
   const isFollowing = watchlist.hasInsider(name);
   const isPro       = watchlist.pro;
+  if (compact) {
+    // Icon-only variant for use inside table rows
+    return (
+      <button
+        className={`star-btn${isFollowing?' star-btn--active':''}${!isPro?' star-btn--locked':''}`}
+        title={isPro ? (isFollowing?'Unfollow':'Follow insider') : 'Pro feature'}
+        onClick={e=>{e.stopPropagation();watchlist.toggleInsider(name);}}>
+        <svg viewBox="0 0 24 24" fill={isFollowing?'currentColor':'none'} stroke="currentColor" strokeWidth={2} width="12" height="12">
+          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+      </button>
+    );
+  }
   return (
     <button
       className={`follow-btn${isFollowing?' follow-btn--active':''}${!isPro?' follow-btn--locked':''}`}
@@ -7603,24 +7616,32 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                     <div key={s.ticker} className="ws-data-row ws-data-row--clickable"
                       onClick={()=>onOpenDetail({type:'ticker',ticker:s.ticker,company:s.company,expand:true})}>
                       <div className="ws-data-row__main ws-row__main--wl">
-                        <div className="ws-data-row__cell">
-                          <div style={{display:'flex',alignItems:'center',gap:6}}>
-                            <span className="ticker">{s.ticker}</span>
-                            <div onClick={e=>e.stopPropagation()}><StarBtn ticker={s.ticker} watchlist={watchlist}/></div>
+                        {/* Ticker + company */}
+                        <div className="ws-data-row__cell" style={{display:'flex',alignItems:'center',gap:8}}>
+                          <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
+                            <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                           </div>
-                          <div style={{fontSize:11,color:'var(--text-2)',marginTop:1}}>{s.company}</div>
+                          <div style={{minWidth:0}}>
+                            <div style={{display:'flex',alignItems:'center',gap:5}}>
+                              <span className="ticker">{s.ticker}</span>
+                            </div>
+                            <div style={{fontSize:11,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.company}</div>
+                          </div>
                         </div>
+                        {/* Last activity */}
                         <div className="ws-data-row__cell">
                           {s.lastTradeDate?(
-                            <span style={{display:'flex',alignItems:'center',gap:6,fontSize:'0.75rem'}}>
-                              <span className="td-muted">{fmt.ago(s.lastTradeDate)}</span>
+                            <div style={{display:'flex',alignItems:'center',gap:5}}>
+                              <span style={{fontSize:11,color:'var(--text-2)'}}>{fmt.ago(s.lastTradeDate)}</span>
                               {lastType&&<span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`}>{lastType==='buy'?'Buy':'Sell'}</span>}
-                            </span>
-                          ):<span className="td-muted" style={{fontSize:'0.75rem'}}>{loading?'Loading…':'No SEC filings yet'}</span>}
+                            </div>
+                          ):<span style={{fontSize:11,color:'var(--text-3)'}}>{loading?'Loading…':'—'}</span>}
                         </div>
+                        {/* Net flow */}
                         <div className="ws-data-row__cell ws-data-row__cell--right">
-                          <span className={`ws-data-mono${s.netValue>=0?' val-buy':' val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
-                          <div style={{fontSize:10,color:'var(--text-3)',marginTop:2}}>→ Full explore</div>
+                          <span className={`ws-data-mono${s.netValue>=0?' val-buy':' val-sell'}`} style={{fontSize:12}}>
+                            {s.netValue>=0?'+':''}{fmt.money(s.netValue)}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -7629,24 +7650,28 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                   <div key={r.name} className="ws-data-row ws-data-row--clickable"
                     onClick={()=>onOpenDetail({type:'trader',name:r.name,title:r.title,expand:true})}>
                     <div className="ws-data-row__main ws-row__main--wl">
-                      <div className="ws-data-row__cell">
-                        <div style={{display:'flex',alignItems:'center',gap:6}}>
-                          <span style={{fontWeight:600,fontSize:13}}>{r.name}</span>
-                          <div onClick={e=>e.stopPropagation()}><FollowBtn name={r.name} watchlist={watchlist}/></div>
+                      {/* Insider name + title */}
+                      <div className="ws-data-row__cell" style={{display:'flex',alignItems:'center',gap:8}}>
+                        <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
+                          <FollowBtn name={r.name} watchlist={watchlist} compact/>
                         </div>
-                        {r.title&&<div style={{fontSize:11,color:'var(--text-2)',marginTop:1}}>{r.title}</div>}
+                        <div style={{minWidth:0}}>
+                          <div style={{fontWeight:600,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+                          {r.title&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</div>}
+                        </div>
                       </div>
+                      {/* Last activity */}
                       <div className="ws-data-row__cell">
                         {r.lastDate?(
-                          <span style={{display:'flex',alignItems:'center',gap:6,fontSize:'0.75rem'}}>
-                            <span className="td-muted">{fmt.ago(r.lastDate)}</span>
+                          <div style={{display:'flex',alignItems:'center',gap:5}}>
+                            <span style={{fontSize:11,color:'var(--text-2)'}}>{fmt.ago(r.lastDate)}</span>
                             {r.lastType&&<span className={`wl-feed__badge wl-feed__badge--${r.lastType==='buy'?'buy':'sell'}`}>{r.lastType==='buy'?'Buy':'Sell'}</span>}
-                          </span>
-                        ):<span className="td-muted" style={{fontSize:'0.75rem'}}>{loading?'Loading…':'No SEC filings yet'}</span>}
+                          </div>
+                        ):<span style={{fontSize:11,color:'var(--text-3)'}}>{loading?'Loading…':'—'}</span>}
                       </div>
+                      {/* Trades */}
                       <div className="ws-data-row__cell ws-data-row__cell--right">
-                        <span className="ws-data-mono">{r.trades} trade{r.trades!==1?'s':''}</span>
-                        <div style={{fontSize:10,color:'var(--text-3)',marginTop:2}}>→ Full explore</div>
+                        <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-2)'}}>{r.trades} trade{r.trades!==1?'s':''}</span>
                       </div>
                     </div>
                   </div>

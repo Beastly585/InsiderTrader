@@ -6271,6 +6271,7 @@ td { padding:7px 11px; vertical-align:middle; }
   gap: 16px;
   align-items: start;
 }
+@media (max-width: 900px) { .ws-wl-bottom { grid-template-columns: 1fr; } }
 @media (max-width: 900px) {
   .ws-wl-bottom { grid-template-columns: 1fr; }
 }
@@ -6323,10 +6324,12 @@ td { padding:7px 11px; vertical-align:middle; }
   grid-template-columns: minmax(0,1fr) 6% 10% 8% 8% 11% 7%;
 }
 
-/* ── WATCHLIST: ticker·company(flex) | last activity(13%) | net flow(11%) ── */
+/* ── WATCHLIST: ticker·company(flex) | last activity | net flow ── */
+/* These tables sit in a half-width tile (ws-wl-bottom = 1fr 1fr).
+   Use proportional columns that work at ~540px container width. */
 .ws-col-hdrs--wl,
 .ws-row__main--wl {
-  grid-template-columns: minmax(0,1fr) 13% 11%;
+  grid-template-columns: minmax(0,1fr) 28% 22%;
 }
 
 /* ── Mobile: collapse to fewer columns ── */
@@ -6338,7 +6341,7 @@ td { padding:7px 11px; vertical-align:middle; }
   .ws-col-hdrs--ins,
   .ws-row__main--ins  { grid-template-columns: minmax(0,1fr) 12% 20% 14%; }
   .ws-col-hdrs--wl,
-  .ws-row__main--wl   { grid-template-columns: minmax(0,1fr) 22% 18%; }
+  .ws-row__main--wl   { grid-template-columns: minmax(0,1fr) 26% 20%; }
 }
 /* Remove old ins-mobile class — handled by media query above */
 .ws-col-hdrs--ins-mobile,
