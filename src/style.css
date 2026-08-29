@@ -3118,20 +3118,42 @@ td { padding:7px 11px; vertical-align:middle; }
    INSIGHTS DRAWER — two-pane deep-dive: list left, detail right
 ══════════════════════════════════════════════════════════════════════════ */
 .drawer-overlay {
-  position: fixed; inset: 0; z-index: 200;
-  background: rgba(0,0,0,0.45); backdrop-filter: blur(3px);
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 95;  /* above content, below nothing — topnav sits at 100 */
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(2px);
   display: flex; align-items: stretch; justify-content: flex-end;
 }
 .drawer {
-  width: min(1360px, 96vw); height: 100%;
-  background: var(--bg); display: flex; flex-direction: column;
-  box-shadow: -8px 0 48px rgba(0,0,0,0.35);
+  width: min(1360px, 96vw);
+  height: 100%;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  box-shadow: -8px 0 48px rgba(0,0,0,0.4);
   border-left: 0.5px solid var(--border-md);
   animation: drawer-slide-in .18s ease;
+  overflow: hidden;
 }
 @keyframes drawer-slide-in {
   from { transform: translateX(40px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* Branded nav bar at top of every explore drawer — same height as topnav */
+.drawer__topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 0.5px solid var(--border-md);
+  flex-shrink: 0;
+  z-index: 1;
+}
+.drawer__topbar-logo {
+  display: flex; align-items: center; gap: 7px; flex-shrink: 0;
 }
 
 /* Drawer header */
@@ -3148,10 +3170,13 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 
 /* Toolbar — one continuous row, real vertical dividers between groups so
-   each filter reads as clearly distinct, the way PowerBI/Tableau toolbars
-   separate filter sections rather than relying on gap spacing alone. */
+   each filter reads as clearly distinct. */
 .drawer__toolbar {
-  padding: 11px 16px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+  padding: 9px 16px 8px;
+  display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+  border-bottom: 0.5px solid var(--border-md);
+  background: var(--surface-2);
+  flex-shrink: 0;
 }
 .drawer__toolbar-divider {
   width: 1px; align-self: stretch; background: var(--border); margin-bottom: 2px;
@@ -6387,50 +6412,18 @@ td { padding:7px 11px; vertical-align:middle; }
    DRAWER / PANEL Z-INDEX FIX: never overlap the topnav (52px)
 ══════════════════════════════════════════════════════════════════════ */
 
-/* InsightsDrawer and DataDrawer — push below the sticky topnav */
-.insights-drawer,
-.data-drawer,
-.drawer-overlay,
-.panel-overlay {
-  top: 52px !important;
-  z-index: 90 !important;  /* below topnav z-index: 100 */
-}
-
-/* The drawer panels themselves */
-.insights-drawer__panel,
-.data-drawer__panel,
-.drawer__panel {
-  top: 52px !important;
-  height: calc(100dvh - 52px) !important;
-  max-height: calc(100dvh - 52px) !important;
-}
+/* Drawer overlay — behind topnav (z-index 100), covers full screen */
+.drawer-overlay { z-index: 95; }  /* topnav at 100 paints on top naturally */
 
 /* DetailPanel slide-in */
-.panel-overlay { z-index: 90 !important; }
+.panel-overlay { z-index: 90; }
 .detail-panel {
-  top: 52px !important;
-  height: calc(100dvh - 52px) !important;
-  z-index: 91 !important;
+  top: 52px;
+  height: calc(100dvh - 52px);
+  z-index: 91;
 }
-
-/* Modal overlays — full screen but behind topnav */
-.modal-overlay { z-index: 95 !important; }
-
-@media (max-width: 640px) {
-  /* On mobile the topnav is thinner and there's a bottom tab bar */
-  .insights-drawer,
-  .data-drawer,
-  .drawer-overlay,
-  .panel-overlay { top: 52px !important; }
-  .insights-drawer__panel,
-  .data-drawer__panel,
-  .drawer__panel,
-  .detail-panel {
-    top: 52px !important;
-    height: calc(100dvh - 52px - 56px) !important;
-    max-height: calc(100dvh - 52px - 56px) !important;
-  }
-}
+/* Modal overlays */
+.modal-overlay { z-index: 95; }
 
 /* ══════════════════════════════════════════════════════════════════════
    WATCHLIST — free user upsell + pro enhancements

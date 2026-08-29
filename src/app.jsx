@@ -4960,6 +4960,130 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // Clicking any row in the left pane drives the right pane without closing.
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
+function InsiderProfileDrawer({ name, title, filings, watchlist, lbRows, onOpenDetail }) {
+  const [txExpanded, setTxExpanded] = useState(new Set());
+  const r = useMemo(()=>lbRows?.find(x=>x.insider_name===name)||null, [lbRows, name]);
+  const profileTrades = useMemo(()=>
+    filings.filter(f=>f.isOpenMarket&&f.insiderName===name)
+      .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
+      .slice(0,30),
+  [filings, name]);
+  const profileCompanies = useMemo(()=>{
+    const map={};
+    profileTrades.forEach(f=>{
+      if(!map[f.ticker]) map[f.ticker]={ticker:f.ticker,company:f.company,buys:0,sells:0,lastDate:''};
+      if(f.transactionType==='buy') map[f.ticker].buys++; else map[f.ticker].sells++;
+      const d=f.transactionDate||f.date||'';
+      if(d>map[f.ticker].lastDate) map[f.ticker].lastDate=d;
+    });
+    return Object.values(map).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));
+  },[profileTrades]);
+  const initials = name.split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const hrC = r?.hit_rate>=70?'var(--green-600)':r?.hit_rate<50?'var(--red-600)':'var(--text-2)';
+  const retC = (r?.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
+  function ScoreRing({score=0,size=72}){
+    const pct=Math.min(score/5,1),r2=(size-8)/2,circ=2*Math.PI*r2,dash=pct*circ;
+    const color=score>=4?'var(--green-600)':score>=2.5?'var(--accent)':'var(--amber-600)';
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{flexShrink:0}}>
+        <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke="var(--surface-3)" strokeWidth={6}/>
+        <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke={color} strokeWidth={6}
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform={`rotate(-90 ${size/2} ${size/2})`}/>
+        <text x={size/2} y={size/2-4} textAnchor="middle" dominantBaseline="middle"
+          style={{fontSize:size*.22,fontWeight:700,fontFamily:'var(--font-mono)',fill:color,userSelect:'none'}}>{score.toFixed(1)}</text>
+        <text x={size/2} y={size/2+size*.2} textAnchor="middle" dominantBaseline="middle"
+          style={{fontSize:size*.13,fill:'var(--text-3)',fontFamily:'var(--font)',userSelect:'none'}}>/5.0</text>
+      </svg>
+    );
+  }
+  return (
+    <div className="ip-profile" style={{padding:'20px 24px',gap:18,overflowY:'auto',height:'100%'}}>
+      <div className="ip-profile__head">
+        <div className="ip-profile__avatar">{initials}</div>
+        <div className="ip-profile__identity">
+          <div className="ip-profile__name">{name}</div>
+          <div className="ip-profile__meta">
+            {r&&<Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>}
+            {(title||r?.insider_title)&&<span className="ip-profile__title">{title||r?.insider_title}</span>}
+          </div>
+          <div style={{marginTop:8}} onClick={e=>e.stopPropagation()}><FollowBtn name={name} watchlist={watchlist}/></div>
+        </div>
+        <ScoreRing score={r?.proxy_score??0} size={72}/>
+      </div>
+      {r&&(
+        <div className="ip-profile__stats" style={{gridTemplateColumns:'repeat(5,1fr)'}}>
+          {[
+            {label:'Hit rate',val:r.hit_rate!=null?`${r.hit_rate}%`:'—',color:hrC},
+            {label:'Avg return',val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—',color:retC},
+            {label:'OM buys',val:r.om_buys,color:'var(--text)'},
+            {label:'OM sells',val:r.om_sells||0,color:'var(--text)'},
+            {label:'Total bought',val:fmt.money(r.bought_value),color:'var(--text)'},
+          ].map(s=>(
+            <div key={s.label} className="ip-stat">
+              <span className="ip-stat__val" style={{color:s.color,fontFamily:'var(--font-mono)'}}>{s.val}</span>
+              <span className="ip-stat__label">{s.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {profileCompanies.length>0&&(
+        <div className="ip-profile__section">
+          <div className="ip-profile__section-label">Companies traded</div>
+          <div className="ip-profile__companies">
+            {profileCompanies.slice(0,6).map(c=>(
+              <div key={c.ticker} className="ip-company-chip"
+                onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company})}>
+                <span className="ticker" style={{fontSize:11}}>{c.ticker}</span>
+                <span className="ip-company-chip__name">{c.company}</span>
+                <div className="ip-company-chip__counts">
+                  {c.buys>0&&<span className="val-buy" style={{fontSize:10,fontWeight:700}}>+{c.buys}</span>}
+                  {c.sells>0&&<span className="val-sell" style={{fontSize:10,fontWeight:700}}>−{c.sells}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="ip-profile__section" style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
+        <div className="ip-profile__section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span>Transactions{profileTrades.length?` · ${profileTrades.length} found`:''}</span>
+          <button className="ws-tile__action" style={{fontSize:11,fontWeight:600}}
+            onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name,title})}>Full deep-dive →</button>
+        </div>
+        {profileTrades.length===0?(
+          <div className="ws-empty" style={{padding:'12px 0',fontSize:12}}>No open-market transactions found.</div>
+        ):(
+          <div className="ip-tx-list">
+            {profileTrades.map((f,i)=>{
+              const isBuy=f.transactionType==='buy', isExpTx=txExpanded.has(i);
+              return (
+                <div key={i} className="ip-tx-row" style={{borderLeft:`2px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                  <div className="ip-tx-row__main" onClick={()=>setTxExpanded(s=>{const n=new Set(s);n.has(i)?n.delete(i):n.add(i);return n;})}>
+                    <span className="ip-tx-row__date">{fmt.dateShort(f.transactionDate||f.date)}</span>
+                    <span className="ticker" style={{fontSize:12,minWidth:40}}>{f.ticker}</span>
+                    <span style={{fontSize:11,color:'var(--text-3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',margin:'0 8px'}}>{f.company}</span>
+                    <span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span>
+                    <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`} style={{minWidth:72,textAlign:'right'}}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                    <span className="ip-tx-row__chevron">{isExpTx?'▾':'▸'}</span>
+                  </div>
+                  {isExpTx&&(
+                    <div className="ip-tx-row__detail">
+                      <div><span className="ws-data-label">Shares</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.shares?fmt.number(f.shares):'—'}</span></div>
+                      <div><span className="ws-data-label">Price</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.price?fmt.price(f.price):'—'}</span></div>
+                      <div><span className="ws-data-label">Total</span><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
+                      {f.accessionNumber&&f.cikIssuer&&<div><span className="ws-data-label">SEC</span><a href={secFilingUrl(f.accessionNumber,f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ View</a></div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, initialDetailStack, ensureFilingsWindow, filingsLoading, watchlist, initialFilters, pro, onSwitchToData }) {
   const [appetite] = React.useContext(RiskAppetiteContext);
 
@@ -5123,27 +5247,24 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
     <div className="drawer-overlay" onClick={e=>{ if(e.target.classList.contains('drawer-overlay')) onClose(); }}>
       <div className="drawer">
 
-        {/* ── Drawer header ─────────────────────────────────────────── */}
-        <div className="drawer__hdr drawer__hdr--stacked">
-          {/* Row 1 — identity + close only. Filters (including search) live
-              together in row 2 as one real toolbar, not split across two
-              places. */}
-          <div className="drawer__hdr-row1">
-            {/* View switcher tabs */}
-            <div className="drawer__tabs">
-              {[['signals','Signals'],['insiders','Insiders'],['data','Raw Data']].map(([k,l])=>(
-                <button key={k}
-                  className={`drawer__tab${activeTab===k?' drawer__tab--active':''}`}
-                  onClick={()=>switchTab(k)}>{l}</button>
-              ))}
-            </div>
-            <button className="modal-close" onClick={onClose} title="Close (Esc)"><IconClose style={{width:12,height:12}}/></button>
+        {/* Branded top bar — matches topnav height so the page behind remains visible */}
+        <div className="drawer__topbar">
+          <div className="drawer__topbar-logo">
+            <div className="topnav__mark" style={{width:22,height:22}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="topnav__wordmark" style={{fontSize:14}}>Seli</span>
           </div>
+          <div className="drawer__tabs">
+            {[['signals','Signals'],['insiders','Insiders'],['data','Raw Data']].map(([k,l])=>(
+              <button key={k}
+                className={`drawer__tab${activeTab===k?' drawer__tab--active':''}`}
+                onClick={()=>switchTab(k)}>{l}</button>
+            ))}
+          </div>
+          <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
+        </div>
 
-          {/* Row 2 — one unified toolbar. Search is a filter like any other,
-              so it lives in the same row with the same divider treatment
-              instead of floating alone above everything else. */}
-          {activeTab==='signals'&&(
+        {/* Filter toolbar — changes per active tab */}
+        {activeTab==='signals'&&(
             <div className="drawer__toolbar">
               <div className="drawer__filter-group drawer__filter-group--search">
                 <span className="drawer__filter-label">Search</span>
@@ -5375,16 +5496,18 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
                   <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {activeTab==='signals'?'signal':'trader'} to explore</div>
                 </div>
-              : <DetailPanel
-                  detail={detail}
-                  filings={filings}
-                  onClose={()=>setDetail(null)}
-                  onNavigate={(d)=>navigate(d)}
-                  onBack={goBack}
-                  canGoBack={detailStack.length>0}
-                  watchlist={watchlist}
-                  inline={true}
-                />
+              : activeTab==='insiders' && detail.type==='trader'
+                ? <InsiderProfileDrawer name={detail.name} title={detail.title} filings={filings} watchlist={watchlist} lbRows={lbRows} onOpenDetail={(d)=>navigate(d)}/>
+                : <DetailPanel
+                    detail={detail}
+                    filings={filings}
+                    onClose={()=>setDetail(null)}
+                    onNavigate={(d)=>navigate(d)}
+                    onBack={goBack}
+                    canGoBack={detailStack.length>0}
+                    watchlist={watchlist}
+                    inline={true}
+                  />
             }
           </div>
 
@@ -6806,8 +6929,11 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   return (
     <div className="drawer-overlay" onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="drawer">
-        <div className="drawer__hdr-row1">
-          {/* Same tab switcher as InsightsDrawer so the explore nav is consistent */}
+        <div className="drawer__topbar">
+          <div className="drawer__topbar-logo">
+            <div className="topnav__mark" style={{width:22,height:22}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="topnav__wordmark" style={{fontSize:14}}>Seli</span>
+          </div>
           <div className="drawer__tabs">
             {[['signals','Signals'],['insiders','Insiders'],['data','Raw Data']].map(([k,l])=>(
               <button key={k}
@@ -6815,7 +6941,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                 onClick={()=>{ if(k!=='data' && onSwitchTab) onSwitchTab(k); }}>{l}</button>
             ))}
           </div>
-          <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>
+          <button className="btn btn--ghost btn--icon" onClick={onClose} style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
         </div>
 
         <div className="drawer__toolbar">
