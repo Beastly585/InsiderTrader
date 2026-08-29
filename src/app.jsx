@@ -10724,41 +10724,33 @@ function AppInner() {
           <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
         </>
       )}
-      {panelOpen && detailFull && (()=>{
-        // Determine which drawer to show based on drawerMode + detail type
-        const autoMode = detail?.dataFilters ? 'data' : detail?.type==='trader' ? 'insiders' : 'signals';
-        const activeMode = drawerMode==='auto' ? autoMode : drawerMode;
-
-        function switchToData(){ setDrawerMode('data'); }
-        function switchFromData(tab){ setDrawerMode(tab); }
-
-        if (activeMode==='data') {
-          return <DataDrawer
-            initialDetail={detail}
-            initialDetailStack={detailStack}
-            filterState={detail?.dataFilters||{}}
-            onClose={()=>{closeDetail();setDrawerMode('auto');}}
-            onSwitchTab={switchFromData}
-            watchlist={watchlist}
-            portfolioTickers={portfolioTickers}
-            pro={isPro(user)}
-            onUpgrade={(f)=>setShowUpgradeModal(f||'default')}
-          />;
-        }
-        return <InsightsDrawer
-          type={activeMode}
-          filings={filings}
-          onClose={()=>{closeDetail();setDrawerMode('auto');}}
-          onSwitchToData={switchToData}
-          initialDetail={detail}
-          initialDetailStack={detailStack}
-          sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort}
-          ensureFilingsWindow={ensureFilingsWindow}
-          filingsLoading={loading}
-          watchlist={watchlist}
-          pro={isPro(user)}
-        />;
-      })()}
+      {panelOpen && detailFull && (
+        drawerMode==='data' || (drawerMode==='auto' && detail?.dataFilters)
+          ? <DataDrawer
+              initialDetail={detail}
+              initialDetailStack={detailStack}
+              filterState={detail?.dataFilters||{}}
+              onClose={()=>{closeDetail();setDrawerMode('auto');}}
+              onSwitchTab={(tab)=>setDrawerMode(tab)}
+              watchlist={watchlist}
+              portfolioTickers={portfolioTickers}
+              pro={isPro(user)}
+              onUpgrade={(f)=>setShowUpgradeModal(f||'default')}
+            />
+          : <InsightsDrawer
+              type={drawerMode!=='auto' ? drawerMode : detail?.type==='trader' ? 'insiders' : 'signals'}
+              filings={filings}
+              onClose={()=>{closeDetail();setDrawerMode('auto');}}
+              onSwitchToData={()=>setDrawerMode('data')}
+              initialDetail={detail}
+              initialDetailStack={detailStack}
+              sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort}
+              ensureFilingsWindow={ensureFilingsWindow}
+              filingsLoading={loading}
+              watchlist={watchlist}
+              pro={isPro(user)}
+            />
+      )}
     </div>
     </GuideProvider>
     </>
