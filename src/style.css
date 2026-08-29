@@ -6521,10 +6521,10 @@ td { padding:7px 11px; vertical-align:middle; }
    INSIDERS PAGE — game-y profile viewer layout
 ══════════════════════════════════════════════════════════════════════ */
 
-/* Main layout: profile viewer (4fr) + insider rail (1fr) */
+/* Main layout: profile viewer (3fr) + insider rail (1.4fr) */
 .ip-layout {
   display: grid;
-  grid-template-columns: 4fr 1fr;
+  grid-template-columns: 3fr 1.4fr;
   gap: 16px;
   align-items: start;
   min-height: 0;
@@ -6598,13 +6598,14 @@ td { padding:7px 11px; vertical-align:middle; }
 /* Stat row */
 .ip-profile__stats {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 1px;
   background: var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
-@media (max-width: 700px) { .ip-profile__stats { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 900px) { .ip-profile__stats { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 600px) { .ip-profile__stats { grid-template-columns: repeat(3, 1fr); } }
 
 .ip-stat {
   display: flex;
@@ -6756,4 +6757,30 @@ td { padding:7px 11px; vertical-align:middle; }
   font-weight: 700;
   color: var(--accent);
   flex-shrink: 0;
+}
+
+/* InsightsDrawer view-switcher tabs */
+.drawer__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.drawer__tab {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: var(--font);
+  font-weight: 500;
+  color: var(--text-3);
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: color .1s, background .1s;
+  white-space: nowrap;
+}
+.drawer__tab:hover { color: var(--text-2); background: var(--surface-2); }
+.drawer__tab--active {
+  color: var(--text);
+  font-weight: 700;
+  background: var(--surface-2);
 }

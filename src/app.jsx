@@ -4660,6 +4660,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const [search, setSearch]       = useState('');
   const [selected, setSelected]   = useState(null);
   const [txExpanded, setTxExpanded] = useState(new Set());
+  const [insiderDrawerDetail, setInsiderDrawerDetail] = useState(null); // {type:'trader',...} when drawer open
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL){setLbError('Not configured');return;}
@@ -4771,8 +4772,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           {[
             {label:'Hit rate', val:r.hit_rate!=null?`${r.hit_rate}%`:'—', color:hrC},
             {label:'Avg return', val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—', color:retC},
+            {label:'vs S&P 500', val:r.avg_spy_return!=null?(r.avg_spy_return>=0?'+':'')+r.avg_spy_return.toFixed(1)+'%':'—', color:(r.avg_spy_return??0)>=0?'var(--green-600)':'var(--red-600)'},
             {label:'OM buys', val:r.om_buys, color:'var(--text)'},
             {label:'OM sells', val:r.om_sells||0, color:'var(--text)'},
+            {label:'Priced trades', val:r.priced!=null?r.priced:'—', color:'var(--text)'},
             {label:'Total bought', val:fmt.money(r.bought_value), color:'var(--text)'},
           ].map(s=>(
             <div key={s.label} className="ip-stat">
@@ -4807,7 +4810,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           <div className="ip-profile__section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span>Transactions <span style={{fontWeight:400,color:'var(--text-3)'}}>{profileTrades.length ? `· ${profileTrades.length} found` : ''}</span></span>
             <button className="ws-tile__action" style={{fontSize:11,fontWeight:600}}
-              onClick={()=>onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
+              onClick={()=>setInsiderDrawerDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
               Full deep-dive →
             </button>
           </div>
@@ -4932,13 +4935,24 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         </div>
 
       </div>
+
+      {/* Full explore drawer — opens with selected insider profile pre-loaded */}
+      {insiderDrawerDetail&&(
+        <InsightsDrawer
+          type="insiders"
+          filings={filings}
+          initialDetail={insiderDrawerDetail}
+          initialDetailStack={[]}
+          onClose={()=>setInsiderDrawerDetail(null)}
+          ensureFilingsWindow={ensureFilingsWindow||(()=>{})}
+          filingsLoading={loading}
+          watchlist={watchlist}
+          pro={pro}
+        />
+      )}
     </div>
   );
 }
-
-
-
-// ─── InsightsDrawer ───────────────────────────────────────────────────────────
 // Two-pane deep-dive drawer:
 //   Left pane  = sortable/filterable list (signals or insiders)
 //   Right pane = DetailPanel rendered inline with its own nav stack
@@ -4947,6 +4961,17 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // via the same back-button stack DetailPanel already supports.
 function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, initialDetailStack, ensureFilingsWindow, filingsLoading, watchlist, initialFilters, pro }) {
   const [appetite] = React.useContext(RiskAppetiteContext);
+
+  // Tab switcher — user can pivot between views within the drawer
+  const [activeTab, setActiveTab] = useState(type || 'signals'); // 'signals' | 'insiders' | 'data'
+
+  // Reset detail when switching tabs so the pane doesn't show stale content
+  function switchTab(tab) {
+    if (tab === activeTab) return;
+    setActiveTab(tab);
+    setDetail(null);
+    setDetailStack([]);
+  }
 
   // ── left pane state ──────────────────────────────────────────────────────
   // Seeded from the tile's current selections when opened via "Explore full
@@ -5030,7 +5055,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 
   // Insiders
   useEffect(()=>{
-    if (type!=='insiders') return;
+    if (activeTab!=='insiders') return;
     queryNeon(LEADERBOARD_QUERY(200, null, 2, lbYearsBack, lbSource))
       .then(r=>setLbRows(processLeaderboardRows(r)))
       .catch(()=>setLbRows([]));
@@ -5063,14 +5088,14 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   useEffect(()=>{
     if (detail) return;
     if (initialDetail) { setDetail(initialDetail); return; }
-    if (type==='signals' && filteredSignals.length) setDetail({type:'signal',...filteredSignals[0]});
-  },[type, filteredSignals.length > 0, initialDetail]);
+    if (activeTab==='signals' && filteredSignals.length) setDetail({type:'signal',...filteredSignals[0]});
+  },[activeTab, filteredSignals.length > 0, initialDetail]);
 
   useEffect(()=>{
     if (detail) return;
     if (initialDetail) return; // already handled above
-    if (type==='insiders' && sortedLb.length) setDetail({type:'trader',name:sortedLb[0].insider_name,title:sortedLb[0].insider_title});
-  },[type, sortedLb.length > 0, initialDetail]);
+    if (activeTab==='insiders' && sortedLb.length) setDetail({type:'trader',name:sortedLb[0].insider_name,title:sortedLb[0].insider_title});
+  },[activeTab, sortedLb.length > 0, initialDetail]);
 
   // Scroll the left list to whatever's selected when the drawer first opens —
   // without this, expanding from a quick-glance preview lands the user on a
@@ -5083,7 +5108,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const scrolledOnOpenRef = useRef(false);
   useEffect(()=>{
     if (scrolledOnOpenRef.current || !detail) return;
-    const key = detail.type==='trader' ? detail.name : detail.ticker;
+    const key = detail.activeTab==='trader' ? detail.name : detail.ticker;
     if (!key) return;
     const el = listRef.current?.querySelector(`[data-row-key="${CSS.escape(key)}"]`);
     if (el) {
@@ -5102,16 +5127,21 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               together in row 2 as one real toolbar, not split across two
               places. */}
           <div className="drawer__hdr-row1">
-            <span className="drawer__title">
-              {type==='signals' ? 'Insider Signals' : 'Top Insiders'}
-            </span>
+            {/* View switcher tabs */}
+            <div className="drawer__tabs">
+              {[['signals','Signals'],['insiders','Insiders'],['data','Raw Data']].map(([k,l])=>(
+                <button key={k}
+                  className={`drawer__tab${activeTab===k?' drawer__tab--active':''}`}
+                  onClick={()=>switchTab(k)}>{l}</button>
+              ))}
+            </div>
             <button className="modal-close" onClick={onClose} title="Close (Esc)"><IconClose style={{width:12,height:12}}/></button>
           </div>
 
           {/* Row 2 — one unified toolbar. Search is a filter like any other,
               so it lives in the same row with the same divider treatment
               instead of floating alone above everything else. */}
-          {type==='signals'&&(
+          {activeTab==='signals'&&(
             <div className="drawer__toolbar">
               <div className="drawer__filter-group drawer__filter-group--search">
                 <span className="drawer__filter-label">Search</span>
@@ -5194,7 +5224,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               )}
             </div>
           )}
-          {type==='insiders'&&(
+          {activeTab==='insiders'&&(
             <div className="drawer__toolbar">
               <div className="drawer__filter-group drawer__filter-group--search">
                 <span className="drawer__filter-label">Search</span>
@@ -5262,7 +5292,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 
           {/* LEFT: list */}
           <div className="drawer__list" ref={listRef}>
-            {type==='signals'&&(
+            {activeTab==='signals'&&(
               <>
                 <div className="drawer__list-hdr">
                   <span>{filteredSignals.length} signals{filingsLoading&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>loading more…</span>}</span>
@@ -5277,7 +5307,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                 {filteredSignals.length===0
                   ? <div className="drawer__empty">No signals match your filters</div>
                   : filteredSignals.map(s=>{
-                    const isActive = detail?.ticker===s.ticker && detail?.type==='signal';
+                    const isActive = detail?.ticker===s.ticker && detail?.activeTab==='signal';
                     const convPct  = Math.min((s.conviction/15)*100,100);
                     const tier     = tierFromPct(convPct, appetite);
                     return (
@@ -5303,7 +5333,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               </>
             )}
 
-            {type==='insiders'&&(
+            {activeTab==='insiders'&&(
               <>
                 <div className="drawer__list-hdr">
                   <span>{sortedLb.length} insiders</span>
@@ -5313,7 +5343,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   : sortedLb.length===0
                     ? <div className="drawer__empty">No insiders match</div>
                     : sortedLb.map((r,i)=>{
-                      const isActive = detail?.name===r.insider_name && detail?.type==='trader';
+                      const isActive = detail?.name===r.insider_name && detail?.activeTab==='trader';
                       return (
                         <div key={i}
                           data-row-key={r.insider_name}
@@ -5341,7 +5371,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
             {!detail
               ? <div className="drawer__detail-empty">
                   <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
-                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {type==='signals'?'signal':'trader'} to explore</div>
+                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {activeTab==='signals'?'signal':'trader'} to explore</div>
                 </div>
               : <DetailPanel
                   detail={detail}
