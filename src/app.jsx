@@ -3070,7 +3070,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   return (
     <div className={inline?'detail-panel detail-panel--inline':'detail-panel'}>
       <div className="detail-panel__header">
-        {canGoBack&&<button className="btn btn--ghost btn--icon" onClick={onBack} title="Back">←</button>}
+        {canGoBack&&<button className="btn btn--ghost btn--icon" onClick={onBack} title="Back"></button>}
         <div style={{minWidth:0,flex:1}}>{header()}</div>
         {!inline&&onExpand&&<button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
         {!inline&&<button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>}
@@ -5493,7 +5493,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
           <div className="drawer__detail">
             {!detail
               ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
+                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
                   <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {activeTab==='signals'?'signal':'trader'} to explore</div>
                 </div>
               : activeTab==='insiders' && detail.type==='trader'
@@ -5997,7 +5997,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
             </div>
             {!detail
               ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
+                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
                   <div style={{fontSize:13,color:'var(--text-3)'}}>Select a position to see insider trades</div>
                 </div>
               : <DetailPanel
@@ -7036,7 +7036,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
           <div className="drawer__detail">
             {!detail
               ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
+                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
                   <div style={{fontSize:13,color:'var(--text-3)'}}>Select a filing to see details</div>
                 </div>
               : <DetailPanel
@@ -9522,7 +9522,7 @@ function InfoTrustPage({ onBack, onEnter }) {
   return (
     <div className="lp-info">
       <div className="lp-info__inner">
-        <a href="/" onClick={onBack} className="lp-info__back">← Back</a>
+        <a href="/" onClick={onBack} className="lp-info__back"> Back</a>
 
         {/* ── Title + brief intro ──────────────────────────────────────── */}
         <div className="lp-info__eyebrow">About Seli</div>
@@ -10672,7 +10672,7 @@ function AppInner() {
       <main className="ws-main">
         {cameFromHome && page !== 'home' && (
           <button className="home-breadcrumb" onClick={() => navTo('home')}>
-            <span className="home-breadcrumb__arrow">←</span>
+            <span className="home-breadcrumb__arrow"></span>
             Home <span className="home-breadcrumb__sep">›</span> {PAGE_TITLES[page]}
           </button>
         )}
