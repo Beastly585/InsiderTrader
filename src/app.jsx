@@ -50,7 +50,7 @@ function shortRole(title) {
 // ─── Company profile cache & hooks ───────────────────────────────────────────
 // Module-level cache so the same ticker only hits Finnhub once per page load.
 const _profileCache = {};
-const _descCache    = {};
+const _descCache = {};
 
 async function fetchCompanyProfile(ticker) {
   if (_profileCache[ticker]) return _profileCache[ticker];
@@ -79,9 +79,9 @@ async function fetchCompanyDescription(ticker, cik) {
     // EDGAR submissions endpoint — free, no key, returns description for most companies.
     // CIK must be zero-padded to 10 digits.
     if (cik) {
-      const padded = String(cik).replace(/^0+/,'').padStart(10,'0');
+      const padded = String(cik).replace(/^0+/, '').padStart(10, '0');
       const r = await fetch(`https://data.sec.gov/submissions/CIK${padded}.json`, {
-        headers: {'User-Agent': 'Seli research@seli.app'}
+        headers: { 'User-Agent': 'Seli research@seli.app' }
       });
       if (r.ok) {
         const d = await r.json();
@@ -90,7 +90,7 @@ async function fetchCompanyDescription(ticker, cik) {
         return desc;
       }
     }
-  } catch {}
+  } catch { }
   _descCache[key] = null;
   return null;
 }
@@ -98,21 +98,21 @@ async function fetchCompanyDescription(ticker, cik) {
 // React hook — fetches profile + metrics + description for a ticker, returns
 // loading state and the combined data object.
 function useCompanyProfile(ticker, cik) {
-  const [profile, setProfile]   = useState(null);
-  const [metrics, setMetrics]   = useState(null);
-  const [desc,    setDesc]      = useState(null);
-  const [loading, setLoading]   = useState(true);
-  useEffect(()=>{
+  const [profile, setProfile] = useState(null);
+  const [metrics, setMetrics] = useState(null);
+  const [desc, setDesc] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
     if (!ticker) { setLoading(false); return; }
     setLoading(true); setProfile(null); setMetrics(null); setDesc(null);
     Promise.all([
       fetchCompanyProfile(ticker),
       fetchCompanyMetrics(ticker),
       fetchCompanyDescription(ticker, cik),
-    ]).then(([p,m,d])=>{
+    ]).then(([p, m, d]) => {
       setProfile(p); setMetrics(m); setDesc(d); setLoading(false);
-    }).catch(()=>setLoading(false));
-  },[ticker, cik]);
+    }).catch(() => setLoading(false));
+  }, [ticker, cik]);
   return { profile, metrics, desc, loading };
 }
 
@@ -131,8 +131,8 @@ function useCompanyProfile(ticker, cik) {
 // update STRIPE_PRICE_PRO in your worker secrets to the $13.99 Price ID.
 const BETA_ACTIVE = true;
 const PRO_PRICE_DISPLAY = BETA_ACTIVE ? '$6.99' : '$13.99';
-const PRO_PRICE_LABEL   = BETA_ACTIVE ? '$6.99/mo' : '$13.99/mo';
-const PRO_PRICE_FULL    = '$13.99';
+const PRO_PRICE_LABEL = BETA_ACTIVE ? '$6.99/mo' : '$13.99/mo';
+const PRO_PRICE_FULL = '$13.99';
 
 // Shown when a free user tries to use a Pro feature.
 // Comparison-table style, matching the reference layout's structure:
@@ -142,14 +142,14 @@ const PRO_PRICE_FULL    = '$13.99';
 // fabricating one would be dishonest. That visual slot is an honest
 // trust line instead.
 function UpgradeModal({ feature, pro, onClose }) {
-  useEffect(()=>{
-    const h = e => { if (e.key==='Escape') onClose(); };
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  },[onClose]);
+  }, [onClose]);
 
   const [checkoutProduct, setCheckoutProduct] = useState(null); // null | 'pro' | 'data_export'
-  const [plan, setPlan] = useState(feature==='data_export' ? 'data_export' : 'pro'); // which card is selected in the picker
+  const [plan, setPlan] = useState(feature === 'data_export' ? 'data_export' : 'pro'); // which card is selected in the picker
   const [statusModal, setStatusModal] = useState(null);
   const [processing, setProcessing] = useState(false); // true for the gap between payment succeeding and the confirmation being ready
   const [progressText, setProgressText] = useState(null); // live row-count updates during a large export
@@ -159,25 +159,25 @@ function UpgradeModal({ feature, pro, onClose }) {
   // trying to do when they hit the wall, which is what actually motivates
   // the upgrade in the moment.
   const FEATURE_MESSAGES = {
-    watchlist_ticker:  'Upgrade to Pro to track unlimited tickers and get notified the moment insiders trade them.',
+    watchlist_ticker: 'Upgrade to Pro to track unlimited tickers and get notified the moment insiders trade them.',
     watchlist_insider: 'Upgrade to Pro to follow specific insiders and get notified on their trades.',
-    notifications:      'Upgrade to Pro for email digests and instant alerts on the activity you care about.',
-    portfolio:           'Upgrade to Pro to connect your brokerage and see insider activity on your real holdings.',
-    data_export:         'Get a one-time CSV export of the full historical dataset — no subscription required.',
-    full_history:        'Upgrade to Pro for full historical data — the free plan shows the last 12 months.',
-    default:             'Full insider data, real-time alerts, and your own portfolio — in one view.',
+    notifications: 'Upgrade to Pro for email digests and instant alerts on the activity you care about.',
+    portfolio: 'Upgrade to Pro to connect your brokerage and see insider activity on your real holdings.',
+    data_export: 'Get a one-time CSV export of the full historical dataset — no subscription required.',
+    full_history: 'Upgrade to Pro for full historical data — the free plan shows the last 12 months.',
+    default: 'Full insider data, real-time alerts, and your own portfolio — in one view.',
   };
   const subtitle = FEATURE_MESSAGES[feature] || FEATURE_MESSAGES.default;
 
   const COMPARISON = [
-    { label: 'Live dashboard & signals',  free: true,  pro: true },
-    { label: 'Full historical data',      free: false, pro: true },
-    { label: 'Portfolio linking',         free: false, pro: true },
-    { label: 'Instant alerts',            free: false, pro: true },
+    { label: 'Live dashboard & signals', free: true, pro: true },
+    { label: 'Full historical data', free: false, pro: true },
+    { label: 'Portfolio linking', free: false, pro: true },
+    { label: 'Instant alerts', free: false, pro: true },
   ];
 
   if (processing) {
-    return <ProcessingModal text={progressText || (checkoutProduct==='pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…')}/>;
+    return <ProcessingModal text={progressText || (checkoutProduct === 'pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…')} />;
   }
 
   if (statusModal) {
@@ -185,7 +185,7 @@ function UpgradeModal({ feature, pro, onClose }) {
       <StatusModal
         title={statusModal.title}
         message={statusModal.message}
-        onClose={()=>{ setStatusModal(null); onClose(); }}
+        onClose={() => { setStatusModal(null); onClose(); }}
       />
     );
   }
@@ -195,7 +195,7 @@ function UpgradeModal({ feature, pro, onClose }) {
       <CheckoutModal
         product={checkoutProduct}
         onClose={() => setCheckoutProduct(null)}
-        onSuccess={async ()=>{
+        onSuccess={async () => {
           const wasPro = checkoutProduct === 'pro';
           setProcessing(true);
           if (wasPro) {
@@ -227,12 +227,12 @@ function UpgradeModal({ feature, pro, onClose }) {
   // Data export is its own $39.99 one-time product, separate from the Pro
   // subscription — anyone can buy it, free or Pro. Show the focused export
   // modal instead of the dual Free/Pro comparison.
-  if (feature==='data_export') {
+  if (feature === 'data_export') {
     return (
-      <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
+      <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
         <div className="upgrade-modal upgrade-modal--export">
-          <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
-          <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+          <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{ width: 12, height: 12 }} /></button>
+          <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
           <div className="upgrade-modal__title">Buy full data export</div>
           <div className="upgrade-modal__subtitle">A one-time pull of everything currently in the database, delivered as CSV — no subscription required.</div>
           <div className="export-price-card">
@@ -241,14 +241,14 @@ function UpgradeModal({ feature, pro, onClose }) {
               <span className="export-price-card__price">$39.99</span>
             </div>
             <ul className="export-price-card__features">
-              <li><IconCheck style={{width:12,height:12}}/>Every filing currently on record</li>
-              <li><IconCheck style={{width:12,height:12}}/>Delivered as CSV, ready to download</li>
-              <li><IconCheck style={{width:12,height:12}}/>Re-purchase anytime for a fresh pull</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Every filing currently on record</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Delivered as CSV, ready to download</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Re-purchase anytime for a fresh pull</li>
             </ul>
           </div>
-          <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct('data_export')}>Buy Export — $39.99</button>
+          <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('data_export')}>Buy Export — $39.99</button>
           <div className="upgrade-modal__trust">
-            <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe</span>
+            <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Secure checkout via Stripe</span>
           </div>
         </div>
       </div>
@@ -256,13 +256,13 @@ function UpgradeModal({ feature, pro, onClose }) {
   }
 
   return (
-    <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
+    <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
       <div className="upgrade-modal upgrade-modal--hero">
-        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
+        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{ width: 12, height: 12 }} /></button>
 
         {/* Hero header */}
         <div className="upgrade-hero__header">
-          <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+          <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
           <h2 className="upgrade-hero__title">Unlock the full picture</h2>
           <p className="upgrade-hero__sub">{subtitle}</p>
         </div>
@@ -276,10 +276,10 @@ function UpgradeModal({ feature, pro, onClose }) {
               <span className="upgrade-hero__card-price">$0</span>
             </div>
             <ul className="upgrade-hero__features">
-              <li><IconCheck style={{width:12,height:12}}/>Live dashboard & signals</li>
-              <li><IconCheck style={{width:12,height:12}}/>7-day signal window</li>
-              <li><IconCheck style={{width:12,height:12}}/>Top insiders leaderboard</li>
-              <li><IconCheck style={{width:12,height:12}}/>1 year of data history</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Live dashboard & signals</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />7-day signal window</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Top insiders leaderboard</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />1 year of data history</li>
             </ul>
           </div>
 
@@ -294,42 +294,42 @@ function UpgradeModal({ feature, pro, onClose }) {
               </span>
             </div>
             <ul className="upgrade-hero__features">
-              <li><IconCheck style={{width:12,height:12}}/>Everything in Free</li>
-              <li><IconCheck style={{width:12,height:12}}/>Full historical data (2010→present)</li>
-              <li><IconCheck style={{width:12,height:12}}/>Customizable instant alerts</li>
-              <li><IconCheck style={{width:12,height:12}}/>Connect your brokerage</li>
-              <li><IconCheck style={{width:12,height:12}}/>Full score breakdown</li>
-              <li><IconCheck style={{width:12,height:12}}/>Insiders deep-dive</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Everything in Free</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Full historical data (2010→present)</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Customizable instant alerts</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Connect your brokerage</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Full score breakdown</li>
+              <li><IconCheck style={{ width: 12, height: 12 }} />Insiders deep-dive</li>
             </ul>
-            <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct('pro')}>
+            <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('pro')}>
               Upgrade to Pro — {PRO_PRICE_LABEL}
             </button>
           </div>
         </div>
 
         {/* Data export — horizontal tile */}
-        <div className="upgrade-hero__export-tile" onClick={()=>setCheckoutProduct('data_export')}>
+        <div className="upgrade-hero__export-tile" onClick={() => setCheckoutProduct('data_export')}>
           <div className="upgrade-hero__export-tile-left">
             <span className="upgrade-hero__export-tile-label">Data Export</span>
             <span className="upgrade-hero__export-tile-desc">Just need the dataset? Download and own it — no subscription.</span>
             <ul className="upgrade-hero__export-tile-features">
-              <li><IconCheck style={{width:11,height:11}}/>Complete Form 4 dataset</li>
-              <li><IconCheck style={{width:11,height:11}}/>2010→present</li>
-              <li><IconCheck style={{width:11,height:11}}/>CSV, instant download</li>
+              <li><IconCheck style={{ width: 11, height: 11 }} />Complete Form 4 dataset</li>
+              <li><IconCheck style={{ width: 11, height: 11 }} />2010→present</li>
+              <li><IconCheck style={{ width: 11, height: 11 }} />CSV, instant download</li>
             </ul>
           </div>
           <div className="upgrade-hero__export-tile-right">
             <span className="upgrade-hero__export-tile-price">$39.99</span>
             <span className="upgrade-hero__export-tile-per">one-time</span>
-            <button className="upgrade-hero__export-tile-btn" onClick={e=>{e.stopPropagation();setCheckoutProduct('data_export');}}>
+            <button className="upgrade-hero__export-tile-btn" onClick={e => { e.stopPropagation(); setCheckoutProduct('data_export'); }}>
               Download dataset →
             </button>
           </div>
         </div>
 
         <div className="upgrade-modal__trust">
-          <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe</span>
-          <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Cancel anytime</span>
+          <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Secure checkout via Stripe</span>
+          <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Cancel anytime</span>
         </div>
       </div>
     </div>
@@ -371,12 +371,12 @@ const PRODUCT_COPY = {
 // the component fell through to the underlying pricing picker — which is
 // exactly the "flashes back to the original modal" bug this replaces.
 // No close button on purpose — nothing to cancel mid-flight.
-function ProcessingModal({ text='Finishing up…' }) {
+function ProcessingModal({ text = 'Finishing up…' }) {
   return (
     <div className="upgrade-overlay">
-      <div className="upgrade-modal" style={{maxWidth:300,textAlign:'center'}}>
-        <div className="processing-dots"><span/><span/><span/></div>
-        <p style={{fontSize:13,color:'var(--text-2)',marginTop:16}}>{text}</p>
+      <div className="upgrade-modal" style={{ maxWidth: 300, textAlign: 'center' }}>
+        <div className="processing-dots"><span /><span /><span /></div>
+        <p style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 16 }}>{text}</p>
       </div>
     </div>
   );
@@ -386,43 +386,43 @@ function ProcessingModal({ text='Finishing up…' }) {
 function StatusModal({ type, title, message, onClose }) {
   const isPro = type === 'pro';
   return (
-    <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
-      <div className="upgrade-modal" style={{maxWidth: isPro ? 480 : 420, textAlign:'center', padding: isPro ? '40px 36px 32px' : undefined}}>
+    <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
+      <div className="upgrade-modal" style={{ maxWidth: isPro ? 480 : 420, textAlign: 'center', padding: isPro ? '40px 36px 32px' : undefined }}>
         {isPro ? (
           <>
-            <div className="logo-mark" style={{width:44,height:44,margin:'0 auto 16px'}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-            <div className="status-modal__icon" style={{margin:'0 auto 16px'}}><IconCheck style={{width:22,height:22}}/></div>
-            <div className="upgrade-modal__title" style={{fontSize:'1.25rem',marginBottom:8}}>{title}</div>
-            <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5,marginBottom:24}}>
+            <div className="logo-mark" style={{ width: 44, height: 44, margin: '0 auto 16px' }}><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <div className="status-modal__icon" style={{ margin: '0 auto 16px' }}><IconCheck style={{ width: 22, height: 22 }} /></div>
+            <div className="upgrade-modal__title" style={{ fontSize: '1.25rem', marginBottom: 8 }}>{title}</div>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 24 }}>
               Your founding member rate is locked in. Here's what's unlocked:
             </p>
-            <div style={{textAlign:'left',background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'16px 20px',marginBottom:24}}>
-              <ul style={{listStyle:'none',padding:0,margin:0,display:'flex',flexDirection:'column',gap:10}}>
+            <div style={{ textAlign: 'left', background: 'var(--surface-2)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', marginBottom: 24 }}>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {[
                   ['Full historical data', '2010→present, every filed SEC insider trade'],
                   ['Portfolio linking', 'Connect your brokerage to see insider activity on your holdings'],
                   ['Instant alerts', 'Get notified the moment insiders trade your watched tickers'],
                   ['Full score breakdown', 'See conviction scoring on every signal'],
                   ['Insiders deep-dive', 'Complete leaderboard with filters and hit-rate analysis'],
-                ].map(([feat, desc])=>(
-                  <li key={feat} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
-                    <span style={{color:'var(--green-600)',marginTop:2,flexShrink:0}}><IconCheck style={{width:14,height:14}}/></span>
+                ].map(([feat, desc]) => (
+                  <li key={feat} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <span style={{ color: 'var(--green-600)', marginTop: 2, flexShrink: 0 }}><IconCheck style={{ width: 14, height: 14 }} /></span>
                     <span>
-                      <span style={{fontSize:'0.8125rem',fontWeight:600,color:'var(--text)',display:'block'}}>{feat}</span>
-                      <span style={{fontSize:'0.6875rem',color:'var(--text-3)'}}>{desc}</span>
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', display: 'block' }}>{feat}</span>
+                      <span style={{ fontSize: '0.6875rem', color: 'var(--text-3)' }}>{desc}</span>
                     </span>
                   </li>
                 ))}
               </ul>
             </div>
-            <button className="upgrade-modal__cta" style={{width:'100%'}} onClick={onClose}>Start exploring</button>
+            <button className="upgrade-modal__cta" style={{ width: '100%' }} onClick={onClose}>Start exploring</button>
           </>
         ) : (
           <>
-            <div className="status-modal__icon"><IconCheck style={{width:20,height:20}}/></div>
-            <div className="upgrade-modal__title" style={{marginTop:14}}>{title}</div>
-            <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 20px'}}>{message}</p>
-            <button className="upgrade-modal__cta" style={{margin:0}} onClick={onClose}>Done</button>
+            <div className="status-modal__icon"><IconCheck style={{ width: 20, height: 20 }} /></div>
+            <div className="upgrade-modal__title" style={{ marginTop: 14 }}>{title}</div>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5, margin: '8px 0 20px' }}>{message}</p>
+            <button className="upgrade-modal__cta" style={{ margin: 0 }} onClick={onClose}>Done</button>
           </>
         )}
       </div>
@@ -487,9 +487,9 @@ function CheckoutModal({ product, onClose, onSuccess }) {
   }, [product]);
 
   return (
-    <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
+    <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
       <div className="checkout-modal checkout-modal--landscape">
-        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
+        <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{ width: 12, height: 12 }} /></button>
 
         {/* Left — product info, stays constant regardless of payment state */}
         <div className="checkout-modal__info">
@@ -497,12 +497,12 @@ function CheckoutModal({ product, onClose, onSuccess }) {
           <div className="checkout-modal__info-price">{copy.price}</div>
           <p className="checkout-modal__info-subtitle">{copy.subtitle}</p>
           <ul className="checkout-modal__features">
-            {copy.features.map(f=>(
-              <li key={f}><IconCheck style={{width:12,height:12}}/>{f}</li>
+            {copy.features.map(f => (
+              <li key={f}><IconCheck style={{ width: 12, height: 12 }} />{f}</li>
             ))}
           </ul>
           <div className="checkout-modal__trust">
-            <IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe
+            <IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Secure checkout via Stripe
           </div>
         </div>
 
@@ -511,13 +511,13 @@ function CheckoutModal({ product, onClose, onSuccess }) {
           {error && <div className="checkout-error">{error} — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
 
           {!error && !reactivating && !clientSecret && (
-            <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+            <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}><Spinner /></div>
           )}
 
           {!error && reactivating && (
-            <div style={{padding:'2rem',display:'flex',flexDirection:'column',alignItems:'center',gap:10}}>
-              <Spinner/>
-              <p style={{fontSize:'0.75rem',color:'var(--text-2)'}}>Reactivating your subscription…</p>
+            <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <Spinner />
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-2)' }}>Reactivating your subscription…</p>
             </div>
           )}
 
@@ -606,7 +606,7 @@ function CheckoutForm({ product, onSuccess, onClose }) {
         className="upgrade-modal__cta"
         disabled={!stripe || submitting || syncing}
         onClick={handleConfirm}
-        style={{marginTop:16}}
+        style={{ marginTop: 16 }}
       >
         {submitting ? 'Processing…' : syncing ? 'Confirming…' : (product === 'pro' ? 'Subscribe' : 'Buy export')}
       </button>
@@ -623,26 +623,26 @@ function CheckoutForm({ product, onSuccess, onClose }) {
 function CancelModal({ busy, onConfirm, onClose }) {
   const [feedback, setFeedback] = useState('');
   return (
-    <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay') && !busy)onClose();}}>
-      <div className="upgrade-modal" style={{maxWidth:380}}>
+    <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay') && !busy) onClose(); }}>
+      <div className="upgrade-modal" style={{ maxWidth: 380 }}>
         <div className="upgrade-modal__title">Are you sure?</div>
-        <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 16px',textAlign:'left'}}>
+        <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5, margin: '8px 0 16px', textAlign: 'left' }}>
           You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately.
         </p>
-        <label style={{display:'block',textAlign:'left',fontSize:'0.72rem',fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
+        <label style={{ display: 'block', textAlign: 'left', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
           Want to leave feedback? (optional)
         </label>
         <textarea
           className="cancel-feedback-input"
           placeholder="What made you decide to cancel?"
           value={feedback}
-          onChange={e=>setFeedback(e.target.value)}
+          onChange={e => setFeedback(e.target.value)}
           disabled={busy}
           rows={3}
         />
-        <div style={{display:'flex',gap:10,marginTop:16}}>
-          <button className="btn btn--ghost" style={{flex:1}} onClick={onClose} disabled={busy}>Go back</button>
-          <button className="settings-danger-btn" style={{flex:1}} onClick={()=>onConfirm(feedback)} disabled={busy}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button className="btn btn--ghost" style={{ flex: 1 }} onClick={onClose} disabled={busy}>Go back</button>
+          <button className="settings-danger-btn" style={{ flex: 1 }} onClick={() => onConfirm(feedback)} disabled={busy}>
             {busy ? 'Working…' : 'Unsubscribe'}
           </button>
         </div>
@@ -653,9 +653,9 @@ function CancelModal({ busy, onConfirm, onClose }) {
 
 // ─── Billing section (Settings tab) ────────────────────────────────────────────
 function BillingSection({ user }) {
-  const [status, setStatus]   = useState(null);
+  const [status, setStatus] = useState(null);
   const [loadErr, setLoadErr] = useState(null); // distinct from "no data" — see audit note
-  const [busy, setBusy]       = useState(false);
+  const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState(null);
   const [checkoutProduct, setCheckoutProduct] = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -684,7 +684,7 @@ function BillingSection({ user }) {
       if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
       setStatus(data);
       return data; // returned so callers (e.g. cancel) can use fresh data immediately,
-                    // rather than reading stale state from a closure right after setState
+      // rather than reading stale state from a closure right after setState
     } catch (e) {
       // Explicit error state — NOT silently treated as "free plan, no data".
       // This is exactly the gap flagged in the UX audit: failures were
@@ -770,7 +770,7 @@ function BillingSection({ user }) {
       </div>
     );
   }
-  if (!status) return <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>;
+  if (!status) return <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}><Spinner /></div>;
 
   const isProPlan = status.plan === 'pro' && (status.status === 'active' || status.status === 'trialing');
   const dataExports = status.dataExports || [];
@@ -784,10 +784,10 @@ function BillingSection({ user }) {
             <div className="settings-row__label">{isProPlan ? `Pro — ${PRO_PRICE_LABEL}` : 'Free'}</div>
           </div>
           {!isProPlan && (
-            <button className="btn btn--primary" onClick={()=>setCheckoutProduct('pro')}>Upgrade →</button>
+            <button className="btn btn--primary" onClick={() => setCheckoutProduct('pro')}>Upgrade →</button>
           )}
           {isProPlan && !status.cancel_at_period_end && (
-            <button className="settings-danger-btn" disabled={busy} onClick={()=>setConfirmCancel(true)}>
+            <button className="settings-danger-btn" disabled={busy} onClick={() => setConfirmCancel(true)}>
               Cancel subscription
             </button>
           )}
@@ -804,14 +804,14 @@ function BillingSection({ user }) {
           <div className="settings-subsection">
             {status.cancel_at_period_end ? (
               <>
-                <span className="settings-subsection__dot settings-subsection__dot--warn"/>
+                <span className="settings-subsection__dot settings-subsection__dot--warn" />
                 Canceled — Pro access stays active until{' '}
                 <strong>{new Date(status.current_period_end).toLocaleDateString()}</strong>.
                 Changed your mind? <button className="settings-inline-link" disabled={busy} onClick={handleReactivate}>Reactivate</button>
               </>
             ) : (
               <>
-                <span className="settings-subsection__dot settings-subsection__dot--ok"/>
+                <span className="settings-subsection__dot settings-subsection__dot--ok" />
                 Renews automatically on <strong>{new Date(status.current_period_end).toLocaleDateString()}</strong>.
               </>
             )}
@@ -828,14 +828,14 @@ function BillingSection({ user }) {
             </div>
             <div className="settings-row__sub">One-time pull of everything in the database — $39.99</div>
           </div>
-          <button className="btn btn--primary" onClick={()=>setCheckoutProduct('data_export')}>
+          <button className="btn btn--primary" onClick={() => setCheckoutProduct('data_export')}>
             {status.hasDataExport ? 'Buy again' : 'Buy →'}
           </button>
         </div>
 
         {status.hasDataExport && (
-          <div className="settings-row" style={{paddingTop:8}}>
-            <a href="/redownload" style={{fontSize:'0.8125rem',color:'var(--accent-strong)',textDecoration:'none',fontWeight:500}}>
+          <div className="settings-row" style={{ paddingTop: 8 }}>
+            <a href="/redownload" style={{ fontSize: '0.8125rem', color: 'var(--accent-strong)', textDecoration: 'none', fontWeight: 500 }}>
               Already purchased? Re-download or look up an order →
             </a>
           </div>
@@ -848,25 +848,25 @@ function BillingSection({ user }) {
         <CancelModal
           busy={busy}
           onConfirm={handleCancel}
-          onClose={()=>setConfirmCancel(false)}
+          onClose={() => setConfirmCancel(false)}
         />
       )}
 
-      {processing && <ProcessingModal text={progressText || (checkoutProduct==='pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…')}/>}
+      {processing && <ProcessingModal text={progressText || (checkoutProduct === 'pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…')} />}
 
       {statusModal && (
         <StatusModal
           title={statusModal.title}
           message={statusModal.message}
-          onClose={()=>setStatusModal(null)}
+          onClose={() => setStatusModal(null)}
         />
       )}
 
       {checkoutProduct && !processing && (
         <CheckoutModal
           product={checkoutProduct}
-          onClose={()=>setCheckoutProduct(null)}
-          onSuccess={async ()=>{
+          onClose={() => setCheckoutProduct(null)}
+          onSuccess={async () => {
             const wasPro = checkoutProduct === 'pro';
             setProcessing(true);
             if (wasPro) {
@@ -916,8 +916,8 @@ function BillingSection({ user }) {
 const WL_KEY = 'seli_watchlist_v1';
 const WL_INSIDER_KEY = 'seli_insiders_v1';
 
-function wlGet(key=WL_KEY) { try { return JSON.parse(localStorage.getItem(key)||'[]'); } catch { return []; } }
-function wlSet(items, key=WL_KEY) { try { localStorage.setItem(key, JSON.stringify(items)); } catch {} }
+function wlGet(key = WL_KEY) { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } }
+function wlSet(items, key = WL_KEY) { try { localStorage.setItem(key, JSON.stringify(items)); } catch { } }
 
 // Neon-backed watchlist mutation — writes to user_watchlist table via Worker
 async function neonWatchlistMutate(itemType, itemValue, action) {
@@ -955,27 +955,27 @@ async function neonWatchlistLoad() {
 
 function useWatchlist(user) {
   const pro = isPro(user);
-  const [tickers,  setTickers]  = useState(()=> pro ? wlGet(WL_KEY)        : []);
-  const [insiders, setInsiders] = useState(()=> pro ? wlGet(WL_INSIDER_KEY) : []);
+  const [tickers, setTickers] = useState(() => pro ? wlGet(WL_KEY) : []);
+  const [insiders, setInsiders] = useState(() => pro ? wlGet(WL_INSIDER_KEY) : []);
   const [showUpgrade, setShowUpgrade] = useState(null); // null | 'watchlist_ticker' | 'watchlist_insider'
 
   // Load from Neon on mount for Pro users
-  useEffect(()=>{
+  useEffect(() => {
     if (!pro || !user) return;
-    neonWatchlistLoad().then(items=>{
+    neonWatchlistLoad().then(items => {
       if (!items) return;
-      const t = items.filter(i=>i.item_type==='ticker').map(i=>i.item_value);
-      const ins = items.filter(i=>i.item_type==='insider').map(i=>i.item_value);
-      if (t.length)   { wlSet(t, WL_KEY);           setTickers(t); }
-      if (ins.length) { wlSet(ins, WL_INSIDER_KEY);  setInsiders(ins); }
+      const t = items.filter(i => i.item_type === 'ticker').map(i => i.item_value);
+      const ins = items.filter(i => i.item_type === 'insider').map(i => i.item_value);
+      if (t.length) { wlSet(t, WL_KEY); setTickers(t); }
+      if (ins.length) { wlSet(ins, WL_INSIDER_KEY); setInsiders(ins); }
     });
-  },[pro, user?.id]);
+  }, [pro, user?.id]);
 
   // Toggle ticker
   const toggleTicker = useCallback((ticker) => {
     if (!pro) { setShowUpgrade('watchlist_ticker'); return; }
     setTickers(prev => {
-      const next = prev.includes(ticker) ? prev.filter(t=>t!==ticker) : [...prev, ticker];
+      const next = prev.includes(ticker) ? prev.filter(t => t !== ticker) : [...prev, ticker];
       wlSet(next, WL_KEY);
       neonWatchlistMutate('ticker', ticker, prev.includes(ticker) ? 'remove' : 'add');
       return next;
@@ -986,19 +986,19 @@ function useWatchlist(user) {
   const toggleInsider = useCallback((name) => {
     if (!pro) { setShowUpgrade('watchlist_insider'); return; }
     setInsiders(prev => {
-      const next = prev.includes(name) ? prev.filter(n=>n!==name) : [...prev, name];
+      const next = prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name];
       wlSet(next, WL_INSIDER_KEY);
       neonWatchlistMutate('insider', name, prev.includes(name) ? 'remove' : 'add');
       return next;
     });
   }, [pro]);
 
-  const hasTicker  = useCallback((ticker) => tickers.includes(ticker),  [tickers]);
-  const hasInsider = useCallback((name)   => insiders.includes(name),   [insiders]);
+  const hasTicker = useCallback((ticker) => tickers.includes(ticker), [tickers]);
+  const hasInsider = useCallback((name) => insiders.includes(name), [insiders]);
 
   // Legacy compat — existing code calls watchlist.toggle(ticker) and watchlist.has(ticker)
   const toggle = toggleTicker;
-  const has    = hasTicker;
+  const has = hasTicker;
 
   return {
     tickers, insiders, toggle, has,
@@ -1010,15 +1010,15 @@ function useWatchlist(user) {
 // ─── Theme ────────────────────────────────────────────────────────────────────
 function useTheme() {
   const [dark, setDark] = useState(() => {
-    try { const s = localStorage.getItem('theme'); if (s) return s==='dark'; } catch(_){}
+    try { const s = localStorage.getItem('theme'); if (s) return s === 'dark'; } catch (_) { }
     // Default every new visitor to dark — Seli's primary identity — instead
     // of following the OS-level color-scheme preference. Only an explicit
     // in-app toggle (saved to localStorage above) switches this.
     return true;
   });
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', dark?'dark':'light');
-    try { localStorage.setItem('theme', dark?'dark':'light'); } catch(_){}
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (_) { }
   }, [dark]);
   return [dark, setDark];
 }
@@ -1062,50 +1062,50 @@ function useIsMobile() {
 // in src/lib/scoring.js, untouched — only the ability for a user to change
 // which level applies to them has been removed, not the underlying,
 // already-tested tiering math.)
-const RiskAppetiteContext = React.createContext([3, ()=>{}]);
+const RiskAppetiteContext = React.createContext([3, () => { }]);
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 function Badge({ type, children }) {
   return <span className={`badge badge--${type}`}>{children}</span>;
 }
-function Spinner({ size=22 }) {
-  return <div className="spinner" style={{width:size,height:size}}/>;
+function Spinner({ size = 22 }) {
+  return <div className="spinner" style={{ width: size, height: size }} />;
 }
 // Skeleton loading rows — fills the available space with pulsing placeholder
 // rows instead of a centered spinner. Looks like content is about to appear
 // rather than "something is spinning in a void."
-function SkeletonRows({ count=6, style:extraStyle }) {
+function SkeletonRows({ count = 6, style: extraStyle }) {
   return (
     <div className="skel-wrap" style={extraStyle}>
-      {Array.from({length:count},(_,i)=>(
-        <div key={i} className="skel-row" style={{animationDelay:`${i*60}ms`}}>
-          <span className="skel-bar skel-bar--sm"/>
-          <span className="skel-bar skel-bar--lg"/>
-          <span className="skel-bar skel-bar--md"/>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="skel-row" style={{ animationDelay: `${i * 60}ms` }}>
+          <span className="skel-bar skel-bar--sm" />
+          <span className="skel-bar skel-bar--lg" />
+          <span className="skel-bar skel-bar--md" />
         </div>
       ))}
     </div>
   );
 }
 const TX_CODE_TOOLTIPS = {
-  P:'Open market purchase',
-  S:'Open market sale',
-  A:'New shares granted to the insider as compensation — not purchased with their own money',
-  M:'Insider exercised stock options they already held — not a new open-market purchase',
-  J:'Shares moved between accounts or entities — not a market purchase or sale',
-  G:'Shares given or received as a gift — no cash changed hands',
-  F:'Shares withheld by the company to cover taxes owed when equity vested — not a discretionary sale',
-  C:'A derivative security (option/warrant) converted into common stock',
-  D:'Shares sold back to the company itself, not on the open market',
-  E:'An option or right expired unused — no shares bought or sold',
+  P: 'Open market purchase',
+  S: 'Open market sale',
+  A: 'New shares granted to the insider as compensation — not purchased with their own money',
+  M: 'Insider exercised stock options they already held — not a new open-market purchase',
+  J: 'Shares moved between accounts or entities — not a market purchase or sale',
+  G: 'Shares given or received as a gift — no cash changed hands',
+  F: 'Shares withheld by the company to cover taxes owed when equity vested — not a discretionary sale',
+  C: 'A derivative security (option/warrant) converted into common stock',
+  D: 'Shares sold back to the company itself, not on the open market',
+  E: 'An option or right expired unused — no shares bought or sold',
   // Congressional PTRs (STOCK Act filings) never had an entry here, so
   // every one fell through to the raw code (codeLabel = TX_CODE_TOOLTIPS[code]||code)
   // — that's what was rendering as a bare "CONGRESS_S"/"CONGRESS_P" string
   // with no label above it in the trade detail rows. These report a dollar
   // RANGE, not an exact price, which is exactly why there's no price to
   // show — the label now says that instead of leaving the raw code visible.
-  CONGRESS_P:'Congressional purchase — reported as a dollar range, not an exact price',
-  CONGRESS_S:'Congressional sale — reported as a dollar range, not an exact price',
+  CONGRESS_P: 'Congressional purchase — reported as a dollar range, not an exact price',
+  CONGRESS_S: 'Congressional sale — reported as a dollar range, not an exact price',
 };
 
 // Short, self-explanatory labels for the Data table — replaces the bare
@@ -1113,43 +1113,43 @@ const TX_CODE_TOOLTIPS = {
 // (invisible on touch devices, no visual cue that a tooltip even exists).
 // Full explanation is still available on hover via TX_CODE_TOOLTIPS above.
 const TX_CODE_SHORT = {
-  P:'Buy (OM)',    S:'Sell (OM)',
-  A:'Award',       M:'Exercise',
-  J:'Transfer',    G:'Gift',
-  F:'Tax w/h',      C:'Conversion',
-  D:'To issuer',   E:'Expired',
-  CONGRESS_P:'Buy (range)', CONGRESS_S:'Sell (range)',
+  P: 'Buy (OM)', S: 'Sell (OM)',
+  A: 'Award', M: 'Exercise',
+  J: 'Transfer', G: 'Gift',
+  F: 'Tax w/h', C: 'Conversion',
+  D: 'To issuer', E: 'Expired',
+  CONGRESS_P: 'Buy (range)', CONGRESS_S: 'Sell (range)',
 };
 
-function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
-  const active = sortCol===colKey;
+function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title: ttl }) {
+  const active = sortCol === colKey;
   return (
-    <th onClick={()=>onSort(colKey)}
-        className={`th-sort${active?' th--active':''}${right?' th--right':''}`}
-        title={ttl}>
-      {label}{active?(sortDir>0?' ↑':' ↓'):''}
+    <th onClick={() => onSort(colKey)}
+      className={`th-sort${active ? ' th--active' : ''}${right ? ' th--right' : ''}`}
+      title={ttl}>
+      {label}{active ? (sortDir > 0 ? ' ↑' : ' ↓') : ''}
     </th>
   );
 }
-function ConvictionBar({ score, max=20, showLabel=false }) {
-  const pct = Math.min((score/max)*100, 100);
+function ConvictionBar({ score, max = 20, showLabel = false }) {
+  const pct = Math.min((score / max) * 100, 100);
   // 5-tier system: Very Low → Low → Medium → High → Very High
   // Thresholds at 20%/40%/60%/85% of max (scores 4/8/12/17 out of 20)
-  const tier = pct>=85?'very-high':pct>=60?'high':pct>=40?'medium':pct>=20?'low':'very-low';
-  const label = tier==='very-high'?'Very High':tier==='high'?'High':tier==='medium'?'Medium':tier==='low'?'Low':'Very Low';
-  const color = tier==='very-high'?'var(--green-600)':tier==='high'?'#5EC26A':tier==='medium'?'var(--amber-600)':tier==='low'?'var(--text-3)':'var(--text-3)';
+  const tier = pct >= 85 ? 'very-high' : pct >= 60 ? 'high' : pct >= 40 ? 'medium' : pct >= 20 ? 'low' : 'very-low';
+  const label = tier === 'very-high' ? 'Very High' : tier === 'high' ? 'High' : tier === 'medium' ? 'Medium' : tier === 'low' ? 'Low' : 'Very Low';
+  const color = tier === 'very-high' ? 'var(--green-600)' : tier === 'high' ? '#5EC26A' : tier === 'medium' ? 'var(--amber-600)' : tier === 'low' ? 'var(--text-3)' : 'var(--text-3)';
   // Show label for anything below High — green color already communicates strength
-  const showText = showLabel && tier!=='very-high' && tier!=='high';
+  const showText = showLabel && tier !== 'very-high' && tier !== 'high';
   return (
     <div className="conv-bar-wrap" title={`Conviction: ${label} (${score.toFixed(1)}/${max}) — combines exec participation, position size, and insider clustering`}>
       <div className="conv-bar-track">
-        <div className="conv-bar-tick" style={{left:'20%'}}/>
-        <div className="conv-bar-tick" style={{left:'40%'}}/>
-        <div className="conv-bar-tick" style={{left:'60%'}}/>
-        <div className="conv-bar-tick" style={{left:'85%'}}/>
-        <div className="conv-bar" style={{width:`${pct}%`,background:color}}/>
+        <div className="conv-bar-tick" style={{ left: '20%' }} />
+        <div className="conv-bar-tick" style={{ left: '40%' }} />
+        <div className="conv-bar-tick" style={{ left: '60%' }} />
+        <div className="conv-bar-tick" style={{ left: '85%' }} />
+        <div className="conv-bar" style={{ width: `${pct}%`, background: color }} />
       </div>
-      {showText&&<span className="conv-bar-label" style={{color}}>{label}</span>}
+      {showText && <span className="conv-bar-label" style={{ color }}>{label}</span>}
     </div>
   );
 }
@@ -1159,52 +1159,52 @@ function ConvictionBar({ score, max=20, showLabel=false }) {
 // Outlined / 2px stroke / rounded corners, per the brand guide. Standard,
 // widely-recognized icon shapes (same convention as Feather/Lucide) rather
 // than inventing new ones — familiarity matters more than novelty here.
-const ICON_PROPS = { viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round' };
-function IconHome(p)      { return <svg {...ICON_PROPS} {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>; }
-function IconInsights(p)  { return <svg {...ICON_PROPS} {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>; }
-function IconData(p)      { return <svg {...ICON_PROPS} {...p}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>; }
-function IconFavorites(p) { return <svg {...ICON_PROPS} {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>; }
-function IconSettings(p)  { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>; }
+const ICON_PROPS = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
+function IconHome(p) { return <svg {...ICON_PROPS} {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>; }
+function IconInsights(p) { return <svg {...ICON_PROPS} {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>; }
+function IconData(p) { return <svg {...ICON_PROPS} {...p}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>; }
+function IconFavorites(p) { return <svg {...ICON_PROPS} {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>; }
+function IconSettings(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>; }
 // "More" — mobile-only nav icon, opens the sheet holding everything that
 // doesn't fit in the 2-icon mobile bar (Dashboard/Insights/Data/Watchlist/
 // Settings). Standard horizontal-ellipsis "more" glyph.
-function IconMore(p) { return <svg {...ICON_PROPS} {...p}><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>; }
-function IconHelp(p)      { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }
-function IconSun(p)       { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>; }
-function IconMoon(p)      { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>; }
-function IconReversal(p)  { return <svg {...ICON_PROPS} {...p}><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>; }
-function IconClose(p)     { return <svg {...ICON_PROPS} {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>; }
-function IconCheck(p)      { return <svg {...ICON_PROPS} {...p}><polyline points="20 6 9 17 4 12"/></svg>; }
-function IconWarning(p)    { return <svg {...ICON_PROPS} {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }
-function IconBuyTri(p)     { return <svg viewBox="0 0 24 24" {...p}><polygon points="12 4 21 19 3 19" fill="currentColor"/></svg>; }
-function IconSellTri(p)    { return <svg viewBox="0 0 24 24" {...p}><polygon points="12 20 3 5 21 5" fill="currentColor"/></svg>; }
-function IconEmpty(p)      { return <svg {...ICON_PROPS} {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>; }
-function IconMail(p)       { return <svg {...ICON_PROPS} {...p}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>; }
-function IconMessage(p)    { return <svg {...ICON_PROPS} {...p}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>; }
-function IconLink(p)       { return <svg {...ICON_PROPS} {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>; }
-function IconZap(p)        { return <svg {...ICON_PROPS} {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>; }
+function IconMore(p) { return <svg {...ICON_PROPS} {...p}><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg>; }
+function IconHelp(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>; }
+function IconSun(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>; }
+function IconMoon(p) { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>; }
+function IconReversal(p) { return <svg {...ICON_PROPS} {...p}><path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>; }
+function IconClose(p) { return <svg {...ICON_PROPS} {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>; }
+function IconCheck(p) { return <svg {...ICON_PROPS} {...p}><polyline points="20 6 9 17 4 12" /></svg>; }
+function IconWarning(p) { return <svg {...ICON_PROPS} {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>; }
+function IconBuyTri(p) { return <svg viewBox="0 0 24 24" {...p}><polygon points="12 4 21 19 3 19" fill="currentColor" /></svg>; }
+function IconSellTri(p) { return <svg viewBox="0 0 24 24" {...p}><polygon points="12 20 3 5 21 5" fill="currentColor" /></svg>; }
+function IconEmpty(p) { return <svg {...ICON_PROPS} {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>; }
+function IconMail(p) { return <svg {...ICON_PROPS} {...p}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22 6 12 13 2 6" /></svg>; }
+function IconMessage(p) { return <svg {...ICON_PROPS} {...p}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>; }
+function IconLink(p) { return <svg {...ICON_PROPS} {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>; }
+function IconZap(p) { return <svg {...ICON_PROPS} {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>; }
 // Added for the Guide modal — 'raw-data' and 'using-seli' were previously
 // reusing IconData and IconHome (already used by 'data-source' and
 // 'welcome'), so two pairs of sections were visually identical in the nav,
 // especially on the mobile layout where the label text is hidden and the
 // icon is the only real way to tell sections apart.
-function IconList(p)       { return <svg {...ICON_PROPS} {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>; }
-function IconCompass(p)    { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>; }
+function IconList(p) { return <svg {...ICON_PROPS} {...p}><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>; }
+function IconCompass(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10" /><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" /></svg>; }
 
 const NAV = [
-  {id:'dashboard', Icon:IconHome,      label:'Dashboard'},
-  {id:'signals',   Icon:IconInsights,  label:'Insights'},
-  {id:'data',      Icon:IconData,      label:'Data'},
-  {id:'watchlist', Icon:IconFavorites, label:'Watchlist'},
+  { id: 'dashboard', Icon: IconHome, label: 'Dashboard' },
+  { id: 'signals', Icon: IconInsights, label: 'Insights' },
+  { id: 'data', Icon: IconData, label: 'Data' },
+  { id: 'watchlist', Icon: IconFavorites, label: 'Watchlist' },
 ];
 // ─── Top Nav ──────────────────────────────────────────────────────────────────
 function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate, isDataStale, loading }) {
   const pro = isPro(user);
   const isMobile = useIsMobile();
   const NAV_LINKS = [
-    { id: 'home',      label: 'Home',      Icon: IconHome },
-    { id: 'dashboard', label: 'Data',      Icon: IconData },
-    { id: 'signals',   label: 'Insiders',  Icon: IconInsights },
+    { id: 'home', label: 'Home', Icon: IconHome },
+    { id: 'dashboard', label: 'Data', Icon: IconData },
+    { id: 'signals', label: 'Insiders', Icon: IconInsights },
     { id: 'watchlist', label: 'Watchlist', Icon: IconFavorites },
   ];
   if (isMobile) {
@@ -1212,33 +1212,33 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
       <>
         <header className="topnav">
           <div className="topnav__logo" onClick={() => setPage('home')}>
-            <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="topnav__wordmark">Seli</span>
             <span className="topnav__beta">BETA</span>
           </div>
           <div className="topnav__right">
             {lastFilingDate && (
-              <span className={`topnav__freshness${isDataStale?' topnav__freshness--stale':''}`}>
-                <span className="topnav__dot" style={isDataStale?{background:'var(--amber-600)'}:{}}/>
+              <span className={`topnav__freshness${isDataStale ? ' topnav__freshness--stale' : ''}`}>
+                <span className="topnav__dot" style={isDataStale ? { background: 'var(--amber-600)' } : {}} />
                 {fmt.dateShort(lastFilingDate)}
               </span>
             )}
-            <button className="topnav__icon-btn" onClick={()=>setDark(d=>!d)} aria-label="Toggle theme">
-              {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+            <button className="topnav__icon-btn" onClick={() => setDark(d => !d)} aria-label="Toggle theme">
+              {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
             </button>
             <SignedIn>
-              <UserButton afterSignOutUrl="/" appearance={{elements:{avatarBox:'clerk-avatar',userButtonTrigger:'clerk-avatar-trigger',userButtonAvatarBox:'clerk-avatar-box'}}}/>
+              <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'clerk-avatar', userButtonTrigger: 'clerk-avatar-trigger', userButtonAvatarBox: 'clerk-avatar-box' } }} />
             </SignedIn>
           </div>
         </header>
         <nav className="bottomnav">
-          {NAV_LINKS.map(n=>(
-            <button key={n.id} className={`bottomnav__btn${page===n.id?' bottomnav__btn--active':''}`} onClick={()=>setPage(n.id)}>
-              <n.Icon style={{width:20,height:20}}/><span className="bottomnav__label">{n.label}</span>
+          {NAV_LINKS.map(n => (
+            <button key={n.id} className={`bottomnav__btn${page === n.id ? ' bottomnav__btn--active' : ''}`} onClick={() => setPage(n.id)}>
+              <n.Icon style={{ width: 20, height: 20 }} /><span className="bottomnav__label">{n.label}</span>
             </button>
           ))}
-          <button className={`bottomnav__btn${page==='settings'?' bottomnav__btn--active':''}`} onClick={()=>setPage('settings')}>
-            <IconSettings style={{width:20,height:20}}/><span className="bottomnav__label">Settings</span>
+          <button className={`bottomnav__btn${page === 'settings' ? ' bottomnav__btn--active' : ''}`} onClick={() => setPage('settings')}>
+            <IconSettings style={{ width: 20, height: 20 }} /><span className="bottomnav__label">Settings</span>
           </button>
         </nav>
       </>
@@ -1246,39 +1246,39 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
   }
   return (
     <header className="topnav">
-      <div className="topnav__logo" onClick={()=>setPage('home')}>
-        <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+      <div className="topnav__logo" onClick={() => setPage('home')}>
+        <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
         <span className="topnav__wordmark">Seli</span>
         <span className="topnav__beta">BETA</span>
       </div>
       <nav className="topnav__links">
-        {NAV_LINKS.map(n=>(
-          <button key={n.id} className={`topnav__link${page===n.id?' topnav__link--active':''}`} onClick={()=>setPage(n.id)}>
-            <n.Icon style={{width:14,height:14}}/>{n.label}
+        {NAV_LINKS.map(n => (
+          <button key={n.id} className={`topnav__link${page === n.id ? ' topnav__link--active' : ''}`} onClick={() => setPage(n.id)}>
+            <n.Icon style={{ width: 14, height: 14 }} />{n.label}
           </button>
         ))}
       </nav>
       <div className="topnav__right">
-        {lastFilingDate&&(
-          <span className={`topnav__freshness${isDataStale?' topnav__freshness--stale':''}`} title={`Data through ${lastFilingDate}`}>
-            <span className="topnav__dot" style={isDataStale?{background:'var(--amber-600)'}:{}}/>
-            {isDataStale?`Stale · ${fmt.dateShort(lastFilingDate)}`:`Through ${fmt.dateShort(lastFilingDate)}`}
+        {lastFilingDate && (
+          <span className={`topnav__freshness${isDataStale ? ' topnav__freshness--stale' : ''}`} title={`Data through ${lastFilingDate}`}>
+            <span className="topnav__dot" style={isDataStale ? { background: 'var(--amber-600)' } : {}} />
+            {isDataStale ? `Stale · ${fmt.dateShort(lastFilingDate)}` : `Through ${fmt.dateShort(lastFilingDate)}`}
           </span>
         )}
-        {loading&&!lastFilingDate&&<span className="topnav__freshness"><span className="topnav__dot"/>Syncing…</span>}
-        <FeedbackButton page={page}/>
-        <GuideStatusBarButton/>
-        <button className="topnav__icon-btn" onClick={()=>setDark(d=>!d)} title={dark?'Light mode':'Dark mode'}>
-          {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+        {loading && !lastFilingDate && <span className="topnav__freshness"><span className="topnav__dot" />Syncing…</span>}
+        <FeedbackButton page={page} />
+        <GuideStatusBarButton />
+        <button className="topnav__icon-btn" onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'}>
+          {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
         </button>
-        {!pro&&<button className="topnav__upgrade" onClick={()=>onUpgrade('default')}>Upgrade → $6.99</button>}
+        {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}>Upgrade → $6.99</button>}
         <SignedIn>
-          <UserButton afterSignOutUrl="/" appearance={{elements:{avatarBox:'clerk-avatar',userButtonTrigger:'clerk-avatar-trigger',userButtonAvatarBox:'clerk-avatar-box'}}}/>
+          <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'clerk-avatar', userButtonTrigger: 'clerk-avatar-trigger', userButtonAvatarBox: 'clerk-avatar-box' } }} />
         </SignedIn>
         <SignedOut><SignInButton mode="modal"><button className="topnav__upgrade">Sign in</button></SignInButton></SignedOut>
       </div>
-      <button className={`topnav__settings-fab${page==='settings'?' topnav__settings-fab--active':''}`} onClick={()=>setPage('settings')} title="Settings" aria-label="Settings">
-        <IconSettings style={{width:16,height:16}}/>
+      <button className={`topnav__settings-fab${page === 'settings' ? ' topnav__settings-fab--active' : ''}`} onClick={() => setPage('settings')} title="Settings" aria-label="Settings">
+        <IconSettings style={{ width: 16, height: 16 }} />
       </button>
     </header>
   );
@@ -1326,7 +1326,7 @@ async function getAuthHeaders() {
     try {
       const token = await window.__clerkGetToken();
       if (token) return { 'Authorization': `Bearer ${token}` };
-    } catch {}
+    } catch { }
   }
   // No static-key fallback — a request without a valid Clerk token should
   // fail with a real 401, not silently succeed via a key that would
@@ -1355,9 +1355,9 @@ async function queryNeon(sql) {
 function clusterTrades(rows, windowDays = 5) {
   if (!rows || !rows.length) return [];
   // Sort ascending by date so we can walk forward and group
-  const sorted = [...rows].sort((a,b)=>{
-    const ad = a.transaction_date||a.filing_date||'';
-    const bd = b.transaction_date||b.filing_date||'';
+  const sorted = [...rows].sort((a, b) => {
+    const ad = a.transaction_date || a.filing_date || '';
+    const bd = b.transaction_date || b.filing_date || '';
     return ad.localeCompare(bd);
   });
 
@@ -1366,35 +1366,35 @@ function clusterTrades(rows, windowDays = 5) {
 
   for (const r of sorted) {
     const tt = r.transaction_type;
-    const dt = r.transaction_date||r.filing_date;
-    if (!dt) { clusters.push({...r, _isCluster:false, _count:1}); continue; }
-    const dtMs = new Date(dt+'T00:00:00').getTime();
+    const dt = r.transaction_date || r.filing_date;
+    if (!dt) { clusters.push({ ...r, _isCluster: false, _count: 1 }); continue; }
+    const dtMs = new Date(dt + 'T00:00:00').getTime();
 
     const sameGroup = current
       && current.transaction_type === tt
-      && current._ticker === (r.ticker||'')
-      && current._insider === (r.insider_name||'')
-      && (dtMs - current._lastMs) <= windowDays*86400000;
+      && current._ticker === (r.ticker || '')
+      && current._insider === (r.insider_name || '')
+      && (dtMs - current._lastMs) <= windowDays * 86400000;
 
     if (sameGroup) {
       current._trades.push(r);
       current._lastMs = dtMs;
-      current.shares = (current.shares||0) + (r.shares||0);
-      current.value  = (current.value||0)  + (r.value||0);
+      current.shares = (current.shares || 0) + (r.shares || 0);
+      current.value = (current.value || 0) + (r.value || 0);
       current._count++;
       // weighted avg price
-      const totalShares = current._trades.reduce((s,t)=>s+(t.shares||0),0);
-      current.price_per_share = totalShares>0
-        ? current._trades.reduce((s,t)=>s+((t.price||t.price_per_share||0)*(t.shares||0)),0)/totalShares
+      const totalShares = current._trades.reduce((s, t) => s + (t.shares || 0), 0);
+      current.price_per_share = totalShares > 0
+        ? current._trades.reduce((s, t) => s + ((t.price || t.price_per_share || 0) * (t.shares || 0)), 0) / totalShares
         : current.price_per_share;
       current.price = current.price_per_share;
-      current.transaction_date = current._trades[0].transaction_date||current._trades[0].filing_date; // earliest
+      current.transaction_date = current._trades[0].transaction_date || current._trades[0].filing_date; // earliest
       current._lastDate = dt; // most recent
     } else {
       if (current) clusters.push(current);
       current = {
-        ...r, _isCluster:true, _count:1, _trades:[r],
-        _ticker: r.ticker||'', _insider: r.insider_name||'',
+        ...r, _isCluster: true, _count: 1, _trades: [r],
+        _ticker: r.ticker || '', _insider: r.insider_name || '',
         _lastMs: dtMs, _lastDate: dt,
       };
     }
@@ -1402,12 +1402,12 @@ function clusterTrades(rows, windowDays = 5) {
   if (current) clusters.push(current);
 
   // Mark single-trade "clusters" as non-clusters for display purposes
-  for (const c of clusters) if (c._count===1) c._isCluster=false;
+  for (const c of clusters) if (c._count === 1) c._isCluster = false;
 
   // Return newest-first to match existing sort convention
-  return clusters.sort((a,b)=>{
-    const ad = a._lastDate||a.transaction_date||a.filing_date||'';
-    const bd = b._lastDate||b.transaction_date||b.filing_date||'';
+  return clusters.sort((a, b) => {
+    const ad = a._lastDate || a.transaction_date || a.filing_date || '';
+    const bd = b._lastDate || b.transaction_date || b.filing_date || '';
     return bd.localeCompare(ad);
   });
 }
@@ -1417,22 +1417,22 @@ function clusterTrades(rows, windowDays = 5) {
 // not just "did the stock go up since they bought." A net seller with bad
 // realized P&L will no longer score well just because their few buys are green.
 function trustScore(st) {
-  if (!st||st.omBuys<2) return null;
-  let s=0;
+  if (!st || st.omBuys < 2) return null;
+  let s = 0;
   // Combined hit rate (buys priced correctly + profitable sells), weighted more
-  if (st.combinedHitRate!=null){if(st.combinedHitRate>=70)s+=2;else if(st.combinedHitRate>=50)s+=1;}else s+=0.5;
-  if (st.avgRealizedReturn!=null){if(st.avgRealizedReturn>=20)s+=1.5;else if(st.avgRealizedReturn>=5)s+=1;else if(st.avgRealizedReturn>=0)s+=0.5;else s-=0.5;}
-  if (st.omBuys+st.omSells>=10)s+=1;else if(st.omBuys+st.omSells>=5)s+=0.5;
-  if (st.totalBuys>0&&st.omBuys/st.totalBuys>=0.7)s+=0.5;
-  return Math.max(0,Math.min(Math.round(s*10)/10,5));
+  if (st.combinedHitRate != null) { if (st.combinedHitRate >= 70) s += 2; else if (st.combinedHitRate >= 50) s += 1; } else s += 0.5;
+  if (st.avgRealizedReturn != null) { if (st.avgRealizedReturn >= 20) s += 1.5; else if (st.avgRealizedReturn >= 5) s += 1; else if (st.avgRealizedReturn >= 0) s += 0.5; else s -= 0.5; }
+  if (st.omBuys + st.omSells >= 10) s += 1; else if (st.omBuys + st.omSells >= 5) s += 0.5;
+  if (st.totalBuys > 0 && st.omBuys / st.totalBuys >= 0.7) s += 0.5;
+  return Math.max(0, Math.min(Math.round(s * 10) / 10, 5));
 }
 
-function TrustStars({score}) {
-  if (score===null) return <span className="td-muted" style={{fontSize:'0.6875rem'}}>Insufficient data</span>;
+function TrustStars({ score }) {
+  if (score === null) return <span className="td-muted" style={{ fontSize: '0.6875rem' }}>Insufficient data</span>;
   // Round to nearest 0.5 for clean half-star rendering (e.g. 2.3->2.5, 2.7->2.5... no: round to nearest half)
-  const rounded = Math.round(score*2)/2;
-  const stars = [0,1,2,3,4].map(i=>{
-    const fillAmount = Math.max(0, Math.min(1, rounded-i)); // 0, 0.5, or 1
+  const rounded = Math.round(score * 2) / 2;
+  const stars = [0, 1, 2, 3, 4].map(i => {
+    const fillAmount = Math.max(0, Math.min(1, rounded - i)); // 0, 0.5, or 1
     return fillAmount;
   });
   return (
@@ -1440,10 +1440,10 @@ function TrustStars({score}) {
       <span className="trust-stars__label" title="A weighted composite of hit rate, realized return size, trade volume, and how concentrated their buying is — not the same number as the hit-rate % shown below, which is a raw price outcome with no weighting.">Trust score</span>
       <span className="trust-stars" title={`${score}/5 — composite score (hit rate + return size + volume + concentration), distinct from the hit-rate % below`}>
         <span className="trust-stars__row">
-          {stars.map((fill,i)=>(
+          {stars.map((fill, i) => (
             <span key={i} className="trust-star">
               <span className="trust-star__bg">★</span>
-              <span className="trust-star__fg" style={{width:`${fill*100}%`}}>★</span>
+              <span className="trust-star__fg" style={{ width: `${fill * 100}%` }}>★</span>
             </span>
           ))}
         </span>
@@ -1472,7 +1472,7 @@ const GUIDE_SECTIONS = [
       <>
         <div className="guide-hero">
           <div className="guide-hero__mark" aria-hidden="true">
-            <img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
+            <img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <span className="guide-hero__wordmark">Seli</span>
           <span className="guide-hero__beta">Private Beta</span>
@@ -1480,9 +1480,9 @@ const GUIDE_SECTIONS = [
         <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as it's published, scores it, and makes it actionable.</p>
         <p>This guide walks you through what you're looking at, where the data comes from, and how to get the most out of it.</p>
         <div className="guide-callout guide-callout--accent">
-          <p className="guide-callout__title" style={{color:'var(--accent-strong)'}}>You're one of the first people here</p>
+          <p className="guide-callout__title" style={{ color: 'var(--accent-strong)' }}>You're one of the first people here</p>
           <p className="guide-callout__text">
-            Everything is built on real SEC filings and peer-reviewed methodology, but the product is still early. Use the feedback button <IconMessage style={{width:13,height:13,verticalAlign:'-2px',margin:'0 2px'}}/> in the status bar to report bugs or share thoughts.
+            Everything is built on real SEC filings and peer-reviewed methodology, but the product is still early. Use the feedback button <IconMessage style={{ width: 13, height: 13, verticalAlign: '-2px', margin: '0 2px' }} /> in the status bar to report bugs or share thoughts.
           </p>
         </div>
       </>
@@ -1494,43 +1494,43 @@ const GUIDE_SECTIONS = [
     render: () => (
       <>
         <div className="guide-env-row">
-          <div className="guide-env-icon"><IconHome style={{width:18,height:18}}/></div>
+          <div className="guide-env-icon"><IconHome style={{ width: 18, height: 18 }} /></div>
           <div className="guide-env-body">
             <p className="guide-env-label">Dashboard</p>
             <p>Your daily briefing. Market sentiment, sector heatmap, the strongest insider signals, top-ranked insiders, and market news — all on one screen.</p>
           </div>
         </div>
-        <EnvPreview type="dashboard"/>
+        <EnvPreview type="dashboard" />
 
         <div className="guide-env-row">
-          <div className="guide-env-icon" style={{color:'var(--accent-strong)'}}><IconInsights style={{width:18,height:18}}/></div>
+          <div className="guide-env-icon" style={{ color: 'var(--accent-strong)' }}><IconInsights style={{ width: 18, height: 18 }} /></div>
           <div className="guide-env-body">
             <p className="guide-env-label">Insights</p>
             <p>The full scored signal feed. Every ticker with recent insider activity, ranked by conviction. Filter by sector, time window, and trade type. The leaderboard shows which insiders have the best track records.</p>
           </div>
         </div>
-        <EnvPreview type="insights"/>
+        <EnvPreview type="insights" />
 
         <div className="guide-env-row">
-          <div className="guide-env-icon"><IconData style={{width:18,height:18}}/></div>
+          <div className="guide-env-icon"><IconData style={{ width: 18, height: 18 }} /></div>
           <div className="guide-env-body">
             <p className="guide-env-label">Data</p>
             <p>Raw filing data. Every trade, searchable and filterable, with a link to the original SEC filing. Use this when you want to draw your own conclusions.</p>
           </div>
         </div>
-        <EnvPreview type="data"/>
+        <EnvPreview type="data" />
 
         <div className="guide-env-row">
-          <div className="guide-env-icon"><IconFavorites style={{width:18,height:18}}/></div>
+          <div className="guide-env-icon"><IconFavorites style={{ width: 18, height: 18 }} /></div>
           <div className="guide-env-body">
             <p className="guide-env-label">Watchlist</p>
             <p>Tickers and insiders you follow. Their activity drives your instant alerts, email digests, and the activity feed. Link a brokerage to see insider activity on stocks you actually hold.</p>
           </div>
         </div>
-        <EnvPreview type="watchlist"/>
+        <EnvPreview type="watchlist" />
 
         <div className="guide-env-row">
-          <div className="guide-env-icon"><IconSettings style={{width:18,height:18}}/></div>
+          <div className="guide-env-icon"><IconSettings style={{ width: 18, height: 18 }} /></div>
           <div className="guide-env-body">
             <p className="guide-env-label">Settings</p>
             <p>Your plan, billing, notification preferences, and brokerage connection.</p>
@@ -1544,7 +1544,7 @@ const GUIDE_SECTIONS = [
     label: 'Data & Scoring',
     render: () => (
       <>
-        <p style={{fontWeight:600,color:'var(--text)',marginBottom:4}}>Where the data comes from</p>
+        <p style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Where the data comes from</p>
         <p>Seli ingests trades from two official government sources — both public record.</p>
 
         <div className="guide-pipeline">
@@ -1554,17 +1554,17 @@ const GUIDE_SECTIONS = [
             </div>
             <div className="guide-pipeline__arrow">
               <span className="guide-pipeline__timing">up to 2 days</span>
-              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
             <div className="guide-pipeline__step">
               <span className="guide-pipeline__label">SEC Form 4</span>
             </div>
             <div className="guide-pipeline__arrow">
               <span className="guide-pipeline__timing">minutes</span>
-              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
             <div className="guide-pipeline__step guide-pipeline__step--seli">
-              <img src={logoSimple} alt="" style={{width:16,height:16,objectFit:'contain'}}/>
+              <img src={logoSimple} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />
               <span className="guide-pipeline__label">Seli</span>
             </div>
           </div>
@@ -1574,25 +1574,25 @@ const GUIDE_SECTIONS = [
             </div>
             <div className="guide-pipeline__arrow">
               <span className="guide-pipeline__timing">up to 45 days</span>
-              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
             <div className="guide-pipeline__step">
               <span className="guide-pipeline__label">STOCK Act</span>
             </div>
             <div className="guide-pipeline__arrow">
               <span className="guide-pipeline__timing">minutes</span>
-              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
             <div className="guide-pipeline__step guide-pipeline__step--seli">
-              <img src={logoSimple} alt="" style={{width:16,height:16,objectFit:'contain'}}/>
+              <img src={logoSimple} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }} />
               <span className="guide-pipeline__label">Seli</span>
             </div>
           </div>
         </div>
 
-        <p style={{fontSize:'0.75rem',color:'var(--text-3)',margin:'6px 0 16px'}}>Only open-market trades — option exercises, RSU vests, gifts, and plan transactions are filtered out.</p>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-3)', margin: '6px 0 16px' }}>Only open-market trades — option exercises, RSU vests, gifts, and plan transactions are filtered out.</p>
 
-        <p style={{fontWeight:600,color:'var(--text)',marginBottom:4}}>How scoring works</p>
+        <p style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>How scoring works</p>
         <p>Every trade runs through the same algorithm. Raw data becomes a <strong>conviction score</strong> — higher means more markers of a historically meaningful trade.</p>
 
         <div className="guide-scoring-flow">
@@ -1601,7 +1601,7 @@ const GUIDE_SECTIONS = [
             <span className="guide-scoring-flow__stage-sub">As reported to SEC</span>
           </div>
           <div className="guide-scoring-flow__arrow">
-            <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </div>
           <div className="guide-scoring-flow__stage guide-scoring-flow__stage--algo">
             <span className="guide-scoring-flow__stage-label">Scoring algorithm</span>
@@ -1613,28 +1613,28 @@ const GUIDE_SECTIONS = [
             </ul>
           </div>
           <div className="guide-scoring-flow__arrow">
-            <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </div>
           <div className="guide-scoring-flow__stage">
             <span className="guide-scoring-flow__stage-label">Signals</span>
             <div className="guide-signal-examples">
               <div className="guide-signal-ex">
-                <span className="guide-signal-ex__label" style={{color:'var(--green-600)'}}>Very High</span>
-                <ConvictionBar score={17} max={20}/>
+                <span className="guide-signal-ex__label" style={{ color: 'var(--green-600)' }}>Very High</span>
+                <ConvictionBar score={17} max={20} />
               </div>
               <div className="guide-signal-ex">
-                <span className="guide-signal-ex__label" style={{color:'var(--amber-600)'}}>Medium</span>
-                <ConvictionBar score={9} max={20}/>
+                <span className="guide-signal-ex__label" style={{ color: 'var(--amber-600)' }}>Medium</span>
+                <ConvictionBar score={9} max={20} />
               </div>
               <div className="guide-signal-ex">
-                <span className="guide-signal-ex__label" style={{color:'var(--text-3)'}}>Low</span>
-                <ConvictionBar score={3} max={20}/>
+                <span className="guide-signal-ex__label" style={{ color: 'var(--text-3)' }}>Low</span>
+                <ConvictionBar score={3} max={20} />
               </div>
             </div>
           </div>
         </div>
 
-        <p style={{fontSize:'0.75rem',color:'var(--text-3)',marginTop:8}}>Based on Lakonishok & Lee, Cohen et al. Identical for every user. Not a recommendation. <a href="/terms">Terms</a>.</p>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-3)', marginTop: 8 }}>Based on Lakonishok & Lee, Cohen et al. Identical for every user. Not a recommendation. <a href="/terms">Terms</a>.</p>
       </>
     ),
   },
@@ -1648,7 +1648,7 @@ const GUIDE_SECTIONS = [
         <div className="guide-help-demo">
           <div className="guide-help-demo__item">
             <div className="guide-help-demo__icon-circle">
-              <IconHelp style={{width:12,height:12}}/>
+              <IconHelp style={{ width: 12, height: 12 }} />
             </div>
             <div className="guide-help-demo__body">
               <span className="guide-help-demo__label">Tile help</span>
@@ -1657,7 +1657,7 @@ const GUIDE_SECTIONS = [
           </div>
           <div className="guide-help-demo__item">
             <div className="guide-help-demo__icon-circle">
-              <IconMessage style={{width:12,height:12}}/>
+              <IconMessage style={{ width: 12, height: 12 }} />
             </div>
             <div className="guide-help-demo__body">
               <span className="guide-help-demo__label">Send feedback</span>
@@ -1666,7 +1666,7 @@ const GUIDE_SECTIONS = [
           </div>
           <div className="guide-help-demo__item">
             <div className="guide-help-demo__icon-circle">
-              <IconHelp style={{width:12,height:12}}/>
+              <IconHelp style={{ width: 12, height: 12 }} />
             </div>
             <div className="guide-help-demo__body">
               <span className="guide-help-demo__label">This guide</span>
@@ -1696,8 +1696,8 @@ const GUIDE_SECTIONS = [
           <li><strong>Portfolio tracking</strong> — connect a brokerage (read-only) and see insider activity on stocks you actually hold.</li>
           <li><strong>Full history</strong> — scored signals and raw data going back to 2013.</li>
         </ul>
-        <div className="guide-callout guide-callout--accent" style={{margin:'12px 0'}}>
-          <p className="guide-callout__title" style={{color:'var(--accent-strong)'}}>Founding member pricing</p>
+        <div className="guide-callout guide-callout--accent" style={{ margin: '12px 0' }}>
+          <p className="guide-callout__title" style={{ color: 'var(--accent-strong)' }}>Founding member pricing</p>
           <p className="guide-callout__text">
             As a beta user, you can lock in Pro at <strong>$6.99/mo — half off, forever</strong>. That rate stays as long as your subscription is active.
           </p>
@@ -1732,15 +1732,15 @@ function EnvPreview({ type }) {
         {['Sentiment', 'SPY', 'QQQ', 'Flow'].map(l => (
           <div key={l} className="env-preview__stat">
             <span className="env-preview__stat-label">{l}</span>
-            <span className="env-preview__stat-val"/>
+            <span className="env-preview__stat-val" />
           </div>
         ))}
       </div>
-      {[0,1,2].map(i => (
+      {[0, 1, 2].map(i => (
         <div key={i} className="env-preview__row">
-          <span className="env-preview__ticker"/>
-          <span className="env-preview__bar" style={{width:`${60-i*12}%`}}/>
-          <span className="env-preview__num env-preview__num--pos"/>
+          <span className="env-preview__ticker" />
+          <span className="env-preview__bar" style={{ width: `${60 - i * 12}%` }} />
+          <span className="env-preview__num env-preview__num--pos" />
         </div>
       ))}
     </div>
@@ -1748,24 +1748,24 @@ function EnvPreview({ type }) {
   if (type === 'insights') return (
     <div className="env-preview env-preview--signals">
       <div className="env-preview__pills">
-        {['30d','90d','1y','All'].map((p,i) => (
-          <span key={p} className={`env-preview__pill env-preview__pill--label${i===1?' env-preview__pill--active':''}`}>{p}</span>
+        {['30d', '90d', '1y', 'All'].map((p, i) => (
+          <span key={p} className={`env-preview__pill env-preview__pill--label${i === 1 ? ' env-preview__pill--active' : ''}`}>{p}</span>
         ))}
       </div>
       {[
-        {rank:1, rate:'94%', dir:'buy'},
-        {rank:2, rate:'87%', dir:'buy'},
-        {rank:3, rate:'61%', dir:'sell'},
-        {rank:4, rate:'52%', dir:'buy'},
+        { rank: 1, rate: '94%', dir: 'buy' },
+        { rank: 2, rate: '87%', dir: 'buy' },
+        { rank: 3, rate: '61%', dir: 'sell' },
+        { rank: 4, rate: '52%', dir: 'buy' },
       ].map(r => (
         <div key={r.rank} className="env-preview__lb-row">
           <span className="env-preview__lb-rank">{r.rank}</span>
-          <span className="env-preview__ticker"/>
-          <span className="env-preview__wl-name"/>
-          {r.dir==='buy'
-            ? <IconBuyTri className="env-preview__lb-dir env-preview__lb-dir--buy" style={{width:8,height:8}}/>
-            : <IconSellTri className="env-preview__lb-dir env-preview__lb-dir--sell" style={{width:8,height:8}}/>}
-          <span className={`env-preview__lb-rate${parseFloat(r.rate)>=70?' env-preview__lb-rate--hi':''}`}>{r.rate}</span>
+          <span className="env-preview__ticker" />
+          <span className="env-preview__wl-name" />
+          {r.dir === 'buy'
+            ? <IconBuyTri className="env-preview__lb-dir env-preview__lb-dir--buy" style={{ width: 8, height: 8 }} />
+            : <IconSellTri className="env-preview__lb-dir env-preview__lb-dir--sell" style={{ width: 8, height: 8 }} />}
+          <span className={`env-preview__lb-rate${parseFloat(r.rate) >= 70 ? ' env-preview__lb-rate--hi' : ''}`}>{r.rate}</span>
         </div>
       ))}
     </div>
@@ -1773,23 +1773,23 @@ function EnvPreview({ type }) {
   if (type === 'data') return (
     <div className="env-preview env-preview--data">
       <div className="env-preview__toolbar">
-        <span className="env-preview__search"/>
-        <span className="env-preview__pill env-preview__pill--sm"/>
-        <span className="env-preview__pill env-preview__pill--sm"/>
+        <span className="env-preview__search" />
+        <span className="env-preview__pill env-preview__pill--sm" />
+        <span className="env-preview__pill env-preview__pill--sm" />
       </div>
       <div className="env-preview__thead">
-        {['Date','Insider','Ticker','Type','Value'].map(h => (
+        {['Date', 'Insider', 'Ticker', 'Type', 'Value'].map(h => (
           <span key={h} className="env-preview__th">{h}</span>
         ))}
       </div>
       <div className="env-preview__table">
-        {[0,1,2,3].map(i => (
+        {[0, 1, 2, 3].map(i => (
           <div key={i} className="env-preview__trow env-preview__trow--data">
-            <span/>
-            <span/>
-            <span className="env-preview__ticker"/>
-            <span className={`env-preview__code${i%3===0?' env-preview__code--sell':' env-preview__code--buy'}`}>{i%3===0?'S':'P'}</span>
-            <span className="env-preview__num env-preview__num--pos"/>
+            <span />
+            <span />
+            <span className="env-preview__ticker" />
+            <span className={`env-preview__code${i % 3 === 0 ? ' env-preview__code--sell' : ' env-preview__code--buy'}`}>{i % 3 === 0 ? 'S' : 'P'}</span>
+            <span className="env-preview__num env-preview__num--pos" />
           </div>
         ))}
       </div>
@@ -1798,19 +1798,19 @@ function EnvPreview({ type }) {
   if (type === 'watchlist') return (
     <div className="env-preview env-preview--watchlist">
       <div className="env-preview__wl-row">
-        <svg viewBox="0 0 24 24" fill="var(--accent-strong)" stroke="var(--accent-strong)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{flexShrink:0}}>
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        <svg viewBox="0 0 24 24" fill="var(--accent-strong)" stroke="var(--accent-strong)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ flexShrink: 0 }}>
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
         </svg>
         <span className="env-preview__wl-hint">Star a stock to track insider activity</span>
       </div>
       <div className="env-preview__wl-row">
-        <svg viewBox="0 0 24 24" fill="var(--accent-strong)" stroke="var(--accent-strong)" strokeWidth={2} width="14" height="14" style={{flexShrink:0}}>
-          <circle cx="12" cy="12" r="9"/>
+        <svg viewBox="0 0 24 24" fill="var(--accent-strong)" stroke="var(--accent-strong)" strokeWidth={2} width="14" height="14" style={{ flexShrink: 0 }}>
+          <circle cx="12" cy="12" r="9" />
         </svg>
         <span className="env-preview__wl-hint">Follow an insider to track their trades</span>
       </div>
-      <div className="env-preview__wl-row" style={{opacity:0.45}}>
-        <IconLink style={{width:14,height:14,flexShrink:0}}/>
+      <div className="env-preview__wl-row" style={{ opacity: 0.45 }}>
+        <IconLink style={{ width: 14, height: 14, flexShrink: 0 }} />
         <span className="env-preview__wl-hint">Link a brokerage for portfolio-level alerts</span>
       </div>
     </div>
@@ -1818,15 +1818,15 @@ function EnvPreview({ type }) {
   if (type === 'settings') return (
     <div className="env-preview env-preview--alerts">
       {[
-        {isNew:true,  buy:true},
-        {isNew:false, buy:true},
-        {isNew:false, buy:false},
-      ].map((r,i) => (
+        { isNew: true, buy: true },
+        { isNew: false, buy: true },
+        { isNew: false, buy: false },
+      ].map((r, i) => (
         <div key={i} className="env-preview__alert-row">
-          <span className={`env-preview__alert-dot${r.buy?' env-preview__alert-dot--buy':' env-preview__alert-dot--sell'}`}/>
+          <span className={`env-preview__alert-dot${r.buy ? ' env-preview__alert-dot--buy' : ' env-preview__alert-dot--sell'}`} />
           <div className="env-preview__alert-body">
-            <span className="env-preview__ticker"/>
-            <span className="env-preview__alert-text"/>
+            <span className="env-preview__ticker" />
+            <span className="env-preview__alert-text" />
           </div>
           {r.isNew && <span className="env-preview__alert-new">New</span>}
         </div>
@@ -1856,7 +1856,7 @@ function GuideProvider({ children }) {
       if (!localStorage.getItem('seli_onboard_seen')) {
         setOpenSection('welcome');
       }
-    } catch (_) {}
+    } catch (_) { }
   }, []);
 
   const openGuide = useCallback((sectionId) => setOpenSection(sectionId || 'welcome'), []);
@@ -1864,14 +1864,14 @@ function GuideProvider({ children }) {
     setOpenSection(null);
     // Mark onboarding complete on first close — subsequent opens via the
     // status bar ? button don't re-trigger the nudge or re-mark.
-    try { localStorage.setItem('seli_onboard_seen', '1'); } catch (_) {}
+    try { localStorage.setItem('seli_onboard_seen', '1'); } catch (_) { }
   }, []);
 
   const nudge = useTileNudge();
   const closeGuideAndNudge = useCallback(() => {
     const wasFirstTime = !localStorage.getItem('seli_onboard_seen');
     setOpenSection(null);
-    try { localStorage.setItem('seli_onboard_seen', '1'); } catch (_) {}
+    try { localStorage.setItem('seli_onboard_seen', '1'); } catch (_) { }
     // Fire the tile-help nudge only after the very first onboard dismissal
     if (wasFirstTime) {
       // Small delay so the guide modal fully animates out before pulsing
@@ -1884,7 +1884,7 @@ function GuideProvider({ children }) {
       <TileNudgeContext.Provider value={nudge}>
         {children}
       </TileNudgeContext.Provider>
-      {openSection && <GuideModal initialSection={openSection} onClose={closeGuideAndNudge}/>}
+      {openSection && <GuideModal initialSection={openSection} onClose={closeGuideAndNudge} />}
     </GuideContext.Provider>
   );
 }
@@ -2096,10 +2096,10 @@ function TileHelpPanel({ tileId, onClose }) {
   if (!help) return null;
   return (
     <div className="tile-help-overlay" onClick={onClose}>
-      <div className="tile-help-panel" onClick={e=>e.stopPropagation()}>
+      <div className="tile-help-panel" onClick={e => e.stopPropagation()}>
         <div className="tile-help-panel__header">
           <h3 className="tile-help-panel__title">{help.title}</h3>
-          <button className="upgrade-modal__close" style={{position:'static'}} onClick={onClose} aria-label="Close"><IconClose style={{width:10,height:10}}/></button>
+          <button className="upgrade-modal__close" style={{ position: 'static' }} onClick={onClose} aria-label="Close"><IconClose style={{ width: 10, height: 10 }} /></button>
         </div>
         <div className="tile-help-panel__body">
           <p className="tile-help-panel__what">{help.what}</p>
@@ -2117,7 +2117,7 @@ function TileHelpPanel({ tileId, onClose }) {
             <div className="tile-help-panel__card">
               <h4 className="tile-help-panel__section-title">Columns</h4>
               <dl className="tile-help-panel__dl">
-                {help.columns.map(c=>(
+                {help.columns.map(c => (
                   <div key={c.term} className="tile-help-panel__dl-row">
                     <dt>{c.term}</dt>
                     <dd>{c.def}</dd>
@@ -2148,24 +2148,24 @@ function useTileNudge() {
   const trigger = useCallback(() => {
     try {
       if (localStorage.getItem('seli_tile_nudge_seen')) return;
-    } catch (_) {}
+    } catch (_) { }
     setActive(true);
     timerRef.current = setTimeout(() => {
       setActive(false);
-      try { localStorage.setItem('seli_tile_nudge_seen', '1'); } catch (_) {}
+      try { localStorage.setItem('seli_tile_nudge_seen', '1'); } catch (_) { }
     }, 6000);
   }, []);
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
   const dismiss = useCallback(() => {
     setActive(false);
     if (timerRef.current) clearTimeout(timerRef.current);
-    try { localStorage.setItem('seli_tile_nudge_seen', '1'); } catch (_) {}
+    try { localStorage.setItem('seli_tile_nudge_seen', '1'); } catch (_) { }
   }, []);
   return { nudgeActive: active, dismissNudge: dismiss, triggerNudge: trigger };
 }
 
 // Shared context so all TileInfoButtons can see the nudge state
-const TileNudgeContext = createContext({ nudgeActive: false, dismissNudge: () => {} });
+const TileNudgeContext = createContext({ nudgeActive: false, dismissNudge: () => { } });
 
 function TileInfoButton({ section, title, tileId }) {
   const guide = useContext(GuideContext);
@@ -2185,7 +2185,7 @@ function TileInfoButton({ section, title, tileId }) {
     }
   }
   return (
-    <span style={{position:'relative',display:'inline-flex',alignItems:'center'}}>
+    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
       <button
         className={`tile-info-btn${shouldNudge ? ' tile-info-btn--nudge' : ''}`}
         onClick={handleClick}
@@ -2197,7 +2197,7 @@ function TileInfoButton({ section, title, tileId }) {
       {shouldNudge && (
         <span className="tile-nudge-tooltip">Tap for details on this tile</span>
       )}
-      {showHelp && <TileHelpPanel tileId={tileId} onClose={()=>setShowHelp(false)}/>}
+      {showHelp && <TileHelpPanel tileId={tileId} onClose={() => setShowHelp(false)} />}
     </span>
   );
 }
@@ -2219,7 +2219,7 @@ function FeedbackButton({ page }) {
       >
         <IconMessage style={{ width: 16, height: 16 }} />
       </button>
-      {open && <FeedbackModal page={page} onClose={() => setOpen(false)}/>}
+      {open && <FeedbackModal page={page} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -2295,7 +2295,7 @@ function FeedbackModal({ page, onClose }) {
           screenshots: screenshots.map(s => ({ data: s.dataUrl })),
         }),
       });
-      if (!r.ok) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Something went wrong sending this — try again in a moment.'); }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Something went wrong sending this — try again in a moment.'); }
       setSent(true);
     } catch (e) {
       setError(e.message);
@@ -2315,24 +2315,24 @@ function FeedbackModal({ page, onClose }) {
 
   return (
     <div className="upgrade-overlay" onClick={onClose}>
-      <div className="upgrade-modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
-        <div className="upgrade-modal__title" style={{marginBottom:4}}>Send feedback</div>
-        <p style={{fontSize:13,color:'var(--text-2)',margin:'0 0 14px'}}>
+      <div className="upgrade-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+        <div className="upgrade-modal__title" style={{ marginBottom: 4 }}>Send feedback</div>
+        <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 14px' }}>
           Bug, confusing moment, something you wish existed — all of it helps during beta.
         </p>
         <input
           className="feedback-input"
           value={summary}
-          onChange={e=>setSummary(e.target.value)}
+          onChange={e => setSummary(e.target.value)}
           placeholder="Summary — one line"
           maxLength={200}
           autoFocus
         />
         <textarea
           className="feedback-textarea"
-          style={{marginTop:8}}
+          style={{ marginTop: 8 }}
           value={message}
-          onChange={e=>setMessage(e.target.value)}
+          onChange={e => setMessage(e.target.value)}
           onPaste={onPaste}
           placeholder="What's on your mind? (you can paste a screenshot directly in here)"
           rows={5}
@@ -2341,37 +2341,37 @@ function FeedbackModal({ page, onClose }) {
           <div className="feedback-shots">
             {screenshots.map((s, i) => (
               <div key={i} className="feedback-shot">
-                <img src={s.dataUrl} alt={s.name}/>
-                <button className="feedback-shot__remove" onClick={()=>removeShot(i)} title="Remove" aria-label="Remove screenshot">
-                  <IconClose style={{width:10,height:10}}/>
+                <img src={s.dataUrl} alt={s.name} />
+                <button className="feedback-shot__remove" onClick={() => removeShot(i)} title="Remove" aria-label="Remove screenshot">
+                  <IconClose style={{ width: 10, height: 10 }} />
                 </button>
               </div>
             ))}
           </div>
         )}
-        <div style={{display:'flex',alignItems:'center',gap:10,marginTop:8}}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
           <button
             className="btn btn--ghost btn--sm"
-            onClick={()=>fileInputRef.current?.click()}
+            onClick={() => fileInputRef.current?.click()}
             disabled={screenshots.length >= FEEDBACK_MAX_SCREENSHOTS}
           >
             Attach screenshot
           </button>
-          <span className="td-muted" style={{fontSize:'0.6875rem'}}>or paste one into the text box</span>
+          <span className="td-muted" style={{ fontSize: '0.6875rem' }}>or paste one into the text box</span>
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
             multiple
-            style={{display:'none'}}
+            style={{ display: 'none' }}
             onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
           />
         </div>
-        {shotError && <div className="checkout-error" style={{marginTop:10}}>{shotError}</div>}
-        {error && <div className="checkout-error" style={{marginTop:10}}>{error}</div>}
-        <div style={{display:'flex',gap:8,marginTop:14,justifyContent:'flex-end'}}>
+        {shotError && <div className="checkout-error" style={{ marginTop: 10 }}>{shotError}</div>}
+        {error && <div className="checkout-error" style={{ marginTop: 10 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
           <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn--primary" disabled={!summary.trim()||!message.trim()||sending} onClick={submit}>
+          <button className="btn btn--primary" disabled={!summary.trim() || !message.trim() || sending} onClick={submit}>
             {sending ? 'Sending…' : 'Send'}
           </button>
         </div>
@@ -2401,42 +2401,42 @@ function CompanyProfileCard({ ticker, cik, company }) {
   const { profile, metrics, desc, loading } = useCompanyProfile(ticker, cik);
 
   const mktCap = profile?.marketCapitalization
-    ? `$${(profile.marketCapitalization/1000).toFixed(1)}B`
+    ? `$${(profile.marketCapitalization / 1000).toFixed(1)}B`
     : null;
-  const w52hi = metrics?.['52WeekHigh']  ? `$${Number(metrics['52WeekHigh']).toFixed(2)}`  : null;
-  const w52lo = metrics?.['52WeekLow']   ? `$${Number(metrics['52WeekLow']).toFixed(2)}`   : null;
-  const pe    = metrics?.['peNormalizedAnnual'] ? Number(metrics['peNormalizedAnnual']).toFixed(1) : null;
-  const beta  = metrics?.['beta']        ? Number(metrics['beta']).toFixed(2) : null;
+  const w52hi = metrics?.['52WeekHigh'] ? `$${Number(metrics['52WeekHigh']).toFixed(2)}` : null;
+  const w52lo = metrics?.['52WeekLow'] ? `$${Number(metrics['52WeekLow']).toFixed(2)}` : null;
+  const pe = metrics?.['peNormalizedAnnual'] ? Number(metrics['peNormalizedAnnual']).toFixed(1) : null;
+  const beta = metrics?.['beta'] ? Number(metrics['beta']).toFixed(2) : null;
 
-  if (loading) return <div style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:8,borderBottom:'0.5px solid var(--border)'}}><Spinner size={14}/><span className="td-muted" style={{fontSize:'0.75rem'}}>Loading profile…</span></div>;
+  if (loading) return <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '0.5px solid var(--border)' }}><Spinner size={14} /><span className="td-muted" style={{ fontSize: '0.75rem' }}>Loading profile…</span></div>;
   if (!profile && !desc) return null;
 
   return (
     <div className="co-profile-card">
       {/* Header: logo + name + exchange */}
       <div className="co-profile-card__top">
-        {profile?.logo&&<img src={profile.logo} alt="" className="co-profile-card__logo" onError={e=>e.target.style.display='none'}/>}
-        <div style={{minWidth:0}}>
-          <div className="co-profile-card__name">{profile?.name||company}</div>
+        {profile?.logo && <img src={profile.logo} alt="" className="co-profile-card__logo" onError={e => e.target.style.display = 'none'} />}
+        <div style={{ minWidth: 0 }}>
+          <div className="co-profile-card__name">{profile?.name || company}</div>
           <div className="co-profile-card__sub">
             {[profile?.exchange, profile?.finnhubIndustry, profile?.country].filter(Boolean).join(' · ')}
           </div>
         </div>
-        {profile?.weburl&&<a href={profile.weburl} target="_blank" rel="noreferrer" className="co-profile-card__web">↗</a>}
+        {profile?.weburl && <a href={profile.weburl} target="_blank" rel="noreferrer" className="co-profile-card__web">↗</a>}
       </div>
 
       {/* Key stats row */}
-      {(mktCap||w52hi||pe||beta)&&(
+      {(mktCap || w52hi || pe || beta) && (
         <div className="co-profile-stats">
-          {mktCap&&<div className="co-profile-stat"><span className="co-profile-stat__label">Market cap</span><span className="co-profile-stat__val">{mktCap}</span></div>}
-          {(w52hi&&w52lo)&&<div className="co-profile-stat"><span className="co-profile-stat__label">52w range</span><span className="co-profile-stat__val">{w52lo} – {w52hi}</span></div>}
-          {pe&&<div className="co-profile-stat"><span className="co-profile-stat__label">P/E</span><span className="co-profile-stat__val">{pe}</span></div>}
-          {beta&&<div className="co-profile-stat"><span className="co-profile-stat__label">Beta</span><span className="co-profile-stat__val">{beta}</span></div>}
+          {mktCap && <div className="co-profile-stat"><span className="co-profile-stat__label">Market cap</span><span className="co-profile-stat__val">{mktCap}</span></div>}
+          {(w52hi && w52lo) && <div className="co-profile-stat"><span className="co-profile-stat__label">52w range</span><span className="co-profile-stat__val">{w52lo} – {w52hi}</span></div>}
+          {pe && <div className="co-profile-stat"><span className="co-profile-stat__label">P/E</span><span className="co-profile-stat__val">{pe}</span></div>}
+          {beta && <div className="co-profile-stat"><span className="co-profile-stat__label">Beta</span><span className="co-profile-stat__val">{beta}</span></div>}
         </div>
       )}
 
       {/* Description — truncated with "more" expand */}
-      {desc&&<CompanyDescExpanded desc={desc}/>}
+      {desc && <CompanyDescExpanded desc={desc} />}
     </div>
   );
 }
@@ -2448,8 +2448,8 @@ function CompanyDescExpanded({ desc }) {
   return (
     <div className="co-profile-desc">
       {short ? desc.slice(0, SHORT).trimEnd() + '…' : desc}
-      {desc.length > SHORT&&(
-        <button className="co-profile-desc__toggle" onClick={()=>setExp(e=>!e)}>
+      {desc.length > SHORT && (
+        <button className="co-profile-desc__toggle" onClick={() => setExp(e => !e)}>
           {exp ? ' less' : ' more'}
         </button>
       )}
@@ -2460,48 +2460,48 @@ function CompanyDescExpanded({ desc }) {
 // ─── Star (watchlist) button ──────────────────────────────────────────────────
 function StarBtn({ ticker, watchlist }) {
   const isWatched = watchlist.has(ticker);
-  const isPro     = watchlist.pro;
+  const isPro = watchlist.pro;
   return (
     <button
-      className={`star-btn${isWatched?' star-btn--active':''}${!isPro?' star-btn--locked':''}`}
-      title={isPro ? (isWatched?'Remove from watchlist':'Add to watchlist') : 'Pro feature — upgrade to track tickers'}
-      onClick={e=>{e.stopPropagation();watchlist.toggle(ticker);}}>
-      <svg viewBox="0 0 24 24" fill={isWatched?'currentColor':'none'} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+      className={`star-btn${isWatched ? ' star-btn--active' : ''}${!isPro ? ' star-btn--locked' : ''}`}
+      title={isPro ? (isWatched ? 'Remove from watchlist' : 'Add to watchlist') : 'Pro feature — upgrade to track tickers'}
+      onClick={e => { e.stopPropagation(); watchlist.toggle(ticker); }}>
+      <svg viewBox="0 0 24 24" fill={isWatched ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
       </svg>
     </button>
   );
 }
 
 // Follow button for insiders — same pattern as StarBtn
-function FollowBtn({ name, watchlist, compact=false }) {
+function FollowBtn({ name, watchlist, compact = false }) {
   const isFollowing = watchlist.hasInsider(name);
-  const isPro       = watchlist.pro;
+  const isPro = watchlist.pro;
   if (compact) {
     // Icon-only variant for use inside table rows
     return (
       <button
-        className={`star-btn${isFollowing?' star-btn--active':''}${!isPro?' star-btn--locked':''}`}
-        title={isPro ? (isFollowing?'Unfollow':'Follow insider') : 'Pro feature'}
-        onClick={e=>{e.stopPropagation();watchlist.toggleInsider(name);}}>
-        <svg viewBox="0 0 24 24" fill={isFollowing?'currentColor':'none'} stroke="currentColor" strokeWidth={2} width="12" height="12">
-          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        className={`star-btn${isFollowing ? ' star-btn--active' : ''}${!isPro ? ' star-btn--locked' : ''}`}
+        title={isPro ? (isFollowing ? 'Unfollow' : 'Follow insider') : 'Pro feature'}
+        onClick={e => { e.stopPropagation(); watchlist.toggleInsider(name); }}>
+        <svg viewBox="0 0 24 24" fill={isFollowing ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} width="12" height="12">
+          <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
         </svg>
       </button>
     );
   }
   return (
     <button
-      className={`follow-btn${isFollowing?' follow-btn--active':''}${!isPro?' follow-btn--locked':''}`}
-      title={isPro ? (isFollowing?'Unfollow insider':'Follow insider — get alerts on their trades') : 'Pro feature — upgrade to follow insiders'}
-      onClick={e=>{e.stopPropagation();watchlist.toggleInsider(name);}}>
-      <svg viewBox="0 0 24 24" fill={isFollowing?'currentColor':'none'} stroke="currentColor" strokeWidth={2} width="10" height="10" style={{marginRight:4,verticalAlign:'-1px'}}><circle cx="12" cy="12" r="9"/></svg>
+      className={`follow-btn${isFollowing ? ' follow-btn--active' : ''}${!isPro ? ' follow-btn--locked' : ''}`}
+      title={isPro ? (isFollowing ? 'Unfollow insider' : 'Follow insider — get alerts on their trades') : 'Pro feature — upgrade to follow insiders'}
+      onClick={e => { e.stopPropagation(); watchlist.toggleInsider(name); }}>
+      <svg viewBox="0 0 24 24" fill={isFollowing ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} width="10" height="10" style={{ marginRight: 4, verticalAlign: '-1px' }}><circle cx="12" cy="12" r="9" /></svg>
       {isFollowing ? 'Following' : 'Follow'}
     </button>
   );
 }
 
-function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, watchlist, inline=false, onExpand, hideProfileCard=false }) {
+function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, watchlist, inline = false, onExpand, hideProfileCard = false }) {
   // Note: this component is only ever mounted by the caller when `detail` is
   // truthy (see App's panelOpen guard), so `d` is always defined here. No
   // early-return guard before the hooks below — that pattern breaks React's
@@ -2512,34 +2512,34 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   const [traderRows, setTraderRows] = useState(null);
   const [tickerRows, setTickerRows] = useState(null);
   const [signalPrice, setSignalPrice] = useState(null); // current price for signal-type details
-  const [busy,       setBusy]       = useState(false);
-  const [bundleOn,   setBundleOn]   = useState(true);
-  const [omOnly,     setOmOnly]     = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [bundleOn, setBundleOn] = useState(true);
+  const [omOnly, setOmOnly] = useState(true);
 
   // Fetch current price for signal-type details so the NOW column shows data.
   // Signal trades come from the client-side filings array (no price join),
   // unlike ticker/trader details which use server queries with LATERAL JOIN.
-  useEffect(()=>{
-    if (d.type!=='signal' || !d.ticker) return;
+  useEffect(() => {
+    if (d.type !== 'signal' || !d.ticker) return;
     setSignalPrice(null);
-    queryNeon(`SELECT close::float AS current_price FROM public.prices_history WHERE ticker='${(d.ticker||'').replace(/'/g,"''")}' ORDER BY date DESC LIMIT 1`)
+    queryNeon(`SELECT close::float AS current_price FROM public.prices_history WHERE ticker='${(d.ticker || '').replace(/'/g, "''")}' ORDER BY date DESC LIMIT 1`)
       .then(r => setSignalPrice(r?.[0]?.current_price ?? null))
       .catch(() => setSignalPrice(null));
-  },[d.type, d.ticker]);
+  }, [d.type, d.ticker]);
   // When the current detail originated from the Data page (it has
   // dataFilters), carry those filters forward to any sub-navigation so
   // that expanding always opens the DataDrawer (filings explore), not the
   // InsightsDrawer (signals explore). Without this, clicking "All SYBT
   // trades →" from a Data-originated transaction would lose the dataFilters
   // on the new detail, causing expand to fall through to InsightsDrawer.
-  const nav = (type,data,opts) => {
+  const nav = (type, data, opts) => {
     if (!onNavigate) return;
     const forwarded = d.dataFilters ? { dataFilters: d.dataFilters, ...data } : data;
-    onNavigate({type,...forwarded}, opts);
+    onNavigate({ type, ...forwarded }, opts);
   };
 
-  useEffect(()=>{
-    if (d.type!=='trader') return;
+  useEffect(() => {
+    if (d.type !== 'trader') return;
     setTraderRows(null); setBusy(true);
     queryNeon(`
       SELECT f.accession_number,f.cik_issuer,
@@ -2555,14 +2555,14 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
         SELECT close FROM public.prices_history
         WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
       ) ph ON true
-      WHERE f.insider_name='${d.name.replace(/'/g,"''")}'
+      WHERE f.insider_name='${d.name.replace(/'/g, "''")}'
         AND f.transaction_type IN ('buy','sell')
       ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r=>{setTraderRows(r);setBusy(false);}).catch(()=>{setTraderRows([]);setBusy(false);});
-  },[d.type,d.name]);
+    `).then(r => { setTraderRows(r); setBusy(false); }).catch(() => { setTraderRows([]); setBusy(false); });
+  }, [d.type, d.name]);
 
-  useEffect(()=>{
-    if (d.type!=='ticker') return;
+  useEffect(() => {
+    if (d.type !== 'ticker') return;
     setTickerRows(null); setBusy(true);
     queryNeon(`
       SELECT f.accession_number,f.transaction_date,f.filing_date,f.insider_name,
@@ -2580,30 +2580,30 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
         SELECT close FROM public.prices_history
         WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
       ) ph ON true
-      WHERE f.ticker='${(d.ticker||'').replace(/'/g,"''")}'
+      WHERE f.ticker='${(d.ticker || '').replace(/'/g, "''")}'
         AND f.transaction_type IN ('buy','sell')
       ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r=>{setTickerRows(r);setBusy(false);}).catch(()=>{setTickerRows([]);setBusy(false);});
-  },[d.type,d.ticker]);
+    `).then(r => { setTickerRows(r); setBusy(false); }).catch(() => { setTickerRows([]); setBusy(false); });
+  }, [d.type, d.ticker]);
 
-  const traderStats = useMemo(()=>{
+  const traderStats = useMemo(() => {
     if (!traderRows?.length) return null;
-    const buys=traderRows.filter(r=>r.transaction_type==='buy');
-    const sells=traderRows.filter(r=>r.transaction_type==='sell');
-    const omBuys=buys.filter(r=>r.is_open_market);
-    const omSells=sells.filter(r=>r.is_open_market);
+    const buys = traderRows.filter(r => r.transaction_type === 'buy');
+    const sells = traderRows.filter(r => r.transaction_type === 'sell');
+    const omBuys = buys.filter(r => r.is_open_market);
+    const omSells = sells.filter(r => r.is_open_market);
 
     // Only P/S coded trades have a real, economically meaningful price.
     // Grants (A), exercises (M), and "other" (J) often carry $0 or a strike
     // price that isn't comparable to market price — exclude these from
     // return calculations entirely rather than silently treating $0 as a loss.
-    const pricedBuys  = omBuys.filter(r=>r.price>0&&r.current_price!=null&&Math.abs((r.current_price-r.price)/r.price)<3);
-    const pricedSells = omSells.filter(r=>r.price>0);
+    const pricedBuys = omBuys.filter(r => r.price > 0 && r.current_price != null && Math.abs((r.current_price - r.price) / r.price) < 3);
+    const pricedSells = omSells.filter(r => r.price > 0);
 
     // Unrealized: buys where stock is still above/below entry today
-    const buyWinners = pricedBuys.filter(r=>r.current_price>=r.price);
+    const buyWinners = pricedBuys.filter(r => r.current_price >= r.price);
     const avgUnrealizedReturn = pricedBuys.length
-      ? +(pricedBuys.reduce((s,r)=>s+((r.current_price-r.price)/r.price*100),0)/pricedBuys.length).toFixed(1)
+      ? +(pricedBuys.reduce((s, r) => s + ((r.current_price - r.price) / r.price * 100), 0) / pricedBuys.length).toFixed(1)
       : null;
 
     // Realized: did sells happen at a profit relative to that insider's own
@@ -2611,32 +2611,32 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     // money" question, not just "did the stock go up since any buy."
     const buyPriceByTicker = {};
     for (const r of pricedBuys) {
-      if (!buyPriceByTicker[r.ticker]) buyPriceByTicker[r.ticker] = {totalCost:0,totalShares:0};
-      buyPriceByTicker[r.ticker].totalCost += r.price*(r.shares||0);
-      buyPriceByTicker[r.ticker].totalShares += (r.shares||0);
+      if (!buyPriceByTicker[r.ticker]) buyPriceByTicker[r.ticker] = { totalCost: 0, totalShares: 0 };
+      buyPriceByTicker[r.ticker].totalCost += r.price * (r.shares || 0);
+      buyPriceByTicker[r.ticker].totalShares += (r.shares || 0);
     }
-    const realizedTrades = pricedSells.map(r=>{
+    const realizedTrades = pricedSells.map(r => {
       const bp = buyPriceByTicker[r.ticker];
-      const avgCost = bp && bp.totalShares>0 ? bp.totalCost/bp.totalShares : null;
-      const realizedReturn = avgCost ? ((r.price-avgCost)/avgCost*100) : null;
-      return {...r, avgCost, realizedReturn};
-    }).filter(r=>r.realizedReturn!=null);
+      const avgCost = bp && bp.totalShares > 0 ? bp.totalCost / bp.totalShares : null;
+      const realizedReturn = avgCost ? ((r.price - avgCost) / avgCost * 100) : null;
+      return { ...r, avgCost, realizedReturn };
+    }).filter(r => r.realizedReturn != null);
 
-    const sellWinners = realizedTrades.filter(r=>r.realizedReturn>=0);
+    const sellWinners = realizedTrades.filter(r => r.realizedReturn >= 0);
     const avgRealizedReturn = realizedTrades.length
-      ? +(realizedTrades.reduce((s,r)=>s+r.realizedReturn,0)/realizedTrades.length).toFixed(1)
+      ? +(realizedTrades.reduce((s, r) => s + r.realizedReturn, 0) / realizedTrades.length).toFixed(1)
       : null;
 
     // Combined hit rate across BOTH sides — this is the honest profitability number
-    const allOutcomes = [...pricedBuys.map(()=>null), ...realizedTrades]; // placeholder structure
+    const allOutcomes = [...pricedBuys.map(() => null), ...realizedTrades]; // placeholder structure
     const winCount = buyWinners.length + sellWinners.length;
     const totalEvaluated = pricedBuys.length + realizedTrades.length;
-    const combinedHitRate = totalEvaluated>0 ? Math.round((winCount/totalEvaluated)*100) : null;
+    const combinedHitRate = totalEvaluated > 0 ? Math.round((winCount / totalEvaluated) * 100) : null;
 
     // Best performers by ticker (unrealized buy-side, for "what's working" context)
-    const byTk={};
-    for (const r of pricedBuys){if(!byTk[r.ticker])byTk[r.ticker]={ticker:r.ticker,ret:0,count:0};byTk[r.ticker].ret+=((r.current_price-r.price)/r.price)*100;byTk[r.ticker].count++;}
-    const bestTickers=Object.values(byTk).map(t=>({...t,avgRet:t.ret/t.count})).sort((a,b)=>b.avgRet-a.avgRet).slice(0,3);
+    const byTk = {};
+    for (const r of pricedBuys) { if (!byTk[r.ticker]) byTk[r.ticker] = { ticker: r.ticker, ret: 0, count: 0 }; byTk[r.ticker].ret += ((r.current_price - r.price) / r.price) * 100; byTk[r.ticker].count++; }
+    const bestTickers = Object.values(byTk).map(t => ({ ...t, avgRet: t.ret / t.count })).sort((a, b) => b.avgRet - a.avgRet).slice(0, 3);
 
     // Current holding status per ticker: sum all OM buy shares minus OM sell
     // shares, most recent transaction first — tells you if they likely still
@@ -2644,15 +2644,15 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     const holdingByTicker = {};
     for (const r of traderRows) {
       if (!r.ticker || !r.is_open_market) continue;
-      if (!holdingByTicker[r.ticker]) holdingByTicker[r.ticker] = {netShares:0,lastDate:null};
-      const sh = r.shares||0;
-      holdingByTicker[r.ticker].netShares += (r.transaction_type==='buy'?sh:-sh);
-      const dt = r.transaction_date||r.filing_date;
-      if (!holdingByTicker[r.ticker].lastDate || dt>holdingByTicker[r.ticker].lastDate) holdingByTicker[r.ticker].lastDate = dt;
+      if (!holdingByTicker[r.ticker]) holdingByTicker[r.ticker] = { netShares: 0, lastDate: null };
+      const sh = r.shares || 0;
+      holdingByTicker[r.ticker].netShares += (r.transaction_type === 'buy' ? sh : -sh);
+      const dt = r.transaction_date || r.filing_date;
+      if (!holdingByTicker[r.ticker].lastDate || dt > holdingByTicker[r.ticker].lastDate) holdingByTicker[r.ticker].lastDate = dt;
     }
-    const holdings = Object.entries(holdingByTicker).map(([ticker,h])=>({ticker,...h,stillHolding:h.netShares>0}));
+    const holdings = Object.entries(holdingByTicker).map(([ticker, h]) => ({ ticker, ...h, stillHolding: h.netShares > 0 }));
 
-    const dates=traderRows.map(r=>r.transaction_date||r.filing_date).filter(Boolean).sort();
+    const dates = traderRows.map(r => r.transaction_date || r.filing_date).filter(Boolean).sort();
 
     // Build affiliations: for each company this insider has filed at, capture
     // their title, relationship, company name, and most recent activity date.
@@ -2676,33 +2676,33 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     const affiliations = Object.values(affMap).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
 
     return {
-      totalBuys:buys.length, sells:sells.length, omBuys:omBuys.length, omSells:omSells.length,
-      avgReturn:avgUnrealizedReturn, avgRealizedReturn, hitRate:combinedHitRate, combinedHitRate,
-      withReturn:totalEvaluated,
-      totalBuyVal:omBuys.reduce((s,r)=>s+(r.value||0),0),
-      totalSellVal:omSells.reduce((s,r)=>s+(r.value||0),0),
-      companies:[...new Set(traderRows.map(r=>r.ticker).filter(Boolean))],
-      sectors:[...new Set(traderRows.map(r=>r.sector).filter(Boolean))],
+      totalBuys: buys.length, sells: sells.length, omBuys: omBuys.length, omSells: omSells.length,
+      avgReturn: avgUnrealizedReturn, avgRealizedReturn, hitRate: combinedHitRate, combinedHitRate,
+      withReturn: totalEvaluated,
+      totalBuyVal: omBuys.reduce((s, r) => s + (r.value || 0), 0),
+      totalSellVal: omSells.reduce((s, r) => s + (r.value || 0), 0),
+      companies: [...new Set(traderRows.map(r => r.ticker).filter(Boolean))],
+      sectors: [...new Set(traderRows.map(r => r.sector).filter(Boolean))],
       role: affiliations[0]?.relationship || 'weak',
       title: affiliations[0]?.title || '',
       affiliations,
       bestTickers, holdings,
-      firstTrade:dates[dates.length-1], lastTrade:dates[0],
+      firstTrade: dates[dates.length - 1], lastTrade: dates[0],
     };
-  },[traderRows]);
+  }, [traderRows]);
 
   // Per-stock breakdown: for each ticker this insider has traded, compute
   // hold duration pattern (avg days between matched buy->sell pairs), avg
   // filing lag, current estimated position + live value, and a reversal-
   // paired transaction list (FIFO-matched buys/sells with realized P&L and
   // hold time per closed round-trip).
-  const perStockBreakdown = useMemo(()=>{
+  const perStockBreakdown = useMemo(() => {
     if (!traderRows?.length) return [];
     // In OM-only mode, only consider rows that are open-market P/S transactions
     // for ALL calculations (position, hold time, P&L). In all-data mode, every
     // row counts toward the position calc but P&L/hold-time still only uses
     // priced (OM) trades since grants/exercises don't have a comparable cost basis.
-    const sourceRows = omOnly ? traderRows.filter(r=>r.is_open_market) : traderRows;
+    const sourceRows = omOnly ? traderRows.filter(r => r.is_open_market) : traderRows;
     const byTicker = {};
     for (const r of sourceRows) {
       if (!r.ticker) continue;
@@ -2710,9 +2710,9 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       byTicker[r.ticker].push(r);
     }
 
-    return Object.entries(byTicker).map(([ticker, rows])=>{
-      const sorted = [...rows].sort((a,b)=>{
-        const ad=a.transaction_date||a.filing_date||'', bd=b.transaction_date||b.filing_date||'';
+    return Object.entries(byTicker).map(([ticker, rows]) => {
+      const sorted = [...rows].sort((a, b) => {
+        const ad = a.transaction_date || a.filing_date || '', bd = b.transaction_date || b.filing_date || '';
         return ad.localeCompare(bd); // oldest first for FIFO matching
       });
 
@@ -2723,42 +2723,42 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       const roundTrips = [];
       for (const r of sorted) {
         if (!r.is_open_market) continue; // only OM trades for hold-time/P&L purposes
-        const dt = r.transaction_date||r.filing_date;
-        if (r.transaction_type==='buy' && r.price>0) {
-          lots.push({date:dt, shares:r.shares||0, price:r.price});
-        } else if (r.transaction_type==='sell' && r.price>0) {
-          let sellSharesRemaining = r.shares||0;
-          while (sellSharesRemaining>0 && lots.length>0) {
+        const dt = r.transaction_date || r.filing_date;
+        if (r.transaction_type === 'buy' && r.price > 0) {
+          lots.push({ date: dt, shares: r.shares || 0, price: r.price });
+        } else if (r.transaction_type === 'sell' && r.price > 0) {
+          let sellSharesRemaining = r.shares || 0;
+          while (sellSharesRemaining > 0 && lots.length > 0) {
             const lot = lots[0];
             const matched = Math.min(lot.shares, sellSharesRemaining);
-            if (matched>0) {
-              const buyDt = new Date(lot.date+'T00:00:00');
-              const sellDt = new Date(dt+'T00:00:00');
-              const holdDays = Math.round((sellDt-buyDt)/86400000);
+            if (matched > 0) {
+              const buyDt = new Date(lot.date + 'T00:00:00');
+              const sellDt = new Date(dt + 'T00:00:00');
+              const holdDays = Math.round((sellDt - buyDt) / 86400000);
               roundTrips.push({
-                ticker, buyDate:lot.date, sellDate:dt, shares:matched,
-                buyPrice:lot.price, sellPrice:r.price,
-                pnl: (r.price-lot.price)*matched,
-                pnlPct: ((r.price-lot.price)/lot.price)*100,
+                ticker, buyDate: lot.date, sellDate: dt, shares: matched,
+                buyPrice: lot.price, sellPrice: r.price,
+                pnl: (r.price - lot.price) * matched,
+                pnlPct: ((r.price - lot.price) / lot.price) * 100,
                 holdDays,
               });
             }
             lot.shares -= matched;
             sellSharesRemaining -= matched;
-            if (lot.shares<=0.001) lots.shift();
+            if (lot.shares <= 0.001) lots.shift();
           }
         }
       }
 
       // Avg hold time across closed round-trips
       const avgHoldDays = roundTrips.length
-        ? Math.round(roundTrips.reduce((s,rt)=>s+rt.holdDays,0)/roundTrips.length)
+        ? Math.round(roundTrips.reduce((s, rt) => s + rt.holdDays, 0) / roundTrips.length)
         : null;
 
       // Avg filing lag for this ticker
-      const lagRows = rows.filter(r=>r.filing_lag_days!=null);
+      const lagRows = rows.filter(r => r.filing_lag_days != null);
       const avgFilingLag = lagRows.length
-        ? Math.round(lagRows.reduce((s,r)=>s+r.filing_lag_days,0)/lagRows.length)
+        ? Math.round(lagRows.reduce((s, r) => s + r.filing_lag_days, 0) / lagRows.length)
         : null;
 
       // Current position: primary source is shares_owned_after, the figure the
@@ -2775,92 +2775,92 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       // of a stock with ~1.2B shares outstanding total, from a mis-scoped
       // derivative row). Direct-table (non-derivative) rows are the only ones
       // whose shares_owned_after is comparable to actual common stock held.
-      const directRows = sorted.filter(r=>!r.is_derivative);
-      const reportedShares = [...directRows].reverse().find(r=>r.shares_owned_after!=null)?.shares_owned_after;
-      const fifoRemainingShares = lots.reduce((s,l)=>s+l.shares,0);
+      const directRows = sorted.filter(r => !r.is_derivative);
+      const reportedShares = [...directRows].reverse().find(r => r.shares_owned_after != null)?.shares_owned_after;
+      const fifoRemainingShares = lots.reduce((s, l) => s + l.shares, 0);
 
       // Sanity bound: SEC-reported figure shouldn't be wildly disproportionate
       // to the actual transaction sizes we've observed for this insider+ticker.
       // If shares_owned_after is more than 200x the largest single transaction
       // we've seen, treat it as suspect (likely a filer typo or scope error)
       // and fall back to the FIFO estimate instead of showing a clearly wrong number.
-      const maxTxnShares = Math.max(0, ...sorted.map(r=>r.shares||0));
-      const reportedIsPlausible = reportedShares==null || maxTxnShares===0
-        || reportedShares <= maxTxnShares*200;
+      const maxTxnShares = Math.max(0, ...sorted.map(r => r.shares || 0));
+      const reportedIsPlausible = reportedShares == null || maxTxnShares === 0
+        || reportedShares <= maxTxnShares * 200;
 
       const remainingShares = omOnly
         ? fifoRemainingShares
-        : (reportedShares!=null && reportedIsPlausible ? reportedShares : fifoRemainingShares);
+        : (reportedShares != null && reportedIsPlausible ? reportedShares : fifoRemainingShares);
 
-      const currentPrice = sorted[sorted.length-1]?.current_price;
-      const currentValue = (remainingShares>0 && currentPrice) ? remainingShares*currentPrice : null;
+      const currentPrice = sorted[sorted.length - 1]?.current_price;
+      const currentValue = (remainingShares > 0 && currentPrice) ? remainingShares * currentPrice : null;
 
-      const totalRealizedPnl = roundTrips.reduce((s,rt)=>s+rt.pnl,0);
+      const totalRealizedPnl = roundTrips.reduce((s, rt) => s + rt.pnl, 0);
       const company = rows[0]?.company_name;
 
       return {
         ticker, company, rows: sorted, roundTrips: roundTrips.reverse(), // newest first for display
         avgHoldDays, avgFilingLag, remainingShares, currentPrice, currentValue,
         reportedShares, fifoRemainingShares, totalRealizedPnl,
-        positionSource: omOnly ? 'om-fifo' : (reportedShares!=null && reportedIsPlausible ? 'sec-reported' : 'om-fifo'),
-        positionFlagged: reportedShares!=null && !reportedIsPlausible,
-        stillHolding: remainingShares>0.001,
+        positionSource: omOnly ? 'om-fifo' : (reportedShares != null && reportedIsPlausible ? 'sec-reported' : 'om-fifo'),
+        positionFlagged: reportedShares != null && !reportedIsPlausible,
+        stillHolding: remainingShares > 0.001,
         tradeCount: rows.length,
       };
-    }).sort((a,b)=>{
+    }).sort((a, b) => {
       // Most recently active ticker first
-      const aLast = a.rows[a.rows.length-1]?.transaction_date||'';
-      const bLast = b.rows[b.rows.length-1]?.transaction_date||'';
+      const aLast = a.rows[a.rows.length - 1]?.transaction_date || '';
+      const bLast = b.rows[b.rows.length - 1]?.transaction_date || '';
       return bLast.localeCompare(aLast);
     });
-  },[traderRows,omOnly]);
+  }, [traderRows, omOnly]);
 
   // Aggregate hero metrics across all stocks — the "headline number" for the profile
-  const heroStats = useMemo(()=>{
+  const heroStats = useMemo(() => {
     if (!perStockBreakdown.length) return null;
-    const totalRealized = perStockBreakdown.reduce((s,p)=>s+(p.totalRealizedPnl||0),0);
-    const totalCurrentValue = perStockBreakdown.reduce((s,p)=>s+(p.currentValue||0),0);
-    const holdingCount = perStockBreakdown.filter(p=>p.stillHolding).length;
-    const closedCount = perStockBreakdown.filter(p=>!p.stillHolding && p.roundTrips.length>0).length;
-    const hasRealizedData = perStockBreakdown.some(p=>p.roundTrips.length>0);
+    const totalRealized = perStockBreakdown.reduce((s, p) => s + (p.totalRealizedPnl || 0), 0);
+    const totalCurrentValue = perStockBreakdown.reduce((s, p) => s + (p.currentValue || 0), 0);
+    const holdingCount = perStockBreakdown.filter(p => p.stillHolding).length;
+    const closedCount = perStockBreakdown.filter(p => !p.stillHolding && p.roundTrips.length > 0).length;
+    const hasRealizedData = perStockBreakdown.some(p => p.roundTrips.length > 0);
     return { totalRealized, totalCurrentValue, holdingCount, closedCount, hasRealizedData };
-  },[perStockBreakdown]);
+  }, [perStockBreakdown]);
 
-  const tickerStats = useMemo(()=>{
+  const tickerStats = useMemo(() => {
     if (!tickerRows?.length) return null;
-    const buys=tickerRows.filter(r=>r.transaction_type==='buy');
-    const sells=tickerRows.filter(r=>r.transaction_type==='sell');
-    const names=[...new Set(tickerRows.map(r=>r.insider_name).filter(Boolean))];
-    return {buys:buys.length,sells:sells.length,cSuite:buys.filter(r=>r.relationship==='strong'&&r.is_open_market).length,insiders:names.length,insiderNames:names.slice(0,5),net:buys.reduce((s,r)=>s+(r.value||0),0)-sells.reduce((s,r)=>s+(r.value||0),0)};
-  },[tickerRows]);
+    const buys = tickerRows.filter(r => r.transaction_type === 'buy');
+    const sells = tickerRows.filter(r => r.transaction_type === 'sell');
+    const names = [...new Set(tickerRows.map(r => r.insider_name).filter(Boolean))];
+    return { buys: buys.length, sells: sells.length, cSuite: buys.filter(r => r.relationship === 'strong' && r.is_open_market).length, insiders: names.length, insiderNames: names.slice(0, 5), net: buys.reduce((s, r) => s + (r.value || 0), 0) - sells.reduce((s, r) => s + (r.value || 0), 0) };
+  }, [tickerRows]);
 
-  const tickerRowsDisplay = useMemo(()=>{
+  const tickerRowsDisplay = useMemo(() => {
     if (!tickerRows) return [];
     return bundleOn ? clusterTrades(tickerRows) : tickerRows;
-  },[tickerRows,bundleOn]);
+  }, [tickerRows, bundleOn]);
 
-  const byInsider = useMemo(()=>{
-    if (d.type!=='signal') return [];
-    const map={};
-    const trades=d.trades||[];
-    for (const t of trades){const k=t.insiderName||'Unknown';if(!map[k])map[k]={name:k,title:t.title,rel:t.relationship,trades:[]};map[k].trades.push(t);}
-    for (const v of Object.values(map))v.trades.sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''));
-    return Object.values(map).sort((a,b)=>{const ra=a.rel==='strong'?0:a.rel==='medium'?1:2,rb=b.rel==='strong'?0:b.rel==='medium'?1:2;if(ra!==rb)return ra-rb;return b.trades.reduce((s,t)=>s+(t.value||0),0)-a.trades.reduce((s,t)=>s+(t.value||0),0);});
-  },[d]);
+  const byInsider = useMemo(() => {
+    if (d.type !== 'signal') return [];
+    const map = {};
+    const trades = d.trades || [];
+    for (const t of trades) { const k = t.insiderName || 'Unknown'; if (!map[k]) map[k] = { name: k, title: t.title, rel: t.relationship, trades: [] }; map[k].trades.push(t); }
+    for (const v of Object.values(map)) v.trades.sort((a, b) => (b.transactionDate || b.date || '').localeCompare(a.transactionDate || a.date || ''));
+    return Object.values(map).sort((a, b) => { const ra = a.rel === 'strong' ? 0 : a.rel === 'medium' ? 1 : 2, rb = b.rel === 'strong' ? 0 : b.rel === 'medium' ? 1 : 2; if (ra !== rb) return ra - rb; return b.trades.reduce((s, t) => s + (t.value || 0), 0) - a.trades.reduce((s, t) => s + (t.value || 0), 0); });
+  }, [d]);
 
-  const score=traderStats?trustScore(traderStats):null;
-  const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{rel==='strong'?'Exec':rel==='medium'?'Officer':'Director'}</Badge>;
+  const score = traderStats ? trustScore(traderStats) : null;
+  const RelBadge = ({ rel }) => <Badge type={`rel-${rel}`}>{rel === 'strong' ? 'Exec' : rel === 'medium' ? 'Officer' : 'Director'}</Badge>;
 
-  const TRow=({r,showTicker,showInsider})=>{
-    const tt=r.transaction_type||r.transactionType;
-    const code=r.transaction_code||r.transactionCode;
-    const isOM=r.is_open_market||r.isOpenMarket;
-    const pr=r.price||r.price_per_share;
-    const cur=r.current_price||r.currentPrice;
+  const TRow = ({ r, showTicker, showInsider }) => {
+    const tt = r.transaction_type || r.transactionType;
+    const code = r.transaction_code || r.transactionCode;
+    const isOM = r.is_open_market || r.isOpenMarket;
+    const pr = r.price || r.price_per_share;
+    const cur = r.current_price || r.currentPrice;
     // Only P/S codes carry a real market price. A/M/J/etc often show $0 or a
     // strike price that isn't comparable — don't compute a misleading return.
-    const hasRealPrice = isOM && pr>0;
-    const isForeign=r.is_foreign_price||r.isForeignPrice||(hasRealPrice&&cur&&Math.abs((cur-pr)/pr)>=3);
+    const hasRealPrice = isOM && pr > 0;
+    const isForeign = r.is_foreign_price || r.isForeignPrice || (hasRealPrice && cur && Math.abs((cur - pr) / pr) >= 3);
     // For a BUY, price rising afterward is a good outcome. For a SELL, it's
     // the opposite — price rising after you sold means you left money on
     // the table. The percentage shown stays true to the actual price move
@@ -2870,21 +2870,21 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     // this was actually a good outcome for THIS trade's direction, which
     // previously used the same green-if-positive logic for both buys and
     // sells — backwards for every sell.
-    const ret=(hasRealPrice&&cur&&!isForeign)?((cur-pr)/pr*100):null;
-    const isGoodOutcome = ret!=null ? (tt==='sell' ? ret<0 : ret>=0) : null;
-    const dt=r.transaction_date||r.transactionDate||r.date;
-    const codeLabel = TX_CODE_TOOLTIPS[code]||code;
+    const ret = (hasRealPrice && cur && !isForeign) ? ((cur - pr) / pr * 100) : null;
+    const isGoodOutcome = ret != null ? (tt === 'sell' ? ret < 0 : ret >= 0) : null;
+    const dt = r.transaction_date || r.transactionDate || r.date;
+    const codeLabel = TX_CODE_TOOLTIPS[code] || code;
     const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
     const secUrl = secFilingUrl(r.accessionNumber || r.accession_number, r.cikIssuer || r.cik_issuer);
     const secIcon = secUrl ? (
       <a href={secUrl} target="_blank" rel="noopener noreferrer"
-         className="dp-trade-sec-link"
-         title="View original SEC filing"
-         onClick={e => e.stopPropagation()}>
+        className="dp-trade-sec-link"
+        title="View original SEC filing"
+        onClick={e => e.stopPropagation()}>
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V11"/>
-          <path d="M9 2h5v5"/>
-          <path d="M14 2 7 9"/>
+          <path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V11" />
+          <path d="M9 2h5v5" />
+          <path d="M14 2 7 9" />
         </svg>
         <span className="dp-trade-sec-tooltip">View SEC filing</span>
       </a>
@@ -2898,16 +2898,16 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     // subject to scope to; anywhere else (a compact signals widget with no
     // one fixed subject) this stays null and expand falls back to the
     // existing general Insights drawer, unchanged.
-    const rowDataFilters = d.type==='ticker' && d.ticker ? { search: d.ticker }
-                          : d.type==='trader' && d.name ? { search: d.name }
-                          : null;
+    const rowDataFilters = d.type === 'ticker' && d.ticker ? { search: d.ticker }
+      : d.type === 'trader' && d.name ? { search: d.name }
+        : null;
     const openTransaction = () => nav('transaction', { trade: r, dataFilters: rowDataFilters });
     return (
       <div className={`dp-trade dp-trade--${tt} dp-clickable`}
-           role="button" tabIndex={0}
-           onClick={openTransaction}
-           onKeyDown={(e)=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); openTransaction(); } }}>
-        <div className={`dp-trade-split${inline?'':' dp-trade-split--stacked'}`}>
+        role="button" tabIndex={0}
+        onClick={openTransaction}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTransaction(); } }}>
+        <div className={`dp-trade-split${inline ? '' : ' dp-trade-split--stacked'}`}>
           {/* LEFT — context: what kind of trade, when, who/what ticker.
 
               The wide inline drawer (Filings Explore) keeps this to just
@@ -2920,31 +2920,31 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             <div className="dp-trade-left">
               <div className="dp-trade-left__top">
                 {showInsider && r.insider_name
-                  ? <span className="dp-clickable dp-trade-row2__name dp-trade-row2__name--lg" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
+                  ? <span className="dp-clickable dp-trade-row2__name dp-trade-row2__name--lg" onClick={(e) => { e.stopPropagation(); nav('trader', { name: r.insider_name, title: r.title }); }}>{r.insider_name}</span>
                   : <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
-                {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
-                {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+                {r._isCluster && <span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+                {isForeign && <span style={{ color: 'var(--amber-600)' }} title="Price move too large to be reliable — verify manually"><IconWarning style={{ width: 10, height: 10, display: 'inline', verticalAlign: '-1px' }} /></span>}
               </div>
               <div className="dp-trade-left__bottom">
                 {showInsider && r.insider_name && <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
-                {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
+                {showTicker && r.ticker && <span className="ticker dp-clickable" onClick={(e) => { e.stopPropagation(); nav('ticker', { ticker: r.ticker, company: r.company_name }); }}>{r.ticker}</span>}
               </div>
             </div>
           ) : showInsider && r.insider_name ? (
             <div className="dp-trade-toprow">
               <div className="dp-trade-toprow__left">
-                <span className="dp-clickable dp-trade-row2__name" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
+                <span className="dp-clickable dp-trade-row2__name" onClick={(e) => { e.stopPropagation(); nav('trader', { name: r.insider_name, title: r.title }); }}>{r.insider_name}</span>
                 <div className="dp-trade-toprow__meta">
                   <span className="dp-trade-date">{dateLabel}</span>
                   {secIcon}
-                  {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
-                  {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+                  {r._isCluster && <span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+                  {isForeign && <span style={{ color: 'var(--amber-600)' }} title="Price move too large to be reliable — verify manually"><IconWarning style={{ width: 10, height: 10, display: 'inline', verticalAlign: '-1px' }} /></span>}
                 </div>
               </div>
               <div className="dp-trade-toprow__badges">
-                <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-                <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
-                {isOM&&<span className="dp-trade-om-label">Open market</span>}
+                <Badge type={tt === 'buy' ? 'buy' : tt === 'sell' ? 'sell' : 'other'}>{tt === 'buy' ? <><IconBuyTri style={{ width: 8, height: 8, marginRight: 3 }} />Buy</> : tt === 'sell' ? <><IconSellTri style={{ width: 8, height: 8, marginRight: 3 }} />Sell</> : '◆'}</Badge>
+                <span className="code-pill" title={codeLabel}>{(code === 'P' || code === 'S') ? code : (TX_CODE_SHORT[code] || code)}</span>
+                {isOM && <span className="dp-trade-om-label">Open market</span>}
               </div>
             </div>
           ) : (
@@ -2952,13 +2952,13 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-trade-left__top">
                 <span className="dp-trade-date">{dateLabel}</span>
                 {secIcon}
-                {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+                {r._isCluster && <span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
               </div>
               <div className="dp-trade-left__bottom">
-                <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-                <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
-                {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
-                {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+                <Badge type={tt === 'buy' ? 'buy' : tt === 'sell' ? 'sell' : 'other'}>{tt === 'buy' ? <><IconBuyTri style={{ width: 8, height: 8, marginRight: 3 }} />Buy</> : tt === 'sell' ? <><IconSellTri style={{ width: 8, height: 8, marginRight: 3 }} />Sell</> : '◆'}</Badge>
+                <span className="code-pill" title={codeLabel}>{(code === 'P' || code === 'S') ? code : (TX_CODE_SHORT[code] || code)}</span>
+                {showTicker && r.ticker && <span className="ticker dp-clickable" onClick={(e) => { e.stopPropagation(); nav('ticker', { ticker: r.ticker, company: r.company_name }); }}>{r.ticker}</span>}
+                {isForeign && <span style={{ color: 'var(--amber-600)' }} title="Price move too large to be reliable — verify manually"><IconWarning style={{ width: 10, height: 10, display: 'inline', verticalAlign: '-1px' }} /></span>}
               </div>
             </div>
           )}
@@ -2978,62 +2978,62 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">Type</span>
                 <span className="dp-trade-detail__val dp-trade-detail__val--type">
-                  <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-                  <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+                  <Badge type={tt === 'buy' ? 'buy' : tt === 'sell' ? 'sell' : 'other'}>{tt === 'buy' ? <><IconBuyTri style={{ width: 8, height: 8, marginRight: 3 }} />Buy</> : tt === 'sell' ? <><IconSellTri style={{ width: 8, height: 8, marginRight: 3 }} />Sell</> : '◆'}</Badge>
+                  <span className="code-pill" title={codeLabel}>{(code === 'P' || code === 'S') ? code : (TX_CODE_SHORT[code] || code)}</span>
                 </span>
               </div>
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">Shares</span>
-                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+                <span className="dp-trade-detail__val">{r.shares ? fmt.number(r.shares) : '—'}</span>
               </div>
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">Price</span>
-                <span className="dp-trade-detail__val">{hasRealPrice?fmt.price(pr):'—'}</span>
+                <span className="dp-trade-detail__val">{hasRealPrice ? fmt.price(pr) : '—'}</span>
               </div>
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">Now</span>
-                {hasRealPrice&&ret!=null
-                  ? <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span>
+                {hasRealPrice && ret != null
+                  ? <span className={`dp-trade-detail__val ${isGoodOutcome ? 'val-buy' : 'val-sell'}`}>{fmt.price(cur)} ({ret >= 0 ? '+' : ''}{ret.toFixed(1)}%)</span>
                   : <span className="dp-trade-detail__val td-muted">—</span>}
               </div>
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">% of position</span>
-                <span className="dp-trade-detail__val val-buy">{(r.pct_owned_change||r.pctOwnedChange)!=null?`+${(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%`:'—'}</span>
+                <span className="dp-trade-detail__val val-buy">{(r.pct_owned_change || r.pctOwnedChange) != null ? `+${(r.pct_owned_change || r.pctOwnedChange).toFixed(0)}%` : '—'}</span>
               </div>
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">Total</span>
-                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value ? fmt.money(r.value) : '—'}</span>
               </div>
             </div>
           ) : (
             <div className="dp-trade-right">
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">Shares</span>
-                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+                <span className="dp-trade-detail__val">{r.shares ? fmt.number(r.shares) : '—'}</span>
               </div>
               {hasRealPrice ? (<>
                 <div className="dp-trade-detail">
                   <span className="dp-trade-detail__label">Price</span>
                   <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
                 </div>
-                {ret!=null && (
+                {ret != null && (
                   <div className="dp-trade-detail">
                     <span className="dp-trade-detail__label">Now</span>
-                    <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
-                      {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
+                    <span className={`dp-trade-detail__val ${isGoodOutcome ? 'val-buy' : 'val-sell'}`}>
+                      {fmt.price(cur)} ({ret >= 0 ? '+' : ''}{ret.toFixed(1)}%)
                     </span>
                   </div>
                 )}
               </>) : null}
-              {(r.pct_owned_change||r.pctOwnedChange)!=null && (
+              {(r.pct_owned_change || r.pctOwnedChange) != null && (
                 <div className="dp-trade-detail">
                   <span className="dp-trade-detail__label">% of position</span>
-                  <span className="dp-trade-detail__val val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%</span>
+                  <span className="dp-trade-detail__val val-buy">+{(r.pct_owned_change || r.pctOwnedChange).toFixed(0)}%</span>
                 </div>
               )}
               <div className="dp-trade-detail">
                 <span className="dp-trade-detail__label">Total</span>
-                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value ? fmt.money(r.value) : '—'}</span>
               </div>
             </div>
           )}
@@ -3042,292 +3042,293 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     );
   };
 
-  const header=()=>{
-    if(d.type==='trader'){
+  const header = () => {
+    if (d.type === 'trader') {
       const affs = traderStats?.affiliations || [];
       const maxChips = inline ? affs.length : 3; // inline = explore, show all
       const visibleAffs = affs.slice(0, maxChips);
       const hiddenCount = affs.length - visibleAffs.length;
-      return <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{affs.length>0&&<div className="trader-aff-list">{visibleAffs.map((a)=><span key={a.ticker} className="trader-aff-chip" title={`${a.title||REL_LABELS[a.relationship]||'Director'} at ${a.ticker}`}><span className="trader-aff-chip__role">{shortRole(a.title)||REL_LABELS[a.relationship]||'Director'}</span> at <span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span></span>)}{hiddenCount>0&&<span className="trader-aff-chip trader-aff-chip--more">+{hiddenCount} more</span>}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+      return <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>{d.name}{traderRows?.[0]?.is_entity_owner && <span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{ width: 9, height: 9, marginRight: 2, verticalAlign: "-1px" }} />entity</span>}</div>{affs.length > 0 && <div className="trader-aff-list">{visibleAffs.map((a) => <span key={a.ticker} className="trader-aff-chip" title={`${a.title || REL_LABELS[a.relationship] || 'Director'} at ${a.ticker}`}><span className="trader-aff-chip__role">{shortRole(a.title) || REL_LABELS[a.relationship] || 'Director'}</span> at <span className="ticker dp-clickable" onClick={() => nav('ticker', { ticker: a.ticker, company: a.company })}>{a.ticker}</span></span>)}{hiddenCount > 0 && <span className="trader-aff-chip trader-aff-chip--more">+{hiddenCount} more</span>}</div>}</div>{watchlist && <FollowBtn name={d.name} watchlist={watchlist} />}</div>;
     }
-    if(d.type==='ticker')return(
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
-        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
-        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
+    if (d.type === 'ticker') return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="ticker" style={{ fontSize: 17 }}>{d.ticker}</span>
+        <span style={{ fontSize: 13, color: 'var(--text-2)', flex: 1 }}>{d.company}</span>
+        {watchlist && <StarBtn ticker={d.ticker} watchlist={watchlist} />}
       </div>
     );
-    if(d.type==='signal')return(
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
-        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
-        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
+    if (d.type === 'signal') return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="ticker" style={{ fontSize: 17 }}>{d.ticker}</span>
+        <span style={{ fontSize: 13, color: 'var(--text-2)', flex: 1 }}>{d.company}</span>
+        {watchlist && <StarBtn ticker={d.ticker} watchlist={watchlist} />}
       </div>
     );
-    if(d.type==='transaction')return<div><div style={{display:'flex',alignItems:'baseline',gap:8}}><span className="ticker" style={{fontSize:15}}>{d.trade?.ticker}</span><span style={{fontSize:'0.75rem',color:'var(--text-2)'}}>{d.trade?.company_name||d.trade?.company}</span></div><div className="td-muted" style={{fontSize:'0.6875rem'}}>Transaction</div></div>;
+    if (d.type === 'transaction') return <div><div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}><span className="ticker" style={{ fontSize: 15 }}>{d.trade?.ticker}</span><span style={{ fontSize: '0.75rem', color: 'var(--text-2)' }}>{d.trade?.company_name || d.trade?.company}</span></div><div className="td-muted" style={{ fontSize: '0.6875rem' }}>Transaction</div></div>;
   };
 
   return (
-    <div className={inline?'detail-panel detail-panel--inline':'detail-panel'}>
+    <div className={inline ? 'detail-panel detail-panel--inline' : 'detail-panel'}>
       <div className="detail-panel__header">
-        {canGoBack&&<button className="btn btn--ghost btn--icon" onClick={onBack} title="Back"></button>}
-        <div style={{minWidth:0,flex:1}}>{header()}</div>
-        {!inline&&onExpand&&<button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
-        {!inline&&<button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>}
-        {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:'0.6875rem'}} onClick={onClose} title="Clear"><IconClose style={{width:12,height:12}}/></button>}
+        {canGoBack && <button className="btn btn--ghost btn--icon" onClick={onBack} title="Back"></button>}
+        <div style={{ minWidth: 0, flex: 1 }}>{header()}</div>
+        {!inline && onExpand && <button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
+        {!inline && <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{ width: 12, height: 12 }} /></button>}
+        {inline && canGoBack && <button className="btn btn--ghost btn--icon" style={{ fontSize: '0.6875rem' }} onClick={onClose} title="Clear"><IconClose style={{ width: 12, height: 12 }} /></button>}
       </div>
       <div className="detail-panel__body">
 
-        {d.type==='trader'&&(busy?<SkeletonRows count={6}/>:!traderStats?<div className="state-box" style={{padding:'2rem'}}><p>No trades found.</p></div>:(<>
+        {d.type === 'trader' && (busy ? <SkeletonRows count={6} /> : !traderStats ? <div className="state-box" style={{ padding: '2rem' }}><p>No trades found.</p></div> : (<>
 
           {/* ── Sparse profile gate — need OM buys for meaningful stats ── */}
           {traderStats.omBuys < 2 ? (
             <div className="trader-sparse">
               <div className="trader-sparse__notice">
-                <span style={{fontWeight:600}}>Limited data</span>
+                <span style={{ fontWeight: 600 }}>Limited data</span>
                 <span className="td-muted">This insider has {traderStats.omBuys === 0 ? 'no' : 'only ' + traderStats.omBuys} open-market buy{traderStats.omBuys === 1 ? '' : 's'} on record — not enough to compute performance stats.{traderStats.omSells > 0 ? ` (${traderStats.omSells} sell${traderStats.omSells !== 1 ? 's' : ''} recorded)` : ''}</span>
               </div>
               {traderStats.totalBuys + traderStats.sells > 0 && (
-                <div className="td-muted" style={{fontSize:'0.6875rem',marginTop:4}}>
+                <div className="td-muted" style={{ fontSize: '0.6875rem', marginTop: 4 }}>
                   {traderStats.totalBuys + traderStats.sells} total filing{traderStats.totalBuys + traderStats.sells !== 1 ? 's' : ''} (including grants, exercises, and other non-market transactions)
                 </div>
               )}
-              {traderStats.firstTrade&&<div className="td-muted" style={{fontSize:'0.625rem',marginTop:6}}>Active {fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</div>}
+              {traderStats.firstTrade && <div className="td-muted" style={{ fontSize: '0.625rem', marginTop: 6 }}>Active {fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</div>}
             </div>
           ) : (<>
 
-          {/* ── Account overview card — hero metrics + stats in one container ── */}
-          {heroStats&&(
-            <div className="trader-hero">
-              <div className="trader-hero__top">
-                <div className="trader-hero__metrics">
-                  {heroStats.hasRealizedData && (
-                    <div className="trader-hero__metric">
-                      <div className="trader-hero__label">Realized P&L</div>
-                      <div className={`trader-hero__value ${heroStats.totalRealized>=0?'val-buy':'val-sell'}`}>
-                        {heroStats.totalRealized>=0?'+':''}{fmt.money(heroStats.totalRealized)}
+            {/* ── Account overview card — hero metrics + stats in one container ── */}
+            {heroStats && (
+              <div className="trader-hero">
+                <div className="trader-hero__top">
+                  <div className="trader-hero__metrics">
+                    {heroStats.hasRealizedData && (
+                      <div className="trader-hero__metric">
+                        <div className="trader-hero__label">Realized P&L</div>
+                        <div className={`trader-hero__value ${heroStats.totalRealized >= 0 ? 'val-buy' : 'val-sell'}`}>
+                          {heroStats.totalRealized >= 0 ? '+' : ''}{fmt.money(heroStats.totalRealized)}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {heroStats.totalCurrentValue>0 && (
-                    <div className="trader-hero__metric">
-                      <div className="trader-hero__label">{heroStats.hasRealizedData?'Position Value':'Est. Position Value'}</div>
-                      <div className={`trader-hero__value${heroStats.hasRealizedData?' trader-hero__value--secondary':''}`}>
-                        {fmt.money(heroStats.totalCurrentValue)}
+                    )}
+                    {heroStats.totalCurrentValue > 0 && (
+                      <div className="trader-hero__metric">
+                        <div className="trader-hero__label">{heroStats.hasRealizedData ? 'Position Value' : 'Est. Position Value'}</div>
+                        <div className={`trader-hero__value${heroStats.hasRealizedData ? ' trader-hero__value--secondary' : ''}`}>
+                          {fmt.money(heroStats.totalCurrentValue)}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  {score != null && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, minWidth: 80 }}>
+                    <span style={{ fontSize: '0.625rem', color: 'var(--text-3)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.04em' }}>Score</span>
+                    <span className="td-mono" style={{ fontSize: '0.875rem', fontWeight: 700 }}>{score.toFixed(1)}</span>
+                    <ConvictionBar score={score} max={5} />
+                  </div>}
                 </div>
-                {score!=null&&<div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,minWidth:80}}>
-                  <span style={{fontSize:'0.625rem',color:'var(--text-3)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.04em'}}>Score</span>
-                  <span className="td-mono" style={{fontSize:'0.875rem',fontWeight:700}}>{score.toFixed(1)}</span>
-                  <ConvictionBar score={score} max={5}/>
-                </div>}
-              </div>
-              <div className="trader-hero__chips">
-                <span className="hero-chip">{heroStats.holdingCount} holding{heroStats.holdingCount!==1?'s':''}</span>
-                <span className="hero-chip">{heroStats.closedCount} closed</span>
-                {traderStats.combinedHitRate!=null&&
-                  <span className={`hero-chip ${traderStats.combinedHitRate>=60?'hero-chip--good':traderStats.combinedHitRate<40?'hero-chip--bad':''}`}>
-                    {traderStats.combinedHitRate}% hit rate
-                  </span>}
-                {traderStats.firstTrade&&<span className="hero-chip">{fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span>}
-              </div>
-              {/* Stats breakdown — inside the hero card. Collapsed in sidebar, open in explore. */}
-              <details className="trader-stats-toggle" open={inline}>
-                <summary>Stats breakdown</summary>
-                <div className="dp-summary" style={{marginTop:8}}>
-                  <div className="dp-sum-item"><span className="dp-sum-label">OM Buys</span><span className="val-buy dp-sum-val">{traderStats.omBuys}</span></div>
-                  <div className="dp-sum-item"><span className="dp-sum-label">OM Sells</span><span className="val-sell dp-sum-val">{traderStats.omSells}</span></div>
-                  <div className="dp-sum-item"><span className="dp-sum-label">Bought $</span><span className="dp-sum-val">{fmt.money(traderStats.totalBuyVal)}</span></div>
-                  <div className="dp-sum-item"><span className="dp-sum-label">Sold $</span><span className="dp-sum-val">{fmt.money(traderStats.totalSellVal)}</span></div>
-                  {traderStats.combinedHitRate!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate>=60?'val-buy':traderStats.combinedHitRate<40?'val-sell':''}`}>{traderStats.combinedHitRate}% <span style={{fontSize:'0.6875rem',opacity:.7}}>({traderStats.withReturn} events)</span></span></div>}
-                  {traderStats.avgRealizedReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgRealizedReturn>=0?'+':''}{traderStats.avgRealizedReturn}%</span></div>}
-                  {traderStats.avgReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgReturn>=0?'+':''}{traderStats.avgReturn}%</span></div>}
+                <div className="trader-hero__chips">
+                  <span className="hero-chip">{heroStats.holdingCount} holding{heroStats.holdingCount !== 1 ? 's' : ''}</span>
+                  <span className="hero-chip">{heroStats.closedCount} closed</span>
+                  {traderStats.combinedHitRate != null &&
+                    <span className={`hero-chip ${traderStats.combinedHitRate >= 60 ? 'hero-chip--good' : traderStats.combinedHitRate < 40 ? 'hero-chip--bad' : ''}`}>
+                      {traderStats.combinedHitRate}% hit rate
+                    </span>}
+                  {traderStats.firstTrade && <span className="hero-chip">{fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span>}
                 </div>
-              </details>
-            </div>
-          )}
+                {/* Stats breakdown — inside the hero card. Collapsed in sidebar, open in explore. */}
+                <details className="trader-stats-toggle" open={inline}>
+                  <summary>Stats breakdown</summary>
+                  <div className="dp-summary" style={{ marginTop: 8 }}>
+                    <div className="dp-sum-item"><span className="dp-sum-label">OM Buys</span><span className="val-buy dp-sum-val">{traderStats.omBuys}</span></div>
+                    <div className="dp-sum-item"><span className="dp-sum-label">OM Sells</span><span className="val-sell dp-sum-val">{traderStats.omSells}</span></div>
+                    <div className="dp-sum-item"><span className="dp-sum-label">Bought $</span><span className="dp-sum-val">{fmt.money(traderStats.totalBuyVal)}</span></div>
+                    <div className="dp-sum-item"><span className="dp-sum-label">Sold $</span><span className="dp-sum-val">{fmt.money(traderStats.totalSellVal)}</span></div>
+                    {traderStats.combinedHitRate != null && <div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate >= 60 ? 'val-buy' : traderStats.combinedHitRate < 40 ? 'val-sell' : ''}`}>{traderStats.combinedHitRate}% <span style={{ fontSize: '0.6875rem', opacity: .7 }}>({traderStats.withReturn} events)</span></span></div>}
+                    {traderStats.avgRealizedReturn != null && <div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn >= 0 ? 'val-buy' : 'val-sell'}`}>{traderStats.avgRealizedReturn >= 0 ? '+' : ''}{traderStats.avgRealizedReturn}%</span></div>}
+                    {traderStats.avgReturn != null && <div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn >= 0 ? 'val-buy' : 'val-sell'}`}>{traderStats.avgReturn >= 0 ? '+' : ''}{traderStats.avgReturn}%</span></div>}
+                  </div>
+                </details>
+              </div>
+            )}
 
           </>)}
 
-          {perStockBreakdown.length>0&&(<>
-            <div className="dp-section-label" style={{marginTop:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          {perStockBreakdown.length > 0 && (<>
+            <div className="dp-section-label" style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span>Positions</span>
-              <div style={{display:'flex',gap:10}}>
+              <div style={{ display: 'flex', gap: 10 }}>
                 {inline && (
                   <label className="bundle-toggle" title="Bundle consecutive same-direction trades by this insider within a few days into one row.">
-                    <input type="checkbox" checked={bundleOn} onChange={e=>setBundleOn(e.target.checked)}/>
+                    <input type="checkbox" checked={bundleOn} onChange={e => setBundleOn(e.target.checked)} />
                     Bundle nearby
                   </label>
                 )}
                 <label className="bundle-toggle" title="When on, every number on this page — position, hold-time, P&L, and the transactions listed below — uses ONLY open-market (real cash) buys and sells. Grants, exercises, and gifts are excluded entirely. When off, current position uses the insider's own SEC-reported total holdings, but hold-time/P&L still only ever use priced trades.">
-                  <input type="checkbox" checked={omOnly} onChange={e=>setOmOnly(e.target.checked)}/>
+                  <input type="checkbox" checked={omOnly} onChange={e => setOmOnly(e.target.checked)} />
                   Own-money purchases only
                 </label>
               </div>
             </div>
-            {perStockBreakdown.map((s,i)=>{
+            {perStockBreakdown.map((s, i) => {
               const displayRows = (inline ? bundleOn : true) ? clusterTrades(s.rows) : s.rows;
               return (
-              <div key={i} className="position-card">
-                <div className="position-card__top">
-                  <div className="position-card__id">
-                    <span className="ticker dp-clickable" style={{fontSize:14}} onClick={()=>nav('ticker',{ticker:s.ticker,company:s.company})}>{s.ticker}</span>
-                    <span className={`holding-status ${s.stillHolding?'holding-status--yes':'holding-status--no'}`}>
-                      <svg viewBox="0 0 24 24" fill="currentColor" width="7" height="7" style={{marginRight:3,verticalAlign:'-0.5px'}}><circle cx="12" cy="12" r="10"/></svg>
-                      {s.stillHolding?'Holding':'Closed'}
-                    </span>
-                  </div>
-                  <span className="td-muted" style={{fontSize:'0.6875rem'}}>{s.tradeCount} txn{s.tradeCount!==1?'s':''}</span>
-                </div>
-
-                <div className="position-card__value-row">
-                  <div className="position-card__value-block">
-                    <span className="position-card__value-label">
-                      {s.stillHolding?'Current Position':'Realized P&L'}
-                      <span className="trust-explain" title={s.stillHolding?(s.positionFlagged?"The SEC-reported share count for this ticker looked implausible relative to actual transaction sizes (likely a derivative-security mix-up or filer error), so we fell back to an open-market-only estimate instead.":s.positionSource==='sec-reported'?"From the insider's own most recent SEC-reported total holdings (includes grants, exercises, gifts, everything).":"From open-market buy/sell flow only (FIFO). May understate true holdings if they also received grants or exercised options."):"Sum of all closed FIFO-matched round-trips, open-market trades only."}>ⓘ</span>
-                    </span>
-                    {s.stillHolding ? (
-                      <span className="position-card__value">
-                        {fmt.number(s.remainingShares)} sh
-                        {s.currentValue&&<span className="position-card__value-sub"> · {fmt.money(s.currentValue)}</span>}
-                      </span>
-                    ) : (
-                      <span className={`position-card__value ${s.totalRealizedPnl>=0?'val-buy':'val-sell'}`}>
-                        {s.roundTrips.length?`${s.totalRealizedPnl>=0?'+':''}${fmt.money(s.totalRealizedPnl)}`:'—'}
-                      </span>
-                    )}
-                  </div>
-                  {s.stillHolding && s.roundTrips.length>0 && (
-                    <div className="position-card__value-block position-card__value-block--secondary">
-                      <span className="position-card__value-label">Realized so far</span>
-                      <span className={`position-card__value position-card__value--small ${s.totalRealizedPnl>=0?'val-buy':'val-sell'}`}>
-                        {s.totalRealizedPnl>=0?'+':''}{fmt.money(s.totalRealizedPnl)}
+                <div key={i} className="position-card">
+                  <div className="position-card__top">
+                    <div className="position-card__id">
+                      <span className="ticker dp-clickable" style={{ fontSize: 14 }} onClick={() => nav('ticker', { ticker: s.ticker, company: s.company })}>{s.ticker}</span>
+                      <span className={`holding-status ${s.stillHolding ? 'holding-status--yes' : 'holding-status--no'}`}>
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="7" height="7" style={{ marginRight: 3, verticalAlign: '-0.5px' }}><circle cx="12" cy="12" r="10" /></svg>
+                        {s.stillHolding ? 'Holding' : 'Closed'}
                       </span>
                     </div>
-                  )}
-                </div>
+                    <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{s.tradeCount} txn{s.tradeCount !== 1 ? 's' : ''}</span>
+                  </div>
 
-                <div className="position-card__meta">
-                  <span title="Average days held across closed round-trips">⏱ {s.avgHoldDays!=null?`${s.avgHoldDays}d avg hold`:'hold time n/a'}</span>
-                  <span title="Average days between trade date and SEC filing acceptance">◷ {s.avgFilingLag!=null?`${s.avgFilingLag}d filing lag`:'lag n/a'}</span>
-                  <span className="position-card__source">
-                    {s.positionFlagged&&<span className="position-flagged-badge" title="SEC-reported figure looked implausible, fell back to estimate"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>flagged</span>}
-                    {!s.positionFlagged&&s.stillHolding?(s.positionSource==='sec-reported'?'SEC-reported':'OM est.'):''}
-                  </span>
-                </div>
-
-                {s.roundTrips.length>0&&(
-                  <details className="position-card__roundtrips">
-                    <summary>{s.roundTrips.length} closed round-trip{s.roundTrips.length!==1?'s':''} (FIFO, open-market)</summary>
-                    {s.roundTrips.slice(0,8).map((rt,j)=>(
-                      <div key={j} className="roundtrip-row">
-                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>{fmt.dateShort(rt.buyDate)} → {fmt.dateShort(rt.sellDate)}</span>
-                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>{rt.holdDays}d held</span>
-                        <span style={{fontSize:'0.6875rem',fontFamily:'var(--font-mono)'}}>@{fmt.price(rt.buyPrice)}→{fmt.price(rt.sellPrice)}</span>
-                        <span className={`roundtrip-pnl ${rt.pnl>=0?'val-buy':'val-sell'}`}>
-                          {rt.pnl>=0?'+':''}{fmt.money(rt.pnl)} ({rt.pnlPct>=0?'+':''}{rt.pnlPct.toFixed(1)}%)
+                  <div className="position-card__value-row">
+                    <div className="position-card__value-block">
+                      <span className="position-card__value-label">
+                        {s.stillHolding ? 'Current Position' : 'Realized P&L'}
+                        <span className="trust-explain" title={s.stillHolding ? (s.positionFlagged ? "The SEC-reported share count for this ticker looked implausible relative to actual transaction sizes (likely a derivative-security mix-up or filer error), so we fell back to an open-market-only estimate instead." : s.positionSource === 'sec-reported' ? "From the insider's own most recent SEC-reported total holdings (includes grants, exercises, gifts, everything)." : "From open-market buy/sell flow only (FIFO). May understate true holdings if they also received grants or exercised options.") : "Sum of all closed FIFO-matched round-trips, open-market trades only."}>ⓘ</span>
+                      </span>
+                      {s.stillHolding ? (
+                        <span className="position-card__value">
+                          {fmt.number(s.remainingShares)} sh
+                          {s.currentValue && <span className="position-card__value-sub"> · {fmt.money(s.currentValue)}</span>}
+                        </span>
+                      ) : (
+                        <span className={`position-card__value ${s.totalRealizedPnl >= 0 ? 'val-buy' : 'val-sell'}`}>
+                          {s.roundTrips.length ? `${s.totalRealizedPnl >= 0 ? '+' : ''}${fmt.money(s.totalRealizedPnl)}` : '—'}
+                        </span>
+                      )}
+                    </div>
+                    {s.stillHolding && s.roundTrips.length > 0 && (
+                      <div className="position-card__value-block position-card__value-block--secondary">
+                        <span className="position-card__value-label">Realized so far</span>
+                        <span className={`position-card__value position-card__value--small ${s.totalRealizedPnl >= 0 ? 'val-buy' : 'val-sell'}`}>
+                          {s.totalRealizedPnl >= 0 ? '+' : ''}{fmt.money(s.totalRealizedPnl)}
                         </span>
                       </div>
-                    ))}
-                    {s.roundTrips.length>8&&<div className="td-muted" style={{fontSize:'0.6875rem',padding:'4px 0'}}>+{s.roundTrips.length-8} more</div>}
-                  </details>
-                )}
-
-                <details className="position-card__txns" open={perStockBreakdown.length===1}>
-                  <summary>{displayRows.length} transaction{displayRows.length!==1?'s':''} for {s.ticker}{omOnly?' (open market only)':''}</summary>
-                  <div className="position-card__txn-list">
-                    {(inline?displayRows:displayRows.slice(0,5)).map((r,j)=><TRow key={j} r={r} showTicker={true} showInsider={false}/>)}
+                    )}
                   </div>
-                  {!inline&&displayRows.length>5&&(
-                    <button className="btn btn--ghost btn--sm position-card__view-full" onClick={()=>onExpand&&onExpand()}>
-                      View full data — {displayRows.length} transactions →
-                    </button>
+
+                  <div className="position-card__meta">
+                    <span title="Average days held across closed round-trips">⏱ {s.avgHoldDays != null ? `${s.avgHoldDays}d avg hold` : 'hold time n/a'}</span>
+                    <span title="Average days between trade date and SEC filing acceptance">◷ {s.avgFilingLag != null ? `${s.avgFilingLag}d filing lag` : 'lag n/a'}</span>
+                    <span className="position-card__source">
+                      {s.positionFlagged && <span className="position-flagged-badge" title="SEC-reported figure looked implausible, fell back to estimate"><IconWarning style={{ width: 9, height: 9, marginRight: 2, verticalAlign: "-1px" }} />flagged</span>}
+                      {!s.positionFlagged && s.stillHolding ? (s.positionSource === 'sec-reported' ? 'SEC-reported' : 'OM est.') : ''}
+                    </span>
+                  </div>
+
+                  {s.roundTrips.length > 0 && (
+                    <details className="position-card__roundtrips">
+                      <summary>{s.roundTrips.length} closed round-trip{s.roundTrips.length !== 1 ? 's' : ''} (FIFO, open-market)</summary>
+                      {s.roundTrips.slice(0, 8).map((rt, j) => (
+                        <div key={j} className="roundtrip-row">
+                          <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{fmt.dateShort(rt.buyDate)} → {fmt.dateShort(rt.sellDate)}</span>
+                          <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{rt.holdDays}d held</span>
+                          <span style={{ fontSize: '0.6875rem', fontFamily: 'var(--font-mono)' }}>@{fmt.price(rt.buyPrice)}→{fmt.price(rt.sellPrice)}</span>
+                          <span className={`roundtrip-pnl ${rt.pnl >= 0 ? 'val-buy' : 'val-sell'}`}>
+                            {rt.pnl >= 0 ? '+' : ''}{fmt.money(rt.pnl)} ({rt.pnlPct >= 0 ? '+' : ''}{rt.pnlPct.toFixed(1)}%)
+                          </span>
+                        </div>
+                      ))}
+                      {s.roundTrips.length > 8 && <div className="td-muted" style={{ fontSize: '0.6875rem', padding: '4px 0' }}>+{s.roundTrips.length - 8} more</div>}
+                    </details>
                   )}
-                </details>
-              </div>
-            );})}
+
+                  <details className="position-card__txns" open={perStockBreakdown.length === 1}>
+                    <summary>{displayRows.length} transaction{displayRows.length !== 1 ? 's' : ''} for {s.ticker}{omOnly ? ' (open market only)' : ''}</summary>
+                    <div className="position-card__txn-list">
+                      {(inline ? displayRows : displayRows.slice(0, 5)).map((r, j) => <TRow key={j} r={r} showTicker={true} showInsider={false} />)}
+                    </div>
+                    {!inline && displayRows.length > 5 && (
+                      <button className="btn btn--ghost btn--sm position-card__view-full" onClick={() => onExpand && onExpand()}>
+                        View full data — {displayRows.length} transactions →
+                      </button>
+                    )}
+                  </details>
+                </div>
+              );
+            })}
           </>)}
 
         </>))}
 
 
-        {d.type==='ticker'&&(busy?<SkeletonRows count={6}/>:!tickerStats?<div className="state-box" style={{padding:'2rem'}}><p>No data.</p></div>:(<>
-          {!hideProfileCard && <CompanyProfileCard ticker={d.ticker} cik={tickerRows?.[0]?.cik_issuer} company={d.company}/>}
+        {d.type === 'ticker' && (busy ? <SkeletonRows count={6} /> : !tickerStats ? <div className="state-box" style={{ padding: '2rem' }}><p>No data.</p></div> : (<>
+          {!hideProfileCard && <CompanyProfileCard ticker={d.ticker} cik={tickerRows?.[0]?.cik_issuer} company={d.company} />}
           <div className="dp-summary">
             <div className="dp-sum-item"><span className="dp-sum-label">Buys</span><span className="val-buy dp-sum-val">{tickerStats.buys}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Sells</span><span className="val-sell dp-sum-val">{tickerStats.sells}</span></div>
-            <div className="dp-sum-item"><span className="dp-sum-label">Net $</span><span className={`dp-sum-val ${tickerStats.net>=0?'val-buy':'val-sell'}`}>{tickerStats.net>=0?'+':''}{fmt.money(tickerStats.net)}</span></div>
+            <div className="dp-sum-item"><span className="dp-sum-label">Net $</span><span className={`dp-sum-val ${tickerStats.net >= 0 ? 'val-buy' : 'val-sell'}`}>{tickerStats.net >= 0 ? '+' : ''}{fmt.money(tickerStats.net)}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Moves</span><span className="dp-sum-val">{tickerStats.buys + tickerStats.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Insiders</span><span className="dp-sum-val">{tickerStats.insiders}</span></div>
           </div>
-          <div className="dp-section-label" style={{marginTop:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <span>All Insider Activity ({bundleOn?tickerRowsDisplay.length:tickerRows.length})</span>
+          <div className="dp-section-label" style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>All Insider Activity ({bundleOn ? tickerRowsDisplay.length : tickerRows.length})</span>
             <label className="bundle-toggle">
-              <input type="checkbox" checked={bundleOn} onChange={e=>setBundleOn(e.target.checked)}/>
+              <input type="checkbox" checked={bundleOn} onChange={e => setBundleOn(e.target.checked)} />
               Bundle nearby trades
             </label>
           </div>
-          {tickerRowsDisplay.map((r,i)=><TRow key={i} r={r} showTicker={false} showInsider={true}/>)}
+          {tickerRowsDisplay.map((r, i) => <TRow key={i} r={r} showTicker={false} showInsider={true} />)}
         </>))}
 
-        {d.type==='signal'&&(<>
+        {d.type === 'signal' && (<>
           <div className="dp-summary">
             <div className="dp-sum-item"><span className="dp-sum-label">Buys</span><span className="val-buy dp-sum-val">{d.buys}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Sells</span><span className="val-sell dp-sum-val">{d.sells}</span></div>
-            <div className="dp-sum-item"><span className="dp-sum-label">Net $</span><span className={`dp-sum-val ${d.netValue>=0?'val-buy':'val-sell'}`}>{d.netValue>=0?'+':''}{fmt.money(d.netValue)}</span></div>
+            <div className="dp-sum-item"><span className="dp-sum-label">Net $</span><span className={`dp-sum-val ${d.netValue >= 0 ? 'val-buy' : 'val-sell'}`}>{d.netValue >= 0 ? '+' : ''}{fmt.money(d.netValue)}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Moves</span><span className="dp-sum-val">{d.buys + d.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Insiders</span><span className="dp-sum-val">{d.insiderCount}</span></div>
           </div>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,marginTop:14}}>
-            <div className="dp-section-label" style={{margin:0}}>Trades by Insider</div>
-            <button className="dp-nav-link" onClick={()=>nav('ticker',{ticker:d.ticker,company:d.company})}>Full history →</button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 14 }}>
+            <div className="dp-section-label" style={{ margin: 0 }}>Trades by Insider</div>
+            <button className="dp-nav-link" onClick={() => nav('ticker', { ticker: d.ticker, company: d.company })}>Full history →</button>
           </div>
-          {byInsider.map((ins,i)=>(
+          {byInsider.map((ins, i) => (
             <div key={i} className="dp-insider-block">
               <div className="dp-insider-header">
-                <RelBadge rel={ins.rel}/>
-                <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:ins.name,title:ins.title})}>{ins.name}</span>
-                <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{ins.title}</span>
+                <RelBadge rel={ins.rel} />
+                <span className="dp-clickable" style={{ fontWeight: 500, fontSize: 12.5 }} onClick={() => nav('trader', { name: ins.name, title: ins.title })}>{ins.name}</span>
+                <span className="td-muted" style={{ fontSize: '0.6875rem', marginLeft: 'auto' }}>{ins.title}</span>
               </div>
-              {ins.trades.map((t,j)=><TRow key={j} r={{...t,insider_name:t.insiderName||ins.name,title:t.title||ins.title,transaction_type:t.transactionType,transaction_code:t.transactionCode,is_open_market:t.isOpenMarket,price:t.price,current_price:signalPrice,pct_owned_change:t.pctOwnedChange,transaction_date:t.transactionDate,is_foreign_price:t.isForeignPrice}} showTicker={false} showInsider={true}/>)}
+              {ins.trades.map((t, j) => <TRow key={j} r={{ ...t, insider_name: t.insiderName || ins.name, title: t.title || ins.title, transaction_type: t.transactionType, transaction_code: t.transactionCode, is_open_market: t.isOpenMarket, price: t.price, current_price: signalPrice, pct_owned_change: t.pctOwnedChange, transaction_date: t.transactionDate, is_foreign_price: t.isForeignPrice }} showTicker={false} showInsider={true} />)}
             </div>
           ))}
         </>)}
 
-        {d.type==='transaction'&&d.trade&&(()=>{
-          const t=d.trade;
-          const tt=t.transactionType||t.transaction_type;
-          const pr=t.price||t.price_per_share;
-          const cur=t.currentPrice||t.current_price;
-          const isForeign=t.isForeignPrice||t.is_foreign_price||(pr&&cur&&pr>0&&Math.abs((cur-pr)/pr)>=3);
-          const ret=(pr&&cur&&pr>0&&!isForeign)?((cur-pr)/pr*100):null;
-          const isGoodOutcome = ret!=null ? (tt==='sell' ? ret<0 : ret>=0) : null;
-          return(<>
+        {d.type === 'transaction' && d.trade && (() => {
+          const t = d.trade;
+          const tt = t.transactionType || t.transaction_type;
+          const pr = t.price || t.price_per_share;
+          const cur = t.currentPrice || t.current_price;
+          const isForeign = t.isForeignPrice || t.is_foreign_price || (pr && cur && pr > 0 && Math.abs((cur - pr) / pr) >= 3);
+          const ret = (pr && cur && pr > 0 && !isForeign) ? ((cur - pr) / pr * 100) : null;
+          const isGoodOutcome = ret != null ? (tt === 'sell' ? ret < 0 : ret >= 0) : null;
+          return (<>
             <div className="dp-summary">
-              <div className="dp-sum-item"><span className="dp-sum-label">Type</span><Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge></div>
+              <div className="dp-sum-item"><span className="dp-sum-label">Type</span><Badge type={tt === 'buy' ? 'buy' : tt === 'sell' ? 'sell' : 'other'}>{tt === 'buy' ? <><IconBuyTri style={{ width: 8, height: 8, marginRight: 3 }} />Buy</> : tt === 'sell' ? <><IconSellTri style={{ width: 8, height: 8, marginRight: 3 }} />Sell</> : '◆'}</Badge></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Value</span><span className="dp-sum-val">{fmt.money(t.value)}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Shares</span><span className="dp-sum-val">{fmt.number(t.shares)}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:'0.6875rem'}}> <IconWarning style={{width:9,height:9,display:'inline',verticalAlign:'-1px'}}/> verify (3x+ move)</span>}</span></div>
-              {ret!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Now</span><span className={`dp-sum-val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span></div>}
-              {(t.pctOwnedChange||t.pct_owned_change)!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Pos Δ</span><span className="dp-sum-val val-buy">+{(t.pctOwnedChange||t.pct_owned_change).toFixed(1)}%</span></div>}
+              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign && <span style={{ color: 'var(--amber-600)', fontSize: '0.6875rem' }}> <IconWarning style={{ width: 9, height: 9, display: 'inline', verticalAlign: '-1px' }} /> verify (3x+ move)</span>}</span></div>
+              {ret != null && <div className="dp-sum-item"><span className="dp-sum-label">Now</span><span className={`dp-sum-val ${isGoodOutcome ? 'val-buy' : 'val-sell'}`}>{fmt.price(cur)} ({ret >= 0 ? '+' : ''}{ret.toFixed(1)}%)</span></div>}
+              {(t.pctOwnedChange || t.pct_owned_change) != null && <div className="dp-sum-item"><span className="dp-sum-label">Pos Δ</span><span className="dp-sum-val val-buy">+{(t.pctOwnedChange || t.pct_owned_change).toFixed(1)}%</span></div>}
             </div>
-            <div className="dp-section-label" style={{marginTop:12}}>Insider</div>
+            <div className="dp-section-label" style={{ marginTop: 12 }}>Insider</div>
             <div className="dp-insider-block">
               <div className="dp-insider-header">
-                <RelBadge rel={t.relationship||'weak'}/>
-                <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:t.insiderName||t.insider_name,title:t.title||t.insider_title})}>{t.insiderName||t.insider_name}</span>
-                <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{t.title||t.insider_title}</span>
+                <RelBadge rel={t.relationship || 'weak'} />
+                <span className="dp-clickable" style={{ fontWeight: 500, fontSize: 12.5 }} onClick={() => nav('trader', { name: t.insiderName || t.insider_name, title: t.title || t.insider_title })}>{t.insiderName || t.insider_name}</span>
+                <span className="td-muted" style={{ fontSize: '0.6875rem', marginLeft: 'auto' }}>{t.title || t.insider_title}</span>
               </div>
             </div>
-            <div className="dp-section-label" style={{marginTop:12}}>Details</div>
+            <div className="dp-section-label" style={{ marginTop: 12 }}>Details</div>
             <div className="dp-detail-list">
-              {[['Trade date',fmt.date(t.transactionDate||t.transaction_date)],['Filed',fmt.date(t.date||t.filing_date)],['Code',t.transactionCode||t.transaction_code],['Open market',(t.isOpenMarket||t.is_open_market)?'✓ Yes':'No'],['Sector',t.sector]].filter(([,v])=>v&&v!=='—').map(([k,v],i)=>(<div key={i} className="dp-detail-row"><span>{k}</span><span>{v}</span></div>))}
+              {[['Trade date', fmt.date(t.transactionDate || t.transaction_date)], ['Filed', fmt.date(t.date || t.filing_date)], ['Code', t.transactionCode || t.transaction_code], ['Open market', (t.isOpenMarket || t.is_open_market) ? '✓ Yes' : 'No'], ['Sector', t.sector]].filter(([, v]) => v && v !== '—').map(([k, v], i) => (<div key={i} className="dp-detail-row"><span>{k}</span><span>{v}</span></div>))}
             </div>
-            <div style={{marginTop:12,display:'flex',gap:12}}>
-              <button className="dp-nav-link" onClick={()=>nav('trader',{name:t.insiderName||t.insider_name,title:t.title},{expand:true})}>Trader profile →</button>
-              <button className="dp-nav-link" onClick={()=>nav('ticker',{ticker:t.ticker,company:t.company_name||t.company},{expand:true})}>All {t.ticker} trades →</button>
+            <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
+              <button className="dp-nav-link" onClick={() => nav('trader', { name: t.insiderName || t.insider_name, title: t.title }, { expand: true })}>Trader profile →</button>
+              <button className="dp-nav-link" onClick={() => nav('ticker', { ticker: t.ticker, company: t.company_name || t.company }, { expand: true })}>All {t.ticker} trades →</button>
             </div>
           </>);
         })()}
@@ -3339,10 +3340,10 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 const DASH_SORT_OPTS = [
-  {key:'conviction',    label:'Conviction'},
-  {key:'netValue',      label:'Net $'},
-  {key:'buys',           label:'Moves'},
-  {key:'lastTradeDate', label:'Recent'},
+  { key: 'conviction', label: 'Conviction' },
+  { key: 'netValue', label: 'Net $' },
+  { key: 'buys', label: 'Moves' },
+  { key: 'lastTradeDate', label: 'Recent' },
 ];
 // ── SentimentBar ─────────────────────────────────────────────────────────────
 // Replaces the raw 5-stat pulse strip with meaningful market context:
@@ -3354,31 +3355,31 @@ const DASH_SORT_OPTS = [
 // Consolidated: F&G score + index prices + insider flow + sector heatmap.
 // Single API fetch. Finnhub fallback for index prices if raw_data unavailable.
 const FG_COLORS = {
-  'Extreme Fear':'#E55A55', Fear:'#E5943A', Neutral:'#9C9FAE',
-  Greed:'#2DB87A', 'Extreme Greed':'#1A9E68',
+  'Extreme Fear': '#E55A55', Fear: '#E5943A', Neutral: '#9C9FAE',
+  Greed: '#2DB87A', 'Extreme Greed': '#1A9E68',
 };
 function fgLabel(score) {
-  if (score<=20) return 'Extreme Fear';
-  if (score<=40) return 'Fear';
-  if (score<=60) return 'Neutral';
-  if (score<=80) return 'Greed';
+  if (score <= 20) return 'Extreme Fear';
+  if (score <= 40) return 'Fear';
+  if (score <= 60) return 'Neutral';
+  if (score <= 80) return 'Greed';
   return 'Extreme Greed';
 }
 
 const SECTOR_WEIGHTS = [
-  {label:'Technology',    sym:'XLK', weight:32.5},
-  {label:'Financials',    sym:'XLF', weight:13.4},
-  {label:'Healthcare',    sym:'XLV', weight:12.1},
-  {label:'Industrials',   sym:'XLI', weight:8.9},
-  {label:'Cons. Disc.',   sym:'XLY', weight:8.3},
-  {label:'Comm. Svcs',    sym:'XLC', weight:8.2},
-  {label:'Cons. Staples', sym:'XLP', weight:4.8},
-  {label:'Energy',        sym:'XLE', weight:4.0},
-  {label:'Materials',     sym:'XLB', weight:2.7},
-  {label:'Utilities',     sym:'XLU', weight:2.5},
-  {label:'Real Estate',   sym:'XLRE',weight:2.1},
+  { label: 'Technology', sym: 'XLK', weight: 32.5 },
+  { label: 'Financials', sym: 'XLF', weight: 13.4 },
+  { label: 'Healthcare', sym: 'XLV', weight: 12.1 },
+  { label: 'Industrials', sym: 'XLI', weight: 8.9 },
+  { label: 'Cons. Disc.', sym: 'XLY', weight: 8.3 },
+  { label: 'Comm. Svcs', sym: 'XLC', weight: 8.2 },
+  { label: 'Cons. Staples', sym: 'XLP', weight: 4.8 },
+  { label: 'Energy', sym: 'XLE', weight: 4.0 },
+  { label: 'Materials', sym: 'XLB', weight: 2.7 },
+  { label: 'Utilities', sym: 'XLU', weight: 2.5 },
+  { label: 'Real Estate', sym: 'XLRE', weight: 2.1 },
 ];
-const INDEX_SYMS = ['SPY','QQQ','IWM'];
+const INDEX_SYMS = ['SPY', 'QQQ', 'IWM'];
 
 // ─── Shared market data hook ──────────────────────────────────────────────────
 // Fetches once per page load, shared between SentimentStrip and HeatmapOnly
@@ -3387,53 +3388,53 @@ let _mktCache = null;
 const _mktListeners = new Set();
 function useMktData() {
   const [data, setData] = useState(_mktCache);
-  useEffect(()=>{
+  useEffect(() => {
     if (_mktCache) { setData(_mktCache); return; }
     const cb = d => setData(d);
     _mktListeners.add(cb);
     if (_mktListeners.size === 1) {
       // First subscriber kicks off the fetch
       fetch('https://feargreedchart.com/api/?action=all')
-        .then(r=>r.json())
-        .then(d=>{
+        .then(r => r.json())
+        .then(d => {
           const market = d?.market || {};
-          const out = { fgScore: d?.score?.score ?? null, indices:{}, sectors:{}, err:false };
+          const out = { fgScore: d?.score?.score ?? null, indices: {}, sectors: {}, err: false };
           for (const [sym, item] of Object.entries(market)) {
             if (!item) continue;
             const price = item.price ?? item.close;
-            const chg   = item.pct ?? item.chg;
-            if (INDEX_SYMS.includes(sym))                    out.indices[sym]={price,chg};
-            if (SECTOR_WEIGHTS.some(s=>s.sym===sym))         out.sectors[sym]={price,chg};
+            const chg = item.pct ?? item.chg;
+            if (INDEX_SYMS.includes(sym)) out.indices[sym] = { price, chg };
+            if (SECTOR_WEIGHTS.some(s => s.sym === sym)) out.sectors[sym] = { price, chg };
           }
           _mktCache = out;
-          _mktListeners.forEach(fn=>fn(out));
+          _mktListeners.forEach(fn => fn(out));
         })
-        .catch(()=>{
-          const out = { fgScore:null, indices:{}, sectors:{}, err:true };
+        .catch(() => {
+          const out = { fgScore: null, indices: {}, sectors: {}, err: true };
           _mktCache = out;
-          _mktListeners.forEach(fn=>fn(out));
+          _mktListeners.forEach(fn => fn(out));
         });
     }
-    return ()=>{ _mktListeners.delete(cb); };
-  },[]);
+    return () => { _mktListeners.delete(cb); };
+  }, []);
 
   // Finnhub fallback for indices
-  useEffect(()=>{
+  useEffect(() => {
     if (!data || Object.keys(data.indices).length || !cfg.FINNHUB_API_KEY) return;
-    Promise.all(INDEX_SYMS.map(sym=>
+    Promise.all(INDEX_SYMS.map(sym =>
       fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${cfg.FINNHUB_API_KEY}`)
-        .then(r=>r.json()).then(d=>({sym,price:d.c,chg:d.c&&d.pc?(((d.c-d.pc)/d.pc)*100):null}))
-        .catch(()=>null)
-    )).then(res=>{
-      const idxOut={};
-      for(const r of res) if(r?.price) idxOut[r.sym]={price:r.price,chg:r.chg};
-      if(Object.keys(idxOut).length) {
-        const updated = {...data, indices:idxOut};
+        .then(r => r.json()).then(d => ({ sym, price: d.c, chg: d.c && d.pc ? (((d.c - d.pc) / d.pc) * 100) : null }))
+        .catch(() => null)
+    )).then(res => {
+      const idxOut = {};
+      for (const r of res) if (r?.price) idxOut[r.sym] = { price: r.price, chg: r.chg };
+      if (Object.keys(idxOut).length) {
+        const updated = { ...data, indices: idxOut };
         _mktCache = updated;
         setData(updated);
       }
     });
-  },[data?.indices && Object.keys(data.indices).length]);
+  }, [data?.indices && Object.keys(data.indices).length]);
 
   return data;
 }
@@ -3441,57 +3442,59 @@ function useMktData() {
 // Full-width sentiment strip above the bento
 function SentimentStrip({ filings }) {
   const mkt = useMktData();
-  const insiderFlow = useMemo(()=>{
-    const cut=(()=>{const d=new Date();d.setDate(d.getDate()-30);return d.toISOString().split('T')[0];})();
-    const r=filings.filter(f=>(f.transactionDate||f.date||'')>=cut&&f.isOpenMarket);
-    const bv=r.filter(f=>f.transactionType==='buy').reduce((s,f)=>s+(f.value||0),0);
-    const sv=r.filter(f=>f.transactionType==='sell').reduce((s,f)=>s+(f.value||0),0);
-    const t=bv+sv; if(!t) return null;
-    const ratio=Math.round((bv/t)*100);
-    return {ratio, label:ratio>=60?'Bullish':ratio>=45?'Neutral':'Bearish',
-            color:ratio>=60?'var(--green-600)':ratio>=45?'var(--text-3)':'var(--red-600)'};
-  },[filings]);
+  const insiderFlow = useMemo(() => {
+    const cut = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0]; })();
+    const r = filings.filter(f => (f.transactionDate || f.date || '') >= cut && f.isOpenMarket);
+    const bv = r.filter(f => f.transactionType === 'buy').reduce((s, f) => s + (f.value || 0), 0);
+    const sv = r.filter(f => f.transactionType === 'sell').reduce((s, f) => s + (f.value || 0), 0);
+    const t = bv + sv; if (!t) return null;
+    const ratio = Math.round((bv / t) * 100);
+    return {
+      ratio, label: ratio >= 60 ? 'Bullish' : ratio >= 45 ? 'Neutral' : 'Bearish',
+      color: ratio >= 60 ? 'var(--green-600)' : ratio >= 45 ? 'var(--text-3)' : 'var(--red-600)'
+    };
+  }, [filings]);
 
-  const fgScore=mkt?.fgScore??null;
-  const fgLbl=fgScore!=null?fgLabel(fgScore):null;
-  const fgColor=fgLbl?FG_COLORS[fgLbl]:'var(--text-3)';
-  const indices=mkt?.indices||{};
+  const fgScore = mkt?.fgScore ?? null;
+  const fgLbl = fgScore != null ? fgLabel(fgScore) : null;
+  const fgColor = fgLbl ? FG_COLORS[fgLbl] : 'var(--text-3)';
+  const indices = mkt?.indices || {};
 
   return (
     <div className="mkt-tile mkt-tile--strip-only">
       <div className="mkt-tile__strip">
         <div className="mkt-stat mkt-stat--fg">
-          <span className="mkt-stat__label">Sentiment <TileInfoButton section="data-source" title="Market overview" tileId="sentiment"/></span>
-          {fgScore!=null?<>
+          <span className="mkt-stat__label">Sentiment <TileInfoButton section="data-source" title="Market overview" tileId="sentiment" /></span>
+          {fgScore != null ? <>
             <div className="mkt-fg-row">
-              <span className="mkt-stat__val" style={{color:fgColor}}>{fgScore}</span>
-              <span className="mkt-fg-lbl" style={{color:fgColor}}>{fgLbl}</span>
+              <span className="mkt-stat__val" style={{ color: fgColor }}>{fgScore}</span>
+              <span className="mkt-fg-lbl" style={{ color: fgColor }}>{fgLbl}</span>
             </div>
             <div className="mkt-fg-bar">
-              <div className="mkt-fg-bar__fill" style={{width:`${fgScore}%`,background:fgColor}}/>
-              {[20,40,60,80].map(v=><div key={v} className="mkt-fg-bar__tick" style={{left:`${v}%`}}/>)}
+              <div className="mkt-fg-bar__fill" style={{ width: `${fgScore}%`, background: fgColor }} />
+              {[20, 40, 60, 80].map(v => <div key={v} className="mkt-fg-bar__tick" style={{ left: `${v}%` }} />)}
             </div>
-          </>:<span className="mkt-stat__loading">{mkt?.err?'—':'...'}</span>}
+          </> : <span className="mkt-stat__loading">{mkt?.err ? '—' : '...'}</span>}
         </div>
-        <div className="mkt-divider"/>
-        {INDEX_SYMS.map(sym=>{
-          const d=indices[sym];
+        <div className="mkt-divider" />
+        {INDEX_SYMS.map(sym => {
+          const d = indices[sym];
           return (
             <div key={sym} className="mkt-stat">
               <span className="mkt-stat__label">{sym}</span>
-              {d?.price!=null?<>
+              {d?.price != null ? <>
                 <span className="mkt-stat__val">{fmt.price(d.price)}</span>
-                {d.chg!=null&&<span className={`mkt-stat__chg ${d.chg>=0?'val-buy':'val-sell'}`}>{d.chg>=0?'+':''}{Number(d.chg).toFixed(2)}%</span>}
-              </>:<span className="mkt-stat__loading">—</span>}
+                {d.chg != null && <span className={`mkt-stat__chg ${d.chg >= 0 ? 'val-buy' : 'val-sell'}`}>{d.chg >= 0 ? '+' : ''}{Number(d.chg).toFixed(2)}%</span>}
+              </> : <span className="mkt-stat__loading">—</span>}
             </div>
           );
         })}
-        <div className="mkt-divider"/>
-        {insiderFlow&&(
+        <div className="mkt-divider" />
+        {insiderFlow && (
           <div className="mkt-stat">
             <span className="mkt-stat__label">Insider flow (30d)</span>
-            <span className="mkt-stat__val" style={{color:insiderFlow.color}}>{insiderFlow.label}</span>
-            <span className="mkt-stat__chg" style={{color:'var(--text-3)'}}>{insiderFlow.ratio}% net buying</span>
+            <span className="mkt-stat__val" style={{ color: insiderFlow.color }}>{insiderFlow.label}</span>
+            <span className="mkt-stat__chg" style={{ color: 'var(--text-3)' }}>{insiderFlow.ratio}% net buying</span>
           </div>
         )}
       </div>
@@ -3502,49 +3505,49 @@ function SentimentStrip({ filings }) {
 // Heatmap-only component — sits inside the left column tile
 function HeatmapOnly() {
   const mkt = useMktData();
-  const sectors=mkt?.sectors||{};
-  const totalW=SECTOR_WEIGHTS.reduce((s,x)=>s+x.weight,0);
+  const sectors = mkt?.sectors || {};
+  const totalW = SECTOR_WEIGHTS.reduce((s, x) => s + x.weight, 0);
 
   function heatColor(chg) {
-    if (chg==null) return 'var(--surface-3)';
-    const a=Math.min(0.20+(Math.abs(chg)/3.5)*0.65,0.90);
-    return chg>=0?`rgba(45,184,122,${a.toFixed(2)})`:`rgba(229,90,85,${a.toFixed(2)})`;
+    if (chg == null) return 'var(--surface-3)';
+    const a = Math.min(0.20 + (Math.abs(chg) / 3.5) * 0.65, 0.90);
+    return chg >= 0 ? `rgba(45,184,122,${a.toFixed(2)})` : `rgba(229,90,85,${a.toFixed(2)})`;
   }
-  function heatText(chg) { return (chg!=null&&Math.abs(chg)>0.3)?'#fff':'var(--text-2)'; }
+  function heatText(chg) { return (chg != null && Math.abs(chg) > 0.3) ? '#fff' : 'var(--text-2)'; }
 
   return (
     <div className="mkt-tile__heatmap">
       <div className="mkt-heatmap-label">
         S&amp;P 500 sectors
-        <span className="td-muted" style={{fontWeight:400,marginLeft:6}}>day return · by weight · ETF proxy</span>
-        <TileInfoButton section="data-source" title="S&P 500 sector heatmap" tileId="sector-heatmap"/>
-        {Object.keys(sectors).length===0&&(
-          <span className="td-muted" style={{marginLeft:'auto',fontSize:'0.6875rem'}}>
-            {mkt?.err?'unavailable':'loading…'}
+        <span className="td-muted" style={{ fontWeight: 400, marginLeft: 6 }}>day return · by weight · ETF proxy</span>
+        <TileInfoButton section="data-source" title="S&P 500 sector heatmap" tileId="sector-heatmap" />
+        {Object.keys(sectors).length === 0 && (
+          <span className="td-muted" style={{ marginLeft: 'auto', fontSize: '0.6875rem' }}>
+            {mkt?.err ? 'unavailable' : 'loading…'}
           </span>
         )}
       </div>
       <div className="mkt-heatmap-grid">
-        {SECTOR_WEIGHTS.map(sec=>{
-          const d=sectors[sec.sym];
-          const chg=d?.chg??null, price=d?.price??null;
-          const tc=heatText(chg);
+        {SECTOR_WEIGHTS.map(sec => {
+          const d = sectors[sec.sym];
+          const chg = d?.chg ?? null, price = d?.price ?? null;
+          const tc = heatText(chg);
           return (
-            <div key={sec.sym} className={`mkt-heatmap-sq${chg==null?' mkt-heatmap-sq--empty':''}`}
-              style={{flexBasis:`${(sec.weight/totalW)*100}%`,background:heatColor(chg)}}
-              title={`${sec.label} (${sec.sym}) · ${price?`$${Number(price).toFixed(2)}`:'—'} · ${chg!=null?`${chg>=0?'+':''}${Number(chg).toFixed(2)}%`:'loading'}`}>
-              <div className="mkt-heatmap-sq__name" style={{color:tc}}>{sec.label}</div>
-              <div className="mkt-heatmap-sq__chg" style={{color:chg==null?'var(--text-3)':tc}}>
-                {chg!=null?`${chg>=0?'+':''}${Number(chg).toFixed(2)}%`:sec.sym}
+            <div key={sec.sym} className={`mkt-heatmap-sq${chg == null ? ' mkt-heatmap-sq--empty' : ''}`}
+              style={{ flexBasis: `${(sec.weight / totalW) * 100}%`, background: heatColor(chg) }}
+              title={`${sec.label} (${sec.sym}) · ${price ? `$${Number(price).toFixed(2)}` : '—'} · ${chg != null ? `${chg >= 0 ? '+' : ''}${Number(chg).toFixed(2)}%` : 'loading'}`}>
+              <div className="mkt-heatmap-sq__name" style={{ color: tc }}>{sec.label}</div>
+              <div className="mkt-heatmap-sq__chg" style={{ color: chg == null ? 'var(--text-3)' : tc }}>
+                {chg != null ? `${chg >= 0 ? '+' : ''}${Number(chg).toFixed(2)}%` : sec.sym}
               </div>
             </div>
           );
         })}
       </div>
       <div className="mkt-heatmap-legend">
-        {[['≤−3%','rgba(229,90,85,0.9)'],['−1%','rgba(229,90,85,0.40)'],['flat','var(--surface-3)'],['1%','rgba(45,184,122,0.40)'],['≥3%','rgba(45,184,122,0.9)']].map(([l,c])=>(
+        {[['≤−3%', 'rgba(229,90,85,0.9)'], ['−1%', 'rgba(229,90,85,0.40)'], ['flat', 'var(--surface-3)'], ['1%', 'rgba(45,184,122,0.40)'], ['≥3%', 'rgba(45,184,122,0.9)']].map(([l, c]) => (
           <div key={l} className="mkt-heatmap-legend__item">
-            <div style={{width:10,height:10,borderRadius:2,background:c,border:'0.5px solid var(--border)'}}/>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: c, border: '0.5px solid var(--border)' }} />
             <span>{l}</span>
           </div>
         ))}
@@ -3553,7 +3556,7 @@ function HeatmapOnly() {
   );
 }
 
-const DASH_DATE_OPTS = [{label:'1d',days:1},{label:'3d',days:3},{label:'7d',days:7},{label:'30d',days:30}];
+const DASH_DATE_OPTS = [{ label: '1d', days: 1 }, { label: '3d', days: 3 }, { label: '7d', days: 7 }, { label: '30d', days: 30 }];
 
 
 
@@ -3562,13 +3565,13 @@ const DASH_DATE_OPTS = [{label:'1d',days:1},{label:'3d',days:3},{label:'7d',days
 // need the same position list, so we fetch once and pass it down).
 function usePortfolio(pro) {
   const [port, setPort] = useState(null);
-  const [err,  setErr]  = useState(false);
+  const [err, setErr] = useState(false);
   const [connected, setConnected] = useState(null); // null=checking, true/false once known
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [perf, setPerf] = useState(undefined); // undefined=not fetched, null=unavailable, [...points] once loaded
 
-  const load = useCallback(async (isManualRefresh=false) => {
+  const load = useCallback(async (isManualRefresh = false) => {
     if (!cfg.NEON_PROXY_URL) return;
     if (!pro) return; // avoid a call we already know the Worker will 403 — this is a Pro feature
     if (isManualRefresh) setRefreshing(true);
@@ -3576,7 +3579,7 @@ function usePortfolio(pro) {
       const headers = await getAuthHeaders();
       // First check whether a brokerage is actually connected at all —
       // distinct from "connected but zero positions" or "not connected yet".
-      const statusRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/status`, { headers }).then(r=>r.json()).catch(()=>null);
+      const statusRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/status`, { headers }).then(r => r.json()).catch(() => null);
       if (!statusRes?.connection) { setConnected(false); return; }
       setConnected(true);
 
@@ -3610,14 +3613,14 @@ function usePortfolio(pro) {
         for (const p of extractPositionsArray(acct.positions)) {
           const units = parseFloat(p.units) || 0;
           const price = parseFloat(p.price) || 0;
-          const costBasis = p.cost_basis!=null ? parseFloat(p.cost_basis) : null;
+          const costBasis = p.cost_basis != null ? parseFloat(p.cost_basis) : null;
           const marketValue = units * price;
           // Approximate unrealized gain/loss — real average cost per share
           // vs current price, times shares held. Not a substitute for the
           // brokerage's own official P/L (fees, partial-lot cost basis
           // nuances aren't captured here), but a solid real approximation.
-          const openPnl = costBasis!=null ? (price - costBasis) * units : null;
-          const openPnlPct = costBasis!=null && costBasis>0 ? ((price - costBasis) / costBasis) * 100 : null;
+          const openPnl = costBasis != null ? (price - costBasis) * units : null;
+          const openPnlPct = costBasis != null && costBasis > 0 ? ((price - costBasis) / costBasis) * 100 : null;
           flatPositions.push({
             symbol: p.instrument?.symbol || p.instrument?.raw_symbol || '—',
             company: p.instrument?.description || '',
@@ -3635,7 +3638,7 @@ function usePortfolio(pro) {
       }
       setPort({ positions: flatPositions, totalValue });
 
-      const perfRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/performance`, { headers }).then(r=>r.json()).catch(()=>null);
+      const perfRes = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/performance`, { headers }).then(r => r.json()).catch(() => null);
       setPerf(perfRes?.points?.length ? perfRes.points : null);
       setLastRefreshed(new Date());
       setErr(false);
@@ -3668,32 +3671,32 @@ function PortfolioTickerNews({ tickers }) {
   const [loading, setLoading] = useState(false);
   const hasKey = !!cfg.FINNHUB_API_KEY;
   const tickerKey = tickers.join(',');
-  useEffect(()=>{
+  useEffect(() => {
     if (!hasKey || !tickers.length) return;
     setLoading(true);
-    const today=new Date().toISOString().split('T')[0];
-    const from=new Date(); from.setDate(from.getDate()-5);
-    const fromStr=from.toISOString().split('T')[0];
-    Promise.all(tickers.slice(0,5).map(tk=>
+    const today = new Date().toISOString().split('T')[0];
+    const from = new Date(); from.setDate(from.getDate() - 5);
+    const fromStr = from.toISOString().split('T')[0];
+    Promise.all(tickers.slice(0, 5).map(tk =>
       fetch(`https://finnhub.io/api/v1/company-news?symbol=${tk}&from=${fromStr}&to=${today}&token=${cfg.FINNHUB_API_KEY}`)
-        .then(r=>r.json()).then(a=>(a||[]).slice(0,2).map(n=>({...n,_ticker:tk}))).catch(()=>[])
-    )).then(res=>{
-      setNews(res.flat().filter(n=>n.headline&&n.url).sort((a,b)=>b.datetime-a.datetime).slice(0,6));
+        .then(r => r.json()).then(a => (a || []).slice(0, 2).map(n => ({ ...n, _ticker: tk }))).catch(() => [])
+    )).then(res => {
+      setNews(res.flat().filter(n => n.headline && n.url).sort((a, b) => b.datetime - a.datetime).slice(0, 6));
       setLoading(false);
     });
-  },[tickerKey,hasKey]);
+  }, [tickerKey, hasKey]);
 
   if (!tickers.length) return null;
   if (!hasKey) return <div className="port-block__empty">News unavailable right now.</div>;
-  if (loading) return <div style={{padding:'8px 0',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>;
+  if (loading) return <div style={{ padding: '8px 0', display: 'flex', justifyContent: 'center' }}><Spinner size={14} /></div>;
   if (!news.length) return <div className="port-block__empty">No recent news for your holdings</div>;
   return (
     <div className="dash-news-list">
-      {news.map((n,i)=>(
+      {news.map((n, i) => (
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
-            <span className="ticker" style={{fontSize:'0.6875rem'}}>{n._ticker}</span>
-            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            <span className="ticker" style={{ fontSize: '0.6875rem' }}>{n._ticker}</span>
+            <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{n.source} · {fmt.ago(new Date(n.datetime * 1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
@@ -3734,14 +3737,14 @@ function PortfolioTickerNews({ tickers }) {
 function useMyNewsTickers(watchlist, filings) {
   return useMemo(() => {
     if (!watchlist) return [];
-    const starred = new Set(watchlist.tickers||[]);
+    const starred = new Set(watchlist.tickers || []);
     const reasonByTicker = new Map();
     for (const t of starred) reasonByTicker.set(t, 'starred');
-    for (const f of (filings||[])) {
+    for (const f of (filings || [])) {
       if (!f.ticker || !f.insiderName || !watchlist.insiders?.includes(f.insiderName)) continue;
       if (!reasonByTicker.has(f.ticker)) reasonByTicker.set(f.ticker, f.insiderName);
     }
-    return [...reasonByTicker.entries()].slice(0,15).map(([ticker,reason])=>({ticker,reason}));
+    return [...reasonByTicker.entries()].slice(0, 15).map(([ticker, reason]) => ({ ticker, reason }));
   }, [watchlist?.tickers, watchlist?.insiders, filings]);
 }
 
@@ -3749,7 +3752,7 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const hasKey = !!cfg.FINNHUB_API_KEY;
-  const tickerKey = myTickers.map(t=>t.ticker).join(',');
+  const tickerKey = myTickers.map(t => t.ticker).join(',');
 
   useEffect(() => {
     if (!hasKey) return;
@@ -3759,29 +3762,29 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
     if (myNewsOn) {
       if (!myTickers.length) { setNews([]); setLoading(false); return; }
       const to = new Date().toISOString().split('T')[0];
-      const from = (()=>{const d=new Date();d.setDate(d.getDate()-14);return d.toISOString().split('T')[0];})();
-      Promise.all(myTickers.map(({ticker,reason}) =>
+      const from = (() => { const d = new Date(); d.setDate(d.getDate() - 14); return d.toISOString().split('T')[0]; })();
+      Promise.all(myTickers.map(({ ticker, reason }) =>
         fetch(`https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${from}&to=${to}&token=${cfg.FINNHUB_API_KEY}`)
-          .then(r=>r.json()).then(a=>Array.isArray(a)?a.map(n=>({...n,_ticker:ticker,_reason:reason})):[]).catch(()=>[])
+          .then(r => r.json()).then(a => Array.isArray(a) ? a.map(n => ({ ...n, _ticker: ticker, _reason: reason })) : []).catch(() => [])
       )).then(results => {
         if (cancelled) return;
         const merged = results.flat()
-          .filter(n=>n.headline&&n.url)
-          .sort((a,b)=>(b.datetime||0)-(a.datetime||0))
+          .filter(n => n.headline && n.url)
+          .sort((a, b) => (b.datetime || 0) - (a.datetime || 0))
           .slice(0, limit);
         setNews(merged); setLoading(false);
       });
     } else {
       fetch(`https://finnhub.io/api/v1/news?category=general&token=${cfg.FINNHUB_API_KEY}`)
-        .then(r=>r.json())
-        .then(a=>{
+        .then(r => r.json())
+        .then(a => {
           if (cancelled) return;
-          setNews((a||[]).filter(n=>n.headline&&n.url).slice(0, limit));
+          setNews((a || []).filter(n => n.headline && n.url).slice(0, limit));
           setLoading(false);
         })
-        .catch(()=>{ if(!cancelled) setLoading(false); });
+        .catch(() => { if (!cancelled) setLoading(false); });
     }
-    return ()=>{ cancelled=true; };
+    return () => { cancelled = true; };
   }, [hasKey, myNewsOn, limit, tickerKey]);
 
   return { news, loading, hasKey };
@@ -3792,7 +3795,7 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
 // insider's trade actually pulled it in. Not just "personalized", a real
 // reason.
 function NewsMatchBadge({ ticker, reason }) {
-  const viaInsider = reason && reason!=='starred';
+  const viaInsider = reason && reason !== 'starred';
   return (
     <span className="news-match-badge"
       title={viaInsider ? `${ticker} — matched via ${reason}'s recent trade` : `${ticker} — on your watchlist`}>
@@ -3807,16 +3810,16 @@ function NewsMatchBadge({ ticker, reason }) {
 // would show a broken/blank frame for the majority of sources rather than
 // the article. New tab is the reliable option, not a placeholder choice.
 function NewsList({ news, loading, hasKey, emptyHint }) {
-  if (!hasKey) return <div className="dp-placeholder" style={{padding:'1rem'}}><p style={{fontSize:'0.6875rem'}}>No headlines available right now.</p></div>;
-  if (loading) return <div style={{padding:'1.5rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>;
-  if (!news.length) return <div style={{padding:'1rem',fontSize:'0.75rem',color:'var(--text-3)'}}>{emptyHint||'No headlines available right now'}</div>;
+  if (!hasKey) return <div className="dp-placeholder" style={{ padding: '1rem' }}><p style={{ fontSize: '0.6875rem' }}>No headlines available right now.</p></div>;
+  if (loading) return <div style={{ padding: '1.5rem', display: 'flex', justifyContent: 'center' }}><Spinner size={16} /></div>;
+  if (!news.length) return <div style={{ padding: '1rem', fontSize: '0.75rem', color: 'var(--text-3)' }}>{emptyHint || 'No headlines available right now'}</div>;
   return (
     <div className="dash-news-list">
-      {news.map((n,i)=>(
+      {news.map((n, i) => (
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
-            {n._ticker&&<NewsMatchBadge ticker={n._ticker} reason={n._reason}/>}
-            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            {n._ticker && <NewsMatchBadge ticker={n._ticker} reason={n._reason} />}
+            <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{n.source} · {fmt.ago(new Date(n.datetime * 1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
@@ -3825,14 +3828,14 @@ function NewsList({ news, loading, hasKey, emptyHint }) {
   );
 }
 
-function MarketNews({ watchlist, filings, limit=12, myNewsOn=false }) {
+function MarketNews({ watchlist, filings, limit = 12, myNewsOn = false }) {
   const pro = !!watchlist?.pro;
   const myTickers = useMyNewsTickers(watchlist, filings);
-  const { news, loading, hasKey } = useMarketNews({ myTickers, myNewsOn: myNewsOn&&pro, limit });
+  const { news, loading, hasKey } = useMarketNews({ myTickers, myNewsOn: myNewsOn && pro, limit });
 
   return (
     <NewsList news={news} loading={loading} hasKey={hasKey}
-      emptyHint={myNewsOn&&pro?'No recent news for your starred tickers or followed insiders\' trades.':undefined}/>
+      emptyHint={myNewsOn && pro ? 'No recent news for your starred tickers or followed insiders\' trades.' : undefined} />
   );
 }
 
@@ -3840,28 +3843,28 @@ function NewsDrawer({ watchlist, filings, onClose }) {
   const [myNewsOn, setMyNewsOn] = useState(false);
   const pro = !!watchlist?.pro;
   const myTickers = useMyNewsTickers(watchlist, filings);
-  const { news, loading, hasKey } = useMarketNews({ myTickers, myNewsOn: myNewsOn&&pro, limit: 60 });
+  const { news, loading, hasKey } = useMarketNews({ myTickers, myNewsOn: myNewsOn && pro, limit: 60 });
 
   return (
-    <div className="drawer-overlay" onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
+    <div className="drawer-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="drawer drawer--news">
         <div className="drawer__hdr-row1">
           <span className="drawer__title">Market news</span>
-          <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <label
-              className={`bundle-toggle${myNewsOn&&pro?' bundle-toggle--active':''}`}
-              title={pro?'Only news for your starred tickers and followed insiders\' recent trades':'Pro feature — filters news to your starred tickers and followed insiders'}
+              className={`bundle-toggle${myNewsOn && pro ? ' bundle-toggle--active' : ''}`}
+              title={pro ? 'Only news for your starred tickers and followed insiders\' recent trades' : 'Pro feature — filters news to your starred tickers and followed insiders'}
             >
-              <input type="checkbox" checked={myNewsOn&&pro}
-                onChange={()=>pro?setMyNewsOn(v=>!v):watchlist?.setShowUpgrade?.('watchlist_ticker')}/>
-              My news{!pro&&<span className="settings-pro-badge" style={{marginLeft:5}}>Pro</span>}
+              <input type="checkbox" checked={myNewsOn && pro}
+                onChange={() => pro ? setMyNewsOn(v => !v) : watchlist?.setShowUpgrade?.('watchlist_ticker')} />
+              My news{!pro && <span className="settings-pro-badge" style={{ marginLeft: 5 }}>Pro</span>}
             </label>
-            <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>
+            <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{ width: 12, height: 12 }} /></button>
           </div>
         </div>
         <div className="drawer__body drawer__body--single">
           <NewsList news={news} loading={loading} hasKey={hasKey}
-            emptyHint={myNewsOn&&pro?'No recent news for your starred tickers or followed insiders\' trades.':undefined}/>
+            emptyHint={myNewsOn && pro ? 'No recent news for your starred tickers or followed insiders\' trades.' : undefined} />
         </div>
       </div>
     </div>
@@ -3898,9 +3901,9 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
   const isMobile = useIsMobile();
   const [sigDays, setSigDays] = useState(3);
   const [sigSort, setSigSort] = useState('conviction');
-  const [sigDir,  setSigDir]  = useState(-1);
+  const [sigDir, setSigDir] = useState(-1);
   const [filSort, setFilSort] = useState('date');
-  const [filDir,  setFilDir]  = useState(-1);
+  const [filDir, setFilDir] = useState(-1);
 
   const cutoff = useMemo(() => {
     const d = new Date(); d.setDate(d.getDate() - sigDays);
@@ -3925,7 +3928,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
     return [...allSignals].sort((a, b) => {
       const av = a[sigSort] ?? -Infinity, bv = b[sigSort] ?? -Infinity;
       const r = typeof av === 'number' ? (av < bv ? -1 : av > bv ? 1 : 0)
-              : String(av).localeCompare(String(bv));
+        : String(av).localeCompare(String(bv));
       return sigDir > 0 ? r : -r;
     });
   }, [allSignals, sigSort, sigDir]);
@@ -3938,10 +3941,10 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
   const recentFilings = useMemo(() => {
     return [...filings].filter(f => f.isOpenMarket).sort((a, b) => {
       if (filSort === 'date') {
-        const av = a.transactionDate||a.date||'', bv = b.transactionDate||b.date||'';
+        const av = a.transactionDate || a.date || '', bv = b.transactionDate || b.date || '';
         return filDir > 0 ? av.localeCompare(bv) : bv.localeCompare(av);
       }
-      if (filSort === 'value') return filDir > 0 ? (a.value||0)-(b.value||0) : (b.value||0)-(a.value||0);
+      if (filSort === 'value') return filDir > 0 ? (a.value || 0) - (b.value || 0) : (b.value || 0) - (a.value || 0);
       return 0;
     }).slice(0, 12);
   }, [filings, filSort, filDir]);
@@ -3952,13 +3955,13 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
   }
 
   const stats = useMemo(() => {
-    const yd = filings.filter(f => f.isOpenMarket && (f.transactionDate||f.date||'') >= ydCutoff);
-    const w3 = filings.filter(f => f.isOpenMarket && (f.transactionDate||f.date||'') >= cutoff);
+    const yd = filings.filter(f => f.isOpenMarket && (f.transactionDate || f.date || '') >= ydCutoff);
+    const w3 = filings.filter(f => f.isOpenMarket && (f.transactionDate || f.date || '') >= cutoff);
     return {
-      buyValYd:  yd.filter(f => f.transactionType==='buy').reduce((s,f) => s+(f.value||0), 0),
-      buyCntYd:  yd.filter(f => f.transactionType==='buy').length,
+      buyValYd: yd.filter(f => f.transactionType === 'buy').reduce((s, f) => s + (f.value || 0), 0),
+      buyCntYd: yd.filter(f => f.transactionType === 'buy').length,
       highConv3: allSignals.filter(s => s.conviction >= 10).length,
-      tickers3:  new Set(w3.map(f => f.ticker)).size,
+      tickers3: new Set(w3.map(f => f.ticker)).size,
     };
   }, [filings, allSignals, ydCutoff, cutoff]);
 
@@ -3966,14 +3969,14 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
     <div className="ws-page">
       {/* Stat strip */}
       <div className="ws-stat-strip">
-        <div className="ws-stat"><div className="ws-stat__label">Buy value · 24h</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{loading?'—':fmt.money(stats.buyValYd)}</div><div className="ws-stat__sub">{stats.buyCntYd} transactions</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">High-conviction · 3d</div><div className="ws-stat__value">{loading?'—':stats.highConv3}</div><div className="ws-stat__sub">Score ≥10/15</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Tickers active · 3d</div><div className="ws-stat__value">{loading?'—':stats.tickers3}</div><div className="ws-stat__sub">With open-market trades</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Data freshness</div><div className="ws-stat__value" style={{fontSize:15}}>{loading?'Syncing…':'Live'}</div><div className="ws-stat__sub">SEC Form 4 · STOCK Act</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Buy value · 24h</div><div className="ws-stat__value" style={{ color: 'var(--green-600)' }}>{loading ? '—' : fmt.money(stats.buyValYd)}</div><div className="ws-stat__sub">{stats.buyCntYd} transactions</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">High-conviction · 3d</div><div className="ws-stat__value">{loading ? '—' : stats.highConv3}</div><div className="ws-stat__sub">Score ≥10/15</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Tickers active · 3d</div><div className="ws-stat__value">{loading ? '—' : stats.tickers3}</div><div className="ws-stat__sub">With open-market trades</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Data freshness</div><div className="ws-stat__value" style={{ fontSize: 15 }}>{loading ? 'Syncing…' : 'Live'}</div><div className="ws-stat__sub">SEC Form 4 · STOCK Act</div></div>
       </div>
 
       {/* Sentiment strip */}
-      <div style={{marginBottom:16}}><SentimentStrip filings={filings}/></div>
+      <div style={{ marginBottom: 16 }}><SentimentStrip filings={filings} /></div>
 
       {/* ── Centered narrow column: Recent filings ABOVE signals, then market news fills right ── */}
       <div className="ws-home-centered">
@@ -3982,34 +3985,34 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
         <div className="ws-home-main">
 
           {/* 1. Recent filings tile — ABOVE signals */}
-          <div className="ws-tile" style={{marginBottom:14}}>
+          <div className="ws-tile" style={{ marginBottom: 14 }}>
             <div className="ws-tile__hdr">
               <div className="ws-tile__hdr-left">
                 <span className="ws-tile__title">Recent filings</span>
                 <span className="ws-tile__sub">Open-market trades</span>
               </div>
-              <button className="ws-tile__action" onClick={()=>onSeeAll('dashboard')}>See all →</button>
+              <button className="ws-tile__action" onClick={() => onSeeAll('dashboard')}>See all →</button>
             </div>
             {/* Sortable column headers */}
             <div className="ws-home-fil-hdrs">
               <span className="ws-col-sort ws-col-sort--sm">Ticker</span>
-              <button className={`ws-col-sort ws-col-sort--sm${filSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onFilSort('date')}>Date{filSort==='date'&&(filDir<0?' ↓':' ↑')}</button>
+              <button className={`ws-col-sort ws-col-sort--sm${filSort === 'date' ? ' ws-col-sort--active' : ''}`} onClick={() => onFilSort('date')}>Date{filSort === 'date' && (filDir < 0 ? ' ↓' : ' ↑')}</button>
               <span className="ws-col-sort ws-col-sort--sm">Type</span>
-              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${filSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onFilSort('value')}>Value{filSort==='value'&&(filDir<0?' ↓':' ↑')}</button>
+              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${filSort === 'value' ? ' ws-col-sort--active' : ''}`} onClick={() => onFilSort('value')}>Value{filSort === 'value' && (filDir < 0 ? ' ↓' : ' ↑')}</button>
             </div>
-            <div style={{maxHeight:240,overflowY:'auto',overflowX:'hidden'}}>
-              {loading?<SkeletonRows count={5}/>:recentFilings.map((f,i)=>{
-                const isBuy=f.transactionType==='buy';
+            <div style={{ maxHeight: 240, overflowY: 'auto', overflowX: 'hidden' }}>
+              {loading ? <SkeletonRows count={5} /> : recentFilings.map((f, i) => {
+                const isBuy = f.transactionType === 'buy';
                 return (
-                  <div key={i} className="ws-fil-compact-row" onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company})}
-                    style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                  <div key={i} className="ws-fil-compact-row" onClick={() => onOpenDetail({ type: 'ticker', ticker: f.ticker, company: f.company })}
+                    style={{ borderLeft: `3px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
                     <div className="ws-fil-compact-row__ticker">
                       <span className="ticker">{f.ticker}</span>
-                      <div style={{fontSize:10,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName?.split(' ').slice(0,2).join(' ')}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.insiderName?.split(' ').slice(0, 2).join(' ')}</div>
                     </div>
-                    <div className="ws-fil-compact-row__date">{fmt.dateShort(f.transactionDate||f.date)}</div>
-                    <div className="ws-fil-compact-row__type"><span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span></div>
-                    <div className="ws-fil-compact-row__val"><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
+                    <div className="ws-fil-compact-row__date">{fmt.dateShort(f.transactionDate || f.date)}</div>
+                    <div className="ws-fil-compact-row__type"><span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span></div>
+                    <div className="ws-fil-compact-row__val"><span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</span></div>
                   </div>
                 );
               })}
@@ -4021,55 +4024,55 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
             <div className="ws-tile__hdr">
               <div className="ws-tile__hdr-left">
                 <span className="ws-tile__title">Insider signals</span>
-                {!loading&&<span className="ws-tile__count">{signals.length}</span>}
+                {!loading && <span className="ws-tile__count">{signals.length}</span>}
                 <span className="ws-tile__sub">Scored by conviction</span>
               </div>
-              <button className="ws-tile__action" onClick={()=>onSeeAll('dashboard')}>See all →</button>
+              <button className="ws-tile__action" onClick={() => onSeeAll('dashboard')}>See all →</button>
             </div>
             {/* Capped at 7d — keep it fresh, daily-return habit */}
             <div className="ws-tile__filters">
               <div className="ws-pills">
-                {[{l:'1d',v:1},{l:'3d',v:3},{l:'7d',v:7}].map(o=>(
-                  <button key={o.v} className={`ws-pill${sigDays===o.v?' ws-pill--active':''}`}
-                    onClick={()=>setSigDays(o.v)}>{o.l}</button>
+                {[{ l: '1d', v: 1 }, { l: '3d', v: 3 }, { l: '7d', v: 7 }].map(o => (
+                  <button key={o.v} className={`ws-pill${sigDays === o.v ? ' ws-pill--active' : ''}`}
+                    onClick={() => setSigDays(o.v)}>{o.l}</button>
                 ))}
               </div>
             </div>
             {/* Sortable column headers */}
             <div className="ws-home-sig-hdrs">
-              <button className={`ws-col-sort ws-col-sort--sm${sigSort==='ticker'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('ticker')}>Ticker{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
-              {!isMobile&&<button className={`ws-col-sort ws-col-sort--sm${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}>Ins.{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>}
-              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}>Net value{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
-              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}>Conviction{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
+              <button className={`ws-col-sort ws-col-sort--sm${sigSort === 'ticker' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('ticker')}>Ticker{sigSort === 'ticker' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
+              {!isMobile && <button className={`ws-col-sort ws-col-sort--sm${sigSort === 'insiderCount' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('insiderCount')}>Ins.{sigSort === 'insiderCount' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>}
+              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort === 'netValue' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('netValue')}>Net value{sigSort === 'netValue' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
+              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort === 'conviction' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('conviction')}>Conviction{sigSort === 'conviction' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
             </div>
             {/* Scrollable body — max height so it doesn't dominate page */}
-            <div style={{maxHeight:400,overflowY:'auto',overflowX:'hidden'}}>
-              {loading?<SkeletonRows count={6}/>:signals.length===0?(
-                <div className="ws-empty" style={{padding:'20px 16px'}}>No signals in this window — Form 4s are filed 1–2 days after trades.</div>
-              ):(
+            <div style={{ maxHeight: 400, overflowY: 'auto', overflowX: 'hidden' }}>
+              {loading ? <SkeletonRows count={6} /> : signals.length === 0 ? (
+                <div className="ws-empty" style={{ padding: '20px 16px' }}>No signals in this window — Form 4s are filed 1–2 days after trades.</div>
+              ) : (
                 <div>
-                  {signals.map(s=>{
-                    const isBuy = s.direction!=='sell';
+                  {signals.map(s => {
+                    const isBuy = s.direction !== 'sell';
                     const hasRev = detectReversalForTicker(s.ticker, filings);
                     return (
-                      <div key={s.ticker} className="ws-sig-compact-row" onClick={()=>onOpenDetail({type:'signal',...s})}
-                        style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                      <div key={s.ticker} className="ws-sig-compact-row" onClick={() => onOpenDetail({ type: 'signal', ...s })}
+                        style={{ borderLeft: `3px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
                         <div className="ws-sig-compact-row__left">
-                          <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',marginBottom:2}}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 2 }}>
                             <span className="ticker">{s.ticker}</span>
-                            {s.cSuiteBuys>0&&<span className="badge badge--rel-strong" style={{fontSize:10,padding:'1px 5px'}}>{s.cSuiteBuys} exec</span>}
-                            {hasRev&&<span className="reversal-badge" style={{fontSize:9}}><IconReversal className="reversal-badge__icon"/>rev</span>}
-                            <StarBtn ticker={s.ticker} watchlist={watchlist}/>
+                            {s.cSuiteBuys > 0 && <span className="badge badge--rel-strong" style={{ fontSize: 10, padding: '1px 5px' }}>{s.cSuiteBuys} exec</span>}
+                            {hasRev && <span className="reversal-badge" style={{ fontSize: 9 }}><IconReversal className="reversal-badge__icon" />rev</span>}
+                            <StarBtn ticker={s.ticker} watchlist={watchlist} />
                           </div>
-                          <div style={{fontSize:11,color:'var(--text-2)',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.company}</div>
-                          <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            {!isMobile&&<span style={{fontSize:11,color:'var(--text-3)'}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>}
-                            <ConvictionBar score={s.conviction} max={15} showLabel/>
+                          <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.company}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {!isMobile && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.insiderCount} insider{s.insiderCount !== 1 ? 's' : ''}</span>}
+                            <ConvictionBar score={s.conviction} max={15} showLabel />
                           </div>
                         </div>
                         <div className="ws-sig-compact-row__right">
-                          <div className={`ws-sig-row__val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</div>
-                          <div style={{fontSize:10,color:'var(--text-3)',marginTop:2}}>{fmt.ago(s.lastTradeDate)}</div>
+                          <div className={`ws-sig-row__val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{fmt.ago(s.lastTradeDate)}</div>
                         </div>
                       </div>
                     );
@@ -4078,7 +4081,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
               )}
             </div>
             <div className="ws-tile__footer">
-              <button className="ws-tile__see-all-btn" onClick={()=>onSeeAll('dashboard')}>View all signals with full filters →</button>
+              <button className="ws-tile__see-all-btn" onClick={() => onSeeAll('dashboard')}>View all signals with full filters →</button>
             </div>
           </div>
         </div>
@@ -4087,15 +4090,15 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
         <div className="ws-home-side">
 
           {/* Market news — sleek, replaces the old recent filings sidebar */}
-          <div className="ws-tile" style={{marginBottom:14}}>
+          <div className="ws-tile" style={{ marginBottom: 14 }}>
             <div className="ws-tile__hdr">
               <div className="ws-tile__hdr-left">
                 <span className="ws-tile__title">Market news</span>
                 <span className="ws-tile__sub">General &amp; finance</span>
               </div>
             </div>
-            <div style={{maxHeight:260,overflowY:'auto',overflowX:'hidden'}}>
-              <MarketNews watchlist={watchlist} filings={filings} limit={10}/>
+            <div style={{ maxHeight: 260, overflowY: 'auto', overflowX: 'hidden' }}>
+              <MarketNews watchlist={watchlist} filings={filings} limit={10} />
             </div>
           </div>
 
@@ -4103,10 +4106,10 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
           <div className="ws-tile">
             <div className="ws-tile__hdr">
               <div className="ws-tile__hdr-left"><span className="ws-tile__title">Top insiders</span><span className="ws-tile__sub">By composite score</span></div>
-              <button className="ws-tile__action" onClick={()=>onSeeAll('signals')}>Full leaderboard →</button>
+              <button className="ws-tile__action" onClick={() => onSeeAll('signals')}>Full leaderboard →</button>
             </div>
             <div className="ws-tile__body">
-              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
+              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro} />
             </div>
           </div>
 
@@ -4122,23 +4125,23 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const isMobile = useIsMobile();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [tab, setTab]           = useState('signals');
-  const [days, setDays]         = useState(7);
-  const [sourceF, setSourceF]   = useState('');
-  const [sectorF, setSectorF]   = useState('');
-  const [minStr, setMinStr]     = useState(1);
-  const [txType, setTxType]     = useState('all');
+  const [tab, setTab] = useState('signals');
+  const [days, setDays] = useState(7);
+  const [sourceF, setSourceF] = useState('');
+  const [sectorF, setSectorF] = useState('');
+  const [minStr, setMinStr] = useState(1);
+  const [txType, setTxType] = useState('all');
   const [rawRoleF, setRawRoleF] = useState('');
-  const [search, setSearch]     = useState('');
-  const [sigSort, setSigSort]   = useState('conviction');
-  const [sigDir, setSigDir]     = useState(-1);
-  const [rawSort, setRawSort]   = useState('date');
-  const [rawDir, setRawDir]     = useState(-1);
+  const [search, setSearch] = useState('');
+  const [sigSort, setSigSort] = useState('conviction');
+  const [sigDir, setSigDir] = useState(-1);
+  const [rawSort, setRawSort] = useState('date');
+  const [rawDir, setRawDir] = useState(-1);
   // Expanded rows — multiple can be open simultaneously
   const [expandedSigs, setExpandedSigs] = useState(new Set()); // Set of tickers
   const [expandedRaws, setExpandedRaws] = useState(new Set()); // Set of indices
   // Full-screen explore drawer (top-right button)
-  const [drawer, setDrawer]     = useState(null); // null | 'signals' | 'raw'
+  const [drawer, setDrawer] = useState(null); // null | 'signals' | 'raw'
 
   const cutoff = useMemo(() => {
     if (days == null) return '2021-01-01';
@@ -4151,66 +4154,66 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   }, [days]);
 
   const sectors = useMemo(() =>
-    [...new Set(filings.map(f=>f.sector).filter(s=>s&&s!=='Other'))].sort(),
-  [filings]);
+    [...new Set(filings.map(f => f.sector).filter(s => s && s !== 'Other'))].sort(),
+    [filings]);
 
-  const strengthThreshold = minStr===3?10:minStr===2?5:0;
+  const strengthThreshold = minStr === 3 ? 10 : minStr === 2 ? 5 : 0;
 
   // ── Signals ───────────────────────────────────────────────────────────────
   const allSignals = useMemo(() => {
     const result = filterAndScoreSignals(filings, { cutoff, sourceF, sectorF, strengthThreshold });
     const q = search.toLowerCase();
-    return result.filter(s => !q || s.ticker.toLowerCase().includes(q) || (s.company||'').toLowerCase().includes(q));
+    return result.filter(s => !q || s.ticker.toLowerCase().includes(q) || (s.company || '').toLowerCase().includes(q));
   }, [filings, cutoff, sourceF, sectorF, strengthThreshold, search]);
 
   const signals = useMemo(() =>
-    [...allSignals].sort((a,b)=>{
-      const av=a[sigSort]??-Infinity, bv=b[sigSort]??-Infinity;
-      const r=typeof av==='number'?(av<bv?-1:av>bv?1:0):String(av).localeCompare(String(bv));
-      return sigDir>0?r:-r;
+    [...allSignals].sort((a, b) => {
+      const av = a[sigSort] ?? -Infinity, bv = b[sigSort] ?? -Infinity;
+      const r = typeof av === 'number' ? (av < bv ? -1 : av > bv ? 1 : 0) : String(av).localeCompare(String(bv));
+      return sigDir > 0 ? r : -r;
     }),
-  [allSignals, sigSort, sigDir]);
+    [allSignals, sigSort, sigDir]);
 
   // ── Raw filings ───────────────────────────────────────────────────────────
   const allRaw = useMemo(() => {
     const q = search.toLowerCase();
     return filings.filter(f => {
       if (!f.isOpenMarket) return false;
-      if (sectorF && f.sector!==sectorF) return false;
-      if (txType!=='all' && f.transactionType!==txType) return false;
-      if (rawRoleF && f.relationship!==rawRoleF) return false;
-      if (rawCutoff && (f.transactionDate||f.date||'')<rawCutoff) return false;
-      if (q && !f.ticker?.toLowerCase().includes(q) && !(f.company||'').toLowerCase().includes(q) && !(f.insiderName||'').toLowerCase().includes(q)) return false;
+      if (sectorF && f.sector !== sectorF) return false;
+      if (txType !== 'all' && f.transactionType !== txType) return false;
+      if (rawRoleF && f.relationship !== rawRoleF) return false;
+      if (rawCutoff && (f.transactionDate || f.date || '') < rawCutoff) return false;
+      if (q && !f.ticker?.toLowerCase().includes(q) && !(f.company || '').toLowerCase().includes(q) && !(f.insiderName || '').toLowerCase().includes(q)) return false;
       return true;
     });
   }, [filings, sectorF, txType, rawRoleF, rawCutoff, search]);
 
   const rawFilings = useMemo(() =>
-    [...allRaw].sort((a,b)=>{
-      const aV = rawSort==='date'?(a.transactionDate||a.date||''):rawSort==='value'?(a.value||0):(a.shares||0);
-      const bV = rawSort==='date'?(b.transactionDate||b.date||''):rawSort==='value'?(b.value||0):(b.shares||0);
-      return rawDir>0?(aV>bV?1:-1):(bV>aV?1:-1);
-    }).slice(0,300),
-  [allRaw, rawSort, rawDir]);
+    [...allRaw].sort((a, b) => {
+      const aV = rawSort === 'date' ? (a.transactionDate || a.date || '') : rawSort === 'value' ? (a.value || 0) : (a.shares || 0);
+      const bV = rawSort === 'date' ? (b.transactionDate || b.date || '') : rawSort === 'value' ? (b.value || 0) : (b.shares || 0);
+      return rawDir > 0 ? (aV > bV ? 1 : -1) : (bV > aV ? 1 : -1);
+    }).slice(0, 300),
+    [allRaw, rawSort, rawDir]);
 
-  function onSigSort(col) { if(sigSort===col)setSigDir(d=>-d);else{setSigSort(col);setSigDir(-1);} }
-  function onRawSort(col) { if(rawSort===col)setRawDir(d=>-d);else{setRawSort(col);setRawDir(-1);} }
-  const hasFilters = search||sectorF||sourceF||minStr>1||days!==7||(tab==='raw'&&(txType!=='all'||rawRoleF!==''));
-  function resetFilters(){ setSearch('');setSectorF('');setSourceF('');setMinStr(1);setDays(7);setTxType('all');setRawRoleF(''); }
+  function onSigSort(col) { if (sigSort === col) setSigDir(d => -d); else { setSigSort(col); setSigDir(-1); } }
+  function onRawSort(col) { if (rawSort === col) setRawDir(d => -d); else { setRawSort(col); setRawDir(-1); } }
+  const hasFilters = search || sectorF || sourceF || minStr > 1 || days !== 7 || (tab === 'raw' && (txType !== 'all' || rawRoleF !== ''));
+  function resetFilters() { setSearch(''); setSectorF(''); setSourceF(''); setMinStr(1); setDays(7); setTxType('all'); setRawRoleF(''); }
 
   function toggleSig(ticker) {
-    setExpandedSigs(prev => { const n=new Set(prev); n.has(ticker)?n.delete(ticker):n.add(ticker); return n; });
+    setExpandedSigs(prev => { const n = new Set(prev); n.has(ticker) ? n.delete(ticker) : n.add(ticker); return n; });
   }
   function toggleRaw(idx) {
-    setExpandedRaws(prev => { const n=new Set(prev); n.has(idx)?n.delete(idx):n.add(idx); return n; });
+    setExpandedRaws(prev => { const n = new Set(prev); n.has(idx) ? n.delete(idx) : n.add(idx); return n; });
   }
 
   // Get individual trades for an expanded signal row
   function getSignalTrades(s) {
     return filings.filter(f =>
-      f.isOpenMarket && f.ticker===s.ticker &&
-      (f.transactionDate||f.date||'') >= (s.lastTradeDate ? new Date(new Date(s.lastTradeDate).getTime()-90*86400000).toISOString().split('T')[0] : cutoff)
-    ).sort((a,b) => (b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||'')).slice(0,8);
+      f.isOpenMarket && f.ticker === s.ticker &&
+      (f.transactionDate || f.date || '') >= (s.lastTradeDate ? new Date(new Date(s.lastTradeDate).getTime() - 90 * 86400000).toISOString().split('T')[0] : cutoff)
+    ).sort((a, b) => (b.transactionDate || b.date || '').localeCompare(a.transactionDate || a.date || '')).slice(0, 8);
   }
 
   // State for seamless drawer handoff — passes selected signal/ticker into the drawer
@@ -4218,47 +4221,47 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [drawerInitTicker, setDrawerInitTicker] = useState(null);
 
   function openSignalsDrawer(signal) {
-    setDrawerInitSignal(signal ? {type:'signal',...signal} : null);
+    setDrawerInitSignal(signal ? { type: 'signal', ...signal } : null);
     setDrawer('signals');
   }
   function openRawDrawer(ticker, company) {
-    setDrawerInitTicker(ticker ? {type:'ticker', ticker, company} : null);
+    setDrawerInitTicker(ticker ? { type: 'ticker', ticker, company } : null);
     setDrawer('raw');
   }
 
   return (
     <div className="ws-page">
-      <div style={{marginBottom:20}}>
+      <div style={{ marginBottom: 20 }}>
         <h1 className="ws-page-title">Market Data</h1>
         <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
       </div>
 
       {/* Stat strip */}
       <div className="ws-stat-strip">
-        <div className="ws-stat"><div className="ws-stat__label">Open-mkt buys</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{loading?'—':filings.filter(f=>f.isOpenMarket&&f.transactionType==='buy').length}</div><div className="ws-stat__sub">{fmt.money(filings.filter(f=>f.isOpenMarket&&f.transactionType==='buy').reduce((s,f)=>s+(f.value||0),0))}</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">High conviction</div><div className="ws-stat__value">{loading?'—':allSignals.filter(s=>s.conviction>=10).length}</div><div className="ws-stat__sub">Score ≥10/15</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Unique tickers</div><div className="ws-stat__value">{loading?'—':new Set(filings.filter(f=>f.isOpenMarket).map(f=>f.ticker)).size}</div><div className="ws-stat__sub">With activity</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Showing</div><div className="ws-stat__value">{tab==='signals'?signals.length:rawFilings.length}</div><div className="ws-stat__sub">{tab==='signals'?'signals':'filings'} after filters</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Open-mkt buys</div><div className="ws-stat__value" style={{ color: 'var(--green-600)' }}>{loading ? '—' : filings.filter(f => f.isOpenMarket && f.transactionType === 'buy').length}</div><div className="ws-stat__sub">{fmt.money(filings.filter(f => f.isOpenMarket && f.transactionType === 'buy').reduce((s, f) => s + (f.value || 0), 0))}</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">High conviction</div><div className="ws-stat__value">{loading ? '—' : allSignals.filter(s => s.conviction >= 10).length}</div><div className="ws-stat__sub">Score ≥10/15</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Unique tickers</div><div className="ws-stat__value">{loading ? '—' : new Set(filings.filter(f => f.isOpenMarket).map(f => f.ticker)).size}</div><div className="ws-stat__sub">With activity</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Showing</div><div className="ws-stat__value">{tab === 'signals' ? signals.length : rawFilings.length}</div><div className="ws-stat__sub">{tab === 'signals' ? 'signals' : 'filings'} after filters</div></div>
       </div>
 
       <div className="ws-tile">
         {/* Tab bar + Explore full view */}
         <div className="ws-toolbar-hdr">
           <div className="ws-toolbar-tabs">
-            <button className={`ws-toolbar-tab${tab==='signals'?' ws-toolbar-tab--active':''}`}
-              onClick={()=>{setTab('signals');setExpandedRaws(new Set());}}>
-              Signals <span className="ws-tile__count">{loading?'…':allSignals.length}</span>
+            <button className={`ws-toolbar-tab${tab === 'signals' ? ' ws-toolbar-tab--active' : ''}`}
+              onClick={() => { setTab('signals'); setExpandedRaws(new Set()); }}>
+              Signals <span className="ws-tile__count">{loading ? '…' : allSignals.length}</span>
             </button>
-            <button className={`ws-toolbar-tab${tab==='raw'?' ws-toolbar-tab--active':''}`}
-              onClick={()=>{setTab('raw');setExpandedSigs(new Set());}}>
-              Raw filings <span className="ws-tile__count">{loading?'…':allRaw.length}</span>
+            <button className={`ws-toolbar-tab${tab === 'raw' ? ' ws-toolbar-tab--active' : ''}`}
+              onClick={() => { setTab('raw'); setExpandedSigs(new Set()); }}>
+              Raw filings <span className="ws-tile__count">{loading ? '…' : allRaw.length}</span>
             </button>
           </div>
           <div className="ws-toolbar-right">
             {/* Opens the correct full drawer for whichever tab is active */}
             <button className="ws-toolbar-explore-btn"
-              onClick={()=> tab==='signals' ? openSignalsDrawer(null) : openRawDrawer(null,null)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+              onClick={() => tab === 'signals' ? openSignalsDrawer(null) : openRawDrawer(null, null)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6" /><path d="M10 14L21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
               Explore full view
             </button>
           </div>
@@ -4268,157 +4271,157 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
         <div className="ws-filter-bar">
           <div className="ws-search-wrap">
             <span className="ws-search-icon">⌕</span>
-            <input className="ws-search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder={tab==='signals'?'Ticker or company…':'Ticker, company, or insider…'}/>
-            {search&&<button className="ws-search-clear" onClick={()=>setSearch('')}>×</button>}
+            <input className="ws-search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder={tab === 'signals' ? 'Ticker or company…' : 'Ticker, company, or insider…'} />
+            {search && <button className="ws-search-clear" onClick={() => setSearch('')}>×</button>}
           </div>
 
-          {tab==='signals'&&<>
+          {tab === 'signals' && <>
             <div className="ws-filter-group">
               <span className="ws-filter-label">Window</span>
               <div className="ws-pills">
-                {[{v:1,l:'1d'},{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>{
-                  if (!pro&&(o.v===null||o.v>7)) return null;
-                  return <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`} onClick={()=>setDays(o.v)}>{o.l}</button>;
+                {[{ v: 1, l: '1d' }, { v: 3, l: '3d' }, { v: 7, l: '7d' }, { v: 30, l: '30d' }, { v: 90, l: '90d' }, { v: null, l: 'All' }].map(o => {
+                  if (!pro && (o.v === null || o.v > 7)) return null;
+                  return <button key={o.l} className={`ws-pill${days === o.v ? ' ws-pill--active' : ''}`} onClick={() => setDays(o.v)}>{o.l}</button>;
                 })}
-                {!pro&&<button className="ws-pill ws-pill--locked" onClick={()=>onUpgrade('full_history')}>More ↑</button>}
+                {!pro && <button className="ws-pill ws-pill--locked" onClick={() => onUpgrade('full_history')}>More ↑</button>}
               </div>
             </div>
             <div className="ws-filter-group">
               <span className="ws-filter-label">Strength</span>
               <div className="ws-pills">
-                {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
-                  <button key={o.v} className={`ws-pill${minStr===o.v?' ws-pill--active':''}`}
-                    style={o.v===3&&minStr===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:o.v===2&&minStr===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
-                    onClick={()=>setMinStr(o.v)}>{o.l}</button>
+                {[{ v: 1, l: 'Any' }, { v: 2, l: 'Med+' }, { v: 3, l: 'High' }].map(o => (
+                  <button key={o.v} className={`ws-pill${minStr === o.v ? ' ws-pill--active' : ''}`}
+                    style={o.v === 3 && minStr === 3 ? { background: 'var(--green-600)', borderColor: 'var(--green-600)', color: '#fff' } : o.v === 2 && minStr === 2 ? { background: 'var(--amber-600)', borderColor: 'var(--amber-600)', color: '#fff' } : {}}
+                    onClick={() => setMinStr(o.v)}>{o.l}</button>
                 ))}
               </div>
             </div>
             <div className="ws-filter-group">
               <span className="ws-filter-label">Type</span>
               <div className="ws-pills">
-                {[['','All'],['corporate','Corp'],['political','Congress']].map(([v,l])=>(
-                  <button key={v} className={`ws-pill${sourceF===v?' ws-pill--active':''}`} onClick={()=>setSourceF(v)}>{l}</button>
+                {[['', 'All'], ['corporate', 'Corp'], ['political', 'Congress']].map(([v, l]) => (
+                  <button key={v} className={`ws-pill${sourceF === v ? ' ws-pill--active' : ''}`} onClick={() => setSourceF(v)}>{l}</button>
                 ))}
               </div>
             </div>
           </>}
 
-          {tab==='raw'&&<>
+          {tab === 'raw' && <>
             <div className="ws-filter-group">
               <span className="ws-filter-label">Date</span>
               <div className="ws-pills">
-                {[{v:1,l:'1d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:null,l:'All'}].map(o=>(
-                  <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`} onClick={()=>setDays(o.v)}>{o.l}</button>
+                {[{ v: 1, l: '1d' }, { v: 7, l: '7d' }, { v: 30, l: '30d' }, { v: null, l: 'All' }].map(o => (
+                  <button key={o.l} className={`ws-pill${days === o.v ? ' ws-pill--active' : ''}`} onClick={() => setDays(o.v)}>{o.l}</button>
                 ))}
               </div>
             </div>
             <div className="ws-filter-group">
               <span className="ws-filter-label">Type</span>
               <div className="ws-pills">
-                {[['all','All'],['buy','Buys'],['sell','Sells']].map(([v,l])=>(
-                  <button key={v} className={`ws-pill${txType===v?' ws-pill--active':''}`} onClick={()=>setTxType(v)}>{l}</button>
+                {[['all', 'All'], ['buy', 'Buys'], ['sell', 'Sells']].map(([v, l]) => (
+                  <button key={v} className={`ws-pill${txType === v ? ' ws-pill--active' : ''}`} onClick={() => setTxType(v)}>{l}</button>
                 ))}
               </div>
             </div>
             <div className="ws-filter-group">
               <span className="ws-filter-label">Role</span>
               <div className="ws-pills">
-                {[['','All'],['strong','C-Suite'],['medium','Officer']].map(([v,l])=>(
-                  <button key={v} className={`ws-pill${rawRoleF===v?' ws-pill--active':''}`} onClick={()=>setRawRoleF(v)}>{l}</button>
+                {[['', 'All'], ['strong', 'C-Suite'], ['medium', 'Officer']].map(([v, l]) => (
+                  <button key={v} className={`ws-pill${rawRoleF === v ? ' ws-pill--active' : ''}`} onClick={() => setRawRoleF(v)}>{l}</button>
                 ))}
               </div>
             </div>
           </>}
 
-          <select className="ws-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
+          <select className="ws-select" value={sectorF} onChange={e => setSectorF(e.target.value)}>
             <option value="">All sectors</option>
-            {sectors.map(s=><option key={s} value={s}>{s}</option>)}
+            {sectors.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          {hasFilters&&<button className="ws-clear-btn" onClick={resetFilters}>Clear</button>}
+          {hasFilters && <button className="ws-clear-btn" onClick={resetFilters}>Clear</button>}
         </div>
 
         {/* ── SIGNALS TABLE ─────────────────────────────────────────────── */}
-        {tab==='signals'&&(
-          loading?<SkeletonRows count={10}/>:signals.length===0?(
+        {tab === 'signals' && (
+          loading ? <SkeletonRows count={10} /> : signals.length === 0 ? (
             <div className="ws-empty">No signals match these filters. Try widening the window or clearing filters.</div>
-          ):(
+          ) : (
             <>
               <div className="ws-col-hdrs ws-col-hdrs--data">
-                <button className={`ws-col-sort${sigSort==='ticker'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('ticker')}>Ticker{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
-                {!isMobile&&<button className={`ws-col-sort${sigSort==='company'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('company')}>Company{sigSort==='company'&&(sigDir<0?' ↓':' ↑')}</button>}
-                <button className={`ws-col-sort ws-col-sort--right${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}>Insiders{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>
-                <button className={`ws-col-sort ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}>Net value{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
-                <button className={`ws-col-sort ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}>Conviction{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
+                <button className={`ws-col-sort${sigSort === 'ticker' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('ticker')}>Ticker{sigSort === 'ticker' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
+                {!isMobile && <button className={`ws-col-sort${sigSort === 'company' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('company')}>Company{sigSort === 'company' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>}
+                <button className={`ws-col-sort ws-col-sort--right${sigSort === 'insiderCount' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('insiderCount')}>Insiders{sigSort === 'insiderCount' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
+                <button className={`ws-col-sort ws-col-sort--right${sigSort === 'netValue' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('netValue')}>Net value{sigSort === 'netValue' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
+                <button className={`ws-col-sort ws-col-sort--right${sigSort === 'conviction' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('conviction')}>Conviction{sigSort === 'conviction' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
               </div>
               <div>
-                {signals.map(s=>{
-                  const isBuy=s.direction!=='sell';
-                  const isExp=expandedSigs.has(s.ticker);
-                  const hasRev=detectReversalForTicker(s.ticker,filings);
-                  const trades=isExp?getSignalTrades(s):[];
+                {signals.map(s => {
+                  const isBuy = s.direction !== 'sell';
+                  const isExp = expandedSigs.has(s.ticker);
+                  const hasRev = detectReversalForTicker(s.ticker, filings);
+                  const trades = isExp ? getSignalTrades(s) : [];
                   return (
-                    <div key={s.ticker} className={`ws-row${isExp?' ws-row--open':''}`}
-                      style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                    <div key={s.ticker} className={`ws-row${isExp ? ' ws-row--open' : ''}`}
+                      style={{ borderLeft: `3px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
 
                       {/* ── Main row — click anywhere to expand ── */}
-                      <div className="ws-row__main ws-row__main--data" style={{cursor:'pointer'}}
-                        onClick={()=>toggleSig(s.ticker)}>
+                      <div className="ws-row__main ws-row__main--data" style={{ cursor: 'pointer' }}
+                        onClick={() => toggleSig(s.ticker)}>
                         <div className="ws-row__cell">
-                          <div style={{display:'flex',alignItems:'center',gap:5}}>
-                            <span className="ws-row__chevron ws-row__chevron--lg">{isExp?'▾':'▸'}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span className="ws-row__chevron ws-row__chevron--lg">{isExp ? '▾' : '▸'}</span>
                             <span className="ticker">{s.ticker}</span>
-                            {hasRev&&<span className="reversal-badge" style={{fontSize:9,padding:'0 3px'}}><IconReversal className="reversal-badge__icon"/>rev</span>}
-                            <div onClick={e=>e.stopPropagation()}>
-                              <StarBtn ticker={s.ticker} watchlist={watchlist}/>
+                            {hasRev && <span className="reversal-badge" style={{ fontSize: 9, padding: '0 3px' }}><IconReversal className="reversal-badge__icon" />rev</span>}
+                            <div onClick={e => e.stopPropagation()}>
+                              <StarBtn ticker={s.ticker} watchlist={watchlist} />
                             </div>
                           </div>
-                          {isMobile&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:2,paddingLeft:18}}>{s.company}</div>}
+                          {isMobile && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, paddingLeft: 18 }}>{s.company}</div>}
                         </div>
-                        {!isMobile&&<div className="ws-row__cell ws-row__cell--overflow">{s.company}</div>}
+                        {!isMobile && <div className="ws-row__cell ws-row__cell--overflow">{s.company}</div>}
                         <div className="ws-row__cell ws-row__cell--right">
-                          <span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{s.insiderCount}</span>
-                          {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:9,padding:'0 4px',marginLeft:3}}>{s.cSuiteBuys}×</span>}
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.insiderCount}</span>
+                          {s.cSuiteBuys > 0 && <span className="csuite-badge" style={{ fontSize: 9, padding: '0 4px', marginLeft: 3 }}>{s.cSuiteBuys}×</span>}
                         </div>
                         <div className="ws-row__cell ws-row__cell--right">
-                          <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</span>
+                          <span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</span>
                         </div>
-                        <div className="ws-row__cell" style={{minWidth:90}}>
-                          <ConvictionBar score={s.conviction} max={15} showLabel/>
+                        <div className="ws-row__cell" style={{ minWidth: 90 }}>
+                          <ConvictionBar score={s.conviction} max={15} showLabel />
                         </div>
                       </div>
 
                       {/* ── Expanded detail ── */}
-                      {isExp&&(
-                        <div className="ws-row__detail" onClick={e=>e.stopPropagation()}>
+                      {isExp && (
+                        <div className="ws-row__detail" onClick={e => e.stopPropagation()}>
 
                           {/* Signal summary row */}
                           <div className="ws-row__detail-summary">
                             <div><span className="ws-data-label">Last trade</span><div className="ws-row__detail-val">{fmt.dateShort(s.lastTradeDate)}</div></div>
-                            <div><span className="ws-data-label">Net flow</span><div className={`ws-row__detail-val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</div></div>
-                            <div><span className="ws-data-label">Exec transactions</span><div className="ws-row__detail-val">{s.cSuiteBuys>0?`${s.cSuiteBuys} trade${s.cSuiteBuys!==1?'s':''}`:'—'}</div></div>
+                            <div><span className="ws-data-label">Net flow</span><div className={`ws-row__detail-val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div></div>
+                            <div><span className="ws-data-label">Exec transactions</span><div className="ws-row__detail-val">{s.cSuiteBuys > 0 ? `${s.cSuiteBuys} trade${s.cSuiteBuys !== 1 ? 's' : ''}` : '—'}</div></div>
                             <div><span className="ws-data-label">Insiders</span><div className="ws-row__detail-val">{s.insiderCount}</div></div>
-                            <div><span className="ws-data-label">Sector</span><div className="ws-row__detail-val">{s.sector||'—'}</div></div>
+                            <div><span className="ws-data-label">Sector</span><div className="ws-row__detail-val">{s.sector || '—'}</div></div>
                             <div><span className="ws-data-label">Conviction</span><div className="ws-row__detail-val">{s.conviction.toFixed(1)} / 15</div></div>
-                            {s.avgReturn!=null&&<div><span className="ws-data-label">Since trade</span><div className={`ws-row__detail-val${s.avgReturn>=0?' val-buy':' val-sell'}`}>{s.avgReturn>=0?'+':''}{s.avgReturn.toFixed(1)}%</div></div>}
+                            {s.avgReturn != null && <div><span className="ws-data-label">Since trade</span><div className={`ws-row__detail-val${s.avgReturn >= 0 ? ' val-buy' : ' val-sell'}`}>{s.avgReturn >= 0 ? '+' : ''}{s.avgReturn.toFixed(1)}%</div></div>}
                           </div>
 
                           {/* Individual trade history */}
-                          {trades.length>0&&(
+                          {trades.length > 0 && (
                             <div className="ws-row__detail-trades">
                               <div className="ws-row__detail-trades-hdr">
                                 <span className="ws-data-label">Individual trades · {s.company}</span>
                               </div>
-                              {trades.map((f,ti)=>{
-                                const fb=f.transactionType==='buy';
-                                const su=secFilingUrl(f.accessionNumber,f.cikIssuer);
+                              {trades.map((f, ti) => {
+                                const fb = f.transactionType === 'buy';
+                                const su = secFilingUrl(f.accessionNumber, f.cikIssuer);
                                 return (
                                   <div key={ti} className="ws-row__trade-line">
-                                    <span className="ws-row__trade-date ws-data-label">{fmt.dateShort(f.transactionDate||f.date)}</span>
-                                    <span className="ws-row__trade-who">{f.insiderName} <span style={{color:'var(--text-3)',fontSize:10}}>{f.title?'· '+f.title.split(' ').slice(0,3).join(' '):''}</span></span>
-                                    <span className={`ws-type-badge${fb?' ws-type-badge--buy':' ws-type-badge--sell'}`} style={{flexShrink:0}}>{fb?'Buy':'Sell'}</span>
-                                    {f.shares&&<span className="ws-row__trade-shares" style={{color:'var(--text-3)',fontSize:11}}>{fmt.number(f.shares)} sh</span>}
-                                    <span className={`ws-data-mono${fb?' val-buy':' val-sell'}`} style={{marginLeft:'auto',flexShrink:0}}>{fb?'+':'−'}{fmt.money(f.value)}</span>
-                                    {su&&<a href={su} target="_blank" rel="noopener noreferrer" className="ws-sec-link" onClick={e=>e.stopPropagation()}>↗</a>}
+                                    <span className="ws-row__trade-date ws-data-label">{fmt.dateShort(f.transactionDate || f.date)}</span>
+                                    <span className="ws-row__trade-who">{f.insiderName} <span style={{ color: 'var(--text-3)', fontSize: 10 }}>{f.title ? '· ' + f.title.split(' ').slice(0, 3).join(' ') : ''}</span></span>
+                                    <span className={`ws-type-badge${fb ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`} style={{ flexShrink: 0 }}>{fb ? 'Buy' : 'Sell'}</span>
+                                    {f.shares && <span className="ws-row__trade-shares" style={{ color: 'var(--text-3)', fontSize: 11 }}>{fmt.number(f.shares)} sh</span>}
+                                    <span className={`ws-data-mono${fb ? ' val-buy' : ' val-sell'}`} style={{ marginLeft: 'auto', flexShrink: 0 }}>{fb ? '+' : '−'}{fmt.money(f.value)}</span>
+                                    {su && <a href={su} target="_blank" rel="noopener noreferrer" className="ws-sec-link" onClick={e => e.stopPropagation()}>↗</a>}
                                   </div>
                                 );
                               })}
@@ -4426,7 +4429,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                           )}
 
                           <div className="ws-row__detail-footer">
-                            <button className="ws-row__detail-cta" onClick={()=>openSignalsDrawer(s)}>
+                            <button className="ws-row__detail-cta" onClick={() => openSignalsDrawer(s)}>
                               Open full ↗
                             </button>
                           </div>
@@ -4442,85 +4445,85 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
         )}
 
         {/* ── RAW FILINGS TABLE ─────────────────────────────────────────── */}
-        {tab==='raw'&&(
-          loading?<SkeletonRows count={12}/>:rawFilings.length===0?(
+        {tab === 'raw' && (
+          loading ? <SkeletonRows count={12} /> : rawFilings.length === 0 ? (
             <div className="ws-empty">No filings match these filters.</div>
-          ):(
+          ) : (
             <>
               {/* Same outer width as signals. 7-col grid: chevron+date | ticker | insider | role | type | ±position | value */}
               <div className="ws-col-hdrs ws-col-hdrs--raw">
-                <button className={`ws-col-sort${rawSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('date')}>Date{rawSort==='date'&&(rawDir<0?' ↓':' ↑')}</button>
+                <button className={`ws-col-sort${rawSort === 'date' ? ' ws-col-sort--active' : ''}`} onClick={() => onRawSort('date')}>Date{rawSort === 'date' && (rawDir < 0 ? ' ↓' : ' ↑')}</button>
                 <span className="ws-col-sort">Ticker</span>
-                {!isMobile&&<span className="ws-col-sort">Insider</span>}
-                {!isMobile&&<span className="ws-col-sort">Role</span>}
+                {!isMobile && <span className="ws-col-sort">Insider</span>}
+                {!isMobile && <span className="ws-col-sort">Role</span>}
                 <span className="ws-col-sort">Type</span>
-                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${rawSort==='shares'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('shares')}>± Position{rawSort==='shares'&&(rawDir<0?' ↓':' ↑')}</button>}
-                <button className={`ws-col-sort ws-col-sort--right${rawSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('value')}>Value{rawSort==='value'&&(rawDir<0?' ↓':' ↑')}</button>
+                {!isMobile && <button className={`ws-col-sort ws-col-sort--right${rawSort === 'shares' ? ' ws-col-sort--active' : ''}`} onClick={() => onRawSort('shares')}>± Position{rawSort === 'shares' && (rawDir < 0 ? ' ↓' : ' ↑')}</button>}
+                <button className={`ws-col-sort ws-col-sort--right${rawSort === 'value' ? ' ws-col-sort--active' : ''}`} onClick={() => onRawSort('value')}>Value{rawSort === 'value' && (rawDir < 0 ? ' ↓' : ' ↑')}</button>
               </div>
               <div>
-                {rawFilings.map((f,i)=>{
-                  const isBuy=f.transactionType==='buy';
-                  const isExp=expandedRaws.has(i);
-                  const secUrl=secFilingUrl(f.accessionNumber,f.cikIssuer);
+                {rawFilings.map((f, i) => {
+                  const isBuy = f.transactionType === 'buy';
+                  const isExp = expandedRaws.has(i);
+                  const secUrl = secFilingUrl(f.accessionNumber, f.cikIssuer);
                   // Sibling filings for this insider × ticker combo
-                  const siblingFilings=isExp?filings.filter(x=>x.ticker===f.ticker&&x.insiderName===f.insiderName&&x.isOpenMarket&&x.accessionNumber!==f.accessionNumber).sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||'')).slice(0,5):[];
+                  const siblingFilings = isExp ? filings.filter(x => x.ticker === f.ticker && x.insiderName === f.insiderName && x.isOpenMarket && x.accessionNumber !== f.accessionNumber).sort((a, b) => (b.transactionDate || b.date || '').localeCompare(a.transactionDate || a.date || '')).slice(0, 5) : [];
                   return (
-                    <div key={i} className={`ws-row${isExp?' ws-row--open':''}`}
-                      style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                    <div key={i} className={`ws-row${isExp ? ' ws-row--open' : ''}`}
+                      style={{ borderLeft: `3px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
 
-                      <div className="ws-row__main ws-row__main--raw" style={{cursor:'pointer'}}
-                        onClick={()=>toggleRaw(i)}>
-                        <div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>
-                          <span className="ws-row__chevron ws-row__chevron--lg">{isExp?'▾':'▸'}</span>
-                          {fmt.dateShort(f.transactionDate||f.date)}
+                      <div className="ws-row__main ws-row__main--raw" style={{ cursor: 'pointer' }}
+                        onClick={() => toggleRaw(i)}>
+                        <div className="ws-row__cell ws-row__cell--muted" style={{ fontSize: 11 }}>
+                          <span className="ws-row__chevron ws-row__chevron--lg">{isExp ? '▾' : '▸'}</span>
+                          {fmt.dateShort(f.transactionDate || f.date)}
                         </div>
                         <div className="ws-row__cell">
                           <span className="ticker">{f.ticker}</span>
-                          {isMobile&&<div style={{fontSize:10,color:'var(--text-3)',marginTop:2}}>{f.insiderName}</div>}
+                          {isMobile && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{f.insiderName}</div>}
                         </div>
-                        {!isMobile&&<div className="ws-row__cell ws-row__cell--overflow" style={{fontSize:12}}>{f.insiderName}</div>}
-                        {!isMobile&&<div className="ws-row__cell"><Badge type={`rel-${f.relationship||'weak'}`}>{f.relationship==='strong'?'C-Suite':f.relationship==='medium'?'Officer':'Dir'}</Badge></div>}
-                        <div className="ws-row__cell"><span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span></div>
+                        {!isMobile && <div className="ws-row__cell ws-row__cell--overflow" style={{ fontSize: 12 }}>{f.insiderName}</div>}
+                        {!isMobile && <div className="ws-row__cell"><Badge type={`rel-${f.relationship || 'weak'}`}>{f.relationship === 'strong' ? 'C-Suite' : f.relationship === 'medium' ? 'Officer' : 'Dir'}</Badge></div>}
+                        <div className="ws-row__cell"><span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span></div>
                         {/* Net position change — signed shares count */}
-                        {!isMobile&&<div className="ws-row__cell ws-row__cell--right">
-                          <span className={`ws-row__pos-change${isBuy?' val-buy':' val-sell'}`}>
-                            {isBuy?'+':'−'}{f.shares?fmt.number(f.shares)+' sh':'—'}
+                        {!isMobile && <div className="ws-row__cell ws-row__cell--right">
+                          <span className={`ws-row__pos-change${isBuy ? ' val-buy' : ' val-sell'}`}>
+                            {isBuy ? '+' : '−'}{f.shares ? fmt.number(f.shares) + ' sh' : '—'}
                           </span>
                         </div>}
                         <div className="ws-row__cell ws-row__cell--right">
-                          <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                          <span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</span>
                         </div>
                       </div>
 
-                      {isExp&&(
-                        <div className="ws-row__detail" onClick={e=>e.stopPropagation()}>
+                      {isExp && (
+                        <div className="ws-row__detail" onClick={e => e.stopPropagation()}>
 
                           {/* Filing details */}
                           <div className="ws-row__detail-summary">
                             <div><span className="ws-data-label">Insider</span><div className="ws-row__detail-val">{f.insiderName}</div></div>
-                            <div><span className="ws-data-label">Title</span><div className="ws-row__detail-val">{f.title||'—'}</div></div>
-                            <div><span className="ws-data-label">Position change</span><div className={`ws-row__detail-val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{f.shares?fmt.number(f.shares)+' sh':'—'}</div></div>
-                            <div><span className="ws-data-label">Price / share</span><div className="ws-row__detail-val">{f.price?fmt.price(f.price):'—'}</div></div>
-                            <div><span className="ws-data-label">Total value</span><div className={`ws-row__detail-val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</div></div>
-                            <div><span className="ws-data-label">Company</span><div className="ws-row__detail-val">{f.company||f.ticker}</div></div>
-                            <div><span className="ws-data-label">Sector</span><div className="ws-row__detail-val">{f.sector||'—'}</div></div>
-                            {secUrl&&<div><span className="ws-data-label">Source</span><div><a href={secUrl} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ SEC filing</a></div></div>}
+                            <div><span className="ws-data-label">Title</span><div className="ws-row__detail-val">{f.title || '—'}</div></div>
+                            <div><span className="ws-data-label">Position change</span><div className={`ws-row__detail-val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{f.shares ? fmt.number(f.shares) + ' sh' : '—'}</div></div>
+                            <div><span className="ws-data-label">Price / share</span><div className="ws-row__detail-val">{f.price ? fmt.price(f.price) : '—'}</div></div>
+                            <div><span className="ws-data-label">Total value</span><div className={`ws-row__detail-val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</div></div>
+                            <div><span className="ws-data-label">Company</span><div className="ws-row__detail-val">{f.company || f.ticker}</div></div>
+                            <div><span className="ws-data-label">Sector</span><div className="ws-row__detail-val">{f.sector || '—'}</div></div>
+                            {secUrl && <div><span className="ws-data-label">Source</span><div><a href={secUrl} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ SEC filing</a></div></div>}
                           </div>
 
                           {/* Other trades by same insider at same ticker */}
-                          {siblingFilings.length>0&&(
+                          {siblingFilings.length > 0 && (
                             <div className="ws-row__detail-trades">
                               <div className="ws-row__detail-trades-hdr">
                                 <span className="ws-data-label">Other trades — {f.insiderName} at {f.ticker}</span>
                               </div>
-                              {siblingFilings.map((sf,si)=>{
-                                const sfb=sf.transactionType==='buy';
+                              {siblingFilings.map((sf, si) => {
+                                const sfb = sf.transactionType === 'buy';
                                 return (
                                   <div key={si} className="ws-row__trade-line">
-                                    <span className="ws-row__trade-date ws-data-label">{fmt.dateShort(sf.transactionDate||sf.date)}</span>
-                                    <span className={`ws-type-badge${sfb?' ws-type-badge--buy':' ws-type-badge--sell'}`} style={{flexShrink:0}}>{sfb?'Buy':'Sell'}</span>
-                                    {sf.shares&&<span className={`ws-row__pos-change${sfb?' val-buy':' val-sell'}`}>{sfb?'+':'−'}{fmt.number(sf.shares)} sh</span>}
-                                    <span className={`ws-data-mono${sfb?' val-buy':' val-sell'}`} style={{marginLeft:'auto',flexShrink:0}}>{sfb?'+':'−'}{fmt.money(sf.value)}</span>
+                                    <span className="ws-row__trade-date ws-data-label">{fmt.dateShort(sf.transactionDate || sf.date)}</span>
+                                    <span className={`ws-type-badge${sfb ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`} style={{ flexShrink: 0 }}>{sfb ? 'Buy' : 'Sell'}</span>
+                                    {sf.shares && <span className={`ws-row__pos-change${sfb ? ' val-buy' : ' val-sell'}`}>{sfb ? '+' : '−'}{fmt.number(sf.shares)} sh</span>}
+                                    <span className={`ws-data-mono${sfb ? ' val-buy' : ' val-sell'}`} style={{ marginLeft: 'auto', flexShrink: 0 }}>{sfb ? '+' : '−'}{fmt.money(sf.value)}</span>
                                   </div>
                                 );
                               })}
@@ -4529,7 +4532,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
                           {/* Single CTA: opens raw explore with same filters + this ticker pre-selected */}
                           <div className="ws-row__detail-footer">
-                            <button className="ws-row__detail-cta" onClick={()=>openRawDrawer(f.ticker, f.company)}>
+                            <button className="ws-row__detail-cta" onClick={() => openRawDrawer(f.ticker, f.company)}>
                               Open full ↗
                             </button>
                           </div>
@@ -4548,27 +4551,27 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
       </div>
 
       {/* Full-screen explore drawer — signals uses InsightsDrawer, raw uses DataDrawer */}
-      {drawer==='signals'&&(
+      {drawer === 'signals' && (
         <InsightsDrawer
           type="signals"
           filings={filings}
           initialDetail={drawerInitSignal}
-          onClose={()=>{setDrawer(null);setDrawerInitSignal(null);}}
-          onSwitchToData={()=>{setDrawer(null);setDrawerInitSignal(null);setTimeout(()=>setDrawer('raw'),50);}}
+          onClose={() => { setDrawer(null); setDrawerInitSignal(null); }}
+          onSwitchToData={() => { setDrawer(null); setDrawerInitSignal(null); setTimeout(() => setDrawer('raw'), 50); }}
           sigSort={sigSort} sigDir={sigDir} sigOnSort={onSigSort}
-          ensureFilingsWindow={()=>{}} filingsLoading={loading}
+          ensureFilingsWindow={() => { }} filingsLoading={loading}
           watchlist={watchlist}
-          initialFilters={{days,sourceF,sectorF,minStrength:minStr}}
+          initialFilters={{ days, sourceF, sectorF, minStrength: minStr }}
           pro={pro}
         />
       )}
-      {drawer==='raw'&&(
+      {drawer === 'raw' && (
         <DataDrawer
-          initialDetail={drawerInitTicker || {type:'data',dataFilters:{days,sectorF,txType,rawRoleF}}}
+          initialDetail={drawerInitTicker || { type: 'data', dataFilters: { days, sectorF, txType, rawRoleF } }}
           initialDetailStack={[]}
-          filterState={{days,sectorF,txType,rawRoleF}}
-          onClose={()=>{setDrawer(null);setDrawerInitTicker(null);}}
-          onSwitchTab={(tab)=>{setDrawer(null);setDrawerInitTicker(null);setTimeout(()=>setDrawer(tab==='signals'?'signals':'insiders'),50);}}
+          filterState={{ days, sectorF, txType, rawRoleF }}
+          onClose={() => { setDrawer(null); setDrawerInitTicker(null); }}
+          onSwitchTab={(tab) => { setDrawer(null); setDrawerInitTicker(null); setTimeout(() => setDrawer(tab === 'signals' ? 'signals' : 'insiders'), 50); }}
           watchlist={watchlist}
           portfolioTickers={[]}
           pro={pro}
@@ -4584,23 +4587,23 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 // Helper — does this ticker have a reversal in the last 30d?
 // Cheap per-row check using cached reversal list passed in.
 function detectReversalForTicker(ticker, filings) {
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
   const iso = cutoff.toISOString().split('T')[0];
-  const rows = filings.filter(f=>f.ticker===ticker&&f.isOpenMarket&&(f.transactionDate||f.date||'')>=iso);
-  const types = new Set(rows.map(f=>f.transactionType));
-  return types.has('buy')&&types.has('sell');
+  const rows = filings.filter(f => f.ticker === ticker && f.isOpenMarket && (f.transactionDate || f.date || '') >= iso);
+  const types = new Set(rows.map(f => f.transactionType));
+  return types.has('buy') && types.has('sell');
 }
 
 
 // ─── SIGNALS ──────────────────────────────────────────────────────────────────
-const DATE_PRESETS=[{label:'3d',days:3},{label:'7d',days:7},{label:'14d',days:14},{label:'30d',days:30},{label:'All',days:null}];
+const DATE_PRESETS = [{ label: '3d', days: 3 }, { label: '7d', days: 7 }, { label: '14d', days: 14 }, { label: '30d', days: 30 }, { label: 'All', days: null }];
 
 // ─── INSIGHTS — multi-environment: Snapshot / Signals / Leaderboard / Sector Flow ──
 const INSIGHTS_ENVS = [
-  {id:'snapshot',    label:'Snapshot'},
-  {id:'signals',     label:'Signals'},
-  {id:'leaderboard', label:'Insider Leaderboard'},
-  {id:'sectorflow',  label:'Sector Money Flow'},
+  { id: 'snapshot', label: 'Snapshot' },
+  { id: 'signals', label: 'Signals' },
+  { id: 'leaderboard', label: 'Insider Leaderboard' },
+  { id: 'sectorflow', label: 'Sector Money Flow' },
 ];
 
 // Detects insiders who reversed direction on a ticker within the last 12mo
@@ -4608,16 +4611,16 @@ const INSIGHTS_ENVS = [
 // the last 30 days. Exit signals (sell-after-buy) are surfaced first since
 // they're the stronger "this insider changed their mind" signal.
 function detectReversals(filings) {
-  const cutoffRecent = new Date(); cutoffRecent.setDate(cutoffRecent.getDate()-30);
-  const cutoffWindow = new Date(); cutoffWindow.setMonth(cutoffWindow.getMonth()-12);
+  const cutoffRecent = new Date(); cutoffRecent.setDate(cutoffRecent.getDate() - 30);
+  const cutoffWindow = new Date(); cutoffWindow.setMonth(cutoffWindow.getMonth() - 12);
   const recentISO = cutoffRecent.toISOString().split('T')[0];
   const windowISO = cutoffWindow.toISOString().split('T')[0];
 
   const byPair = {};
   for (const f of filings) {
     if (!f.isOpenMarket || !f.ticker || !f.insiderName) continue;
-    const dt = f.transactionDate||f.date;
-    if (!dt || dt<windowISO) continue;
+    const dt = f.transactionDate || f.date;
+    if (!dt || dt < windowISO) continue;
     const key = `${f.insiderName}::${f.ticker}`;
     if (!byPair[key]) byPair[key] = [];
     byPair[key].push(f);
@@ -4625,25 +4628,25 @@ function detectReversals(filings) {
 
   const reversals = [];
   for (const [key, trades] of Object.entries(byPair)) {
-    const sorted = [...trades].sort((a,b)=>(a.transactionDate||a.date||'').localeCompare(b.transactionDate||b.date||''));
-    const types = [...new Set(sorted.map(t=>t.transactionType))];
-    if (types.length<2) continue; // needs both a buy and a sell to be a reversal
-    const last = sorted[sorted.length-1];
-    const lastDt = last.transactionDate||last.date;
-    if (!lastDt || lastDt<recentISO) continue; // most recent leg must be within 30d
-    const prior = [...sorted].reverse().find(t=>t.transactionType!==last.transactionType);
+    const sorted = [...trades].sort((a, b) => (a.transactionDate || a.date || '').localeCompare(b.transactionDate || b.date || ''));
+    const types = [...new Set(sorted.map(t => t.transactionType))];
+    if (types.length < 2) continue; // needs both a buy and a sell to be a reversal
+    const last = sorted[sorted.length - 1];
+    const lastDt = last.transactionDate || last.date;
+    if (!lastDt || lastDt < recentISO) continue; // most recent leg must be within 30d
+    const prior = [...sorted].reverse().find(t => t.transactionType !== last.transactionType);
     if (!prior) continue;
     reversals.push({
       insiderName: last.insiderName, title: last.title,
       ticker: last.ticker, company: last.company,
-      priorType: prior.transactionType, priorDate: prior.transactionDate||prior.date,
+      priorType: prior.transactionType, priorDate: prior.transactionDate || prior.date,
       recentType: last.transactionType, recentDate: lastDt,
-      recentValue: last.value, isExit: last.transactionType==='sell',
+      recentValue: last.value, isExit: last.transactionType === 'sell',
     });
   }
-  return reversals.sort((a,b)=>{
-    if (a.isExit!==b.isExit) return a.isExit?-1:1; // exits first
-    return (b.recentDate||'').localeCompare(a.recentDate||'');
+  return reversals.sort((a, b) => {
+    if (a.isExit !== b.isExit) return a.isExit ? -1 : 1; // exits first
+    return (b.recentDate || '').localeCompare(a.recentDate || '');
   });
 }
 
@@ -4653,87 +4656,87 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const pro = isPro(user);
   const isMobile = useIsMobile();
 
-  const [rows, setRows]           = useState(null);
-  const [lbError, setLbError]     = useState(null);
+  const [rows, setRows] = useState(null);
+  const [lbError, setLbError] = useState(null);
   const [yearsBack, setYearsBack] = useState(2);
-  const [lbSource, setLbSource]   = useState(null);
-  const [sort, setSort]           = useState('proxy_score');
-  const [dir, setDir]             = useState(-1);
-  const [search, setSearch]       = useState('');
-  const [selected, setSelected]   = useState(null);
+  const [lbSource, setLbSource] = useState(null);
+  const [sort, setSort] = useState('proxy_score');
+  const [dir, setDir] = useState(-1);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
   const [txExpanded, setTxExpanded] = useState(new Set());
   const [insiderDrawerDetail, setInsiderDrawerDetail] = useState(null); // {type:'trader',...} when drawer open
 
-  useEffect(()=>{
-    if (!cfg.NEON_PROXY_URL){setLbError('Not configured');return;}
-    setRows(null);setLbError(null);
-    queryNeon(LEADERBOARD_QUERY(200,null,2,yearsBack,lbSource))
-      .then(r=>{
+  useEffect(() => {
+    if (!cfg.NEON_PROXY_URL) { setLbError('Not configured'); return; }
+    setRows(null); setLbError(null);
+    queryNeon(LEADERBOARD_QUERY(200, null, 2, yearsBack, lbSource))
+      .then(r => {
         const p = processLeaderboardRows(r);
         setRows(p);
-        setSelected(s => s ?? (p[0]||null));
+        setSelected(s => s ?? (p[0] || null));
       })
-      .catch(e=>setLbError(e.message||'Failed to load'));
-  },[yearsBack,lbSource]);
+      .catch(e => setLbError(e.message || 'Failed to load'));
+  }, [yearsBack, lbSource]);
 
-  const sorted = useMemo(()=>{
+  const sorted = useMemo(() => {
     if (!rows) return [];
     const q = search.toLowerCase();
     return [...rows]
-      .filter(r=>!q||(r.insider_name||'').toLowerCase().includes(q)||(r.insider_title||'').toLowerCase().includes(q))
-      .sort((a,b)=>{const av=a[sort]??-Infinity,bv=b[sort]??-Infinity;return dir>0?av-bv:bv-av;});
-  },[rows,search,sort,dir]);
+      .filter(r => !q || (r.insider_name || '').toLowerCase().includes(q) || (r.insider_title || '').toLowerCase().includes(q))
+      .sort((a, b) => { const av = a[sort] ?? -Infinity, bv = b[sort] ?? -Infinity; return dir > 0 ? av - bv : bv - av; });
+  }, [rows, search, sort, dir]);
 
-  function onSortClick(col){if(sort===col)setDir(d=>-d);else{setSort(col);setDir(-1);}}
+  function onSortClick(col) { if (sort === col) setDir(d => -d); else { setSort(col); setDir(-1); } }
 
-  const stats=useMemo(()=>{
-    if(!rows?.length)return{};
-    const withHR=rows.filter(r=>r.hit_rate!=null);
-    const avgHit=withHR.length?Math.round(withHR.reduce((s,r)=>s+r.hit_rate,0)/withHR.length):null;
-    return{count:rows.length,avgHit,topScore:rows.length?Math.max(...rows.map(r=>r.proxy_score??0)).toFixed(1):'—',totalVal:rows.reduce((s,r)=>s+(r.bought_value||0),0)};
-  },[rows]);
-  const totalValDisplay = isNaN(stats.totalVal) ? '—' : fmt.money(stats.totalVal||0);
+  const stats = useMemo(() => {
+    if (!rows?.length) return {};
+    const withHR = rows.filter(r => r.hit_rate != null);
+    const avgHit = withHR.length ? Math.round(withHR.reduce((s, r) => s + r.hit_rate, 0) / withHR.length) : null;
+    return { count: rows.length, avgHit, topScore: rows.length ? Math.max(...rows.map(r => r.proxy_score ?? 0)).toFixed(1) : '—', totalVal: rows.reduce((s, r) => s + (r.bought_value || 0), 0) };
+  }, [rows]);
+  const totalValDisplay = isNaN(stats.totalVal) ? '—' : fmt.money(stats.totalVal || 0);
 
   // Transactions for selected insider
-  const profileTrades = useMemo(()=>{
+  const profileTrades = useMemo(() => {
     if (!selected) return [];
     return filings
-      .filter(f=>f.isOpenMarket&&f.insiderName===selected.insider_name)
-      .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
-      .slice(0,30);
-  },[filings, selected?.insider_name]);
+      .filter(f => f.isOpenMarket && f.insiderName === selected.insider_name)
+      .sort((a, b) => (b.transactionDate || b.date || '').localeCompare(a.transactionDate || a.date || ''))
+      .slice(0, 30);
+  }, [filings, selected?.insider_name]);
 
   // Companies this insider has traded at
-  const profileCompanies = useMemo(()=>{
-    const map={};
-    profileTrades.forEach(f=>{
-      if(!map[f.ticker]) map[f.ticker]={ticker:f.ticker,company:f.company,buys:0,sells:0,lastDate:''};
-      if(f.transactionType==='buy') map[f.ticker].buys++;
+  const profileCompanies = useMemo(() => {
+    const map = {};
+    profileTrades.forEach(f => {
+      if (!map[f.ticker]) map[f.ticker] = { ticker: f.ticker, company: f.company, buys: 0, sells: 0, lastDate: '' };
+      if (f.transactionType === 'buy') map[f.ticker].buys++;
       else map[f.ticker].sells++;
-      const d=f.transactionDate||f.date||'';
-      if(d>map[f.ticker].lastDate) map[f.ticker].lastDate=d;
+      const d = f.transactionDate || f.date || '';
+      if (d > map[f.ticker].lastDate) map[f.ticker].lastDate = d;
     });
-    return Object.values(map).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));
-  },[profileTrades]);
+    return Object.values(map).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+  }, [profileTrades]);
 
   // Score ring SVG
-  function ScoreRing({score,size=76}){
-    const pct=Math.min((score||0)/5,1);
-    const r=(size-8)/2, circ=2*Math.PI*r, dash=pct*circ;
-    const color=score>=4?'var(--green-600)':score>=2.5?'var(--accent)':'var(--amber-600)';
+  function ScoreRing({ score, size = 76 }) {
+    const pct = Math.min((score || 0) / 5, 1);
+    const r = (size - 8) / 2, circ = 2 * Math.PI * r, dash = pct * circ;
+    const color = score >= 4 ? 'var(--green-600)' : score >= 2.5 ? 'var(--accent)' : 'var(--amber-600)';
     return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{flexShrink:0}}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={6}/>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={6}
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={6} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={6}
           strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
-          transform={`rotate(-90 ${size/2} ${size/2})`}
-          style={{transition:'stroke-dasharray .4s ease'}}/>
-        <text x={size/2} y={size/2-4} textAnchor="middle" dominantBaseline="middle"
-          style={{fontSize:size*0.22,fontWeight:700,fontFamily:'var(--font-mono)',fill:color,userSelect:'none'}}>
-          {score!=null?score.toFixed(1):'—'}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          style={{ transition: 'stroke-dasharray .4s ease' }} />
+        <text x={size / 2} y={size / 2 - 4} textAnchor="middle" dominantBaseline="middle"
+          style={{ fontSize: size * 0.22, fontWeight: 700, fontFamily: 'var(--font-mono)', fill: color, userSelect: 'none' }}>
+          {score != null ? score.toFixed(1) : '—'}
         </text>
-        <text x={size/2} y={size/2+size*0.2} textAnchor="middle" dominantBaseline="middle"
-          style={{fontSize:size*0.13,fill:'var(--text-3)',fontFamily:'var(--font)',userSelect:'none'}}>
+        <text x={size / 2} y={size / 2 + size * 0.2} textAnchor="middle" dominantBaseline="middle"
+          style={{ fontSize: size * 0.13, fill: 'var(--text-3)', fontFamily: 'var(--font)', userSelect: 'none' }}>
           /5.0
         </text>
       </svg>
@@ -4741,16 +4744,16 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   }
 
   // Profile card component
-  function ProfileCard({r}){
-    if(!r) return (
+  function ProfileCard({ r }) {
+    if (!r) return (
       <div className="ip-profile-empty">
-        <div style={{fontSize:40,marginBottom:12,opacity:.25}}>◎</div>
-        <div style={{fontSize:13,color:'var(--text-3)'}}>Select an insider from the list</div>
+        <div style={{ fontSize: 40, marginBottom: 12, opacity: .25 }}>◎</div>
+        <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Select an insider from the list</div>
       </div>
     );
-    const hrC=r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-2)';
-    const retC=(r.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
-    const initials=(r.insider_name||'').split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+    const hrC = r.hit_rate >= 70 ? 'var(--green-600)' : r.hit_rate < 50 ? 'var(--red-600)' : 'var(--text-2)';
+    const retC = (r.avg_return ?? 0) >= 0 ? 'var(--green-600)' : 'var(--red-600)';
+    const initials = (r.insider_name || '').split(' ').map(w => w[0] || '').slice(0, 2).join('').toUpperCase();
     return (
       <div className="ip-profile">
         {/* ── Head: avatar · identity · score ring ── */}
@@ -4759,46 +4762,46 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           <div className="ip-profile__identity">
             <div className="ip-profile__name">{r.insider_name}</div>
             <div className="ip-profile__meta">
-              <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
-              {r.insider_title&&<span className="ip-profile__title">{r.insider_title}</span>}
+              <Badge type={`rel-${r.relationship || 'weak'}`}>{r.relationship === 'strong' ? 'C-Suite' : r.relationship === 'medium' ? 'Officer' : 'Dir'}</Badge>
+              {r.insider_title && <span className="ip-profile__title">{r.insider_title}</span>}
             </div>
-            <div style={{marginTop:10}} onClick={e=>e.stopPropagation()}>
-              <FollowBtn name={r.insider_name} watchlist={watchlist}/>
+            <div style={{ marginTop: 10 }} onClick={e => e.stopPropagation()}>
+              <FollowBtn name={r.insider_name} watchlist={watchlist} />
             </div>
           </div>
-          <ScoreRing score={r.proxy_score??0} size={76}/>
+          <ScoreRing score={r.proxy_score ?? 0} size={76} />
         </div>
 
         {/* ── Stat row ── */}
         <div className="ip-profile__stats">
           {[
-            {label:'Hit rate', val:r.hit_rate!=null?`${r.hit_rate}%`:'—', color:hrC},
-            {label:'Avg return', val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—', color:retC},
-            {label:'OM buys', val:r.om_buys, color:'var(--text)'},
-            {label:'OM sells', val:r.om_sells||0, color:'var(--text)'},
-            {label:'Priced trades', val:r.priced!=null?r.priced:'—', color:'var(--text)'},
-            {label:'Total bought', val:fmt.money(r.bought_value), color:'var(--text)'},
-          ].map(s=>(
+            { label: 'Hit rate', val: r.hit_rate != null ? `${r.hit_rate}%` : '—', color: hrC },
+            { label: 'Avg return', val: r.avg_return != null ? (r.avg_return >= 0 ? '+' : '') + r.avg_return.toFixed(1) + '%' : '—', color: retC },
+            { label: 'OM buys', val: r.om_buys, color: 'var(--text)' },
+            { label: 'OM sells', val: r.om_sells || 0, color: 'var(--text)' },
+            { label: 'Priced trades', val: r.priced != null ? r.priced : '—', color: 'var(--text)' },
+            { label: 'Total bought', val: fmt.money(r.bought_value), color: 'var(--text)' },
+          ].map(s => (
             <div key={s.label} className="ip-stat">
-              <span className="ip-stat__val" style={{color:s.color,fontFamily:'var(--font-mono)'}}>{s.val}</span>
+              <span className="ip-stat__val" style={{ color: s.color, fontFamily: 'var(--font-mono)' }}>{s.val}</span>
               <span className="ip-stat__label">{s.label}</span>
             </div>
           ))}
         </div>
 
         {/* ── Affiliated companies ── */}
-        {profileCompanies.length>0&&(
+        {profileCompanies.length > 0 && (
           <div className="ip-profile__section">
             <div className="ip-profile__section-label">Companies traded</div>
             <div className="ip-profile__companies">
-              {profileCompanies.slice(0,8).map(c=>(
+              {profileCompanies.slice(0, 8).map(c => (
                 <div key={c.ticker} className="ip-company-chip"
-                  onClick={()=>onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company,expand:true})}>
-                  <span className="ticker" style={{fontSize:11}}>{c.ticker}</span>
+                  onClick={() => onOpenDetail({ type: 'ticker', ticker: c.ticker, company: c.company, expand: true })}>
+                  <span className="ticker" style={{ fontSize: 11 }}>{c.ticker}</span>
                   <span className="ip-company-chip__name">{c.company}</span>
                   <div className="ip-company-chip__counts">
-                    {c.buys>0&&<span className="val-buy" style={{fontSize:10,fontWeight:700}}>+{c.buys}</span>}
-                    {c.sells>0&&<span className="val-sell" style={{fontSize:10,fontWeight:700}}>−{c.sells}</span>}
+                    {c.buys > 0 && <span className="val-buy" style={{ fontSize: 10, fontWeight: 700 }}>+{c.buys}</span>}
+                    {c.sells > 0 && <span className="val-sell" style={{ fontSize: 10, fontWeight: 700 }}>−{c.sells}</span>}
                   </div>
                 </div>
               ))}
@@ -4807,42 +4810,42 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         )}
 
         {/* ── Transaction history ── */}
-        <div className="ip-profile__section" style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
-          <div className="ip-profile__section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span>Transactions <span style={{fontWeight:400,color:'var(--text-3)'}}>{profileTrades.length ? `· ${profileTrades.length} found` : ''}</span></span>
-            <button className="ws-tile__action" style={{fontSize:11,fontWeight:600}}
-              onClick={()=>setInsiderDrawerDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
+        <div className="ip-profile__section" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="ip-profile__section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Transactions <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>{profileTrades.length ? `· ${profileTrades.length} found` : ''}</span></span>
+            <button className="ws-tile__action" style={{ fontSize: 11, fontWeight: 600 }}
+              onClick={() => setInsiderDrawerDetail({ type: 'trader', name: r.insider_name, title: r.insider_title })}>
               Full deep-dive →
             </button>
           </div>
-          {profileTrades.length===0?(
-            <div className="ws-empty" style={{padding:'16px 0',fontSize:12}}>
-              {loading?'Loading…':'No open-market trades found.'}
+          {profileTrades.length === 0 ? (
+            <div className="ws-empty" style={{ padding: '16px 0', fontSize: 12 }}>
+              {loading ? 'Loading…' : 'No open-market trades found.'}
             </div>
-          ):(
+          ) : (
             <div className="ip-tx-list">
-              {profileTrades.map((f,i)=>{
-                const isBuy=f.transactionType==='buy';
-                const isExpTx=txExpanded.has(i);
+              {profileTrades.map((f, i) => {
+                const isBuy = f.transactionType === 'buy';
+                const isExpTx = txExpanded.has(i);
                 return (
                   <div key={i} className="ip-tx-row"
-                    style={{borderLeft:`2px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                    style={{ borderLeft: `2px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
                     <div className="ip-tx-row__main"
-                      onClick={()=>setTxExpanded(s=>{const n=new Set(s);n.has(i)?n.delete(i):n.add(i);return n;})}>
-                      <span className="ip-tx-row__date">{fmt.dateShort(f.transactionDate||f.date)}</span>
-                      <span className="ticker" style={{fontSize:12,minWidth:40}}>{f.ticker}</span>
-                      <span style={{fontSize:11,color:'var(--text-3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',margin:'0 8px'}}>{f.company}</span>
-                      <span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span>
-                      <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`} style={{minWidth:72,textAlign:'right'}}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
-                      <span className="ip-tx-row__chevron">{isExpTx?'▾':'▸'}</span>
+                      onClick={() => setTxExpanded(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; })}>
+                      <span className="ip-tx-row__date">{fmt.dateShort(f.transactionDate || f.date)}</span>
+                      <span className="ticker" style={{ fontSize: 12, minWidth: 40 }}>{f.ticker}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '0 8px' }}>{f.company}</span>
+                      <span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span>
+                      <span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`} style={{ minWidth: 72, textAlign: 'right' }}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</span>
+                      <span className="ip-tx-row__chevron">{isExpTx ? '▾' : '▸'}</span>
                     </div>
-                    {isExpTx&&(
+                    {isExpTx && (
                       <div className="ip-tx-row__detail">
-                        <div><span className="ws-data-label">Shares</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.shares?fmt.number(f.shares):'—'}</span></div>
-                        <div><span className="ws-data-label">Price</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.price?fmt.price(f.price):'—'}</span></div>
-                        <div><span className="ws-data-label">Total</span><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
-                        {f.accessionNumber&&f.cikIssuer&&(
-                          <div><span className="ws-data-label">SEC</span><a href={secFilingUrl(f.accessionNumber,f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ View</a></div>
+                        <div><span className="ws-data-label">Shares</span><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{f.shares ? fmt.number(f.shares) : '—'}</span></div>
+                        <div><span className="ws-data-label">Price</span><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{f.price ? fmt.price(f.price) : '—'}</span></div>
+                        <div><span className="ws-data-label">Total</span><span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</span></div>
+                        {f.accessionNumber && f.cikIssuer && (
+                          <div><span className="ws-data-label">SEC</span><a href={secFilingUrl(f.accessionNumber, f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ View</a></div>
                         )}
                       </div>
                     )}
@@ -4858,17 +4861,17 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 
   return (
     <div className="ws-page">
-      <div style={{marginBottom:20}}>
+      <div style={{ marginBottom: 20 }}>
         <h1 className="ws-page-title">Insider Profiles</h1>
         <p className="ws-page-sub">Ranked by composite score — hit rate, returns, volume &amp; role.</p>
       </div>
 
       {/* Stat strip */}
       <div className="ws-stat-strip">
-        <div className="ws-stat"><div className="ws-stat__label">Tracked insiders</div><div className="ws-stat__value">{rows?stats.count:'—'}</div><div className="ws-stat__sub">Open-market traders</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Avg hit rate</div><div className="ws-stat__value" style={{color:stats.avgHit>=60?'var(--green-600)':undefined}}>{stats.avgHit!=null?`${stats.avgHit}%`:'—'}</div><div className="ws-stat__sub">Profitable trades</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Top score</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{rows?stats.topScore:'—'}</div><div className="ws-stat__sub">Out of 5.0</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Total buy value</div><div className="ws-stat__value" style={{fontSize:16}}>{rows?totalValDisplay:'—'}</div><div className="ws-stat__sub">{yearsBack?`${yearsBack}yr window`:'All time'}</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Tracked insiders</div><div className="ws-stat__value">{rows ? stats.count : '—'}</div><div className="ws-stat__sub">Open-market traders</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Avg hit rate</div><div className="ws-stat__value" style={{ color: stats.avgHit >= 60 ? 'var(--green-600)' : undefined }}>{stats.avgHit != null ? `${stats.avgHit}%` : '—'}</div><div className="ws-stat__sub">Profitable trades</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Top score</div><div className="ws-stat__value" style={{ color: 'var(--green-600)' }}>{rows ? stats.topScore : '—'}</div><div className="ws-stat__sub">Out of 5.0</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Total buy value</div><div className="ws-stat__value" style={{ fontSize: 16 }}>{rows ? totalValDisplay : '—'}</div><div className="ws-stat__sub">{yearsBack ? `${yearsBack}yr window` : 'All time'}</div></div>
       </div>
 
       {/* Main: profile viewer + insider rail */}
@@ -4876,76 +4879,76 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 
         {/* Profile viewer — 80% width */}
         <div className="ws-tile ip-profile-tile">
-          <ProfileCard r={selected}/>
+          <ProfileCard r={selected} />
         </div>
 
         {/* Insider rail — 20% width, scrollable */}
         <div className="ws-tile ip-rail">
           <div className="ip-rail__hdr">
-            <div className="ws-search-wrap" style={{maxWidth:'100%',flex:1}}>
+            <div className="ws-search-wrap" style={{ maxWidth: '100%', flex: 1 }}>
               <span className="ws-search-icon">⌕</span>
               <input className="ws-search-input" value={search}
-                onChange={e=>setSearch(e.target.value)} placeholder="Search…"/>
-              {search&&<button className="ws-search-clear" onClick={()=>setSearch('')}>×</button>}
+                onChange={e => setSearch(e.target.value)} placeholder="Search…" />
+              {search && <button className="ws-search-clear" onClick={() => setSearch('')}>×</button>}
             </div>
           </div>
           <div className="ip-rail__filters">
-            <div className="ws-pills" style={{gap:3}}>
-              {[{v:1,l:'1yr'},{v:2,l:'2yr'},{v:5,l:'5yr'},{v:null,l:'All'}].map(o=>(
-                <button key={o.l} className={`ws-pill ws-pill--sm${yearsBack===o.v?' ws-pill--active':''}`}
-                  onClick={()=>setYearsBack(o.v)}>{o.l}</button>
+            <div className="ws-pills" style={{ gap: 3 }}>
+              {[{ v: 1, l: '1yr' }, { v: 2, l: '2yr' }, { v: 5, l: '5yr' }, { v: null, l: 'All' }].map(o => (
+                <button key={o.l} className={`ws-pill ws-pill--sm${yearsBack === o.v ? ' ws-pill--active' : ''}`}
+                  onClick={() => setYearsBack(o.v)}>{o.l}</button>
               ))}
             </div>
-            <div className="ws-pills" style={{gap:3}}>
-              {[[null,'All'],['corporate','Corp'],['congress','Cong']].map(([v,l])=>(
-                <button key={l} className={`ws-pill ws-pill--sm${lbSource===v?' ws-pill--active':''}`}
-                  onClick={()=>setLbSource(v)}>{l}</button>
+            <div className="ws-pills" style={{ gap: 3 }}>
+              {[[null, 'All'], ['corporate', 'Corp'], ['congress', 'Cong']].map(([v, l]) => (
+                <button key={l} className={`ws-pill ws-pill--sm${lbSource === v ? ' ws-pill--active' : ''}`}
+                  onClick={() => setLbSource(v)}>{l}</button>
               ))}
             </div>
           </div>
           <div className="ip-rail__sort-bar">
-            {[['proxy_score','Score'],['hit_rate','Hit %'],['avg_return','Return'],['om_buys','Buys']].map(([k,l])=>(
-              <button key={k} className={`ip-rail__sort-btn${sort===k?' ip-rail__sort-btn--active':''}`}
-                onClick={()=>onSortClick(k)}>{l}{sort===k&&(dir<0?' ↓':' ↑')}</button>
+            {[['proxy_score', 'Score'], ['hit_rate', 'Hit %'], ['avg_return', 'Return'], ['om_buys', 'Buys']].map(([k, l]) => (
+              <button key={k} className={`ip-rail__sort-btn${sort === k ? ' ip-rail__sort-btn--active' : ''}`}
+                onClick={() => onSortClick(k)}>{l}{sort === k && (dir < 0 ? ' ↓' : ' ↑')}</button>
             ))}
           </div>
           <div className="ip-rail__list">
-            {lbError?<div className="ws-empty" style={{color:'var(--red-600)',fontSize:11}}>{lbError}</div>
-            :rows===null?<SkeletonRows count={15}/>
-            :sorted.length===0?<div className="ws-empty" style={{fontSize:11}}>No results.</div>
-            :sorted.map((r,i)=>{
-              const isActive=selected?.insider_name===r.insider_name;
-              const hrC=r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-3)';
-              return (
-                <div key={r.insider_name}
-                  className={`ip-rail-row${isActive?' ip-rail-row--active':''}`}
-                  onClick={()=>{setSelected(r);setTxExpanded(new Set());}}>
-                  <span className="ip-rail-row__rank">{i+1}</span>
-                  <div className="ip-rail-row__info">
-                    <div className="ip-rail-row__name">{r.insider_name}</div>
-                    <div className="ip-rail-row__meta">
-                      <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
-                      {r.hit_rate!=null&&<span style={{fontSize:10,color:hrC,fontFamily:'var(--font-mono)',fontWeight:600}}>{r.hit_rate}%</span>}
-                    </div>
-                  </div>
-                  <span className="ip-rail-row__score">{r.proxy_score?.toFixed(1)??'—'}</span>
-                </div>
-              );
-            })}
+            {lbError ? <div className="ws-empty" style={{ color: 'var(--red-600)', fontSize: 11 }}>{lbError}</div>
+              : rows === null ? <SkeletonRows count={15} />
+                : sorted.length === 0 ? <div className="ws-empty" style={{ fontSize: 11 }}>No results.</div>
+                  : sorted.map((r, i) => {
+                    const isActive = selected?.insider_name === r.insider_name;
+                    const hrC = r.hit_rate >= 70 ? 'var(--green-600)' : r.hit_rate < 50 ? 'var(--red-600)' : 'var(--text-3)';
+                    return (
+                      <div key={r.insider_name}
+                        className={`ip-rail-row${isActive ? ' ip-rail-row--active' : ''}`}
+                        onClick={() => { setSelected(r); setTxExpanded(new Set()); }}>
+                        <span className="ip-rail-row__rank">{i + 1}</span>
+                        <div className="ip-rail-row__info">
+                          <div className="ip-rail-row__name">{r.insider_name}</div>
+                          <div className="ip-rail-row__meta">
+                            <Badge type={`rel-${r.relationship || 'weak'}`}>{r.relationship === 'strong' ? 'C-Suite' : r.relationship === 'medium' ? 'Officer' : 'Dir'}</Badge>
+                            {r.hit_rate != null && <span style={{ fontSize: 10, color: hrC, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{r.hit_rate}%</span>}
+                          </div>
+                        </div>
+                        <span className="ip-rail-row__score">{r.proxy_score?.toFixed(1) ?? '—'}</span>
+                      </div>
+                    );
+                  })}
           </div>
         </div>
 
       </div>
 
       {/* Full explore drawer — opens with selected insider profile pre-loaded */}
-      {insiderDrawerDetail&&(
+      {insiderDrawerDetail && (
         <InsightsDrawer
           type="insiders"
           filings={filings}
           initialDetail={insiderDrawerDetail}
           initialDetailStack={[]}
-          onClose={()=>setInsiderDrawerDetail(null)}
-          ensureFilingsWindow={ensureFilingsWindow||(()=>{})}
+          onClose={() => setInsiderDrawerDetail(null)}
+          ensureFilingsWindow={ensureFilingsWindow || (() => { })}
           filingsLoading={loading}
           watchlist={watchlist}
           pro={pro}
@@ -4962,116 +4965,116 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 // via the same back-button stack DetailPanel already supports.
 function InsiderProfileDrawer({ name, title, filings, watchlist, lbRows, onOpenDetail }) {
   const [txExpanded, setTxExpanded] = useState(new Set());
-  const r = useMemo(()=>lbRows?.find(x=>x.insider_name===name)||null, [lbRows, name]);
-  const profileTrades = useMemo(()=>
-    filings.filter(f=>f.isOpenMarket&&f.insiderName===name)
-      .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
-      .slice(0,30),
-  [filings, name]);
-  const profileCompanies = useMemo(()=>{
-    const map={};
-    profileTrades.forEach(f=>{
-      if(!map[f.ticker]) map[f.ticker]={ticker:f.ticker,company:f.company,buys:0,sells:0,lastDate:''};
-      if(f.transactionType==='buy') map[f.ticker].buys++; else map[f.ticker].sells++;
-      const d=f.transactionDate||f.date||'';
-      if(d>map[f.ticker].lastDate) map[f.ticker].lastDate=d;
+  const r = useMemo(() => lbRows?.find(x => x.insider_name === name) || null, [lbRows, name]);
+  const profileTrades = useMemo(() =>
+    filings.filter(f => f.isOpenMarket && f.insiderName === name)
+      .sort((a, b) => (b.transactionDate || b.date || '').localeCompare(a.transactionDate || a.date || ''))
+      .slice(0, 30),
+    [filings, name]);
+  const profileCompanies = useMemo(() => {
+    const map = {};
+    profileTrades.forEach(f => {
+      if (!map[f.ticker]) map[f.ticker] = { ticker: f.ticker, company: f.company, buys: 0, sells: 0, lastDate: '' };
+      if (f.transactionType === 'buy') map[f.ticker].buys++; else map[f.ticker].sells++;
+      const d = f.transactionDate || f.date || '';
+      if (d > map[f.ticker].lastDate) map[f.ticker].lastDate = d;
     });
-    return Object.values(map).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));
-  },[profileTrades]);
-  const initials = name.split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
-  const hrC = r?.hit_rate>=70?'var(--green-600)':r?.hit_rate<50?'var(--red-600)':'var(--text-2)';
-  const retC = (r?.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
-  function ScoreRing({score=0,size=72}){
-    const pct=Math.min(score/5,1),r2=(size-8)/2,circ=2*Math.PI*r2,dash=pct*circ;
-    const color=score>=4?'var(--green-600)':score>=2.5?'var(--accent)':'var(--amber-600)';
+    return Object.values(map).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+  }, [profileTrades]);
+  const initials = name.split(' ').map(w => w[0] || '').slice(0, 2).join('').toUpperCase();
+  const hrC = r?.hit_rate >= 70 ? 'var(--green-600)' : r?.hit_rate < 50 ? 'var(--red-600)' : 'var(--text-2)';
+  const retC = (r?.avg_return ?? 0) >= 0 ? 'var(--green-600)' : 'var(--red-600)';
+  function ScoreRing({ score = 0, size = 72 }) {
+    const pct = Math.min(score / 5, 1), r2 = (size - 8) / 2, circ = 2 * Math.PI * r2, dash = pct * circ;
+    const color = score >= 4 ? 'var(--green-600)' : score >= 2.5 ? 'var(--accent)' : 'var(--amber-600)';
     return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{flexShrink:0}}>
-        <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke="var(--surface-3)" strokeWidth={6}/>
-        <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke={color} strokeWidth={6}
-          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform={`rotate(-90 ${size/2} ${size/2})`}/>
-        <text x={size/2} y={size/2-4} textAnchor="middle" dominantBaseline="middle"
-          style={{fontSize:size*.22,fontWeight:700,fontFamily:'var(--font-mono)',fill:color,userSelect:'none'}}>{score.toFixed(1)}</text>
-        <text x={size/2} y={size/2+size*.2} textAnchor="middle" dominantBaseline="middle"
-          style={{fontSize:size*.13,fill:'var(--text-3)',fontFamily:'var(--font)',userSelect:'none'}}>/5.0</text>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+        <circle cx={size / 2} cy={size / 2} r={r2} fill="none" stroke="var(--surface-3)" strokeWidth={6} />
+        <circle cx={size / 2} cy={size / 2} r={r2} fill="none" stroke={color} strokeWidth={6}
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+        <text x={size / 2} y={size / 2 - 4} textAnchor="middle" dominantBaseline="middle"
+          style={{ fontSize: size * .22, fontWeight: 700, fontFamily: 'var(--font-mono)', fill: color, userSelect: 'none' }}>{score.toFixed(1)}</text>
+        <text x={size / 2} y={size / 2 + size * .2} textAnchor="middle" dominantBaseline="middle"
+          style={{ fontSize: size * .13, fill: 'var(--text-3)', fontFamily: 'var(--font)', userSelect: 'none' }}>/5.0</text>
       </svg>
     );
   }
   return (
-    <div className="ip-profile" style={{padding:'20px 24px',gap:18,overflowY:'auto',height:'100%'}}>
+    <div className="ip-profile" style={{ padding: '20px 24px', gap: 18, overflowY: 'auto', height: '100%' }}>
       <div className="ip-profile__head">
         <div className="ip-profile__avatar">{initials}</div>
         <div className="ip-profile__identity">
           <div className="ip-profile__name">{name}</div>
           <div className="ip-profile__meta">
-            {r&&<Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>}
-            {(title||r?.insider_title)&&<span className="ip-profile__title">{title||r?.insider_title}</span>}
+            {r && <Badge type={`rel-${r.relationship || 'weak'}`}>{r.relationship === 'strong' ? 'C-Suite' : r.relationship === 'medium' ? 'Officer' : 'Dir'}</Badge>}
+            {(title || r?.insider_title) && <span className="ip-profile__title">{title || r?.insider_title}</span>}
           </div>
-          <div style={{marginTop:8}} onClick={e=>e.stopPropagation()}><FollowBtn name={name} watchlist={watchlist}/></div>
+          <div style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}><FollowBtn name={name} watchlist={watchlist} /></div>
         </div>
-        <ScoreRing score={r?.proxy_score??0} size={72}/>
+        <ScoreRing score={r?.proxy_score ?? 0} size={72} />
       </div>
-      {r&&(
-        <div className="ip-profile__stats" style={{gridTemplateColumns:'repeat(5,1fr)'}}>
+      {r && (
+        <div className="ip-profile__stats" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
           {[
-            {label:'Hit rate',val:r.hit_rate!=null?`${r.hit_rate}%`:'—',color:hrC},
-            {label:'Avg return',val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—',color:retC},
-            {label:'OM buys',val:r.om_buys,color:'var(--text)'},
-            {label:'OM sells',val:r.om_sells||0,color:'var(--text)'},
-            {label:'Total bought',val:fmt.money(r.bought_value),color:'var(--text)'},
-          ].map(s=>(
+            { label: 'Hit rate', val: r.hit_rate != null ? `${r.hit_rate}%` : '—', color: hrC },
+            { label: 'Avg return', val: r.avg_return != null ? (r.avg_return >= 0 ? '+' : '') + r.avg_return.toFixed(1) + '%' : '—', color: retC },
+            { label: 'OM buys', val: r.om_buys, color: 'var(--text)' },
+            { label: 'OM sells', val: r.om_sells || 0, color: 'var(--text)' },
+            { label: 'Total bought', val: fmt.money(r.bought_value), color: 'var(--text)' },
+          ].map(s => (
             <div key={s.label} className="ip-stat">
-              <span className="ip-stat__val" style={{color:s.color,fontFamily:'var(--font-mono)'}}>{s.val}</span>
+              <span className="ip-stat__val" style={{ color: s.color, fontFamily: 'var(--font-mono)' }}>{s.val}</span>
               <span className="ip-stat__label">{s.label}</span>
             </div>
           ))}
         </div>
       )}
-      {profileCompanies.length>0&&(
+      {profileCompanies.length > 0 && (
         <div className="ip-profile__section">
           <div className="ip-profile__section-label">Companies traded</div>
           <div className="ip-profile__companies">
-            {profileCompanies.slice(0,6).map(c=>(
+            {profileCompanies.slice(0, 6).map(c => (
               <div key={c.ticker} className="ip-company-chip"
-                onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company})}>
-                <span className="ticker" style={{fontSize:11}}>{c.ticker}</span>
+                onClick={() => onOpenDetail && onOpenDetail({ type: 'ticker', ticker: c.ticker, company: c.company })}>
+                <span className="ticker" style={{ fontSize: 11 }}>{c.ticker}</span>
                 <span className="ip-company-chip__name">{c.company}</span>
                 <div className="ip-company-chip__counts">
-                  {c.buys>0&&<span className="val-buy" style={{fontSize:10,fontWeight:700}}>+{c.buys}</span>}
-                  {c.sells>0&&<span className="val-sell" style={{fontSize:10,fontWeight:700}}>−{c.sells}</span>}
+                  {c.buys > 0 && <span className="val-buy" style={{ fontSize: 10, fontWeight: 700 }}>+{c.buys}</span>}
+                  {c.sells > 0 && <span className="val-sell" style={{ fontSize: 10, fontWeight: 700 }}>−{c.sells}</span>}
                 </div>
               </div>
             ))}
           </div>
         </div>
       )}
-      <div className="ip-profile__section" style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
-        <div className="ip-profile__section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <span>Transactions{profileTrades.length?` · ${profileTrades.length} found`:''}</span>
-          <button className="ws-tile__action" style={{fontSize:11,fontWeight:600}}
-            onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name,title})}>Full deep-dive →</button>
+      <div className="ip-profile__section" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div className="ip-profile__section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Transactions{profileTrades.length ? ` · ${profileTrades.length} found` : ''}</span>
+          <button className="ws-tile__action" style={{ fontSize: 11, fontWeight: 600 }}
+            onClick={() => onOpenDetail && onOpenDetail({ type: 'trader', name, title })}>Full deep-dive →</button>
         </div>
-        {profileTrades.length===0?(
-          <div className="ws-empty" style={{padding:'12px 0',fontSize:12}}>No open-market transactions found.</div>
-        ):(
+        {profileTrades.length === 0 ? (
+          <div className="ws-empty" style={{ padding: '12px 0', fontSize: 12 }}>No open-market transactions found.</div>
+        ) : (
           <div className="ip-tx-list">
-            {profileTrades.map((f,i)=>{
-              const isBuy=f.transactionType==='buy', isExpTx=txExpanded.has(i);
+            {profileTrades.map((f, i) => {
+              const isBuy = f.transactionType === 'buy', isExpTx = txExpanded.has(i);
               return (
-                <div key={i} className="ip-tx-row" style={{borderLeft:`2px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
-                  <div className="ip-tx-row__main" onClick={()=>setTxExpanded(s=>{const n=new Set(s);n.has(i)?n.delete(i):n.add(i);return n;})}>
-                    <span className="ip-tx-row__date">{fmt.dateShort(f.transactionDate||f.date)}</span>
-                    <span className="ticker" style={{fontSize:12,minWidth:40}}>{f.ticker}</span>
-                    <span style={{fontSize:11,color:'var(--text-3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',margin:'0 8px'}}>{f.company}</span>
-                    <span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span>
-                    <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`} style={{minWidth:72,textAlign:'right'}}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
-                    <span className="ip-tx-row__chevron">{isExpTx?'▾':'▸'}</span>
+                <div key={i} className="ip-tx-row" style={{ borderLeft: `2px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
+                  <div className="ip-tx-row__main" onClick={() => setTxExpanded(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; })}>
+                    <span className="ip-tx-row__date">{fmt.dateShort(f.transactionDate || f.date)}</span>
+                    <span className="ticker" style={{ fontSize: 12, minWidth: 40 }}>{f.ticker}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: '0 8px' }}>{f.company}</span>
+                    <span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span>
+                    <span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`} style={{ minWidth: 72, textAlign: 'right' }}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</span>
+                    <span className="ip-tx-row__chevron">{isExpTx ? '▾' : '▸'}</span>
                   </div>
-                  {isExpTx&&(
+                  {isExpTx && (
                     <div className="ip-tx-row__detail">
-                      <div><span className="ws-data-label">Shares</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.shares?fmt.number(f.shares):'—'}</span></div>
-                      <div><span className="ws-data-label">Price</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.price?fmt.price(f.price):'—'}</span></div>
-                      <div><span className="ws-data-label">Total</span><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
-                      {f.accessionNumber&&f.cikIssuer&&<div><span className="ws-data-label">SEC</span><a href={secFilingUrl(f.accessionNumber,f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ View</a></div>}
+                      <div><span className="ws-data-label">Shares</span><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{f.shares ? fmt.number(f.shares) : '—'}</span></div>
+                      <div><span className="ws-data-label">Price</span><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{f.price ? fmt.price(f.price) : '—'}</span></div>
+                      <div><span className="ws-data-label">Total</span><span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</span></div>
+                      {f.accessionNumber && f.cikIssuer && <div><span className="ws-data-label">SEC</span><a href={secFilingUrl(f.accessionNumber, f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ View</a></div>}
                     </div>
                   )}
                 </div>
@@ -5104,16 +5107,16 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // view" or a row click, so filtering work already done on the tile isn't
   // silently discarded — falls back to these defaults when opened with no
   // tile context (e.g. a deep-linked ticker/insider URL).
-  const [search, setSearch]   = useState('');
-  const [lbRows, setLbRows]   = useState(null);
-  const [lbSort, setLbSort]   = useState('proxy_score');
+  const [search, setSearch] = useState('');
+  const [lbRows, setLbRows] = useState(null);
+  const [lbSort, setLbSort] = useState('proxy_score');
   const [lbYearsBack, setLbYearsBack] = useState(2); // null = all-time
   const [lbSource, setLbSource] = useState(null); // null='all' | 'corporate' | 'congress'
   const [lbMinValue, setLbMinValue] = useState(50000); // minimum bought_value, filtered client-side — defaults to $50K rather than "Any" so a handful of small trades hitting 100% by chance doesn't dominate the default hit-rate sort
-  const [lbDir,  setLbDir]    = useState(-1);
-  const [srcF,   setSrcF]     = useState(initialFilters?.sourceF ?? '');
-  const [secF,   setSecF]     = useState(initialFilters?.sectorF ?? '');
-  const [minStr, setMinStr]   = useState(initialFilters?.minStrength ?? 1);
+  const [lbDir, setLbDir] = useState(-1);
+  const [srcF, setSrcF] = useState(initialFilters?.sourceF ?? '');
+  const [secF, setSecF] = useState(initialFilters?.sectorF ?? '');
+  const [minStr, setMinStr] = useState(initialFilters?.minStrength ?? 1);
   const [daysBack, setDaysBack] = useState(() => {
     const initial = initialFilters?.days ?? 7;
     if (!pro && (initial === null || initial > 7)) return 7;
@@ -5127,23 +5130,23 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // panel, so navigation history from before expanding isn't silently lost —
   // otherwise this always started empty regardless of what was already open.
   const [detailStack, setDetailStack] = useState(() => initialDetailStack || []); // history
-  const [detail,      setDetail]      = useState(null);
+  const [detail, setDetail] = useState(null);
 
   function navigate(d) {
-    if (detail) setDetailStack(s=>[...s, detail]);
+    if (detail) setDetailStack(s => [...s, detail]);
     setDetail(d);
   }
   function goBack() {
-    const prev = detailStack[detailStack.length-1];
-    setDetailStack(s=>s.slice(0,-1));
-    setDetail(prev||null);
+    const prev = detailStack[detailStack.length - 1];
+    setDetailStack(s => s.slice(0, -1));
+    setDetail(prev || null);
   }
 
   // Sectors for filter dropdown
-  const sectors = useMemo(()=>[...new Set(filings.map(f=>f.sector).filter(s=>s&&s!=='Other'))].sort(),[filings]);
+  const sectors = useMemo(() => [...new Set(filings.map(f => f.sector).filter(s => s && s !== 'Other'))].sort(), [filings]);
 
   // Strength threshold
-  const strengthThreshold = minStr===3?10:minStr===2?5:0;
+  const strengthThreshold = minStr === 3 ? 10 : minStr === 2 ? 5 : 0;
 
   // Filtered signals — computed directly from raw `filings`, NOT from the
   // `signals` prop the parent page passes in. The parent's own signal set is
@@ -5152,76 +5155,76 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // widening the Window filter here would do nothing, since data outside the
   // parent's window was never in the array to begin with. Building fresh from
   // `filings` makes the drawer's own Window filter the real source of truth.
-  const filteredSignals = useMemo(()=>{
-    const cutoff = daysBack!=null ? (()=>{ const d=new Date(); d.setDate(d.getDate()-daysBack); return d.toISOString().split('T')[0]; })() : null;
-    const base = filings.filter(f=>{
-      const tx = f.transactionDate||f.date||'';
-      if (cutoff && tx<cutoff) return false;
-      const isPol = !!(f.transactionCode&&f.transactionCode.startsWith('CONGRESS'));
-      if (srcF==='corporate'&&isPol) return false;
-      if (srcF==='political'&&!isPol) return false;
-      if (secF&&f.sector!==secF) return false;
+  const filteredSignals = useMemo(() => {
+    const cutoff = daysBack != null ? (() => { const d = new Date(); d.setDate(d.getDate() - daysBack); return d.toISOString().split('T')[0]; })() : null;
+    const base = filings.filter(f => {
+      const tx = f.transactionDate || f.date || '';
+      if (cutoff && tx < cutoff) return false;
+      const isPol = !!(f.transactionCode && f.transactionCode.startsWith('CONGRESS'));
+      if (srcF === 'corporate' && isPol) return false;
+      if (srcF === 'political' && !isPol) return false;
+      if (secF && f.sector !== secF) return false;
       return true;
     });
     let s = buildSignals(base)
-      .filter(sig=>{
+      .filter(sig => {
         if (sig.direction === 'sell') return sig.sellValue >= 50_000;
-        return sig.cSuiteBuys>=1||sig.insiderCount>=2||sig.netValue>=100_000||sig.isPolitical;
+        return sig.cSuiteBuys >= 1 || sig.insiderCount >= 2 || sig.netValue >= 100_000 || sig.isPolitical;
       })
-      .filter(sig=>sig.conviction>=strengthThreshold);
-    if (minValue>0) s = s.filter(sig=>Math.abs(sig.netValue)>=minValue);
-    if (search) { const q=search.toLowerCase(); s=s.filter(sig=>sig.ticker.toLowerCase().includes(q)||sig.company.toLowerCase().includes(q)); }
-    return s.sort((a,b)=>{
-      const av=a[sigSort],bv=b[sigSort];
-      if(typeof av==='number'){if(av<bv)return sigDir;if(av>bv)return -sigDir;}
-      else{const r=String(av||'').localeCompare(String(bv||''));return sigDir>0?r:-r;}
+      .filter(sig => sig.conviction >= strengthThreshold);
+    if (minValue > 0) s = s.filter(sig => Math.abs(sig.netValue) >= minValue);
+    if (search) { const q = search.toLowerCase(); s = s.filter(sig => sig.ticker.toLowerCase().includes(q) || sig.company.toLowerCase().includes(q)); }
+    return s.sort((a, b) => {
+      const av = a[sigSort], bv = b[sigSort];
+      if (typeof av === 'number') { if (av < bv) return sigDir; if (av > bv) return -sigDir; }
+      else { const r = String(av || '').localeCompare(String(bv || '')); return sigDir > 0 ? r : -r; }
       return 0;
     });
-  },[filings,strengthThreshold,srcF,secF,daysBack,minValue,search,sigSort,sigDir]);
+  }, [filings, strengthThreshold, srcF, secF, daysBack, minValue, search, sigSort, sigDir]);
 
   // Insiders
-  useEffect(()=>{
-    if (activeTab!=='insiders') return;
+  useEffect(() => {
+    if (activeTab !== 'insiders') return;
     queryNeon(LEADERBOARD_QUERY(200, null, 2, lbYearsBack, lbSource))
-      .then(r=>setLbRows(processLeaderboardRows(r)))
-      .catch(()=>setLbRows([]));
-  },[type,lbYearsBack,lbSource]);
+      .then(r => setLbRows(processLeaderboardRows(r)))
+      .catch(() => setLbRows([]));
+  }, [type, lbYearsBack, lbSource]);
 
-  const sortedLb = useMemo(()=>{
+  const sortedLb = useMemo(() => {
     if (!lbRows) return [];
     let rows = lbRows;
-    if (search) { const q=search.toLowerCase(); rows=rows.filter(r=>r.insider_name.toLowerCase().includes(q)); }
-    if (lbMinValue>0) { rows=rows.filter(r=>(r.bought_value||0)>=lbMinValue); }
-    return [...rows].sort((a,b)=>{
-      const av=a[lbSort]??-Infinity, bv=b[lbSort]??-Infinity;
-      return lbDir>0?av-bv:bv-av;
+    if (search) { const q = search.toLowerCase(); rows = rows.filter(r => r.insider_name.toLowerCase().includes(q)); }
+    if (lbMinValue > 0) { rows = rows.filter(r => (r.bought_value || 0) >= lbMinValue); }
+    return [...rows].sort((a, b) => {
+      const av = a[lbSort] ?? -Infinity, bv = b[lbSort] ?? -Infinity;
+      return lbDir > 0 ? av - bv : bv - av;
     });
-  },[lbRows,lbSort,lbDir,search,lbMinValue]);
-  function lbOnSort(col){ if(lbSort===col)setLbDir(d=>-d); else{setLbSort(col);setLbDir(-1);} }
+  }, [lbRows, lbSort, lbDir, search, lbMinValue]);
+  function lbOnSort(col) { if (lbSort === col) setLbDir(d => -d); else { setLbSort(col); setLbDir(-1); } }
 
-  function resetDrawerFilters(){setMinStr(1);setDaysBack(30);setMinValue(0);setSrcF('');setSecF('');setSearch('');}
-  const drawerFiltersDefault = minStr===1 && daysBack===30 && minValue===0 && !srcF && !secF && !search;
+  function resetDrawerFilters() { setMinStr(1); setDaysBack(30); setMinValue(0); setSrcF(''); setSecF(''); setSearch(''); }
+  const drawerFiltersDefault = minStr === 1 && daysBack === 30 && minValue === 0 && !srcF && !secF && !search;
 
   // Escape key
-  useEffect(()=>{
-    const h=e=>{ if(e.key==='Escape') { if(detail&&detailStack.length) goBack(); else if(detail) setDetail(null); else onClose(); }};
-    window.addEventListener('keydown',h);
-    return()=>window.removeEventListener('keydown',h);
-  },[detail,detailStack,onClose]);
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape') { if (detail && detailStack.length) goBack(); else if (detail) setDetail(null); else onClose(); } };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [detail, detailStack, onClose]);
 
   // Open pre-selected to whatever was clicked, if anything — otherwise fall
   // back to the first item so the pane is never empty on open.
-  useEffect(()=>{
+  useEffect(() => {
     if (detail) return;
     if (initialDetail) { setDetail(initialDetail); return; }
-    if (activeTab==='signals' && filteredSignals.length) setDetail({type:'signal',...filteredSignals[0]});
-  },[activeTab, filteredSignals.length > 0, initialDetail]);
+    if (activeTab === 'signals' && filteredSignals.length) setDetail({ type: 'signal', ...filteredSignals[0] });
+  }, [activeTab, filteredSignals.length > 0, initialDetail]);
 
-  useEffect(()=>{
+  useEffect(() => {
     if (detail) return;
     if (initialDetail) return; // already handled above
-    if (activeTab==='insiders' && sortedLb.length) setDetail({type:'trader',name:sortedLb[0].insider_name,title:sortedLb[0].insider_title});
-  },[activeTab, sortedLb.length > 0, initialDetail]);
+    if (activeTab === 'insiders' && sortedLb.length) setDetail({ type: 'trader', name: sortedLb[0].insider_name, title: sortedLb[0].insider_title });
+  }, [activeTab, sortedLb.length > 0, initialDetail]);
 
   // Scroll the left list to whatever's selected when the drawer first opens —
   // without this, expanding from a quick-glance preview lands the user on a
@@ -5232,286 +5235,285 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // visible, so re-scrolling then would just be disorienting.
   const listRef = useRef(null);
   const scrolledOnOpenRef = useRef(false);
-  useEffect(()=>{
+  useEffect(() => {
     if (scrolledOnOpenRef.current || !detail) return;
-    const key = detail.type==='trader' ? detail.name : detail.ticker;
+    const key = detail.type === 'trader' ? detail.name : detail.ticker;
     if (!key) return;
     const el = listRef.current?.querySelector(`[data-row-key="${CSS.escape(key)}"]`);
     if (el) {
       el.scrollIntoView({ block: 'center' });
       scrolledOnOpenRef.current = true;
     }
-  },[detail, filteredSignals, sortedLb]);
+  }, [detail, filteredSignals, sortedLb]);
 
   return (
-    <div className="drawer-overlay" onClick={e=>{ if(e.target.classList.contains('drawer-overlay')) onClose(); }}>
+    <div className="drawer-overlay" onClick={e => { if (e.target.classList.contains('drawer-overlay')) onClose(); }}>
       <div className="drawer">
 
         {/* Branded top bar — matches topnav height so the page behind remains visible */}
         <div className="drawer__topbar">
           <div className="drawer__topbar-logo">
-            <div className="topnav__mark" style={{width:22,height:22}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-            <span className="topnav__wordmark" style={{fontSize:14}}>Seli</span>
+            <div className="topnav__mark" style={{ width: 22, height: 22 }}><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <span className="topnav__wordmark" style={{ fontSize: 14 }}>Seli</span>
           </div>
           <div className="drawer__tabs">
-            {[['signals','Signals'],['insiders','Insiders'],['data','Raw Data']].map(([k,l])=>(
+            {[['signals', 'Signals'], ['insiders', 'Insiders'], ['data', 'Raw Data']].map(([k, l]) => (
               <button key={k}
-                className={`drawer__tab${activeTab===k?' drawer__tab--active':''}`}
-                onClick={()=>switchTab(k)}>{l}</button>
+                className={`drawer__tab${activeTab === k ? ' drawer__tab--active' : ''}`}
+                onClick={() => switchTab(k)}>{l}</button>
             ))}
           </div>
-          <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
+          <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{ marginLeft: 'auto' }}><IconClose style={{ width: 12, height: 12 }} /></button>
         </div>
 
         {/* Filter toolbar — changes per active tab */}
-        {activeTab==='signals'&&(
-            <div className="drawer__toolbar">
-              <div className="drawer__filter-group drawer__filter-group--search">
-                <span className="drawer__filter-label">Search</span>
-                <div className="drawer__search-wrap">
-                  <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  <input className="drawer__search" placeholder="Ticker or company…"
-                    value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
-                </div>
-              </div>
-
-              <div className="drawer__toolbar-divider"/>
-
-              <div className="drawer__filter-group">
-                <span className="drawer__filter-label">Strength</span>
-                <div className="dash-tile-pills" style={{gap:2}}>
-                  {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
-                    <button key={o.v}
-                      className={`dash-tile-pill${minStr===o.v?' dash-tile-pill--active':''}`}
-                      style={o.v===3&&minStr===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:
-                             o.v===2&&minStr===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
-                      onClick={()=>setMinStr(o.v)}>{o.l}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="drawer__toolbar-divider"/>
-
-              <div className="drawer__filter-group">
-                <span className="drawer__filter-label">Window</span>
-                <div className="dash-tile-pills" style={{gap:2}}>
-                  {[{v:3,l:'3d'},{v:7,l:'7d'}].map(o=>(
-                    <button key={o.l} className={`dash-tile-pill${daysBack===o.v?' dash-tile-pill--active':''}`}
-                      onClick={()=>{setDaysBack(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
-                  ))}
-                  {pro ? [{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
-                    <button key={o.l} className={`dash-tile-pill${daysBack===o.v?' dash-tile-pill--active':''}`}
-                      onClick={()=>{setDaysBack(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
-                  )) : (
-                    <button className="dash-tile-pill dash-tile-pill--locked" onClick={()=>{}}>More <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>
-                  )}
-                </div>
-              </div>
-
-              <div className="drawer__toolbar-divider"/>
-
-              <div className="drawer__filter-group">
-                <span className="drawer__filter-label">Min value</span>
-                <select className="ins-filter-select" value={minValue} onChange={e=>setMinValue(Number(e.target.value))}>
-                  <option value={0}>Any</option>
-                  <option value={100000}>$100K+</option>
-                  <option value={500000}>$500K+</option>
-                  <option value={1000000}>$1M+</option>
-                </select>
-              </div>
-
-              <div className="drawer__toolbar-divider"/>
-
-              <div className="drawer__filter-group">
-                <span className="drawer__filter-label">Type</span>
-                <select className="ins-filter-select" value={srcF} onChange={e=>setSrcF(e.target.value)}>
-                  <option value="">All types</option>
-                  <option value="corporate">Corporate</option>
-                  <option value="political">Congressional</option>
-                </select>
-              </div>
-
-              <div className="drawer__toolbar-divider"/>
-
-              <div className="drawer__filter-group">
-                <span className="drawer__filter-label">Sector</span>
-                <select className="ins-filter-select" value={secF} onChange={e=>setSecF(e.target.value)}>
-                  <option value="">All sectors</option>
-                  {sectors.map(s=><option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-
-              <div className="drawer__toolbar-spacer"/>
-              {!drawerFiltersDefault&&(
-                <button className="ins-filter-reset" onClick={resetDrawerFilters}>Reset filters</button>
-              )}
-            </div>
-          )}
-          {activeTab==='insiders'&&(
-            <div className="drawer__toolbar">
-              <div className="drawer__filter-group drawer__filter-group--search">
-                <span className="drawer__filter-label">Search</span>
-                <div className="drawer__search-wrap">
-                  <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  <input className="drawer__search" placeholder="Insider name…"
-                    value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
-                </div>
-              </div>
-              <div className="drawer__toolbar-divider"/>
-              <div className="drawer__filter-group">
-                <span className="drawer__filter-label">Source</span>
-                <div className="dash-tile-pills" style={{gap:2}}>
-                  {[[null,'All'],['corporate','Corporate'],['congress','Congress']].map(([v,l])=>{
-                    if (!pro && v !== null) return null;
-                    return (
-                      <button key={l} className={`dash-tile-pill${lbSource===v?' dash-tile-pill--active':''}`}
-                        onClick={()=>setLbSource(v)}>{l}</button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="drawer__toolbar-divider"/>
-              <div className="drawer__filter-group">
-                <span className="drawer__filter-label">Window</span>
-                <div className="dash-tile-pills" style={{gap:2}}>
-                  {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>{
-                    if (!pro && v !== null) return null;
-                    return (
-                      <button key={l} className={`dash-tile-pill${lbYearsBack===v?' dash-tile-pill--active':''}`}
-                        onClick={()=>setLbYearsBack(v)}>{l}</button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="drawer__toolbar-divider"/>
-              <div className="drawer__filter-group">
-                <span className="drawer__filter-label">Sort by</span>
-                <div className="dash-tile-pills" style={{gap:2}}>
-                  {[['proxy_score','Score'],['om_buys','Buys'],['bought_value','Bought'],['avg_return','Biggest return']].map(([k,l])=>(
-                    <button key={k} className={`dash-tile-pill${lbSort===k?' dash-tile-pill--active':''}`}
-                      onClick={()=>lbOnSort(k)}>{l}{lbSort===k&&(lbDir<0?'↓':'↑')}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="drawer__toolbar-divider"/>
-              <div className="drawer__filter-group">
-                <span className="drawer__filter-label">Min position</span>
-                <div className="dash-tile-pills" style={{gap:2,alignItems:'center'}}>
-                  {[[0,'Any'],[50000,'$50K'],[100000,'$100K'],[1000000,'$1M'],[10000000,'$10M']].map(([v,l])=>(
-                    <button key={l} className={`dash-tile-pill${lbMinValue===v?' dash-tile-pill--active':''}`}
-                      onClick={()=>setLbMinValue(v)}>{l}</button>
-                  ))}
-                  <input type="number" className="ins-filter-select" placeholder="Custom $" style={{width:84,marginLeft:4}}
-                    value={lbMinValue&&![0,50000,100000,1000000,10000000].includes(lbMinValue)?lbMinValue:''}
-                    onChange={e=>setLbMinValue(e.target.value?Number(e.target.value):0)}/>
-                </div>
+        {activeTab === 'signals' && (
+          <div className="drawer__toolbar">
+            <div className="drawer__filter-group drawer__filter-group--search">
+              <span className="drawer__filter-label">Search</span>
+              <div className="drawer__search-wrap">
+                <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                <input className="drawer__search" placeholder="Ticker or company…"
+                  value={search} onChange={e => setSearch(e.target.value)} autoFocus />
               </div>
             </div>
-          )}
-        </div>
 
-        {/* ── Two-pane body ──────────────────────────────────────────── */}
-        <div className="drawer__body">
+            <div className="drawer__toolbar-divider" />
 
-          {/* LEFT: list */}
-          <div className="drawer__list" ref={listRef}>
-            {activeTab==='signals'&&(
-              <>
-                <div className="drawer__list-hdr">
-                  <span>{filteredSignals.length} signals{filingsLoading&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>loading more…</span>}</span>
-                  <div className="dash-sig-sort" style={{marginLeft:'auto',gap:2}}>
-                    {[['conviction','Conv'],['netValue','Net $'],['buys','Moves'],['lastTradeDate','Recent']].map(([k,l])=>(
-                      <button key={k} className={`dash-sort-btn${sigSort===k?' dash-sort-btn--active':''}`} onClick={()=>sigOnSort(k)}>
-                        {l}{sigSort===k&&(sigDir<0?'↓':'↑')}
-                      </button>
-                    ))}
-                  </div>
+            <div className="drawer__filter-group">
+              <span className="drawer__filter-label">Strength</span>
+              <div className="dash-tile-pills" style={{ gap: 2 }}>
+                {[{ v: 1, l: 'Any' }, { v: 2, l: 'Med+' }, { v: 3, l: 'High' }].map(o => (
+                  <button key={o.v}
+                    className={`dash-tile-pill${minStr === o.v ? ' dash-tile-pill--active' : ''}`}
+                    style={o.v === 3 && minStr === 3 ? { background: 'var(--green-600)', borderColor: 'var(--green-600)', color: '#fff' } :
+                      o.v === 2 && minStr === 2 ? { background: 'var(--amber-600)', borderColor: 'var(--amber-600)', color: '#fff' } : {}}
+                    onClick={() => setMinStr(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="drawer__toolbar-divider" />
+
+            <div className="drawer__filter-group">
+              <span className="drawer__filter-label">Window</span>
+              <div className="dash-tile-pills" style={{ gap: 2 }}>
+                {[{ v: 3, l: '3d' }, { v: 7, l: '7d' }].map(o => (
+                  <button key={o.l} className={`dash-tile-pill${daysBack === o.v ? ' dash-tile-pill--active' : ''}`}
+                    onClick={() => { setDaysBack(o.v); ensureFilingsWindow && ensureFilingsWindow(o.v); }}>{o.l}</button>
+                ))}
+                {pro ? [{ v: 30, l: '30d' }, { v: 90, l: '90d' }, { v: null, l: 'All' }].map(o => (
+                  <button key={o.l} className={`dash-tile-pill${daysBack === o.v ? ' dash-tile-pill--active' : ''}`}
+                    onClick={() => { setDaysBack(o.v); ensureFilingsWindow && ensureFilingsWindow(o.v); }}>{o.l}</button>
+                )) : (
+                  <button className="dash-tile-pill dash-tile-pill--locked" onClick={() => { }}>More <span className="settings-pro-badge" style={{ marginLeft: 3, fontSize: '0.5rem' }}>Pro</span></button>
+                )}
+              </div>
+            </div>
+
+            <div className="drawer__toolbar-divider" />
+
+            <div className="drawer__filter-group">
+              <span className="drawer__filter-label">Min value</span>
+              <select className="ins-filter-select" value={minValue} onChange={e => setMinValue(Number(e.target.value))}>
+                <option value={0}>Any</option>
+                <option value={100000}>$100K+</option>
+                <option value={500000}>$500K+</option>
+                <option value={1000000}>$1M+</option>
+              </select>
+            </div>
+
+            <div className="drawer__toolbar-divider" />
+
+            <div className="drawer__filter-group">
+              <span className="drawer__filter-label">Type</span>
+              <select className="ins-filter-select" value={srcF} onChange={e => setSrcF(e.target.value)}>
+                <option value="">All types</option>
+                <option value="corporate">Corporate</option>
+                <option value="political">Congressional</option>
+              </select>
+            </div>
+
+            <div className="drawer__toolbar-divider" />
+
+            <div className="drawer__filter-group">
+              <span className="drawer__filter-label">Sector</span>
+              <select className="ins-filter-select" value={secF} onChange={e => setSecF(e.target.value)}>
+                <option value="">All sectors</option>
+                {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <div className="drawer__toolbar-spacer" />
+            {!drawerFiltersDefault && (
+              <button className="ins-filter-reset" onClick={resetDrawerFilters}>Reset filters</button>
+            )}
+          </div>
+        )}
+        {activeTab === 'insiders' && (
+          <div className="drawer__toolbar">
+            <div className="drawer__filter-group drawer__filter-group--search">
+              <span className="drawer__filter-label">Search</span>
+              <div className="drawer__search-wrap">
+                <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                <input className="drawer__search" placeholder="Insider name…"
+                  value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+              </div>
+            </div>
+            <div className="drawer__toolbar-divider" />
+            <div className="drawer__filter-group">
+              <span className="drawer__filter-label">Source</span>
+              <div className="dash-tile-pills" style={{ gap: 2 }}>
+                {[[null, 'All'], ['corporate', 'Corporate'], ['congress', 'Congress']].map(([v, l]) => {
+                  if (!pro && v !== null) return null;
+                  return (
+                    <button key={l} className={`dash-tile-pill${lbSource === v ? ' dash-tile-pill--active' : ''}`}
+                      onClick={() => setLbSource(v)}>{l}</button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="drawer__toolbar-divider" />
+            <div className="drawer__filter-group">
+              <span className="drawer__filter-label">Window</span>
+              <div className="dash-tile-pills" style={{ gap: 2 }}>
+                {[[1, '1yr'], [2, '2yr'], [5, '5yr'], [null, 'All']].map(([v, l]) => {
+                  if (!pro && v !== null) return null;
+                  return (
+                    <button key={l} className={`dash-tile-pill${lbYearsBack === v ? ' dash-tile-pill--active' : ''}`}
+                      onClick={() => setLbYearsBack(v)}>{l}</button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="drawer__toolbar-divider" />
+            <div className="drawer__filter-group">
+              <span className="drawer__filter-label">Sort by</span>
+              <div className="dash-tile-pills" style={{ gap: 2 }}>
+                {[['proxy_score', 'Score'], ['om_buys', 'Buys'], ['bought_value', 'Bought'], ['avg_return', 'Biggest return']].map(([k, l]) => (
+                  <button key={k} className={`dash-tile-pill${lbSort === k ? ' dash-tile-pill--active' : ''}`}
+                    onClick={() => lbOnSort(k)}>{l}{lbSort === k && (lbDir < 0 ? '↓' : '↑')}</button>
+                ))}
+              </div>
+            </div>
+            <div className="drawer__toolbar-divider" />
+            <div className="drawer__filter-group">
+              <span className="drawer__filter-label">Min position</span>
+              <div className="dash-tile-pills" style={{ gap: 2, alignItems: 'center' }}>
+                {[[0, 'Any'], [50000, '$50K'], [100000, '$100K'], [1000000, '$1M'], [10000000, '$10M']].map(([v, l]) => (
+                  <button key={l} className={`dash-tile-pill${lbMinValue === v ? ' dash-tile-pill--active' : ''}`}
+                    onClick={() => setLbMinValue(v)}>{l}</button>
+                ))}
+                <input type="number" className="ins-filter-select" placeholder="Custom $" style={{ width: 84, marginLeft: 4 }}
+                  value={lbMinValue && ![0, 50000, 100000, 1000000, 10000000].includes(lbMinValue) ? lbMinValue : ''}
+                  onChange={e => setLbMinValue(e.target.value ? Number(e.target.value) : 0)} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Two-pane body ──────────────────────────────────────────── */}
+      <div className="drawer__body">
+
+        {/* LEFT: list */}
+        <div className="drawer__list" ref={listRef}>
+          {activeTab === 'signals' && (
+            <>
+              <div className="drawer__list-hdr">
+                <span>{filteredSignals.length} signals{filingsLoading && <span className="td-muted" style={{ marginLeft: 6, fontWeight: 400 }}><span className="spinner" style={{ width: 10, height: 10, borderWidth: 2, marginRight: 4, display: 'inline-block', verticalAlign: '-1px' }} />loading more…</span>}</span>
+                <div className="dash-sig-sort" style={{ marginLeft: 'auto', gap: 2 }}>
+                  {[['conviction', 'Conv'], ['netValue', 'Net $'], ['buys', 'Moves'], ['lastTradeDate', 'Recent']].map(([k, l]) => (
+                    <button key={k} className={`dash-sort-btn${sigSort === k ? ' dash-sort-btn--active' : ''}`} onClick={() => sigOnSort(k)}>
+                      {l}{sigSort === k && (sigDir < 0 ? '↓' : '↑')}
+                    </button>
+                  ))}
                 </div>
-                {filteredSignals.length===0
-                  ? <div className="drawer__empty">No signals match your filters</div>
-                  : filteredSignals.map(s=>{
-                    const isActive = detail?.ticker===s.ticker && detail?.activeTab==='signal';
-                    const convPct  = Math.min((s.conviction/15)*100,100);
-                    const tier     = tierFromPct(convPct, appetite);
+              </div>
+              {filteredSignals.length === 0
+                ? <div className="drawer__empty">No signals match your filters</div>
+                : filteredSignals.map(s => {
+                  const isActive = detail?.ticker === s.ticker && detail?.activeTab === 'signal';
+                  const convPct = Math.min((s.conviction / 15) * 100, 100);
+                  const tier = tierFromPct(convPct, appetite);
+                  return (
+                    <div key={s.ticker}
+                      data-row-key={s.ticker}
+                      className={`drawer__list-row drawer__list-row--${tier}${isActive ? ' drawer__list-row--active' : ''}`}
+                      onClick={() => { setDetail({ type: 'signal', ...s }); setDetailStack([]); }}>
+                      <div className="drawer__list-row__main">
+                        <span className="ticker" style={{ fontSize: '0.75rem', fontWeight: 700 }}>{s.ticker}</span>
+                        {s.cSuiteBuys > 0 && <span className="csuite-badge" style={{ fontSize: '0.6875rem' }}>{s.cSuiteBuys}×</span>}
+                        {s.isPolitical && <span className="badge badge--src-congress" style={{ fontSize: '0.6875rem' }}>C</span>}
+                        <span className="td-muted" style={{ fontSize: '0.6875rem', flex: 1 }}>{s.company}</span>
+                        <span className={`td-mono drawer__list-row__val ${s.netValue >= 0 ? 'val-buy' : 'val-sell'}`}>{s.netValue >= 0 ? '+' : ''}{fmt.money(s.netValue)}</span>
+                      </div>
+                      <div className="drawer__list-row__sub">
+                        <ConvictionBar score={s.conviction} />
+                        <span className="td-muted" style={{ fontSize: '0.6875rem', marginLeft: 'auto' }}>{fmt.ago(s.lastTradeDate)}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              }
+            </>
+          )}
+
+          {activeTab === 'insiders' && (
+            <>
+              <div className="drawer__list-hdr">
+                <span>{sortedLb.length} insiders</span>
+              </div>
+              {lbRows === null
+                ? <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}><Spinner size={16} /></div>
+                : sortedLb.length === 0
+                  ? <div className="drawer__empty">No insiders match</div>
+                  : sortedLb.map((r, i) => {
+                    const isActive = detail?.type === 'trader' && detail?.name === r.insider_name;
                     return (
-                      <div key={s.ticker}
-                        data-row-key={s.ticker}
-                        className={`drawer__list-row drawer__list-row--${tier}${isActive?' drawer__list-row--active':''}`}
-                        onClick={()=>{ setDetail({type:'signal',...s}); setDetailStack([]); }}>
+                      <div key={i}
+                        data-row-key={r.insider_name}
+                        className={`drawer__list-row${isActive ? ' drawer__list-row--active' : ''}`}
+                        onClick={() => { setDetail({ type: 'trader', name: r.insider_name, title: r.insider_title }); setDetailStack([]); }}>
                         <div className="drawer__list-row__main">
-                          <span className="ticker" style={{fontSize:'0.75rem',fontWeight:700}}>{s.ticker}</span>
-                          {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:'0.6875rem'}}>{s.cSuiteBuys}×</span>}
-                          {s.isPolitical&&<span className="badge badge--src-congress" style={{fontSize:'0.6875rem'}}>C</span>}
-                          <span className="td-muted" style={{fontSize:'0.6875rem',flex:1}}>{s.company}</span>
-                          <span className={`td-mono drawer__list-row__val ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
+                          <span className="td-muted" style={{ fontSize: '0.6875rem', width: 18 }}>{i + 1}</span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 500, flex: 1 }}>{r.insider_name}</span>
+                          <span className="td-mono" style={{ fontSize: 13, fontWeight: 700 }}>{r.proxy_score.toFixed(1)}</span>
                         </div>
                         <div className="drawer__list-row__sub">
-                          <ConvictionBar score={s.conviction}/>
-                          <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{fmt.ago(s.lastTradeDate)}</span>
+                          <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.insider_title || 'Unknown'}</span>
+                          <span className="td-muted" style={{ fontSize: '0.6875rem', marginLeft: 'auto' }}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
                         </div>
                       </div>
                     );
                   })
-                }
-              </>
-            )}
-
-            {activeTab==='insiders'&&(
-              <>
-                <div className="drawer__list-hdr">
-                  <span>{sortedLb.length} insiders</span>
-                </div>
-                {lbRows===null
-                  ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
-                  : sortedLb.length===0
-                    ? <div className="drawer__empty">No insiders match</div>
-                    : sortedLb.map((r,i)=>{
-                      const isActive = detail?.type==='trader' && detail?.name===r.insider_name;
-                      return (
-                        <div key={i}
-                          data-row-key={r.insider_name}
-                          className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
-                          onClick={()=>{ setDetail({type:'trader',name:r.insider_name,title:r.insider_title}); setDetailStack([]); }}>
-                          <div className="drawer__list-row__main">
-                            <span className="td-muted" style={{fontSize:'0.6875rem',width:18}}>{i+1}</span>
-                            <span style={{fontSize:'0.75rem',fontWeight:500,flex:1}}>{r.insider_name}</span>
-                            <span className="td-mono" style={{fontSize:13,fontWeight:700}}>{r.proxy_score.toFixed(1)}</span>
-                          </div>
-                          <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'Unknown'}</span>
-                            <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
-                          </div>
-                        </div>
-                      );
-                    })
-                }
-              </>
-            )}
-          </div>
-
-          {/* RIGHT: inline detail panel */}
-          <div className="drawer__detail">
-            {!detail
-              ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
-                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {activeTab==='signals'?'signal':'trader'} to explore</div>
-                </div>
-              : activeTab==='insiders' && detail.type==='trader'
-                ? <InsiderProfileDrawer name={detail.name} title={detail.title} filings={filings} watchlist={watchlist} lbRows={lbRows} onOpenDetail={(d)=>navigate(d)}/>
-                : <DetailPanel
-                    detail={detail}
-                    filings={filings}
-                    onClose={()=>setDetail(null)}
-                    onNavigate={(d)=>navigate(d)}
-                    onBack={goBack}
-                    canGoBack={detailStack.length>0}
-                    watchlist={watchlist}
-                    inline={true}
-                  />
-            }
-          </div>
-
+              }
+            </>
+          )}
         </div>
+
+        {/* RIGHT: inline detail panel */}
+        <div className="drawer__detail">
+          {!detail
+            ? <div className="drawer__detail-empty">
+              <div style={{ fontSize: 24, marginBottom: 8, opacity: .3 }}></div>
+              <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Select a {activeTab === 'signals' ? 'signal' : 'trader'} to explore</div>
+            </div>
+            : activeTab === 'insiders' && detail.type === 'trader'
+              ? <InsiderProfileDrawer name={detail.name} title={detail.title} filings={filings} watchlist={watchlist} lbRows={lbRows} onOpenDetail={(d) => navigate(d)} />
+              : <DetailPanel
+                detail={detail}
+                filings={filings}
+                onClose={() => setDetail(null)}
+                onNavigate={(d) => navigate(d)}
+                onBack={goBack}
+                canGoBack={detailStack.length > 0}
+                watchlist={watchlist}
+                inline={true}
+              />
+          }
+        </div>
+
       </div>
     </div>
   );
@@ -5525,30 +5527,30 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, pro }) {
   const { port, err, connected, refresh, refreshing, lastRefreshed, perf } = usePortfolio(pro);
 
-  const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[port]);
+  const posSymbols = useMemo(() => (port?.positions || []).map(p => p.symbol), [port]);
 
   // Real positions only — no longer merged with watchlist tickers. What you
   // hold and what you're watching are different questions; conflating them
   // here made it impossible to tell which was which.
-  const activeSignalTickers = useMemo(()=>{
-    const relevant = filings.filter(f=>
+  const activeSignalTickers = useMemo(() => {
+    const relevant = filings.filter(f =>
       posSymbols.includes(f.ticker) &&
-      (f.transactionDate||f.date||'')>=cutoff &&
+      (f.transactionDate || f.date || '') >= cutoff &&
       f.isOpenMarket
     );
-    return new Set(relevant.map(f=>f.ticker));
-  },[filings,cutoff,posSymbols.join(',')]);
+    return new Set(relevant.map(f => f.ticker));
+  }, [filings, cutoff, posSymbols.join(',')]);
 
   if (!cfg.NEON_PROXY_URL) return null;
 
   const header = (
-    <div className="ins-sig-panel__hdr" style={{flexShrink:0}}>
+    <div className="ins-sig-panel__hdr" style={{ flexShrink: 0 }}>
       <span>Portfolio</span>
       {port && (
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
-          {lastRefreshed && <span className="td-muted" style={{fontWeight:400,fontSize:'0.625rem'}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
-          <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} title="Refresh positions" style={{width:22,height:22}}>
-            <span style={{display:'inline-block',fontSize:'0.75rem',animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {lastRefreshed && <span className="td-muted" style={{ fontWeight: 400, fontSize: '0.625rem' }}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
+          <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} title="Refresh positions" style={{ width: 22, height: 22 }}>
+            <span style={{ display: 'inline-block', fontSize: '0.75rem', animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>⟳</span>
           </button>
         </div>
       )}
@@ -5560,8 +5562,8 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
         <div className="port-mini-tile__body">
-          <span className="td-muted" style={{fontSize:'0.6875rem'}}>
-            Pro feature — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=billing')}>upgrade</button> to see insider activity on your real holdings.
+          <span className="td-muted" style={{ fontSize: '0.6875rem' }}>
+            Pro feature — <button className="port-inline-link" onClick={() => navigateTo('/settings?section=billing')}>upgrade</button> to see insider activity on your real holdings.
           </span>
         </div>
       </div>
@@ -5572,47 +5574,47 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
     return (
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
-        <div className="port-mini-tile__body" style={{flexDirection:'row',alignItems:'center'}}>
-          <span className="td-muted" style={{fontSize:'0.6875rem'}}>{connected ? 'No positions available from your broker yet.' : 'Couldn\'t load your positions.'}</span>
-          <button className="btn btn--ghost btn--sm" style={{marginLeft:'auto'}} onClick={refresh} disabled={refreshing}>{refreshing?'Retrying…':'Retry'}</button>
+        <div className="port-mini-tile__body" style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{connected ? 'No positions available from your broker yet.' : 'Couldn\'t load your positions.'}</span>
+          <button className="btn btn--ghost btn--sm" style={{ marginLeft: 'auto' }} onClick={refresh} disabled={refreshing}>{refreshing ? 'Retrying…' : 'Retry'}</button>
         </div>
       </div>
     );
   }
 
-  if (connected===false) {
+  if (connected === false) {
     return (
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
         <div className="port-mini-tile__body">
-          <span className="td-muted" style={{fontSize:'0.6875rem'}}>
-            No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>Link your account</button> to see your real holdings and get notified when insiders trade your stocks.
+          <span className="td-muted" style={{ fontSize: '0.6875rem' }}>
+            No brokerage connected — <button className="port-inline-link" onClick={() => navigateTo('/settings?section=brokers')}>Link your account</button> to see your real holdings and get notified when insiders trade your stocks.
           </span>
         </div>
       </div>
     );
   }
 
-  const pos = port?.positions||[];
-  const totalPnl = pos.reduce((sum,p)=>sum+(p.openPnl||0),0);
-  const totalCost = pos.reduce((sum,p)=>sum+((p.marketValue||0)-(p.openPnl||0)),0);
-  const totalPnlPct = totalCost>0 ? (totalPnl/totalCost)*100 : null;
-  const hasGrowth = pos.some(p=>p.openPnl!=null);
+  const pos = port?.positions || [];
+  const totalPnl = pos.reduce((sum, p) => sum + (p.openPnl || 0), 0);
+  const totalCost = pos.reduce((sum, p) => sum + ((p.marketValue || 0) - (p.openPnl || 0)), 0);
+  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : null;
+  const hasGrowth = pos.some(p => p.openPnl != null);
 
   return (
     <div className="port-mini-tile">
       {header}
 
       {!port ? (
-        <div className="port-mini-tile__body" style={{display:'flex',justifyContent:'center',padding:'1.5rem'}}><Spinner size={16}/></div>
+        <div className="port-mini-tile__body" style={{ display: 'flex', justifyContent: 'center', padding: '1.5rem' }}><Spinner size={16} /></div>
       ) : (
         <div className="port-mini-tile__body">
           {/* Position size + growth */}
           <div className="port-mini-tile__stats">
             <span className="port-mini-tile__val">{fmt.money(port.totalValue)}</span>
             {hasGrowth && (
-              <span className={`port-mini-tile__growth ${totalPnl>=0?'val-buy':'val-sell'}`}>
-                {totalPnl>=0?'+':''}{fmt.money(totalPnl)}{totalPnlPct!=null?` (${totalPnlPct>=0?'+':''}${totalPnlPct.toFixed(1)}%)`:''}
+              <span className={`port-mini-tile__growth ${totalPnl >= 0 ? 'val-buy' : 'val-sell'}`}>
+                {totalPnl >= 0 ? '+' : ''}{fmt.money(totalPnl)}{totalPnlPct != null ? ` (${totalPnlPct >= 0 ? '+' : ''}${totalPnlPct.toFixed(1)}%)` : ''}
               </span>
             )}
           </div>
@@ -5620,43 +5622,43 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
           {/* Performance chart — gracefully degrades if history isn't
               available yet, rather than show anything fabricated */}
           <div className="port-mini-tile__chart">
-            {perf===undefined ? (
-              <div style={{display:'flex',justifyContent:'center',padding:'0.5rem'}}><Spinner size={12}/></div>
-            ) : perf===null || perf.length<2 ? (
-              <p className="td-muted" style={{fontSize:'0.625rem',textAlign:'center',padding:'0.4rem 0'}}>Performance history will appear here once available.</p>
+            {perf === undefined ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '0.5rem' }}><Spinner size={12} /></div>
+            ) : perf === null || perf.length < 2 ? (
+              <p className="td-muted" style={{ fontSize: '0.625rem', textAlign: 'center', padding: '0.4rem 0' }}>Performance history will appear here once available.</p>
             ) : (
-              <PortfolioChartWithRanges points={perf} compact onExplore={onExpand}/>
+              <PortfolioChartWithRanges points={perf} compact onExplore={onExpand} />
             )}
           </div>
 
           {/* Ticker list — height-capped, scrolls internally rather than
               pushing Top insiders (below) out of view */}
           <div className="port-mini-tile__list">
-            {pos.length===0
-              ? <p className="td-muted" style={{fontSize:'0.6875rem',padding:'8px 0'}}>No open positions in your connected account.</p>
-              : [...pos].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>{
-                  const hasActivity=activeSignalTickers.has(p.symbol);
-                  const hasPnl = p.openPnl!=null;
-                  return (
-                    <div key={i} className="port-mini-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:p.company})}>
-                      <span className="ticker" style={{fontSize:'0.75rem',minWidth:50}}>{p.symbol}</span>
-                      {hasActivity&&<span className="ins-port-chip__signal-badge" style={{fontSize:'0.5rem'}}>activity</span>}
-                      <span className="td-muted" style={{fontSize:'0.625rem',flex:1,textAlign:'right'}}>{fmt.money(p.marketValue)}</span>
-                      {hasPnl && (
-                        <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:'0.625rem',fontFamily:'var(--font-mono)',minWidth:70,textAlign:'right'}}>
-                          {p.openPnl>=0?'+':''}{p.openPnlPct.toFixed(1)}%
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
+            {pos.length === 0
+              ? <p className="td-muted" style={{ fontSize: '0.6875rem', padding: '8px 0' }}>No open positions in your connected account.</p>
+              : [...pos].sort((a, b) => Math.abs(b.marketValue || 0) - Math.abs(a.marketValue || 0)).map((p, i) => {
+                const hasActivity = activeSignalTickers.has(p.symbol);
+                const hasPnl = p.openPnl != null;
+                return (
+                  <div key={i} className="port-mini-row" onClick={() => onOpenDetail && onOpenDetail({ type: 'ticker', ticker: p.symbol, company: p.company })}>
+                    <span className="ticker" style={{ fontSize: '0.75rem', minWidth: 50 }}>{p.symbol}</span>
+                    {hasActivity && <span className="ins-port-chip__signal-badge" style={{ fontSize: '0.5rem' }}>activity</span>}
+                    <span className="td-muted" style={{ fontSize: '0.625rem', flex: 1, textAlign: 'right' }}>{fmt.money(p.marketValue)}</span>
+                    {hasPnl && (
+                      <span className={`${p.openPnl >= 0 ? 'val-buy' : 'val-sell'}`} style={{ fontSize: '0.625rem', fontFamily: 'var(--font-mono)', minWidth: 70, textAlign: 'right' }}>
+                        {p.openPnl >= 0 ? '+' : ''}{p.openPnlPct.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                );
+              })
             }
           </div>
         </div>
       )}
 
-      {onExpand&&port&&(
-        <button className="ins-panel-title-link" onClick={onExpand} style={{padding:'8px 14px',borderTop:'0.5px solid var(--border)',justifyContent:'center'}}>
+      {onExpand && port && (
+        <button className="ins-panel-title-link" onClick={onExpand} style={{ padding: '8px 14px', borderTop: '0.5px solid var(--border)', justifyContent: 'center' }}>
           Explore <span className="ins-explore-hint" aria-hidden="true">⤢</span>
         </button>
       )}
@@ -5670,7 +5672,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
 // Simple SVG line chart — no charting library dependency, matching the
 // existing hand-rolled-SVG convention already used elsewhere in this file
 // (see InsightsSectorChart). points: [{date, value}, ...] sorted ascending.
-function PortfolioPerformanceChart({ points, onClick, compact=true }) {
+function PortfolioPerformanceChart({ points, onClick, compact = true }) {
   // The Explore view's container has no fixed width constraint and is
   // typically much wider than the compact tile's — a fixed 160px height
   // regardless of that width is exactly what produced the flat, stretched
@@ -5681,25 +5683,25 @@ function PortfolioPerformanceChart({ points, onClick, compact=true }) {
   const PAD_L = 56, PAD_R = 10, PAD_T = 10, PAD_B = 24;
   const svgRef = useRef(null);
   const [hoverIdx, setHoverIdx] = useState(null);
-  const values = points.map(p=>p.value);
+  const values = points.map(p => p.value);
   const min = Math.min(...values), max = Math.max(...values);
-  const range = (max-min) || 1;
-  const plotW = W-PAD_L-PAD_R, plotH = H-PAD_T-PAD_B;
-  const stepX = plotW / (points.length-1);
-  const coords = points.map((p,i)=>({
-    x: PAD_L + i*stepX,
-    y: PAD_T + plotH * (1 - (p.value-min)/range),
+  const range = (max - min) || 1;
+  const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
+  const stepX = plotW / (points.length - 1);
+  const coords = points.map((p, i) => ({
+    x: PAD_L + i * stepX,
+    y: PAD_T + plotH * (1 - (p.value - min) / range),
   }));
-  const path = coords.map((c,i)=>`${i===0?'M':'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
-  const isUp = values[values.length-1] >= values[0];
-  const color = isUp?'var(--green-600)':'var(--red-600)';
+  const path = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+  const isUp = values[values.length - 1] >= values[0];
+  const color = isUp ? 'var(--green-600)' : 'var(--red-600)';
 
   // Value axis — 3 gridlines (max, mid, min) rather than a dense scale,
   // matching how compact a Yahoo/Google Finance mini-chart actually is.
-  const yTicks = [max, (max+min)/2, min];
+  const yTicks = [max, (max + min) / 2, min];
   // Time axis — first, middle, last date. Enough to orient without
   // crowding a chart this size with a full date scale.
-  const xTicks = [points[0], points[Math.floor((points.length-1)/2)], points[points.length-1]];
+  const xTicks = [points[0], points[Math.floor((points.length - 1) / 2)], points[points.length - 1]];
 
   // Converts a mouse event's screen position to the chart's own viewBox
   // coordinates, then finds the nearest actual data point by x — not a
@@ -5720,47 +5722,47 @@ function PortfolioPerformanceChart({ points, onClick, compact=true }) {
 
   return (
     <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none"
-      style={{display:'block',cursor:onClick?'pointer':'default'}}
-      onClick={onClick} role={onClick?'button':undefined} aria-label={onClick?'Open portfolio explorer':undefined}
-      onMouseMove={handleMove} onMouseLeave={()=>setHoverIdx(null)}>
-      {yTicks.map((v,i)=>{
-        const y = PAD_T + plotH*(i/2);
+      style={{ display: 'block', cursor: onClick ? 'pointer' : 'default' }}
+      onClick={onClick} role={onClick ? 'button' : undefined} aria-label={onClick ? 'Open portfolio explorer' : undefined}
+      onMouseMove={handleMove} onMouseLeave={() => setHoverIdx(null)}>
+      {yTicks.map((v, i) => {
+        const y = PAD_T + plotH * (i / 2);
         return (
           <g key={i}>
-            <line x1={PAD_L} y1={y} x2={W-PAD_R} y2={y} stroke="var(--border)" strokeWidth="0.5"/>
-            <text x={PAD_L-6} y={y+3} textAnchor="end" fontSize="9" fill="var(--text-3)">{fmt.money(v)}</text>
+            <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="var(--border)" strokeWidth="0.5" />
+            <text x={PAD_L - 6} y={y + 3} textAnchor="end" fontSize="9" fill="var(--text-3)">{fmt.money(v)}</text>
           </g>
         );
       })}
-      {xTicks.map((p,i)=>(
+      {xTicks.map((p, i) => (
         <text key={i}
-          x={PAD_L + (i===0?0:i===1?plotW/2:plotW)}
-          y={H-6}
-          textAnchor={i===0?'start':i===1?'middle':'end'}
+          x={PAD_L + (i === 0 ? 0 : i === 1 ? plotW / 2 : plotW)}
+          y={H - 6}
+          textAnchor={i === 0 ? 'start' : i === 1 ? 'middle' : 'end'}
           fontSize="9" fill="var(--text-3)">
           {fmt.dateShort(p.date)}
         </text>
       ))}
-      <path d={path} fill="none" stroke={color} strokeWidth="2"/>
+      <path d={path} fill="none" stroke={color} strokeWidth="2" />
       {hover && (
-        <g style={{pointerEvents:'none'}}>
-          <line x1={hover.coord.x} y1={PAD_T} x2={hover.coord.x} y2={H-PAD_B}
-            stroke="var(--text-3)" strokeWidth="1" strokeDasharray="2,2"/>
-          <circle cx={hover.coord.x} cy={hover.coord.y} r="3.5" fill={color} stroke="var(--surface)" strokeWidth="1.5"/>
+        <g style={{ pointerEvents: 'none' }}>
+          <line x1={hover.coord.x} y1={PAD_T} x2={hover.coord.x} y2={H - PAD_B}
+            stroke="var(--text-3)" strokeWidth="1" strokeDasharray="2,2" />
+          <circle cx={hover.coord.x} cy={hover.coord.y} r="3.5" fill={color} stroke="var(--surface)" strokeWidth="1.5" />
           {/* Tooltip box — flipped to the left side of the guide line past
               the chart's own midpoint, so it never renders partially off
               the right edge for points late in the series. */}
           {(() => {
             const boxW = 92, boxH = 30;
-            const flip = hover.coord.x > PAD_L + plotW/2;
+            const flip = hover.coord.x > PAD_L + plotW / 2;
             const boxX = flip ? hover.coord.x - boxW - 8 : hover.coord.x + 8;
-            const boxY = Math.max(PAD_T, Math.min(H-PAD_B-boxH, hover.coord.y - boxH/2));
+            const boxY = Math.max(PAD_T, Math.min(H - PAD_B - boxH, hover.coord.y - boxH / 2));
             return (
               <g>
                 <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="4"
-                  fill="var(--surface)" stroke="var(--border-md)" strokeWidth="0.5"/>
-                <text x={boxX+8} y={boxY+13} fontSize="9" fill="var(--text-3)">{fmt.dateShort(hover.point.date)}</text>
-                <text x={boxX+8} y={boxY+24} fontSize="10.5" fontWeight="700" fill="var(--text)">{fmt.money(hover.point.value)}</text>
+                  fill="var(--surface)" stroke="var(--border-md)" strokeWidth="0.5" />
+                <text x={boxX + 8} y={boxY + 13} fontSize="9" fill="var(--text-3)">{fmt.dateShort(hover.point.date)}</text>
+                <text x={boxX + 8} y={boxY + 24} fontSize="10.5" fontWeight="700" fill="var(--text)">{fmt.money(hover.point.value)}</text>
               </g>
             );
           })()}
@@ -5777,51 +5779,51 @@ function PortfolioPerformanceChart({ points, onClick, compact=true }) {
 // points client-side rather than re-fetching per range — same pattern as
 // Insights' own day-window selector.
 const PORTFOLIO_CHART_RANGES = [
-  { key:'1w',  label:'1W',  days:7 },
-  { key:'1m',  label:'1M',  days:30 },
-  { key:'3m',  label:'3M',  days:90 },
-  { key:'1y',  label:'1Y',  days:365 },
-  { key:'all', label:'All', days:null },
+  { key: '1w', label: '1W', days: 7 },
+  { key: '1m', label: '1M', days: 30 },
+  { key: '3m', label: '3M', days: 90 },
+  { key: '1y', label: '1Y', days: 365 },
+  { key: 'all', label: 'All', days: null },
 ];
-function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
+function PortfolioChartWithRanges({ points, compact = false, onExplore }) {
   const [range, setRange] = useState('1m');
   const { display, fellBack } = useMemo(() => {
-    const r = PORTFOLIO_CHART_RANGES.find(r=>r.key===range);
-    if (!r || r.days==null) return { display: points, fellBack: false };
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-r.days);
+    const r = PORTFOLIO_CHART_RANGES.find(r => r.key === range);
+    if (!r || r.days == null) return { display: points, fellBack: false };
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - r.days);
     const iso = cutoff.toISOString().split('T')[0]; // YYYY-MM-DD
     // Normalize each point's date to YYYY-MM-DD before comparing —
     // API may return full ISO timestamps or already-trimmed date strings.
-    const inRange = points.filter(p=>{
-      const d = p.date ? String(p.date).slice(0,10) : '';
+    const inRange = points.filter(p => {
+      const d = p.date ? String(p.date).slice(0, 10) : '';
       return d >= iso;
     });
-    return inRange.length>=2 ? { display: inRange, fellBack: false } : { display: points, fellBack: points.length>=2 };
+    return inRange.length >= 2 ? { display: inRange, fellBack: false } : { display: points, fellBack: points.length >= 2 };
   }, [points, range]);
 
   return (
     <div>
-      <div className={`port-chart-ranges${compact?' port-chart-ranges--compact':''}`}>
-        {PORTFOLIO_CHART_RANGES.map(r=>(
+      <div className={`port-chart-ranges${compact ? ' port-chart-ranges--compact' : ''}`}>
+        {PORTFOLIO_CHART_RANGES.map(r => (
           <button key={r.key}
-            className={`port-chart-range-btn${range===r.key?' port-chart-range-btn--active':''}`}
-            onClick={()=>setRange(r.key)}>
+            className={`port-chart-range-btn${range === r.key ? ' port-chart-range-btn--active' : ''}`}
+            onClick={() => setRange(r.key)}>
             {r.label}
           </button>
         ))}
       </div>
-      {display.length<2 ? (
-        <p className="td-muted" style={{fontSize:compact?10:11,textAlign:'center',padding:compact?'0.5rem 0':'1rem 0'}}>
+      {display.length < 2 ? (
+        <p className="td-muted" style={{ fontSize: compact ? 10 : 11, textAlign: 'center', padding: compact ? '0.5rem 0' : '1rem 0' }}>
           Not enough data yet.
         </p>
       ) : (
         <>
           {fellBack && (
-            <p className="td-muted" style={{fontSize:compact?9:10,padding:'2px 12px 0'}}>
-              Showing full history — not enough data for {PORTFOLIO_CHART_RANGES.find(r=>r.key===range)?.label} yet.
+            <p className="td-muted" style={{ fontSize: compact ? 9 : 10, padding: '2px 12px 0' }}>
+              Showing full history — not enough data for {PORTFOLIO_CHART_RANGES.find(r => r.key === range)?.label} yet.
             </p>
           )}
-          <PortfolioPerformanceChart points={display} onClick={onExplore} compact={compact}/>
+          <PortfolioPerformanceChart points={display} onClick={onExplore} compact={compact} />
         </>
       )}
     </div>
@@ -5831,20 +5833,20 @@ function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
 function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
   const { port, perf } = usePortfolio(pro);
   const [selected, setSelected] = useState(null);
-  const [detail, setDetail]     = useState(null);
+  const [detail, setDetail] = useState(null);
   const [detailStack, setDetailStack] = useState([]);
   const [tab, setTab] = useState('positions'); // 'positions' | 'activity' | 'news'
 
   const pos = port?.positions || [];
 
-  const posSymbols = useMemo(()=>pos.map(p=>p.symbol), [pos.length]);
+  const posSymbols = useMemo(() => pos.map(p => p.symbol), [pos.length]);
 
   // Recent insider activity on held tickers
-  const activityByTicker = useMemo(()=>{
+  const activityByTicker = useMemo(() => {
     const by = {};
     for (const f of filings) {
       if (!posSymbols.includes(f.ticker)) continue;
-      if ((f.transactionDate||f.date||'') < cutoff) continue;
+      if ((f.transactionDate || f.date || '') < cutoff) continue;
       if (!f.isOpenMarket) continue;
       if (!by[f.ticker]) by[f.ticker] = [];
       by[f.ticker].push(f);
@@ -5853,20 +5855,20 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
   }, [filings, cutoff, posSymbols.join(',')]);
 
   // Right-pane nav stack
-  function navTo(d) { if (detail) setDetailStack(s=>[...s,detail]); setDetail(d); }
-  function goBack()  { const p=detailStack[detailStack.length-1]; setDetailStack(s=>s.slice(0,-1)); setDetail(p||null); }
+  function navTo(d) { if (detail) setDetailStack(s => [...s, detail]); setDetail(d); }
+  function goBack() { const p = detailStack[detailStack.length - 1]; setDetailStack(s => s.slice(0, -1)); setDetail(p || null); }
 
   // Auto-select first position
-  useEffect(()=>{
+  useEffect(() => {
     if (pos.length && !selected) {
       const p = pos[0];
       setSelected(p.symbol);
-      setDetail({type:'ticker', ticker:p.symbol, company:''});
+      setDetail({ type: 'ticker', ticker: p.symbol, company: '' });
     }
   }, [pos.length]);
 
   // Escape
-  useEffect(()=>{
+  useEffect(() => {
     const h = e => {
       if (e.key !== 'Escape') return;
       if (detail && detailStack.length) goBack();
@@ -5877,12 +5879,12 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
   }, [detail, detailStack, onClose]);
 
   // P&L bar scale
-  const maxAbs = useMemo(()=>
-    Math.max(1, ...pos.map(p=>Math.abs(p.openPnl||0)))
-  , [pos]);
+  const maxAbs = useMemo(() =>
+    Math.max(1, ...pos.map(p => Math.abs(p.openPnl || 0)))
+    , [pos]);
 
   return (
-    <div className="drawer-overlay" onClick={e=>{if(e.target.classList.contains('drawer-overlay'))onClose();}}>
+    <div className="drawer-overlay" onClick={e => { if (e.target.classList.contains('drawer-overlay')) onClose(); }}>
       <div className="drawer drawer--wide">
 
         {/* Header — title, total value, close. Chart moved to the right
@@ -5892,7 +5894,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
           <div className="drawer__hdr-row1">
             <span className="drawer__title">Portfolio</span>
             {port && <span className="port-hdr-val">{fmt.money(port.totalValue)}</span>}
-            <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
+            <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{ marginLeft: 'auto' }}><IconClose style={{ width: 12, height: 12 }} /></button>
           </div>
         </div>
 
@@ -5901,41 +5903,41 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
           {/* LEFT: tabs — Positions / Insider activity / News */}
           <div className="drawer__list">
             <div className="drawer__list-hdr">
-              {[['positions','Positions'],['activity','Insider activity'],['news','News']].map(([id,l])=>(
+              {[['positions', 'Positions'], ['activity', 'Insider activity'], ['news', 'News']].map(([id, l]) => (
                 <button key={id}
-                  className={`dash-tile-pill${tab===id?' dash-tile-pill--active':''}`}
-                  style={{fontSize:'0.6875rem'}} onClick={()=>setTab(id)}>{l}</button>
+                  className={`dash-tile-pill${tab === id ? ' dash-tile-pill--active' : ''}`}
+                  style={{ fontSize: '0.6875rem' }} onClick={() => setTab(id)}>{l}</button>
               ))}
             </div>
 
             {/* POSITIONS TAB */}
-            {tab==='positions' && (
+            {tab === 'positions' && (
               !port
-                ? <SkeletonRows count={6}/>
-                : pos.length===0
-                  ? <div className="drawer__empty">No open positions.<br/>Connect Alpaca to track your holdings here.</div>
+                ? <SkeletonRows count={6} />
+                : pos.length === 0
+                  ? <div className="drawer__empty">No open positions.<br />Connect Alpaca to track your holdings here.</div>
                   : [...pos]
-                    .sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0))
-                    .map((p,i)=>{
+                    .sort((a, b) => Math.abs(b.marketValue || 0) - Math.abs(a.marketValue || 0))
+                    .map((p, i) => {
                       const upl = p.openPnl;
-                      const mv  = p.marketValue;
+                      const mv = p.marketValue;
                       const qty = p.quantity;
-                      const barW = upl!=null ? Math.min(Math.abs(upl)/maxAbs*100, 100) : 0;
+                      const barW = upl != null ? Math.min(Math.abs(upl) / maxAbs * 100, 100) : 0;
                       const hasActivity = !!(activityByTicker[p.symbol]?.length);
-                      const isActive = selected===p.symbol;
+                      const isActive = selected === p.symbol;
                       return (
                         <div key={i}
-                          className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
-                          onClick={()=>{ setSelected(p.symbol); setDetail({type:'ticker',ticker:p.symbol,company:''}); setDetailStack([]); }}>
+                          className={`drawer__list-row${isActive ? ' drawer__list-row--active' : ''}`}
+                          onClick={() => { setSelected(p.symbol); setDetail({ type: 'ticker', ticker: p.symbol, company: '' }); setDetailStack([]); }}>
                           <div className="drawer__list-row__main">
-                            <span className="ticker" style={{fontSize:13,fontWeight:700}}>{p.symbol}</span>
-                            {hasActivity&&<span className="reversal-badge" style={{fontSize:'0.6875rem'}}>insider activity</span>}
-                            <span className="td-muted" style={{fontSize:'0.6875rem',flex:1}}>{qty%1?qty.toFixed(2):qty} sh · {fmt.money(mv)}</span>
-                            {upl!=null && <span className={`td-mono ${upl>=0?'val-buy':'val-sell'}`} style={{fontSize:'0.75rem',fontWeight:700}}>{upl>=0?'+':''}{fmt.money(upl)}</span>}
+                            <span className="ticker" style={{ fontSize: 13, fontWeight: 700 }}>{p.symbol}</span>
+                            {hasActivity && <span className="reversal-badge" style={{ fontSize: '0.6875rem' }}>insider activity</span>}
+                            <span className="td-muted" style={{ fontSize: '0.6875rem', flex: 1 }}>{qty % 1 ? qty.toFixed(2) : qty} sh · {fmt.money(mv)}</span>
+                            {upl != null && <span className={`td-mono ${upl >= 0 ? 'val-buy' : 'val-sell'}`} style={{ fontSize: '0.75rem', fontWeight: 700 }}>{upl >= 0 ? '+' : ''}{fmt.money(upl)}</span>}
                           </div>
-                          {upl!=null && (
+                          {upl != null && (
                             <div className="port-plbar-track">
-                              <div className="port-plbar-fill" style={{width:`${barW}%`,background:upl>=0?'var(--green-600)':'var(--red-600)'}}/>
+                              <div className="port-plbar-fill" style={{ width: `${barW}%`, background: upl >= 0 ? 'var(--green-600)' : 'var(--red-600)' }} />
                             </div>
                           )}
                         </div>
@@ -5944,28 +5946,28 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
             )}
 
             {/* INSIDER ACTIVITY TAB */}
-            {tab==='activity' && (
-              posSymbols.length===0
+            {tab === 'activity' && (
+              posSymbols.length === 0
                 ? <div className="drawer__empty">No positions to track.</div>
-                : Object.keys(activityByTicker).length===0
+                : Object.keys(activityByTicker).length === 0
                   ? <div className="drawer__empty">No open-market insider trades on your holdings in the last {days}d.</div>
-                  : Object.entries(activityByTicker).map(([ticker,trades])=>(
+                  : Object.entries(activityByTicker).map(([ticker, trades]) => (
                     <div key={ticker}>
                       <div className="port-activity-ticker-hdr">
-                        <span className="ticker" style={{fontSize:'0.75rem'}}>{ticker}</span>
-                        <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{trades.length} trade{trades.length!==1?'s':''}</span>
+                        <span className="ticker" style={{ fontSize: '0.75rem' }}>{ticker}</span>
+                        <span className="td-muted" style={{ fontSize: '0.6875rem', marginLeft: 6 }}>{trades.length} trade{trades.length !== 1 ? 's' : ''}</span>
                       </div>
-                      {trades.map((f,i)=>(
+                      {trades.map((f, i) => (
                         <div key={i} className="drawer__list-row"
-                          onClick={()=>{ setSelected(ticker); setDetail({type:'ticker',ticker,company:''}); setDetailStack([]); setTab('positions'); }}>
+                          onClick={() => { setSelected(ticker); setDetail({ type: 'ticker', ticker, company: '' }); setDetailStack([]); setTab('positions'); }}>
                           <div className="drawer__list-row__main">
-                            <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?<IconBuyTri style={{width:8,height:8}}/>:<IconSellTri style={{width:8,height:8}}/>}</Badge>
-                            <span style={{fontSize:'0.6875rem',fontWeight:500,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName}</span>
-                            <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:'0.75rem',fontWeight:600}}>{fmt.money(f.value)}</span>
+                            <Badge type={f.transactionType === 'buy' ? 'buy' : 'sell'}>{f.transactionType === 'buy' ? <IconBuyTri style={{ width: 8, height: 8 }} /> : <IconSellTri style={{ width: 8, height: 8 }} />}</Badge>
+                            <span style={{ fontSize: '0.6875rem', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.insiderName}</span>
+                            <span className={`td-mono ${f.transactionType === 'buy' ? 'val-buy' : 'val-sell'}`} style={{ fontSize: '0.75rem', fontWeight: 600 }}>{fmt.money(f.value)}</span>
                           </div>
                           <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{f.title||f.relationship||'Unknown'}</span>
-                            <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                            <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{f.title || f.relationship || 'Unknown'}</span>
+                            <span className="td-muted" style={{ fontSize: '0.6875rem', marginLeft: 'auto' }}>{fmt.dateShort(f.transactionDate || f.date)}</span>
                           </div>
                         </div>
                       ))}
@@ -5974,43 +5976,43 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
             )}
 
             {/* NEWS TAB */}
-            {tab==='news' && (
-              posSymbols.length===0
+            {tab === 'news' && (
+              posSymbols.length === 0
                 ? <div className="drawer__empty">No positions to fetch news for.</div>
-                : <PortfolioTickerNews tickers={posSymbols}/>
+                : <PortfolioTickerNews tickers={posSymbols} />
             )}
           </div>
 
           {/* RIGHT: ticker profile (only once a position is selected) + performance chart (always shown) + inline ticker detail */}
           <div className="drawer__detail">
-            {selected && <CompanyProfileCard ticker={selected} company={detail?.company||''}/>}
+            {selected && <CompanyProfileCard ticker={selected} company={detail?.company || ''} />}
             <div className="port-perf-chart">
-              {perf===undefined ? (
-                <div style={{padding:'0.75rem',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>
-              ) : perf===null || perf.length<2 ? (
-                <p className="td-muted" style={{fontSize:'0.6875rem',padding:'0.6rem 1rem'}}>
+              {perf === undefined ? (
+                <div style={{ padding: '0.75rem', display: 'flex', justifyContent: 'center' }}><Spinner size={14} /></div>
+              ) : perf === null || perf.length < 2 ? (
+                <p className="td-muted" style={{ fontSize: '0.6875rem', padding: '0.6rem 1rem' }}>
                   Performance history will appear here once enough data has been collected.
                 </p>
               ) : (
-                <PortfolioChartWithRanges points={perf}/>
+                <PortfolioChartWithRanges points={perf} />
               )}
             </div>
             {!detail
               ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
-                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a position to see insider trades</div>
-                </div>
+                <div style={{ fontSize: 24, marginBottom: 8, opacity: .3 }}></div>
+                <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Select a position to see insider trades</div>
+              </div>
               : <DetailPanel
-                  detail={detail}
-                  filings={filings}
-                  onClose={()=>setDetail(null)}
-                  onNavigate={navTo}
-                  onBack={goBack}
-                  canGoBack={detailStack.length>0}
-                  watchlist={watchlist}
-                  inline={true}
-                  hideProfileCard={true}
-                />
+                detail={detail}
+                filings={filings}
+                onClose={() => setDetail(null)}
+                onNavigate={navTo}
+                onBack={goBack}
+                canGoBack={detailStack.length > 0}
+                watchlist={watchlist}
+                inline={true}
+                hideProfileCard={true}
+              />
             }
           </div>
 
@@ -6036,88 +6038,88 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
   const [sort, setSort] = useState('proxy_score');
   const [dir, setDir] = useState(-1);
 
-  useEffect(()=>{
+  useEffect(() => {
     if (!cfg.NEON_PROXY_URL) { setError('Not configured'); return; }
     setRows(null); setError(null);
     queryNeon(LEADERBOARD_QUERY(20, null, 5, yearsBack, source))
-      .then(r=>setRows(processLeaderboardRows(r)))
-      .catch(e=>setError(e.message||'Failed to load'));
-  },[yearsBack,source]);
+      .then(r => setRows(processLeaderboardRows(r)))
+      .catch(e => setError(e.message || 'Failed to load'));
+  }, [yearsBack, source]);
 
-  const sorted = useMemo(()=>{
+  const sorted = useMemo(() => {
     if (!rows) return [];
-    return [...rows].sort((a,b)=>{
-      const av=a[sort]??-Infinity, bv=b[sort]??-Infinity;
-      return dir>0?av-bv:bv-av;
+    return [...rows].sort((a, b) => {
+      const av = a[sort] ?? -Infinity, bv = b[sort] ?? -Infinity;
+      return dir > 0 ? av - bv : bv - av;
     });
-  },[rows,sort,dir]);
-  function onSortClick(col){ if(sort===col)setDir(d=>-d); else{setSort(col);setDir(-1);} }
+  }, [rows, sort, dir]);
+  function onSortClick(col) { if (sort === col) setDir(d => -d); else { setSort(col); setDir(-1); } }
   const isMobile = useIsMobile();
   const [expandedKey, setExpandedKey] = useState(null);
 
   return (
     <div className="ins-lb-list-wrap">
       {pro && (
-      <div className="ins-lb-pill-row">
-        <span className="ins-lb-pill-row__label">Window</span>
-        {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>(
-          <button key={l} className={`dash-tile-pill${yearsBack===v?' dash-tile-pill--active':''}`}
-            onClick={()=>setYearsBack(v)}>{l}</button>
-        ))}
-        <span className="ins-lb-pill-row__label" style={{marginLeft:8}}>Source</span>
-        {[[null,'All'],['corporate','Corp'],['congress','Congress']].map(([v,l])=>(
-          <button key={l} className={`dash-tile-pill${source===v?' dash-tile-pill--active':''}`}
-            onClick={()=>setSource(v)}>{l}</button>
-        ))}
-      </div>
+        <div className="ins-lb-pill-row">
+          <span className="ins-lb-pill-row__label">Window</span>
+          {[[1, '1yr'], [2, '2yr'], [5, '5yr'], [null, 'All']].map(([v, l]) => (
+            <button key={l} className={`dash-tile-pill${yearsBack === v ? ' dash-tile-pill--active' : ''}`}
+              onClick={() => setYearsBack(v)}>{l}</button>
+          ))}
+          <span className="ins-lb-pill-row__label" style={{ marginLeft: 8 }}>Source</span>
+          {[[null, 'All'], ['corporate', 'Corp'], ['congress', 'Congress']].map(([v, l]) => (
+            <button key={l} className={`dash-tile-pill${source === v ? ' dash-tile-pill--active' : ''}`}
+              onClick={() => setSource(v)}>{l}</button>
+          ))}
+        </div>
       )}
       <div className="ins-lb-col-hdr">
-        <span className="ins-lb-col-hdr__spacer"/>
+        <span className="ins-lb-col-hdr__spacer" />
         <span className="ins-lb-col-hdr__name">Insider</span>
-        <button className={`ins-lb-col-hdr__sort${sort==='om_buys'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('om_buys')}>Buys{sort==='om_buys'&&(dir<0?' ↓':' ↑')}</button>
-        <button className={`ins-lb-col-hdr__sort${sort==='proxy_score'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('proxy_score')}>Score{sort==='proxy_score'&&(dir<0?' ↓':' ↑')}</button>
+        <button className={`ins-lb-col-hdr__sort${sort === 'om_buys' ? ' ins-lb-col-hdr__sort--active' : ''}`} onClick={() => onSortClick('om_buys')}>Buys{sort === 'om_buys' && (dir < 0 ? ' ↓' : ' ↑')}</button>
+        <button className={`ins-lb-col-hdr__sort${sort === 'proxy_score' ? ' ins-lb-col-hdr__sort--active' : ''}`} onClick={() => onSortClick('proxy_score')}>Score{sort === 'proxy_score' && (dir < 0 ? ' ↓' : ' ↑')}</button>
       </div>
-      {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
-      :rows===null?<SkeletonRows count={8}/>
-      :rows.length===0?<div className="ins-empty">Not enough data yet</div>
-      :<div className="ins-lb-list">
-        {sorted.slice(0, expandedHome ? 30 : 15).map((r,i)=>{
-          const isExpanded = isMobile && expandedKey===r.insider_name;
-          return (
-          <div key={i} className={`ins-lb-card${isExpanded?' ins-lb-card--expanded':''}`}
-            onClick={()=>{
-              if (isMobile) { setExpandedKey(k=>k===r.insider_name?null:r.insider_name); return; }
-              onOpenDetail&&onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title});
-            }}>
-            <div className="ins-lb-card__rank">{i+1}</div>
-            <div className="ins-lb-card__body">
-              <div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>
-              <div className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'Unknown'}</div>
-              <div className="ins-lb-card__meta">
-                <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
-                <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
-              </div>
-            </div>
-            <div className="ins-lb-card__score">
-              {watchlist&&<FollowBtn name={r.insider_name} watchlist={watchlist}/>}
-              <div className="ins-lb-card__rate td-mono" style={{fontWeight:700}}>{r.proxy_score.toFixed(1)}</div>
-              <ConvictionBar score={r.proxy_score} max={5}/>
-            </div>
-            {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
-            {isExpanded && (
-              <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
-                <div className="ins-sig-row__expanded-grid">
-                  <div><span className="td-muted">Sells</span><br/>{r.om_sells||0}</div>
-                  <div><span className="td-muted">Bought value</span><br/>{fmt.money(r.bought_value)}</div>
-                  {r.hit_rate!=null && <div><span className="td-muted">Hit rate</span><br/><span className={r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}>{r.hit_rate}%</span></div>}
-                  {r.avg_return!=null && <div><span className="td-muted">Avg return</span><br/><span className={r.avg_return>=0?'val-buy':'val-sell'}>{r.avg_return>=0?'+':''}{r.avg_return}%</span></div>}
-                </div>
-              </div>
-            )}
-          </div>
-          );
-        })}
-      </div>}
+      {error ? <div className="ins-empty"><IconWarning style={{ width: 11, height: 11, marginRight: 3, verticalAlign: "-1px" }} />{error}</div>
+        : rows === null ? <SkeletonRows count={8} />
+          : rows.length === 0 ? <div className="ins-empty">Not enough data yet</div>
+            : <div className="ins-lb-list">
+              {sorted.slice(0, expandedHome ? 30 : 15).map((r, i) => {
+                const isExpanded = isMobile && expandedKey === r.insider_name;
+                return (
+                  <div key={i} className={`ins-lb-card${isExpanded ? ' ins-lb-card--expanded' : ''}`}
+                    onClick={() => {
+                      if (isMobile) { setExpandedKey(k => k === r.insider_name ? null : r.insider_name); return; }
+                      onOpenDetail && onOpenDetail({ type: 'trader', name: r.insider_name, title: r.insider_title });
+                    }}>
+                    <div className="ins-lb-card__rank">{i + 1}</div>
+                    <div className="ins-lb-card__body">
+                      <div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>
+                      <div className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.insider_title || 'Unknown'}</div>
+                      <div className="ins-lb-card__meta">
+                        <Badge type={`rel-${r.relationship || 'weak'}`}>{r.relationship === 'strong' ? 'C-Suite' : r.relationship === 'medium' ? 'Officer' : 'Dir'}</Badge>
+                        <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
+                      </div>
+                    </div>
+                    <div className="ins-lb-card__score">
+                      {watchlist && <FollowBtn name={r.insider_name} watchlist={watchlist} />}
+                      <div className="ins-lb-card__rate td-mono" style={{ fontWeight: 700 }}>{r.proxy_score.toFixed(1)}</div>
+                      <ConvictionBar score={r.proxy_score} max={5} />
+                    </div>
+                    {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
+                    {isExpanded && (
+                      <div className="ins-sig-row__expanded" onClick={e => e.stopPropagation()}>
+                        <div className="ins-sig-row__expanded-grid">
+                          <div><span className="td-muted">Sells</span><br />{r.om_sells || 0}</div>
+                          <div><span className="td-muted">Bought value</span><br />{fmt.money(r.bought_value)}</div>
+                          {r.hit_rate != null && <div><span className="td-muted">Hit rate</span><br /><span className={r.hit_rate >= 70 ? 'val-buy' : r.hit_rate < 50 ? 'val-sell' : ''}>{r.hit_rate}%</span></div>}
+                          {r.avg_return != null && <div><span className="td-muted">Avg return</span><br /><span className={r.avg_return >= 0 ? 'val-buy' : 'val-sell'}>{r.avg_return >= 0 ? '+' : ''}{r.avg_return}%</span></div>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>}
     </div>
   );
 }
@@ -6127,19 +6129,19 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
 // SEC data: our own net buy/sell by sector (excludes 'Other' — too much noise)
 // Toggle lets the user switch between the two views.
 const SECTOR_ETFS = [
-  {label:'Tech',      sym:'XLK'},  {label:'Finance',   sym:'XLF'},
-  {label:'Healthcare',sym:'XLV'},  {label:'Energy',    sym:'XLE'},
-  {label:'Staples',   sym:'XLP'},  {label:'Discretion',sym:'XLY'},
-  {label:'Industrials',sym:'XLI'}, {label:'Real Estate',sym:'XLRE'},
-  {label:'Utilities', sym:'XLU'},  {label:'Materials',  sym:'XLB'},
-  {label:'Comms',     sym:'XLC'},
+  { label: 'Tech', sym: 'XLK' }, { label: 'Finance', sym: 'XLF' },
+  { label: 'Healthcare', sym: 'XLV' }, { label: 'Energy', sym: 'XLE' },
+  { label: 'Staples', sym: 'XLP' }, { label: 'Discretion', sym: 'XLY' },
+  { label: 'Industrials', sym: 'XLI' }, { label: 'Real Estate', sym: 'XLRE' },
+  { label: 'Utilities', sym: 'XLU' }, { label: 'Materials', sym: 'XLB' },
+  { label: 'Comms', sym: 'XLC' },
 ];
 // Map our SEC sector names to the ETF sector labels for overlaying
 const SEC_TO_ETF_LABEL = {
-  'Technology':'Tech','Finance':'Finance','Healthcare':'Healthcare','Energy':'Energy',
-  'Consumer Staples':'Staples','Consumer Discretionary':'Discretion',
-  'Industrials':'Industrials','Real Estate':'Real Estate','Utilities':'Utilities',
-  'Materials':'Materials','Communication Services':'Comms',
+  'Technology': 'Tech', 'Finance': 'Finance', 'Healthcare': 'Healthcare', 'Energy': 'Energy',
+  'Consumer Staples': 'Staples', 'Consumer Discretionary': 'Discretion',
+  'Industrials': 'Industrials', 'Real Estate': 'Real Estate', 'Utilities': 'Utilities',
+  'Materials': 'Materials', 'Communication Services': 'Comms',
 };
 
 
@@ -6157,8 +6159,8 @@ const SEC_TO_ETF_LABEL = {
 // the full per-insider trustScore() pipeline for every insider in the DB isn't
 // practical in one query. This is consistent with the same approximation used
 // for "Related Insiders" on the trader profile.
-function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2, sourceFilter=null) {
-  const sectorClause = sectorFilter ? `AND f.sector = '${sectorFilter.replace(/'/g,"''")}'` : '';
+function LEADERBOARD_QUERY(limit = 50, sectorFilter = null, minTrades = 5, yearsBack = 2, sourceFilter = null) {
+  const sectorClause = sectorFilter ? `AND f.sector = '${sectorFilter.replace(/'/g, "''")}'` : '';
   // Date window is now a real parameter rather than hardcoded — yearsBack=null
   // means no date filter at all (true all-time), used by the unsortable
   // preview tiles (Dashboard, Insights side panel) where "all-time" is the
@@ -6169,8 +6171,8 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
   // Corporate vs congressional — congressional trades are the only ones
   // whose transaction_code starts with 'CONGRESS' (set at ingestion).
   const sourceClause = sourceFilter === 'congress' ? `AND f.transaction_code LIKE 'CONGRESS%'`
-                      : sourceFilter === 'corporate' ? `AND (f.transaction_code IS NULL OR f.transaction_code NOT LIKE 'CONGRESS%')`
-                      : '';
+    : sourceFilter === 'corporate' ? `AND (f.transaction_code IS NULL OR f.transaction_code NOT LIKE 'CONGRESS%')`
+      : '';
   // Win/loss now requires a MEANINGFUL margin (5%+) rather than the old
   // razor-thin `close >= buy price`, where a stock up $0.01 counted as a
   // full win identically to one up 400%. Trades that are roughly flat
@@ -6324,7 +6326,7 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
 
 
 // ─── SECTOR MONEY FLOW environment ─────────────────────────────────────────────
-function SECTOR_FLOW_QUERY(days=30) {
+function SECTOR_FLOW_QUERY(days = 30) {
   return `
     SELECT sector,
            SUM(value) FILTER (WHERE transaction_type='buy' AND is_open_market AND value < 50000000000)  AS buy_value,
@@ -6344,18 +6346,18 @@ function SECTOR_FLOW_QUERY(days=30) {
 
 // ─── ALL DATA ─────────────────────────────────────────────────────────────────
 const DATA_PAGE = 100;
-const DATA_DATE_PRESETS = [{l:'1d',d:1},{l:'3d',d:3},{l:'7d',d:7},{l:'30d',d:30},{l:'90d',d:90},{l:'All',d:null}];
+const DATA_DATE_PRESETS = [{ l: '1d', d: 1 }, { l: '3d', d: 3 }, { l: '7d', d: 7 }, { l: '30d', d: 30 }, { l: '90d', d: 90 }, { l: 'All', d: null }];
 const DATA_SORTABLE_COLS = [
-  {key:'transaction_date', label:'Trade Date', type:'date'},
-  {key:'ticker',           label:'Ticker',     type:'text'},
-  {key:'company_name',     label:'Company',    type:'text'},
-  {key:'insider_name',     label:'Insider',    type:'text'},
-  {key:'transaction_type', label:'Type',       type:'text'},
-  {key:'shares',           label:'Shares',     type:'num'},
-  {key:'price_per_share',  label:'Price',      type:'num'},
-  {key:'value',            label:'Value',      type:'num'},
-  {key:'pct_owned_change', label:'Pos%',       type:'num'},
-  {key:'relationship',     label:'Role',       type:'text'},
+  { key: 'transaction_date', label: 'Trade Date', type: 'date' },
+  { key: 'ticker', label: 'Ticker', type: 'text' },
+  { key: 'company_name', label: 'Company', type: 'text' },
+  { key: 'insider_name', label: 'Insider', type: 'text' },
+  { key: 'transaction_type', label: 'Type', type: 'text' },
+  { key: 'shares', label: 'Shares', type: 'num' },
+  { key: 'price_per_share', label: 'Price', type: 'num' },
+  { key: 'value', label: 'Value', type: 'num' },
+  { key: 'pct_owned_change', label: 'Pos%', type: 'num' },
+  { key: 'relationship', label: 'Role', type: 'text' },
 ];
 
 async function proxySQL(sql) {
@@ -6443,12 +6445,12 @@ async function fetchExportViaSnapshot(mode, onProgress) {
     body: JSON.stringify({ mode }),
   });
   if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
-  if (r.status === 403) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
+  if (r.status === 403) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
   if (!r.ok) throw new Error(`Something went wrong exporting this (status ${r.status}) — try again in a moment`);
 
   const contentType = r.headers.get('Content-Type') || '';
   if (contentType.includes('application/json')) {
-    const d = await r.json().catch(()=>({}));
+    const d = await r.json().catch(() => ({}));
     if (d.error === 'snapshot_not_ready') return null; // expected — caller falls back
     throw new Error(d.error || 'Export failed');
   }
@@ -6484,14 +6486,14 @@ async function fetchExportViaSnapshot(mode, onProgress) {
 // before running anything) rather than the general query passthrough —
 // same shape, different endpoint, so a non-purchaser can't just replay a
 // normal /query request with a bigger LIMIT and get the export for free.
-async function proxyExport({ selectCols, whereClause, cursor, pagesPerBatch=5, pageSize=20000, mode='consume' }) {
+async function proxyExport({ selectCols, whereClause, cursor, pagesPerBatch = 5, pageSize = 20000, mode = 'consume' }) {
   const r = await fetch(`${cfg.NEON_PROXY_URL}/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
     body: JSON.stringify({ selectCols, whereClause, cursor, pagesPerBatch, pageSize, mode }),
   });
   if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
-  if (r.status === 403) { const d = await r.json().catch(()=>({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
+  if (r.status === 403) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Full data export requires a one-time purchase.'); }
   if (!r.ok) throw new Error(`Something went wrong exporting this (status ${r.status}) — try again in a moment`);
   const d = await r.json();
   if (d.error) {
@@ -6510,7 +6512,7 @@ async function proxyExport({ selectCols, whereClause, cursor, pagesPerBatch=5, p
 // retries things that plausibly succeed on a second attempt — 401/403
 // fail immediately, since those are deterministic access problems
 // retrying won't fix.
-async function proxyExportWithRetry(params, maxRetries=4) {
+async function proxyExportWithRetry(params, maxRetries = 4) {
   let lastErr;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -6532,41 +6534,41 @@ async function proxyExportWithRetry(params, maxRetries=4) {
 }
 
 
-const EXPORT_COLS = ['transaction_date','filing_date','ticker','company_name','insider_name','insider_title',
-  'transaction_type','transaction_code','is_open_market','shares','price_per_share',
-  'value','pct_owned_change','relationship','sector','footnotes'];
+const EXPORT_COLS = ['transaction_date', 'filing_date', 'ticker', 'company_name', 'insider_name', 'insider_title',
+  'transaction_type', 'transaction_code', 'is_open_market', 'shares', 'price_per_share',
+  'value', 'pct_owned_change', 'relationship', 'sector', 'footnotes'];
 
-const EXPORT_HEADERS = ['Transaction Date','Filing Date','Ticker','Company','Insider Name','Insider Title',
-  'Buy/Sell','Transaction Code','Open Market?','Shares','Price / Share',
-  'Value ($)','% Owned Change','Relationship','Sector','Footnotes'];
+const EXPORT_HEADERS = ['Transaction Date', 'Filing Date', 'Ticker', 'Company', 'Insider Name', 'Insider Title',
+  'Buy/Sell', 'Transaction Code', 'Open Market?', 'Shares', 'Price / Share',
+  'Value ($)', '% Owned Change', 'Relationship', 'Sector', 'Footnotes'];
 
 // Column widths (characters) matched 1:1 to EXPORT_HEADERS above.
-const EXPORT_COL_WIDTHS = [13,12,8,28,20,22,9,16,11,11,12,13,14,11,16,32];
+const EXPORT_COL_WIDTHS = [13, 12, 8, 28, 20, 22, 9, 16, 11, 11, 12, 13, 14, 11, 16, 32];
 
 const TX_CODE_LEGEND = [
   ...Object.entries(TX_CODE_TOOLTIPS),
-  ['CONGRESS_P','Congressional purchase (STOCK Act disclosure)'],
-  ['CONGRESS_S','Congressional sale (STOCK Act disclosure)'],
-  ['CONGRESS_O','Congressional other/exchange transaction (STOCK Act disclosure)'],
+  ['CONGRESS_P', 'Congressional purchase (STOCK Act disclosure)'],
+  ['CONGRESS_S', 'Congressional sale (STOCK Act disclosure)'],
+  ['CONGRESS_O', 'Congressional other/exchange transaction (STOCK Act disclosure)'],
 ];
 
 const COLUMN_LEGEND = [
-  ['Transaction Date','The date the trade itself happened, when disclosed. Congressional trades often disclose only a date range or amount band, not an exact price.'],
-  ['Filing Date','The date the SEC or Congress actually received/processed the disclosure — usually a few days after the transaction date.'],
-  ['Ticker','Stock ticker symbol, when the underlying security has one.'],
-  ['Company','Full company or entity name as filed.'],
-  ['Insider Name','The person or entity who made the trade.'],
-  ['Insider Title','Their role at the company (e.g. CFO, Director), or House/Senate for congressional filers.'],
-  ['Buy/Sell','Whether this was a purchase or a sale.'],
-  ['Transaction Code','The SEC/STOCK Act code describing the transaction type — see the Code column below for what each one means.'],
-  ['Open Market?','Yes if this was a real open-market cash purchase or sale — the kind that reflects a genuine bet with their own money, as opposed to a grant, award, gift, or tax withholding.'],
-  ['Shares','Number of shares involved, when disclosed. Congressional filings typically do not disclose an exact share count.'],
-  ['Price / Share','Price per share at the time of the trade, when disclosed.'],
-  ['Value ($)','Total dollar value of the transaction, or the disclosed range midpoint for congressional trades.'],
-  ['% Owned Change','Approximate percent change in the insider\'s total position this trade represents, when calculable.'],
-  ['Relationship','Insider\'s seniority tier: strong (C-suite), medium (officer), or weak (director/10% owner/other).'],
-  ['Sector','GICS-style sector classification for the company, when known.'],
-  ['Footnotes','Any footnote text attached to the filing, verbatim.'],
+  ['Transaction Date', 'The date the trade itself happened, when disclosed. Congressional trades often disclose only a date range or amount band, not an exact price.'],
+  ['Filing Date', 'The date the SEC or Congress actually received/processed the disclosure — usually a few days after the transaction date.'],
+  ['Ticker', 'Stock ticker symbol, when the underlying security has one.'],
+  ['Company', 'Full company or entity name as filed.'],
+  ['Insider Name', 'The person or entity who made the trade.'],
+  ['Insider Title', 'Their role at the company (e.g. CFO, Director), or House/Senate for congressional filers.'],
+  ['Buy/Sell', 'Whether this was a purchase or a sale.'],
+  ['Transaction Code', 'The SEC/STOCK Act code describing the transaction type — see the Code column below for what each one means.'],
+  ['Open Market?', 'Yes if this was a real open-market cash purchase or sale — the kind that reflects a genuine bet with their own money, as opposed to a grant, award, gift, or tax withholding.'],
+  ['Shares', 'Number of shares involved, when disclosed. Congressional filings typically do not disclose an exact share count.'],
+  ['Price / Share', 'Price per share at the time of the trade, when disclosed.'],
+  ['Value ($)', 'Total dollar value of the transaction, or the disclosed range midpoint for congressional trades.'],
+  ['% Owned Change', 'Approximate percent change in the insider\'s total position this trade represents, when calculable.'],
+  ['Relationship', 'Insider\'s seniority tier: strong (C-suite), medium (officer), or weak (director/10% owner/other).'],
+  ['Sector', 'GICS-style sector classification for the company, when known.'],
+  ['Footnotes', 'Any footnote text attached to the filing, verbatim.'],
 ];
 
 // Shared by DataPage's own "Export CSV" button (filtered to whatever's
@@ -6584,7 +6586,7 @@ const COLUMN_LEGEND = [
 // upstream was rejecting them. DataPage's own filtered browsing already
 // had a same-shaped clamp, which is why this never showed up there — only
 // on the one code path that had none.
-async function downloadFullExport(extraConditions='', orderByClause="ORDER BY COALESCE(transaction_date,filing_date) DESC", mode='consume', onProgress=null) {
+async function downloadFullExport(extraConditions = '', orderByClause = "ORDER BY COALESCE(transaction_date,filing_date) DESC", mode = 'consume', onProgress = null) {
   const today = new Date().toISOString().split('T')[0];
   let data = null;
 
@@ -6598,74 +6600,74 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   }
 
   if (data === null) {
-  // Row inclusion stays permissive — same COALESCE check that was already
-  // proven to work (this is what returned real rows before). Requiring
-  // BOTH transaction_date AND filing_date to independently pass sanity
-  // checking (the previous version of this fix) turned out to exclude
-  // nearly the entire table — date corruption from the known ingestion
-  // bugs is apparently common enough that a large share of rows have at
-  // least one bad field even when the other is fine, and rejecting the
-  // whole row for that lost real data along with the bad value.
-  const conditions = [
-    `COALESCE(transaction_date,filing_date)::date >= '2020-01-01'::date`,
-    `COALESCE(transaction_date,filing_date)::date <= '${today}'::date`,
-  ];
-  if (extraConditions) conditions.push(extraConditions);
+    // Row inclusion stays permissive — same COALESCE check that was already
+    // proven to work (this is what returned real rows before). Requiring
+    // BOTH transaction_date AND filing_date to independently pass sanity
+    // checking (the previous version of this fix) turned out to exclude
+    // nearly the entire table — date corruption from the known ingestion
+    // bugs is apparently common enough that a large share of rows have at
+    // least one bad field even when the other is fine, and rejecting the
+    // whole row for that lost real data along with the bad value.
+    const conditions = [
+      `COALESCE(transaction_date,filing_date)::date >= '2020-01-01'::date`,
+      `COALESCE(transaction_date,filing_date)::date <= '${today}'::date`,
+    ];
+    if (extraConditions) conditions.push(extraConditions);
 
-  // Each date field sanitized independently IN THE OUTPUT instead — a
-  // corrupted transaction_date or filing_date comes back as NULL (blank
-  // in the sheet) rather than either showing garbage or taking the row's
-  // otherwise-good data down with it.
-  const dateExpr = col => `CASE WHEN ${col}::date >= '2020-01-01'::date AND ${col}::date <= '${today}'::date THEN ${col} END AS ${col}`;
-  const selectCols = EXPORT_COLS.map(c => {
-    if (c==='transaction_date' || c==='filing_date') return dateExpr(c);
-    if (c==='shares'||c==='price_per_share'||c==='value'||c==='pct_owned_change') return `${c}::float`;
-    return c;
-  }).join(',\n           ');
+    // Each date field sanitized independently IN THE OUTPUT instead — a
+    // corrupted transaction_date or filing_date comes back as NULL (blank
+    // in the sheet) rather than either showing garbage or taking the row's
+    // otherwise-good data down with it.
+    const dateExpr = col => `CASE WHEN ${col}::date >= '2020-01-01'::date AND ${col}::date <= '${today}'::date THEN ${col} END AS ${col}`;
+    const selectCols = EXPORT_COLS.map(c => {
+      if (c === 'transaction_date' || c === 'filing_date') return dateExpr(c);
+      if (c === 'shares' || c === 'price_per_share' || c === 'value' || c === 'pct_owned_change') return `${c}::float`;
+      return c;
+    }).join(',\n           ');
 
-  // ctid appended as a tiebreaker — sort ties (very likely on a table this
-  // size, since many rows share the same date) need a deterministic
-  // secondary key for pagination to be gap-free and duplicate-free. ctid
-  // always exists on any Postgres table. The Worker rebuilds this same
-  // ORDER BY internally for each page it fetches — sent here mainly for
-  // clarity/documentation, since the actual sort is now hardcoded
-  // server-side to match.
-  void orderByClause; // kept as a parameter for API compatibility; the Worker owns the actual ORDER BY now
+    // ctid appended as a tiebreaker — sort ties (very likely on a table this
+    // size, since many rows share the same date) need a deterministic
+    // secondary key for pagination to be gap-free and duplicate-free. ctid
+    // always exists on any Postgres table. The Worker rebuilds this same
+    // ORDER BY internally for each page it fetches — sent here mainly for
+    // clarity/documentation, since the actual sort is now hardcoded
+    // server-side to match.
+    void orderByClause; // kept as a parameter for API compatibility; the Worker owns the actual ORDER BY now
 
-  // Batched keyset pagination — the Worker loops internally across up to
-  // 5 pages per request instead of the client making one request per
-  // page. This is the fix for the sustained 503s: at one connection per
-  // client request, a ~1M row export meant 45-100+ separate connections
-  // opened in quick succession, which is what was overwhelming Neon under
-  // sustained load — keyset pagination alone fixed the "gets slower with
-  // depth" problem, but not the sheer number of connections. Batching
-  // server-side cuts that count by 5x+ without needing new infrastructure.
-  const PAGE_SIZE = 40000; // was 20000 — still comfortably under Neon's 64MB response cap, but halves the total request count for a large export
-  const PAGES_PER_BATCH = 5;
-  const MAX_ROWS = 2000000; // safety ceiling, not a real-world expectation
-  data = [];
-  let batchMode = mode;
-  let cursor = null;
-  while (true) {
-    const { rows, nextCursor, done } = await proxyExportWithRetry({
-      selectCols, whereClause: conditions.join(' AND '), cursor, pagesPerBatch: PAGES_PER_BATCH, pageSize: PAGE_SIZE, mode: batchMode,
-    });
-    data = data.concat(rows);
-    if (onProgress) onProgress(data.length);
-    cursor = nextCursor;
-    if (done || data.length >= MAX_ROWS) break;
-    // Only the FIRST batch should spend a one-time 'consume' allowance —
-    // this is still one logical download, just split into several
-    // requests because of the size cap. Every batch after the first uses
-    // 'redownload' (requires only that a purchase exists at all) so
-    // continuing doesn't fail because the first batch already marked the
-    // purchase used.
-    batchMode = 'redownload';
-    // A small gap between batches rather than firing the next one the
-    // instant this resolves — gives Neon's connection pool a beat to
-    // release each connection before the next arrives.
-    await new Promise(r => setTimeout(r, 150));
-  }
+    // Batched keyset pagination — the Worker loops internally across up to
+    // 5 pages per request instead of the client making one request per
+    // page. This is the fix for the sustained 503s: at one connection per
+    // client request, a ~1M row export meant 45-100+ separate connections
+    // opened in quick succession, which is what was overwhelming Neon under
+    // sustained load — keyset pagination alone fixed the "gets slower with
+    // depth" problem, but not the sheer number of connections. Batching
+    // server-side cuts that count by 5x+ without needing new infrastructure.
+    const PAGE_SIZE = 40000; // was 20000 — still comfortably under Neon's 64MB response cap, but halves the total request count for a large export
+    const PAGES_PER_BATCH = 5;
+    const MAX_ROWS = 2000000; // safety ceiling, not a real-world expectation
+    data = [];
+    let batchMode = mode;
+    let cursor = null;
+    while (true) {
+      const { rows, nextCursor, done } = await proxyExportWithRetry({
+        selectCols, whereClause: conditions.join(' AND '), cursor, pagesPerBatch: PAGES_PER_BATCH, pageSize: PAGE_SIZE, mode: batchMode,
+      });
+      data = data.concat(rows);
+      if (onProgress) onProgress(data.length);
+      cursor = nextCursor;
+      if (done || data.length >= MAX_ROWS) break;
+      // Only the FIRST batch should spend a one-time 'consume' allowance —
+      // this is still one logical download, just split into several
+      // requests because of the size cap. Every batch after the first uses
+      // 'redownload' (requires only that a purchase exists at all) so
+      // continuing doesn't fail because the first batch already marked the
+      // purchase used.
+      batchMode = 'redownload';
+      // A small gap between batches rather than firing the next one the
+      // instant this resolves — gives Neon's connection pool a beat to
+      // release each connection before the next arrives.
+      await new Promise(r => setTimeout(r, 150));
+    }
   } // end of live-batching fallback (if data === null)
 
   if (data.length === 0) {
@@ -6677,30 +6679,30 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   // ── Sheet 1: the data itself ──────────────────────────────────────────
   const sheetRows = data.map(r => ({
     'Transaction Date': r.transaction_date ? new Date(r.transaction_date) : '',
-    'Filing Date':      r.filing_date ? new Date(r.filing_date) : '',
-    'Ticker':           r.ticker || '',
-    'Company':          r.company_name || '',
-    'Insider Name':     r.insider_name || '',
-    'Insider Title':    r.insider_title || '',
-    'Buy/Sell':         r.transaction_type ? r.transaction_type[0].toUpperCase()+r.transaction_type.slice(1) : '',
+    'Filing Date': r.filing_date ? new Date(r.filing_date) : '',
+    'Ticker': r.ticker || '',
+    'Company': r.company_name || '',
+    'Insider Name': r.insider_name || '',
+    'Insider Title': r.insider_title || '',
+    'Buy/Sell': r.transaction_type ? r.transaction_type[0].toUpperCase() + r.transaction_type.slice(1) : '',
     'Transaction Code': r.transaction_code || '',
-    'Open Market?':     r.is_open_market===true ? 'Yes' : r.is_open_market===false ? 'No' : '',
-    'Shares':           r.shares!=null ? Number(r.shares) : null,
-    'Price / Share':    r.price_per_share!=null ? Number(r.price_per_share) : null,
-    'Value ($)':        r.value!=null ? Number(r.value) : null,
-    '% Owned Change':   r.pct_owned_change!=null ? Number(r.pct_owned_change) : null,
-    'Relationship':     r.relationship || '',
-    'Sector':           r.sector || '',
-    'Footnotes':        r.footnotes || '',
+    'Open Market?': r.is_open_market === true ? 'Yes' : r.is_open_market === false ? 'No' : '',
+    'Shares': r.shares != null ? Number(r.shares) : null,
+    'Price / Share': r.price_per_share != null ? Number(r.price_per_share) : null,
+    'Value ($)': r.value != null ? Number(r.value) : null,
+    '% Owned Change': r.pct_owned_change != null ? Number(r.pct_owned_change) : null,
+    'Relationship': r.relationship || '',
+    'Sector': r.sector || '',
+    'Footnotes': r.footnotes || '',
   }));
   const ws = XLSX.utils.json_to_sheet(sheetRows, { header: EXPORT_HEADERS });
-  ws['!cols'] = EXPORT_COL_WIDTHS.map(wch=>({wch}));
+  ws['!cols'] = EXPORT_COL_WIDTHS.map(wch => ({ wch }));
 
   // Real number/date formatting so Excel renders these as actual dates,
   // currency, and thousands-separated numbers — not plain text that
   // happens to look like one.
   const range = XLSX.utils.decode_range(ws['!ref']);
-  const colFormats = { 0:'yyyy-mm-dd', 1:'yyyy-mm-dd', 9:'#,##0', 10:'$#,##0.00', 11:'$#,##0.00', 12:'0.00"%"' };
+  const colFormats = { 0: 'yyyy-mm-dd', 1: 'yyyy-mm-dd', 9: '#,##0', 10: '$#,##0.00', 11: '$#,##0.00', 12: '0.00"%"' };
   for (let R = range.s.r + 1; R <= range.e.r; R++) {
     for (const [colIdx, fmt] of Object.entries(colFormats)) {
       const cell = ws[XLSX.utils.encode_cell({ r: R, c: Number(colIdx) })];
@@ -6721,16 +6723,16 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   // 2-cell, one empty) is a real, avoidable risk for stricter XLSX readers
   // (Apple Numbers among them), and padding costs nothing.
   const legendRows = [
-    ['COLUMN GUIDE',''],
-    ['Column','What it means'],
+    ['COLUMN GUIDE', ''],
+    ['Column', 'What it means'],
     ...COLUMN_LEGEND,
-    ['',''],
-    ['TRANSACTION CODES',''],
-    ['Code','Meaning'],
+    ['', ''],
+    ['TRANSACTION CODES', ''],
+    ['Code', 'Meaning'],
     ...TX_CODE_LEGEND,
   ];
   const ws2 = XLSX.utils.aoa_to_sheet(legendRows);
-  ws2['!cols'] = [{wch:18},{wch:70}];
+  ws2['!cols'] = [{ wch: 18 }, { wch: 70 }];
   // Bold both section-title rows and both column-header rows (0, 1, and
   // the section break at COLUMN_LEGEND.length + 2).
   const boldLegendRows = [0, 1, COLUMN_LEGEND.length + 2, COLUMN_LEGEND.length + 3];
@@ -6743,9 +6745,9 @@ async function downloadFullExport(extraConditions='', orderByClause="ORDER BY CO
   XLSX.utils.book_append_sheet(wb, ws2, 'Legend');
 
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  a.download=`insider_trades_${today}.xlsx`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = `insider_trades_${today}.xlsx`;
   a.click();
   return data.length;
 }
@@ -6760,58 +6762,58 @@ function FilterPanel({
     <div className="ins-filter-row">
       <div className="ins-filter-group">
         <span className="ins-filter-group__label">Quick</span>
-        <div style={{display:'flex',gap:12}}>
+        <div style={{ display: 'flex', gap: 12 }}>
           <label className="fp-check">
-            <input type="checkbox" checked={openMkt} onChange={e=>setOpenMkt(e.target.checked)}/>
+            <input type="checkbox" checked={openMkt} onChange={e => setOpenMkt(e.target.checked)} />
             Open market only
           </label>
           <label className="fp-check">
-            <input type="checkbox" checked={fromPortfolio} onChange={e=>setFromPortfolio(e.target.checked)}/>
+            <input type="checkbox" checked={fromPortfolio} onChange={e => setFromPortfolio(e.target.checked)} />
             My portfolio
           </label>
         </div>
       </div>
 
-      <div className="drawer__toolbar-divider"/>
+      <div className="drawer__toolbar-divider" />
 
       <div className="ins-filter-group">
         <span className="ins-filter-group__label">Source</span>
         <div className="dash-tile-pills">
-          {[['','All'],['corporate','Corporate'],['political','Political']].map(([v,l])=>(
-            <button key={v} className={`dash-tile-pill${sourceF===v?' dash-tile-pill--active':''}`} onClick={()=>setSourceF(v)}>{l}</button>
+          {[['', 'All'], ['corporate', 'Corporate'], ['political', 'Political']].map(([v, l]) => (
+            <button key={v} className={`dash-tile-pill${sourceF === v ? ' dash-tile-pill--active' : ''}`} onClick={() => setSourceF(v)}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div className="drawer__toolbar-divider"/>
+      <div className="drawer__toolbar-divider" />
 
       <div className="ins-filter-group">
         <span className="ins-filter-group__label">Role</span>
         <div className="dash-tile-pills">
-          {[['','All'],['strong','Exec'],['medium','Officer'],['weak','Director']].map(([v,l])=>(
-            <button key={v} className={`dash-tile-pill${relF===v?' dash-tile-pill--active':''}`} onClick={()=>setRelF(v)}>{l}</button>
+          {[['', 'All'], ['strong', 'Exec'], ['medium', 'Officer'], ['weak', 'Director']].map(([v, l]) => (
+            <button key={v} className={`dash-tile-pill${relF === v ? ' dash-tile-pill--active' : ''}`} onClick={() => setRelF(v)}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div className="drawer__toolbar-divider"/>
+      <div className="drawer__toolbar-divider" />
 
       <div className="ins-filter-group">
         <span className="ins-filter-group__label">Type</span>
         <div className="dash-tile-pills">
-          {[['','All'],['buy','Buy'],['sell','Sell'],['other','Other']].map(([v,l])=>(
-            <button key={v} className={`dash-tile-pill${typeF===v?' dash-tile-pill--active':''}`} onClick={()=>setTypeF(v)}>{l}</button>
+          {[['', 'All'], ['buy', 'Buy'], ['sell', 'Sell'], ['other', 'Other']].map(([v, l]) => (
+            <button key={v} className={`dash-tile-pill${typeF === v ? ' dash-tile-pill--active' : ''}`} onClick={() => setTypeF(v)}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div className="drawer__toolbar-divider"/>
+      <div className="drawer__toolbar-divider" />
 
       <div className="ins-filter-group">
         <span className="ins-filter-group__label">Sector</span>
-        <select className="ins-filter-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
+        <select className="ins-filter-select" value={sectorF} onChange={e => setSectorF(e.target.value)}>
           <option value="">All sectors</option>
-          {sectors.map(s=><option key={s} value={s}>{s}</option>)}
+          {sectors.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
     </div>
@@ -6836,18 +6838,18 @@ function FilterPanel({
 // directly, since DataPage may since have unmounted.
 function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers, pro, onUpgrade, onSwitchTab }) {
   const f = filterState || {};
-  const [search,   setSearch]   = useState(f.search || '');
-  const [typeF,    setTypeF]    = useState(f.typeF || '');
-  const [relF,     setRelF]     = useState(f.relF || '');
-  const [sectorF,  setSectorF]  = useState(f.sectorF || '');
-  const [sourceF,  setSourceF]  = useState(f.sourceF || '');
-  const [openMkt,  setOpenMkt]  = useState(f.openMkt || false);
+  const [search, setSearch] = useState(f.search || '');
+  const [typeF, setTypeF] = useState(f.typeF || '');
+  const [relF, setRelF] = useState(f.relF || '');
+  const [sectorF, setSectorF] = useState(f.sectorF || '');
+  const [sourceF, setSourceF] = useState(f.sourceF || '');
+  const [openMkt, setOpenMkt] = useState(f.openMkt || false);
   const [fromPortfolio, setFromPortfolio] = useState(f.fromPortfolio || false);
-  const [dPreset,  setDPreset]  = useState(f.dPreset ?? 7);
+  const [dPreset, setDPreset] = useState(f.dPreset ?? 7);
   const [dateFrom, setDateFrom] = useState(f.dateFrom || '');
-  const [dateTo,   setDateTo]   = useState(f.dateTo || '');
-  const [sortKey,  setSortKey]  = useState(f.sortKey || 'transaction_date');
-  const [sortDir,  setSortDir]  = useState(f.sortDir ?? -1);
+  const [dateTo, setDateTo] = useState(f.dateTo || '');
+  const [sortKey, setSortKey] = useState(f.sortKey || 'transaction_date');
+  const [sortDir, setSortDir] = useState(f.sortDir ?? -1);
 
   function resetFilters() {
     setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
@@ -6855,47 +6857,47 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
     setDPreset(7); setDateFrom(''); setDateTo('');
   }
 
-  const [rows,    setRows]    = useState(null);
+  const [rows, setRows] = useState(null);
   const [sectors, setSectors] = useState([]);
-  const [detailStack, setDetailStack] = useState(()=>initialDetailStack||[]);
-  const [detail,      setDetail]      = useState(initialDetail||null);
+  const [detailStack, setDetailStack] = useState(() => initialDetailStack || []);
+  const [detail, setDetail] = useState(initialDetail || null);
 
-  useEffect(()=>{
+  useEffect(() => {
     if (!cfg.NEON_PROXY_URL) return;
     proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
-      .then(r=>setSectors(r.map(x=>x.sector).filter(Boolean))).catch(()=>{});
-  },[]);
+      .then(r => setSectors(r.map(x => x.sector).filter(Boolean))).catch(() => { });
+  }, []);
 
   function where() {
-    const c=[];
-    const ef=dateFrom||(dPreset!=null?(()=>{const d=new Date();d.setDate(d.getDate()-dPreset);return d.toISOString().split('T')[0];})():null);
-    const et=dateTo||new Date().toISOString().split('T')[0];
+    const c = [];
+    const ef = dateFrom || (dPreset != null ? (() => { const d = new Date(); d.setDate(d.getDate() - dPreset); return d.toISOString().split('T')[0]; })() : null);
+    const et = dateTo || new Date().toISOString().split('T')[0];
     if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
     c.push(`COALESCE(transaction_date,filing_date)>='2021-01-01'`);
     c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
-    if (typeF)  c.push(`transaction_type='${typeF}'`);
-    if (relF)   c.push(`relationship='${relF}'`);
-    if (sectorF)c.push(`sector='${sectorF.replace(/'/g,"''")}'`);
-    if (openMkt)c.push(`is_open_market=true`);
-    if (sourceF==='corporate') c.push(`transaction_code NOT LIKE 'CONGRESS%'`);
-    if (sourceF==='political') c.push(`transaction_code LIKE 'CONGRESS%'`);
+    if (typeF) c.push(`transaction_type='${typeF}'`);
+    if (relF) c.push(`relationship='${relF}'`);
+    if (sectorF) c.push(`sector='${sectorF.replace(/'/g, "''")}'`);
+    if (openMkt) c.push(`is_open_market=true`);
+    if (sourceF === 'corporate') c.push(`transaction_code NOT LIKE 'CONGRESS%'`);
+    if (sourceF === 'political') c.push(`transaction_code LIKE 'CONGRESS%'`);
     if (fromPortfolio && portfolioTickers && portfolioTickers.length) {
-      c.push(`ticker IN (${portfolioTickers.map(t=>`'${t.replace(/'/g,"''")}'`).join(',')})`);
+      c.push(`ticker IN (${portfolioTickers.map(t => `'${t.replace(/'/g, "''")}'`).join(',')})`);
     } else if (fromPortfolio) {
       c.push(`1=0`);
     }
-    if (search){const q=search.replace(/'/g,"''");c.push(`(ticker ILIKE '%${q}%' OR insider_name ILIKE '%${q}%' OR company_name ILIKE '%${q}%')`);}
-    return c.length?'WHERE '+c.join(' AND '):'';
+    if (search) { const q = search.replace(/'/g, "''"); c.push(`(ticker ILIKE '%${q}%' OR insider_name ILIKE '%${q}%' OR company_name ILIKE '%${q}%')`); }
+    return c.length ? 'WHERE ' + c.join(' AND ') : '';
   }
   function orderBy() {
-    const col = DATA_SORTABLE_COLS.find(c=>c.key===sortKey);
-    const dir = sortDir>0?'ASC':'DESC';
+    const col = DATA_SORTABLE_COLS.find(c => c.key === sortKey);
+    const dir = sortDir > 0 ? 'ASC' : 'DESC';
     if (!col) return `ORDER BY COALESCE(transaction_date,filing_date) DESC`;
-    if (sortKey==='transaction_date') return `ORDER BY COALESCE(transaction_date,filing_date) ${dir} NULLS LAST`;
+    if (sortKey === 'transaction_date') return `ORDER BY COALESCE(transaction_date,filing_date) ${dir} NULLS LAST`;
     return `ORDER BY ${sortKey} ${dir} NULLS LAST`;
   }
 
-  useEffect(()=>{
+  useEffect(() => {
     if (!cfg.NEON_PROXY_URL) return;
     setRows(null);
     proxySQL(`
@@ -6905,71 +6907,71 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
       FROM public.filings ${where()}
       ${orderBy()}
       LIMIT 300
-    `).then(setRows).catch(()=>setRows([]));
-  },[search,typeF,relF,sectorF,sourceF,openMkt,fromPortfolio,dPreset,dateFrom,dateTo,sortKey,sortDir]);
+    `).then(setRows).catch(() => setRows([]));
+  }, [search, typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dPreset, dateFrom, dateTo, sortKey, sortDir]);
 
-  function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
-  function goBack() { const prev=detailStack[detailStack.length-1]; setDetailStack(s=>s.slice(0,-1)); setDetail(prev||null); }
+  function navigate(d) { if (detail) setDetailStack(s => [...s, detail]); setDetail(d); }
+  function goBack() { const prev = detailStack[detailStack.length - 1]; setDetailStack(s => s.slice(0, -1)); setDetail(prev || null); }
 
   // Same reasoning as InsightsDrawer's own version of this: expanding from a
   // docked preview should land with the row you were just looking at
   // visible and marked selected, not scrolled off the top of a freshly
   // fetched 300-row list. Only fires once per open.
-  const rowKey = (t) => t ? `${t.ticker}|${t.insiderName||t.insider_name}|${t.transactionDate||t.transaction_date}` : null;
+  const rowKey = (t) => t ? `${t.ticker}|${t.insiderName || t.insider_name}|${t.transactionDate || t.transaction_date}` : null;
   const listRef = useRef(null);
   const scrolledOnOpenRef = useRef(false);
-  useEffect(()=>{
-    if (scrolledOnOpenRef.current || !detail || detail.type!=='transaction' || !rows) return;
+  useEffect(() => {
+    if (scrolledOnOpenRef.current || !detail || detail.type !== 'transaction' || !rows) return;
     const key = rowKey(detail.trade);
     if (!key) return;
     const el = listRef.current?.querySelector(`[data-row-key="${CSS.escape(key)}"]`);
     if (el) { el.scrollIntoView({ block: 'center' }); scrolledOnOpenRef.current = true; }
-  },[detail, rows]);
+  }, [detail, rows]);
 
   return (
-    <div className="drawer-overlay" onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
+    <div className="drawer-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="drawer">
         <div className="drawer__topbar">
           <div className="drawer__topbar-logo">
-            <div className="topnav__mark" style={{width:22,height:22}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-            <span className="topnav__wordmark" style={{fontSize:14}}>Seli</span>
+            <div className="topnav__mark" style={{ width: 22, height: 22 }}><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <span className="topnav__wordmark" style={{ fontSize: 14 }}>Seli</span>
           </div>
           <div className="drawer__tabs">
-            {[['signals','Signals'],['insiders','Insiders'],['data','Raw Data']].map(([k,l])=>(
+            {[['signals', 'Signals'], ['insiders', 'Insiders'], ['data', 'Raw Data']].map(([k, l]) => (
               <button key={k}
-                className={`drawer__tab${k==='data'?' drawer__tab--active':''}`}
-                onClick={()=>{ if(k!=='data' && onSwitchTab) onSwitchTab(k); }}>{l}</button>
+                className={`drawer__tab${k === 'data' ? ' drawer__tab--active' : ''}`}
+                onClick={() => { if (k !== 'data' && onSwitchTab) onSwitchTab(k); }}>{l}</button>
             ))}
           </div>
-          <button className="btn btn--ghost btn--icon" onClick={onClose} style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
+          <button className="btn btn--ghost btn--icon" onClick={onClose} style={{ marginLeft: 'auto' }}><IconClose style={{ width: 12, height: 12 }} /></button>
         </div>
 
         <div className="drawer__toolbar">
           <div className="drawer__filter-group drawer__filter-group--search">
             <span className="drawer__filter-label">Search</span>
             <div className="drawer__search-wrap">
-              <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
               <input className="drawer__search" placeholder="Ticker, insider, company…"
-                value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
+                value={search} onChange={e => setSearch(e.target.value)} autoFocus />
             </div>
           </div>
-          <div className="drawer__toolbar-divider"/>
+          <div className="drawer__toolbar-divider" />
           <div className="drawer__filter-group">
             <span className="drawer__filter-label">Window</span>
-            <div className="dash-tile-pills" style={{gap:2}}>
-              {DATA_DATE_PRESETS.map(p=>{
+            <div className="dash-tile-pills" style={{ gap: 2 }}>
+              {DATA_DATE_PRESETS.map(p => {
                 if (!pro && p.d === null) return null;
                 return (
-                  <button key={p.l} className={`dash-tile-pill${dPreset===p.d&&!dateFrom?' dash-tile-pill--active':''}`}
-                    onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>{p.l}</button>
+                  <button key={p.l} className={`dash-tile-pill${dPreset === p.d && !dateFrom ? ' dash-tile-pill--active' : ''}`}
+                    onClick={() => { setDPreset(p.d); setDateFrom(''); setDateTo(''); }}>{p.l}</button>
                 );
               })}
-              {!pro&&<button className="dash-tile-pill dash-tile-pill--locked" onClick={()=>onUpgrade&&onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>}
+              {!pro && <button className="dash-tile-pill dash-tile-pill--locked" onClick={() => onUpgrade && onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{ marginLeft: 3, fontSize: '0.5rem' }}>Pro</span></button>}
             </div>
           </div>
-          {(search||typeF||relF||sectorF||sourceF||openMkt||fromPortfolio||dPreset!==7||dateFrom||dateTo) && (
+          {(search || typeF || relF || sectorF || sourceF || openMkt || fromPortfolio || dPreset !== 7 || dateFrom || dateTo) && (
             <>
-              <div className="drawer__toolbar-spacer"/>
+              <div className="drawer__toolbar-spacer" />
               <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
             </>
           )}
@@ -6988,44 +6990,44 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
         <div className="drawer__body">
           <div className="drawer__list" ref={listRef}>
             <div className="drawer__list-hdr">
-              <span>{rows==null?'Loading…':`${rows.length}${rows.length===300?'+':''} filing${rows.length===1?'':'s'}`}</span>
+              <span>{rows == null ? 'Loading…' : `${rows.length}${rows.length === 300 ? '+' : ''} filing${rows.length === 1 ? '' : 's'}`}</span>
             </div>
-            {rows===null
-              ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
-              : rows.length===0
+            {rows === null
+              ? <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}><Spinner size={16} /></div>
+              : rows.length === 0
                 ? <div className="drawer__empty">No filings match these filters</div>
-                : rows.map((r,i)=>{
-                  const tt=r.transaction_type;
+                : rows.map((r, i) => {
+                  const tt = r.transaction_type;
                   const trade = {
-                    ticker:r.ticker,company:r.company_name,company_name:r.company_name,
-                    insiderName:r.insider_name,insider_name:r.insider_name,
-                    title:r.insider_title,insider_title:r.insider_title,
-                    transactionType:tt,transaction_type:tt,
-                    transactionCode:r.transaction_code,transaction_code:r.transaction_code,
-                    isOpenMarket:r.is_open_market,is_open_market:r.is_open_market,
-                    price:r.price_per_share,price_per_share:r.price_per_share,
-                    shares:r.shares,value:r.value,
-                    pctOwnedChange:r.pct_owned_change,pct_owned_change:r.pct_owned_change,
-                    transactionDate:r.transaction_date,transaction_date:r.transaction_date,
-                    date:r.filing_date,filing_date:r.filing_date,
-                    relationship:r.relationship,sector:r.sector,
+                    ticker: r.ticker, company: r.company_name, company_name: r.company_name,
+                    insiderName: r.insider_name, insider_name: r.insider_name,
+                    title: r.insider_title, insider_title: r.insider_title,
+                    transactionType: tt, transaction_type: tt,
+                    transactionCode: r.transaction_code, transaction_code: r.transaction_code,
+                    isOpenMarket: r.is_open_market, is_open_market: r.is_open_market,
+                    price: r.price_per_share, price_per_share: r.price_per_share,
+                    shares: r.shares, value: r.value,
+                    pctOwnedChange: r.pct_owned_change, pct_owned_change: r.pct_owned_change,
+                    transactionDate: r.transaction_date, transaction_date: r.transaction_date,
+                    date: r.filing_date, filing_date: r.filing_date,
+                    relationship: r.relationship, sector: r.sector,
                   };
-                  const isActive = detail?.type==='transaction' && detail?.trade?.ticker===r.ticker
-                    && detail?.trade?.insiderName===r.insider_name && detail?.trade?.transactionDate===r.transaction_date;
+                  const isActive = detail?.type === 'transaction' && detail?.trade?.ticker === r.ticker
+                    && detail?.trade?.insiderName === r.insider_name && detail?.trade?.transactionDate === r.transaction_date;
                   return (
                     <div key={i}
                       data-row-key={rowKey(trade)}
-                      className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
-                      onClick={()=>navigate({type:'transaction',trade})}>
+                      className={`drawer__list-row${isActive ? ' drawer__list-row--active' : ''}`}
+                      onClick={() => navigate({ type: 'transaction', trade })}>
                       <div className="drawer__list-row__main">
-                        <span className="ticker" style={{fontSize:'0.75rem',fontWeight:700}}>{r.ticker||'—'}</span>
-                        <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?'Buy':tt==='sell'?'Sell':'Other'}</Badge>
-                        <span className="td-muted" style={{fontSize:'0.6875rem',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.company_name}</span>
-                        <span className={`td-mono drawer__list-row__val ${tt==='buy'?'val-buy':tt==='sell'?'val-sell':''}`}>{r.value?fmt.money(r.value):'—'}</span>
+                        <span className="ticker" style={{ fontSize: '0.75rem', fontWeight: 700 }}>{r.ticker || '—'}</span>
+                        <Badge type={tt === 'buy' ? 'buy' : tt === 'sell' ? 'sell' : 'other'}>{tt === 'buy' ? 'Buy' : tt === 'sell' ? 'Sell' : 'Other'}</Badge>
+                        <span className="td-muted" style={{ fontSize: '0.6875rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</span>
+                        <span className={`td-mono drawer__list-row__val ${tt === 'buy' ? 'val-buy' : tt === 'sell' ? 'val-sell' : ''}`}>{r.value ? fmt.money(r.value) : '—'}</span>
                       </div>
                       <div className="drawer__list-row__sub">
-                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_name}</span>
-                        <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{fmt.dateShort(r.transaction_date||r.filing_date)}</span>
+                        <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.insider_name}</span>
+                        <span className="td-muted" style={{ fontSize: '0.6875rem', marginLeft: 'auto' }}>{fmt.dateShort(r.transaction_date || r.filing_date)}</span>
                       </div>
                     </div>
                   );
@@ -7036,19 +7038,19 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
           <div className="drawer__detail">
             {!detail
               ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
-                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a filing to see details</div>
-                </div>
+                <div style={{ fontSize: 24, marginBottom: 8, opacity: .3 }}></div>
+                <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Select a filing to see details</div>
+              </div>
               : <DetailPanel
-                  detail={detail}
-                  filings={[]}
-                  onClose={()=>setDetail(null)}
-                  onNavigate={navigate}
-                  onBack={goBack}
-                  canGoBack={detailStack.length>0}
-                  watchlist={watchlist}
-                  inline={true}
-                />
+                detail={detail}
+                filings={[]}
+                onClose={() => setDetail(null)}
+                onNavigate={navigate}
+                onBack={goBack}
+                canGoBack={detailStack.length > 0}
+                watchlist={watchlist}
+                inline={true}
+              />
             }
           </div>
         </div>
@@ -7070,13 +7072,13 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   // right after checkout; anything after that is a deliberate, separate
   // "Re-download" action in Settings > Billing, not a second free door
   // into the same data from here.
-  const [rows,    setRows]    = useState([]);
-  const [total,   setTotal]   = useState(null);
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [pg,      setPg]      = useState(0);
-  const [error,   setError]   = useState(null);
+  const [pg, setPg] = useState(0);
+  const [error, setError] = useState(null);
   const [sectors, setSectors] = useState([]);
-  const [search,  setSearch]  = useState('');
+  const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   // Auto-commits searchInput → search (which the fetch effect below actually
   // depends on) a moment after typing stops, rather than requiring Enter.
@@ -7089,15 +7091,15 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const [typeF,   setTypeF]   = useState('');
-  const [relF,    setRelF]    = useState('');
+  const [typeF, setTypeF] = useState('');
+  const [relF, setRelF] = useState('');
   const [sectorF, setSectorF] = useState('');
   const [sourceF, setSourceF] = useState('');
   const [openMkt, setOpenMkt] = useState(false);
   const [fromPortfolio, setFromPortfolio] = useState(false);
   const [dPreset, setDPreset] = useState(7);
-  const [dateFrom,setDateFrom]= useState('');
-  const [dateTo,  setDateTo]  = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const [sortKey, setSortKey] = useState('transaction_date');
   const [sortDir, setSortDir] = useState(-1);
@@ -7115,135 +7117,146 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   // it in place for the columns that don't fit in the compact view.
   const [expandedRow, setExpandedRow] = useState(null);
 
-  useEffect(()=>{
+  useEffect(() => {
     if (!cfg.NEON_PROXY_URL) return;
     proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
-      .then(r=>setSectors(r.map(x=>x.sector).filter(Boolean))).catch(()=>{});
-  },[]);
+      .then(r => setSectors(r.map(x => x.sector).filter(Boolean))).catch(() => { });
+  }, []);
 
   function where() {
-    const c=[];
-    const ef=dateFrom||(dPreset!=null?(()=>{const d=new Date();d.setDate(d.getDate()-dPreset);return d.toISOString().split('T')[0];})():null);
-    const et=dateTo||new Date().toISOString().split('T')[0]; // always clamp to today unless user picks a later date themselves
+    const c = [];
+    const ef = dateFrom || (dPreset != null ? (() => { const d = new Date(); d.setDate(d.getDate() - dPreset); return d.toISOString().split('T')[0]; })() : null);
+    const et = dateTo || new Date().toISOString().split('T')[0]; // always clamp to today unless user picks a later date themselves
     if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
     c.push(`COALESCE(transaction_date,filing_date)>='2013-01-01'`); // hard floor — matches earliest backfilled data
     c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
-    if (typeF)  c.push(`transaction_type='${typeF}'`);
-    if (relF)   c.push(`relationship='${relF}'`);
-    if (sectorF)c.push(`sector='${sectorF.replace(/'/g,"''")}'`);
-    if (openMkt)c.push(`is_open_market=true`);
-    if (sourceF==='corporate') c.push(`transaction_code NOT LIKE 'CONGRESS%'`);
-    if (sourceF==='political') c.push(`transaction_code LIKE 'CONGRESS%'`);
+    if (typeF) c.push(`transaction_type='${typeF}'`);
+    if (relF) c.push(`relationship='${relF}'`);
+    if (sectorF) c.push(`sector='${sectorF.replace(/'/g, "''")}'`);
+    if (openMkt) c.push(`is_open_market=true`);
+    if (sourceF === 'corporate') c.push(`transaction_code NOT LIKE 'CONGRESS%'`);
+    if (sourceF === 'political') c.push(`transaction_code LIKE 'CONGRESS%'`);
     if (fromPortfolio && portfolioTickers && portfolioTickers.length) {
-      c.push(`ticker IN (${portfolioTickers.map(t=>`'${t.replace(/'/g,"''")}'`).join(',')})`);
+      c.push(`ticker IN (${portfolioTickers.map(t => `'${t.replace(/'/g, "''")}'`).join(',')})`);
     } else if (fromPortfolio) {
       c.push(`1=0`); // no portfolio tickers loaded yet — show nothing rather than everything
     }
-    if (search){const q=search.replace(/'/g,"''");c.push(`(ticker ILIKE '%${q}%' OR insider_name ILIKE '%${q}%' OR company_name ILIKE '%${q}%')`);}
-    return c.length?'WHERE '+c.join(' AND '):'';
+    if (search) { const q = search.replace(/'/g, "''"); c.push(`(ticker ILIKE '%${q}%' OR insider_name ILIKE '%${q}%' OR company_name ILIKE '%${q}%')`); }
+    return c.length ? 'WHERE ' + c.join(' AND ') : '';
   }
 
   function orderBy() {
-    const col = DATA_SORTABLE_COLS.find(c=>c.key===sortKey);
-    const dir = sortDir>0?'ASC':'DESC';
+    const col = DATA_SORTABLE_COLS.find(c => c.key === sortKey);
+    const dir = sortDir > 0 ? 'ASC' : 'DESC';
     if (!col) return `ORDER BY COALESCE(transaction_date,filing_date) DESC`;
-    if (sortKey==='transaction_date') return `ORDER BY COALESCE(transaction_date,filing_date) ${dir} NULLS LAST`;
+    if (sortKey === 'transaction_date') return `ORDER BY COALESCE(transaction_date,filing_date) ${dir} NULLS LAST`;
     return `ORDER BY ${sortKey} ${dir} NULLS LAST`;
   }
 
   async function fetchPg(p) {
-    if (!cfg.NEON_PROXY_URL){setError('Unable to connect right now — try refreshing the page.');return;}
-    setLoading(true);setError(null);
+    if (!cfg.NEON_PROXY_URL) { setError('Unable to connect right now — try refreshing the page.'); return; }
+    setLoading(true); setError(null);
     try {
-      const w=where();
-      if (p===0||total===null){
-        const cnt=await proxySQL(`SELECT COUNT(*) AS count FROM public.filings ${w}`);
-        setTotal(parseInt(cnt[0]?.count||0));
+      const w = where();
+      if (p === 0 || total === null) {
+        const cnt = await proxySQL(`SELECT COUNT(*) AS count FROM public.filings ${w}`);
+        setTotal(parseInt(cnt[0]?.count || 0));
       }
-      const data=await proxySQL(`
+      const data = await proxySQL(`
         SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
                relationship,transaction_type,transaction_code,is_open_market,
                shares::float,price_per_share::float,value::float,pct_owned_change::float,sector
         FROM public.filings ${w}
         ${orderBy()}
-        LIMIT ${DATA_PAGE} OFFSET ${p*DATA_PAGE}
+        LIMIT ${DATA_PAGE} OFFSET ${p * DATA_PAGE}
       `);
-      setRows(data);setPg(p);
-    }catch(e){setError(e.message);}
+      setRows(data); setPg(p);
+    } catch (e) { setError(e.message); }
     setLoading(false);
   }
 
-  useEffect(()=>{setTotal(null);fetchPg(0);},[typeF,relF,sectorF,sourceF,openMkt,fromPortfolio,dateFrom,dateTo,dPreset,search,sortKey,sortDir]);
+  useEffect(() => { setTotal(null); fetchPg(0); }, [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dateFrom, dateTo, dPreset, search, sortKey, sortDir]);
 
   function onSort(key) {
-    if (sortKey===key) setSortDir(d=>-d);
-    else { setSortKey(key); setSortDir(key==='transaction_date'?-1:1); }
+    if (sortKey === key) setSortDir(d => -d);
+    else { setSortKey(key); setSortDir(key === 'transaction_date' ? -1 : 1); }
   }
 
-  const totalPgs=total!=null?Math.ceil(total/DATA_PAGE):null;
-  const activeFilterCount = [typeF,relF,sectorF,sourceF,openMkt,fromPortfolio].filter(Boolean).length;
+  const totalPgs = total != null ? Math.ceil(total / DATA_PAGE) : null;
+  const activeFilterCount = [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio].filter(Boolean).length;
 
   // Passed through on every onOpenDetail call from this page — marks the
   // resulting detail as having come from Data (so expanding it opens the
   // raw-filings explorer, not the Insights signals/insiders one) and seeds
   // that explorer with the filters already active here.
-  const dataFilters = {search,typeF,relF,sectorF,sourceF,openMkt,fromPortfolio,dPreset,dateFrom,dateTo,sortKey,sortDir};
+  const dataFilters = { search, typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dPreset, dateFrom, dateTo, sortKey, sortDir };
 
   return (
     <div className="page-content">
       <div className="data-toolbar">
         <div className="filter-bar filter-bar--wrap">
           <div className="search-wrap">
-            <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
             <input type="search" placeholder="Ticker, insider, company…"
               value={searchInput}
-              onChange={e=>setSearchInput(e.target.value)}
-              onKeyDown={e=>e.key==='Enter'&&setSearch(searchInput)}/>
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && setSearch(searchInput)} />
           </div>
-          <div className="drawer__toolbar-divider"/>
+          <div className="drawer__toolbar-divider" />
           <div className="date-pills">
-            {DATA_DATE_PRESETS.map(p=>{
+            {DATA_DATE_PRESETS.map(p => {
               if (!pro && p.d === null) return null;
               return (
-                <button key={p.l} className={`pill${dPreset===p.d&&!dateFrom?' pill--active':''}`}
-                  onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>
+                <button key={p.l} className={`pill${dPreset === p.d && !dateFrom ? ' pill--active' : ''}`}
+                  onClick={() => { setDPreset(p.d); setDateFrom(''); setDateTo(''); }}>
                   {p.l}
                 </button>
               );
             })}
-            {!pro&&<button className="pill dash-tile-pill--locked" onClick={()=>onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>}
+            {!pro && <button className="pill dash-tile-pill--locked" onClick={() => onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{ marginLeft: 3, fontSize: '0.5rem' }}>Pro</span></button>}
           </div>
           {!isMobile && (
             <>
-              <div className="drawer__toolbar-divider"/>
-              <div style={{display:'flex',alignItems:'center',gap:7}}>
+              <div className="drawer__toolbar-divider" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <input type="date" value={dateFrom}
-                  min={!pro ? new Date(Date.now()-365*86400000).toISOString().split('T')[0] : undefined}
-                  onChange={e=>{
+                  min={!pro ? new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0] : undefined}
+                  onChange={e => {
                     if (!pro) {
-                      const floor = new Date(Date.now()-365*86400000).toISOString().split('T')[0];
+                      const floor = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0];
                       if (e.target.value && e.target.value < floor) { onUpgrade('full_history'); return; }
                     }
-                    setDateFrom(e.target.value);setDPreset(null);
-                  }}/>
-                <span style={{color:'var(--text-3)',fontSize:'0.75rem'}}>→</span>
-                <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
+                    setDateFrom(e.target.value); setDPreset(null);
+                  }} />
+                <span style={{ color: 'var(--text-3)', fontSize: '0.75rem' }}>→</span>
+                <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setDPreset(null); }} />
               </div>
             </>
           )}
           {activeFilterCount > 0 || search || dPreset !== 7 || dateFrom || dateTo ? (
             <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
           ) : null}
-          <TileInfoButton section="data-source" title="All filings" tileId="data-filings"/>
-          <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
-            onClick={()=>onUpgrade('data_export')}>
-            Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>
+          <TileInfoButton section="data-source" title="All filings" tileId="data-filings" />
+          <button className="btn btn--primary btn--sm" style={{ marginLeft: 'auto', flexShrink: 0 }}
+            onClick={() => onUpgrade('data_export')}>
+            Export CSV <span className="settings-pro-badge" style={{ marginLeft: 6 }}>$</span>
           </button>
         </div>
 
-      {isMobile ? (
-        <details className="data-filter-collapse">
-          <summary>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</summary>
+        {isMobile ? (
+          <details className="data-filter-collapse">
+            <summary>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</summary>
+            <FilterPanel
+              sectors={sectors}
+              openMkt={openMkt} setOpenMkt={setOpenMkt}
+              fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
+              sectorF={sectorF} setSectorF={setSectorF}
+              sourceF={sourceF} setSourceF={setSourceF}
+              relF={relF} setRelF={setRelF}
+              typeF={typeF} setTypeF={setTypeF}
+            />
+          </details>
+        ) : (
           <FilterPanel
             sectors={sectors}
             openMkt={openMkt} setOpenMkt={setOpenMkt}
@@ -7253,145 +7266,136 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
             relF={relF} setRelF={setRelF}
             typeF={typeF} setTypeF={setTypeF}
           />
-        </details>
-      ) : (
-        <FilterPanel
-          sectors={sectors}
-          openMkt={openMkt} setOpenMkt={setOpenMkt}
-          fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
-          sectorF={sectorF} setSectorF={setSectorF}
-          sourceF={sourceF} setSourceF={setSourceF}
-          relF={relF} setRelF={setRelF}
-          typeF={typeF} setTypeF={setTypeF}
-        />
-      )}
+        )}
       </div>
 
       <div className="data-layout">
         <div className="data-main">
-          {error?<div className="state-box state-box--error"><p><IconWarning style={{width:14,height:14,marginRight:4,verticalAlign:"-2px"}}/>{error}</p></div>
-          :loading?<SkeletonRows count={15}/>
-          :rows.length===0?<div className="state-box"><IconEmpty style={{width:28,height:28,color:"var(--text-3)"}}/><p>No filings match these filters.</p></div>
-          :isMobile?<div className="data-mobile-list">
-            {rows.map((r,i)=>{
-              const rel=r.relationship||'weak';
-              const rl=rel==='strong'?'Exec':rel==='medium'?'Officer':'Dir';
-              const tt=r.transaction_type;
-              const rowKey = `${r.ticker}-${r.transaction_date||r.filing_date}-${i}`;
-              const isOpen = expandedRow===rowKey;
-              return (
-                <div key={rowKey} className={`data-mobile-card row-${tt}${isOpen?' data-mobile-card--expanded':''}`}
-                  onClick={()=>setExpandedRow(k=>k===rowKey?null:rowKey)}>
-                  <div className="data-mobile-card__top">
-                    <span className="ticker">{r.ticker||'—'}</span>
-                    <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>
-                      {tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆ Other'}
-                    </Badge>
-                    <span className={`td-mono ${tt==='buy'?'val-buy':tt==='sell'?'val-sell':''}`} style={{marginLeft:'auto'}}>{fmt.money(r.value)}</span>
-                  </div>
-                  <div className="data-mobile-card__sub">
-                    <span className="td-overflow">{r.company_name}</span>
-                    <span className="td-muted">{fmt.dateShort(r.transaction_date||r.filing_date)}</span>
-                  </div>
-                  {isOpen && (
-                    <div className="data-mobile-card__expanded" onClick={e=>e.stopPropagation()}>
-                      <div className="data-mobile-card__grid">
-                        <div><span className="td-muted">Insider</span><br/>{r.insider_name||'—'}<br/><span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'—'}</span></div>
-                        <div><span className="td-muted">Relationship</span><br/><Badge type={`rel-${rel}`}>{rl}</Badge></div>
-                        <div><span className="td-muted">Shares</span><br/>{fmt.number(r.shares)}</div>
-                        <div><span className="td-muted">Price</span><br/>{fmt.price(r.price_per_share)}</div>
-                        <div><span className="td-muted">Sector</span><br/>{r.sector!=='Other'?r.sector:'—'}</div>
-                        <div><span className="td-muted">% owned change</span><br/>{r.pct_owned_change!=null?<span className="val-buy">+{parseFloat(r.pct_owned_change).toFixed(1)}%</span>:'—'}</div>
-                        <div><span className="td-muted">Transaction code</span><br/>{r.transaction_code?<span title={TX_CODE_TOOLTIPS[r.transaction_code]||r.transaction_code}>{TX_CODE_SHORT[r.transaction_code]||r.transaction_code}</span>:'—'}</div>
-                        {r.filing_date && r.filing_date!==r.transaction_date && (
-                          <div><span className="td-muted">Filed</span><br/>{fmt.dateShort(r.filing_date)}</div>
+          {error ? <div className="state-box state-box--error"><p><IconWarning style={{ width: 14, height: 14, marginRight: 4, verticalAlign: "-2px" }} />{error}</p></div>
+            : loading ? <SkeletonRows count={15} />
+              : rows.length === 0 ? <div className="state-box"><IconEmpty style={{ width: 28, height: 28, color: "var(--text-3)" }} /><p>No filings match these filters.</p></div>
+                : isMobile ? <div className="data-mobile-list">
+                  {rows.map((r, i) => {
+                    const rel = r.relationship || 'weak';
+                    const rl = rel === 'strong' ? 'Exec' : rel === 'medium' ? 'Officer' : 'Dir';
+                    const tt = r.transaction_type;
+                    const rowKey = `${r.ticker}-${r.transaction_date || r.filing_date}-${i}`;
+                    const isOpen = expandedRow === rowKey;
+                    return (
+                      <div key={rowKey} className={`data-mobile-card row-${tt}${isOpen ? ' data-mobile-card--expanded' : ''}`}
+                        onClick={() => setExpandedRow(k => k === rowKey ? null : rowKey)}>
+                        <div className="data-mobile-card__top">
+                          <span className="ticker">{r.ticker || '—'}</span>
+                          <Badge type={tt === 'buy' ? 'buy' : tt === 'sell' ? 'sell' : 'other'}>
+                            {tt === 'buy' ? <><IconBuyTri style={{ width: 8, height: 8, marginRight: 3 }} />Buy</> : tt === 'sell' ? <><IconSellTri style={{ width: 8, height: 8, marginRight: 3 }} />Sell</> : '◆ Other'}
+                          </Badge>
+                          <span className={`td-mono ${tt === 'buy' ? 'val-buy' : tt === 'sell' ? 'val-sell' : ''}`} style={{ marginLeft: 'auto' }}>{fmt.money(r.value)}</span>
+                        </div>
+                        <div className="data-mobile-card__sub">
+                          <span className="td-overflow">{r.company_name}</span>
+                          <span className="td-muted">{fmt.dateShort(r.transaction_date || r.filing_date)}</span>
+                        </div>
+                        {isOpen && (
+                          <div className="data-mobile-card__expanded" onClick={e => e.stopPropagation()}>
+                            <div className="data-mobile-card__grid">
+                              <div><span className="td-muted">Insider</span><br />{r.insider_name || '—'}<br /><span className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.insider_title || '—'}</span></div>
+                              <div><span className="td-muted">Relationship</span><br /><Badge type={`rel-${rel}`}>{rl}</Badge></div>
+                              <div><span className="td-muted">Shares</span><br />{fmt.number(r.shares)}</div>
+                              <div><span className="td-muted">Price</span><br />{fmt.price(r.price_per_share)}</div>
+                              <div><span className="td-muted">Sector</span><br />{r.sector !== 'Other' ? r.sector : '—'}</div>
+                              <div><span className="td-muted">% owned change</span><br />{r.pct_owned_change != null ? <span className="val-buy">+{parseFloat(r.pct_owned_change).toFixed(1)}%</span> : '—'}</div>
+                              <div><span className="td-muted">Transaction code</span><br />{r.transaction_code ? <span title={TX_CODE_TOOLTIPS[r.transaction_code] || r.transaction_code}>{TX_CODE_SHORT[r.transaction_code] || r.transaction_code}</span> : '—'}</div>
+                              {r.filing_date && r.filing_date !== r.transaction_date && (
+                                <div><span className="td-muted">Filed</span><br />{fmt.dateShort(r.filing_date)}</div>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-          :<div className="table-wrap">
-            <table>
-              <thead><tr>
-                {DATA_SORTABLE_COLS.map(c=>(
-                  <SortTh key={c.key} label={c.label} colKey={c.key} sortCol={sortKey} sortDir={sortDir} onSort={onSort}
-                    right={c.type==='num'}/>
-                ))}
-              </tr></thead>
-              <tbody>
-                {rows.map((r,i)=>{
-                  const rel=r.relationship||'weak';
-                  const rl=rel==='strong'?'Exec':rel==='medium'?'Officer':'Dir';
-                  const tt=r.transaction_type;
-                  return (
-                    <tr key={i} className={`row-${tt} row-clickable`}
-                      onClick={()=>onOpenDetail&&onOpenDetail({type:'transaction',dataFilters,trade:{
-                        ticker:r.ticker,company:r.company_name,company_name:r.company_name,
-                        insiderName:r.insider_name,insider_name:r.insider_name,
-                        title:r.insider_title,insider_title:r.insider_title,
-                        transactionType:tt,transaction_type:tt,
-                        transactionCode:r.transaction_code,transaction_code:r.transaction_code,
-                        isOpenMarket:r.is_open_market,is_open_market:r.is_open_market,
-                        price:r.price_per_share,price_per_share:r.price_per_share,
-                        shares:r.shares,value:r.value,
-                        pctOwnedChange:r.pct_owned_change,pct_owned_change:r.pct_owned_change,
-                        transactionDate:r.transaction_date,transaction_date:r.transaction_date,
-                        date:r.filing_date,filing_date:r.filing_date,
-                        relationship:r.relationship,sector:r.sector,
-                      }})}>
-                      <td className="td-date">
-                        <div className="td-date-main">{fmt.dateShort(r.transaction_date||r.filing_date)}</div>
-                        {r.filing_date&&r.filing_date!==r.transaction_date&&
-                          <div style={{fontSize:'0.6875rem',color:'var(--text-3)'}}>filed {fmt.dateShort(r.filing_date)}</div>}
-                      </td>
-                      <td><span className="ticker dp-clickable" onClick={e=>{e.stopPropagation();r.ticker&&onOpenDetail&&onOpenDetail({type:'ticker',dataFilters,ticker:r.ticker,company:r.company_name});}}>{r.ticker||'—'}</span></td>
-                      <td className="td-company">
-                        <div className="td-overflow">{r.company_name}</div>
-                        <div className="td-sector-inline">{r.sector!=='Other'?r.sector:''}</div>
-                      </td>
-                      <td className="td-insider">
-                        <div className="td-overflow dp-clickable" onClick={e=>{e.stopPropagation();r.insider_name&&onOpenDetail&&onOpenDetail({type:'trader',dataFilters,name:r.insider_name,title:r.insider_title});}}>{r.insider_name}</div>
-                        <div className="td-muted td-overflow" style={{fontSize:'0.6875rem'}}>{r.insider_title||'—'}</div>
-                      </td>
-                      <td>
-                        <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>
-                          {tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆ Other'}
-                        </Badge>
-                        {r.transaction_code&&<div className="code-pill-sm" title={TX_CODE_TOOLTIPS[r.transaction_code]||r.transaction_code}>{TX_CODE_SHORT[r.transaction_code]||r.transaction_code}</div>}
-                      </td>
-                      <td className="td-right td-mono td-secondary">{fmt.number(r.shares)}</td>
-                      <td className="td-right td-mono td-secondary">{fmt.price(r.price_per_share)}</td>
-                      <td className="td-right td-mono">
-                        <span className={tt==='buy'?'val-buy':tt==='sell'?'val-sell':''}>{fmt.money(r.value)}</span>
-                      </td>
-                      <td className="td-right td-mono">
-                        {r.pct_owned_change!=null?<span className="val-buy">+{parseFloat(r.pct_owned_change).toFixed(1)}%</span>:'—'}
-                      </td>
-                      <td><Badge type={`rel-${rel}`}>{rl}</Badge></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>}
+                  : <div className="table-wrap">
+                    <table>
+                      <thead><tr>
+                        {DATA_SORTABLE_COLS.map(c => (
+                          <SortTh key={c.key} label={c.label} colKey={c.key} sortCol={sortKey} sortDir={sortDir} onSort={onSort}
+                            right={c.type === 'num'} />
+                        ))}
+                      </tr></thead>
+                      <tbody>
+                        {rows.map((r, i) => {
+                          const rel = r.relationship || 'weak';
+                          const rl = rel === 'strong' ? 'Exec' : rel === 'medium' ? 'Officer' : 'Dir';
+                          const tt = r.transaction_type;
+                          return (
+                            <tr key={i} className={`row-${tt} row-clickable`}
+                              onClick={() => onOpenDetail && onOpenDetail({
+                                type: 'transaction', dataFilters, trade: {
+                                  ticker: r.ticker, company: r.company_name, company_name: r.company_name,
+                                  insiderName: r.insider_name, insider_name: r.insider_name,
+                                  title: r.insider_title, insider_title: r.insider_title,
+                                  transactionType: tt, transaction_type: tt,
+                                  transactionCode: r.transaction_code, transaction_code: r.transaction_code,
+                                  isOpenMarket: r.is_open_market, is_open_market: r.is_open_market,
+                                  price: r.price_per_share, price_per_share: r.price_per_share,
+                                  shares: r.shares, value: r.value,
+                                  pctOwnedChange: r.pct_owned_change, pct_owned_change: r.pct_owned_change,
+                                  transactionDate: r.transaction_date, transaction_date: r.transaction_date,
+                                  date: r.filing_date, filing_date: r.filing_date,
+                                  relationship: r.relationship, sector: r.sector,
+                                }
+                              })}>
+                              <td className="td-date">
+                                <div className="td-date-main">{fmt.dateShort(r.transaction_date || r.filing_date)}</div>
+                                {r.filing_date && r.filing_date !== r.transaction_date &&
+                                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-3)' }}>filed {fmt.dateShort(r.filing_date)}</div>}
+                              </td>
+                              <td><span className="ticker dp-clickable" onClick={e => { e.stopPropagation(); r.ticker && onOpenDetail && onOpenDetail({ type: 'ticker', dataFilters, ticker: r.ticker, company: r.company_name }); }}>{r.ticker || '—'}</span></td>
+                              <td className="td-company">
+                                <div className="td-overflow">{r.company_name}</div>
+                                <div className="td-sector-inline">{r.sector !== 'Other' ? r.sector : ''}</div>
+                              </td>
+                              <td className="td-insider">
+                                <div className="td-overflow dp-clickable" onClick={e => { e.stopPropagation(); r.insider_name && onOpenDetail && onOpenDetail({ type: 'trader', dataFilters, name: r.insider_name, title: r.insider_title }); }}>{r.insider_name}</div>
+                                <div className="td-muted td-overflow" style={{ fontSize: '0.6875rem' }}>{r.insider_title || '—'}</div>
+                              </td>
+                              <td>
+                                <Badge type={tt === 'buy' ? 'buy' : tt === 'sell' ? 'sell' : 'other'}>
+                                  {tt === 'buy' ? <><IconBuyTri style={{ width: 8, height: 8, marginRight: 3 }} />Buy</> : tt === 'sell' ? <><IconSellTri style={{ width: 8, height: 8, marginRight: 3 }} />Sell</> : '◆ Other'}
+                                </Badge>
+                                {r.transaction_code && <div className="code-pill-sm" title={TX_CODE_TOOLTIPS[r.transaction_code] || r.transaction_code}>{TX_CODE_SHORT[r.transaction_code] || r.transaction_code}</div>}
+                              </td>
+                              <td className="td-right td-mono td-secondary">{fmt.number(r.shares)}</td>
+                              <td className="td-right td-mono td-secondary">{fmt.price(r.price_per_share)}</td>
+                              <td className="td-right td-mono">
+                                <span className={tt === 'buy' ? 'val-buy' : tt === 'sell' ? 'val-sell' : ''}>{fmt.money(r.value)}</span>
+                              </td>
+                              <td className="td-right td-mono">
+                                {r.pct_owned_change != null ? <span className="val-buy">+{parseFloat(r.pct_owned_change).toFixed(1)}%</span> : '—'}
+                              </td>
+                              <td><Badge type={`rel-${rel}`}>{rl}</Badge></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>}
 
-          {!loading&&!error&&(
+          {!loading && !error && (
             <div className="pagination">
               <span className="pagination__info">
-                {total!=null
-                  ? `${pg*DATA_PAGE+1}–${Math.min((pg+1)*DATA_PAGE,total||0)} of ${total.toLocaleString()} filing${total===1?'':'s'}`
+                {total != null
+                  ? `${pg * DATA_PAGE + 1}–${Math.min((pg + 1) * DATA_PAGE, total || 0)} of ${total.toLocaleString()} filing${total === 1 ? '' : 's'}`
                   : ''}
-                {!pro&&<span className="td-muted"> · Free plan: last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
+                {!pro && <span className="td-muted"> · Free plan: last 12 months — <button className="free-tier-note__link" onClick={() => onUpgrade('full_history')}>upgrade</button> for full history</span>}
               </span>
               <div className="pagination__btns">
-                <button className="btn btn--sm" onClick={()=>fetchPg(0)}       disabled={pg===0||loading||totalPgs<=1}>««</button>
-                <button className="btn btn--sm" onClick={()=>fetchPg(pg-1)}    disabled={pg===0||loading||totalPgs<=1}>‹</button>
-                <span className="pagination__counter">{pg+1}/{totalPgs||1}</span>
-                <button className="btn btn--sm" onClick={()=>fetchPg(pg+1)}    disabled={pg>=totalPgs-1||loading||totalPgs<=1}>›</button>
-                <button className="btn btn--sm" onClick={()=>fetchPg(totalPgs-1)} disabled={pg>=totalPgs-1||loading||totalPgs<=1}>»»</button>
+                <button className="btn btn--sm" onClick={() => fetchPg(0)} disabled={pg === 0 || loading || totalPgs <= 1}>««</button>
+                <button className="btn btn--sm" onClick={() => fetchPg(pg - 1)} disabled={pg === 0 || loading || totalPgs <= 1}>‹</button>
+                <span className="pagination__counter">{pg + 1}/{totalPgs || 1}</span>
+                <button className="btn btn--sm" onClick={() => fetchPg(pg + 1)} disabled={pg >= totalPgs - 1 || loading || totalPgs <= 1}>›</button>
+                <button className="btn btn--sm" onClick={() => fetchPg(totalPgs - 1)} disabled={pg >= totalPgs - 1 || loading || totalPgs <= 1}>»»</button>
               </div>
             </div>
           )}
@@ -7417,100 +7421,100 @@ function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
   const pro = true;
   const { port, err, connected, refresh, refreshing, lastRefreshed, perf } = usePortfolio(pro);
 
-  const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[port]);
-  const activeSignalTickers = useMemo(()=>{
-    const relevant = filings.filter(f=>posSymbols.includes(f.ticker)&&(f.transactionDate||f.date||'')>=cutoff&&f.isOpenMarket);
-    return new Set(relevant.map(f=>f.ticker));
-  },[filings,cutoff,posSymbols.join(',')]);
+  const posSymbols = useMemo(() => (port?.positions || []).map(p => p.symbol), [port]);
+  const activeSignalTickers = useMemo(() => {
+    const relevant = filings.filter(f => posSymbols.includes(f.ticker) && (f.transactionDate || f.date || '') >= cutoff && f.isOpenMarket);
+    return new Set(relevant.map(f => f.ticker));
+  }, [filings, cutoff, posSymbols.join(',')]);
 
   // Last insider trade date per portfolio symbol
-  const lastActivity = useMemo(()=>{
+  const lastActivity = useMemo(() => {
     const map = {};
-    filings.filter(f=>posSymbols.includes(f.ticker)&&f.isOpenMarket).forEach(f=>{
-      const d=f.transactionDate||f.date||'';
-      if(!map[f.ticker]||d>map[f.ticker].d) map[f.ticker]={d,type:f.transactionType};
+    filings.filter(f => posSymbols.includes(f.ticker) && f.isOpenMarket).forEach(f => {
+      const d = f.transactionDate || f.date || '';
+      if (!map[f.ticker] || d > map[f.ticker].d) map[f.ticker] = { d, type: f.transactionType };
     });
     return map;
-  },[filings,posSymbols.join(',')]);
+  }, [filings, posSymbols.join(',')]);
 
   if (!cfg.NEON_PROXY_URL) return null;
-  if (connected===false) return (
-    <div style={{padding:'20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+  if (connected === false) return (
+    <div style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
       <div>
-        <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>Portfolio</div>
-        <div style={{fontSize:12,color:'var(--text-3)'}}>Link your brokerage to see insider activity on your real holdings.</div>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Portfolio</div>
+        <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Link your brokerage to see insider activity on your real holdings.</div>
       </div>
-      <button className="btn btn--primary btn--sm" onClick={()=>window.dispatchEvent(new CustomEvent('seli:nav',{detail:'settings'}))}>Link brokerage →</button>
+      <button className="btn btn--primary btn--sm" onClick={() => window.dispatchEvent(new CustomEvent('seli:nav', { detail: 'settings' }))}>Link brokerage →</button>
     </div>
   );
 
-  const pos = port?.positions||[];
-  const totalPnl = pos.reduce((s,p)=>s+(p.openPnl||0),0);
-  const totalCost = pos.reduce((s,p)=>s+((p.marketValue||0)-(p.openPnl||0)),0);
-  const totalPnlPct = totalCost>0?(totalPnl/totalCost)*100:null;
-  const sorted = [...pos].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0));
+  const pos = port?.positions || [];
+  const totalPnl = pos.reduce((s, p) => s + (p.openPnl || 0), 0);
+  const totalCost = pos.reduce((s, p) => s + ((p.marketValue || 0) - (p.openPnl || 0)), 0);
+  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : null;
+  const sorted = [...pos].sort((a, b) => Math.abs(b.marketValue || 0) - Math.abs(a.marketValue || 0));
 
   return (
     <div>
       <div className="ws-tile__hdr">
         <div className="ws-tile__hdr-left">
           <span className="ws-tile__title">Portfolio</span>
-          {port&&<span className="ws-tile__sub">{fmt.money(port.totalValue)}{totalPnlPct!=null?` · ${totalPnl>=0?'+':''}${totalPnlPct.toFixed(1)}%`:''}</span>}
+          {port && <span className="ws-tile__sub">{fmt.money(port.totalValue)}{totalPnlPct != null ? ` · ${totalPnl >= 0 ? '+' : ''}${totalPnlPct.toFixed(1)}%` : ''}</span>}
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          {lastRefreshed&&<span style={{fontSize:11,color:'var(--text-3)'}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
-          <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} style={{width:26,height:26}} title="Refresh">
-            <span style={{fontSize:13,display:'inline-block',animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {lastRefreshed && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
+          <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} style={{ width: 26, height: 26 }} title="Refresh">
+            <span style={{ fontSize: 13, display: 'inline-block', animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>⟳</span>
           </button>
         </div>
       </div>
 
       {!port ? (
-        <div style={{padding:'24px',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
+        <div style={{ padding: '24px', display: 'flex', justifyContent: 'center' }}><Spinner size={16} /></div>
       ) : (
         /* 60% chart · 40% position list */
-        <div style={{display:'grid',gridTemplateColumns:'3fr 2fr',minHeight:0}}>
+        <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', minHeight: 0 }}>
           {/* Chart */}
-          <div style={{padding:'12px 16px',borderRight:'0.5px solid var(--border)',minWidth:0}}>
-            {perf===undefined ? (
-              <div style={{display:'flex',justifyContent:'center',padding:'2rem'}}><Spinner size={14}/></div>
-            ) : perf===null||perf.length<2 ? (
-              <div style={{padding:'2rem',textAlign:'center',color:'var(--text-3)',fontSize:12}}>Performance history will appear here once available.</div>
+          <div style={{ padding: '12px 16px', borderRight: '0.5px solid var(--border)', minWidth: 0 }}>
+            {perf === undefined ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}><Spinner size={14} /></div>
+            ) : perf === null || perf.length < 2 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>Performance history will appear here once available.</div>
             ) : (
-              <PortfolioChartWithRanges points={perf} compact onExplore={()=>{}}/>
+              <PortfolioChartWithRanges points={perf} compact onExplore={() => { }} />
             )}
           </div>
           {/* Position list — wider, with last activity column */}
-          <div style={{minWidth:0,overflowY:'auto',maxHeight:320}}>
+          <div style={{ minWidth: 0, overflowY: 'auto', maxHeight: 320 }}>
             {/* Column header */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr auto auto auto',gap:6,padding:'6px 14px',borderBottom:'0.5px solid var(--border-md)',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',color:'var(--text-3)'}}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, padding: '6px 14px', borderBottom: '0.5px solid var(--border-md)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text-3)' }}>
               <span>Holding</span>
-              <span style={{textAlign:'right',minWidth:60}}>Last trade</span>
-              <span style={{textAlign:'right',minWidth:52}}>Value</span>
-              <span style={{textAlign:'right',minWidth:48}}>P&amp;L</span>
+              <span style={{ textAlign: 'right', minWidth: 60 }}>Last trade</span>
+              <span style={{ textAlign: 'right', minWidth: 52 }}>Value</span>
+              <span style={{ textAlign: 'right', minWidth: 48 }}>P&amp;L</span>
             </div>
-            {sorted.length===0?(
-              <div style={{padding:'12px 14px',fontSize:12,color:'var(--text-3)'}}>No open positions.</div>
-            ):sorted.map((p,i)=>{
-              const hasActivity=activeSignalTickers.has(p.symbol);
-              const last=lastActivity[p.symbol];
+            {sorted.length === 0 ? (
+              <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-3)' }}>No open positions.</div>
+            ) : sorted.map((p, i) => {
+              const hasActivity = activeSignalTickers.has(p.symbol);
+              const last = lastActivity[p.symbol];
               return (
                 <div key={i}
-                  style={{display:'grid',gridTemplateColumns:'1fr auto auto auto',gap:6,alignItems:'center',padding:'7px 14px',borderBottom:'0.5px solid var(--border)',cursor:'pointer',transition:'background .07s'}}
-                  onMouseEnter={e=>e.currentTarget.style.background='var(--surface-2)'}
-                  onMouseLeave={e=>e.currentTarget.style.background=''}
-                  onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:p.company,expand:true})}>
-                  <div style={{display:'flex',alignItems:'center',gap:5,minWidth:0}}>
-                    <span className="ticker" style={{fontSize:12}}>{p.symbol}</span>
-                    {hasActivity&&<span style={{fontSize:9,fontWeight:700,padding:'1px 4px',borderRadius:3,background:'var(--accent-50)',color:'var(--accent)'}}>▲</span>}
+                  style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, alignItems: 'center', padding: '7px 14px', borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .07s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
+                  onClick={() => onOpenDetail && onOpenDetail({ type: 'ticker', ticker: p.symbol, company: p.company, expand: true })}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                    <span className="ticker" style={{ fontSize: 12 }}>{p.symbol}</span>
+                    {hasActivity && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'var(--accent-50)', color: 'var(--accent)' }}>▲</span>}
                   </div>
-                  <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',textAlign:'right',minWidth:60,whiteSpace:'nowrap'}}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-3)', textAlign: 'right', minWidth: 60, whiteSpace: 'nowrap' }}>
                     {last ? fmt.ago(last.d) : '—'}
                   </span>
-                  <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-2)',textAlign:'right',minWidth:52}}>{fmt.money(p.marketValue)}</span>
-                  <span className={p.openPnl!=null?(p.openPnl>=0?'val-buy':'val-sell'):''}
-                    style={{fontFamily:'var(--font-mono)',fontSize:11,textAlign:'right',minWidth:48}}>
-                    {p.openPnl!=null?(p.openPnl>=0?'+':'')+p.openPnlPct?.toFixed(1)+'%':'—'}
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-2)', textAlign: 'right', minWidth: 52 }}>{fmt.money(p.marketValue)}</span>
+                  <span className={p.openPnl != null ? (p.openPnl >= 0 ? 'val-buy' : 'val-sell') : ''}
+                    style={{ fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'right', minWidth: 48 }}>
+                    {p.openPnl != null ? (p.openPnl >= 0 ? '+' : '') + p.openPnlPct?.toFixed(1) + '%' : '—'}
                   </span>
                 </div>
               );
@@ -7524,8 +7528,8 @@ function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
 
 function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow, user }) {
   const pro = isPro(user);
-  const [days, setDays]       = useState(null); // null = All time
-  const [tab, setTab]         = useState('tickers');
+  const [days, setDays] = useState(null); // null = All time
+  const [tab, setTab] = useState('tickers');
   const [sortKey, setSortKey] = useState('lastTradeDate');
   const [sortDir, setSortDir] = useState(-1);
   const isMobile = useIsMobile();
@@ -7534,58 +7538,58 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   // Alert prefs — load only for pro users
   const { prefs, saving, saved, save } = useNotificationPrefs(user?.id, pro);
   const [localPrefs, setLocalPrefs] = useState(null);
-  useEffect(()=>{ if(prefs&&!localPrefs) setLocalPrefs({...prefs}); },[prefs]);
-  function updPref(key,val){ setLocalPrefs(p=>({...p,[key]:val})); }
+  useEffect(() => { if (prefs && !localPrefs) setLocalPrefs({ ...prefs }); }, [prefs]);
+  function updPref(key, val) { setLocalPrefs(p => ({ ...p, [key]: val })); }
 
   // CRITICAL: ensure full history is loaded on mount so "Last activity" is
   // never blank — the app only fetches 7d by default, but watchlist needs all-time
-  useEffect(()=>{
+  useEffect(() => {
     if (ensureFilingsWindow) ensureFilingsWindow(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const cutoff = useMemo(()=>{
-    if(days===null) return null;
-    const d=new Date(); d.setDate(d.getDate()-days); return d.toISOString().split('T')[0];
-  },[days]);
+  const cutoff = useMemo(() => {
+    if (days === null) return null;
+    const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split('T')[0];
+  }, [days]);
 
-  const watchedTickers  = useMemo(()=>[...new Set(watchlist.tickers)], [watchlist.tickers]);
+  const watchedTickers = useMemo(() => [...new Set(watchlist.tickers)], [watchlist.tickers]);
   // Filter out any values that look like ticker symbols (all-caps, ≤5 chars) — these
   // shouldn't be in the insider list but can appear due to old data or sync bugs
-  const watchedInsiders = useMemo(()=>[...new Set((watchlist.insiders||[]).filter(n=>n&&n.length>5&&!/^[A-Z0-9]{1,5}$/.test(n)))], [watchlist.insiders]);
+  const watchedInsiders = useMemo(() => [...new Set((watchlist.insiders || []).filter(n => n && n.length > 5 && !/^[A-Z0-9]{1,5}$/.test(n)))], [watchlist.insiders]);
 
   // Recent activity — open-market only, all-time so it's never empty for watched items
-  const recentActivity = useMemo(()=>{
-    const wt=new Set(watchedTickers), wi=new Set(watchedInsiders);
-    if(!wt.size&&!wi.size) return [];
+  const recentActivity = useMemo(() => {
+    const wt = new Set(watchedTickers), wi = new Set(watchedInsiders);
+    if (!wt.size && !wi.size) return [];
     return filings
-      .filter(f=>f.isOpenMarket&&(wt.has(f.ticker)||wi.has(f.insiderName)))
-      .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
-      .slice(0,50);
-  },[filings,watchedTickers,watchedInsiders]);
+      .filter(f => f.isOpenMarket && (wt.has(f.ticker) || wi.has(f.insiderName)))
+      .sort((a, b) => (b.transactionDate || b.date || '').localeCompare(a.transactionDate || a.date || ''))
+      .slice(0, 50);
+  }, [filings, watchedTickers, watchedInsiders]);
 
   // Ticker rows — always use all-time absLast so "Last activity" is never blank
-  const signals = useMemo(()=>{
-    if(!watchedTickers.length) return [];
-    const allForWatched = filings.filter(f=>f.isOpenMarket&&watchedTickers.includes(f.ticker));
+  const signals = useMemo(() => {
+    if (!watchedTickers.length) return [];
+    const allForWatched = filings.filter(f => f.isOpenMarket && watchedTickers.includes(f.ticker));
     // absLast: all-time most recent trade per ticker (for Last activity column)
     const absLast = {};
-    allForWatched.forEach(f=>{
-      const d=f.transactionDate||f.date||'';
-      if(!absLast[f.ticker]||d>absLast[f.ticker].d) absLast[f.ticker]={d,type:f.transactionType};
+    allForWatched.forEach(f => {
+      const d = f.transactionDate || f.date || '';
+      if (!absLast[f.ticker] || d > absLast[f.ticker].d) absLast[f.ticker] = { d, type: f.transactionType };
     });
-    const base = cutoff ? allForWatched.filter(f=>(f.transactionDate||f.date||'')>=cutoff) : allForWatched;
+    const base = cutoff ? allForWatched.filter(f => (f.transactionDate || f.date || '') >= cutoff) : allForWatched;
     const rawBuilt = buildSignals(base);
 
     // buildSignals produces one row per ticker PER DIRECTION (buy + sell separately).
     // Merge them: one row per ticker with true net value and the higher conviction.
     const byTicker = {};
-    rawBuilt.forEach(s=>{
-      if(!byTicker[s.ticker]) {
-        byTicker[s.ticker] = {...s};
+    rawBuilt.forEach(s => {
+      if (!byTicker[s.ticker]) {
+        byTicker[s.ticker] = { ...s };
       } else {
         // Keep higher conviction, accumulate net value (buy signal has positive netValue, sell negative)
-        if(s.conviction > byTicker[s.ticker].conviction) byTicker[s.ticker].conviction = s.conviction;
+        if (s.conviction > byTicker[s.ticker].conviction) byTicker[s.ticker].conviction = s.conviction;
         // netValue is buyValue - sellValue on each signal; just take the first one since both
         // already compute the full net (the formula is the same in buildSignals)
       }
@@ -7593,80 +7597,82 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 
     const built = Object.values(byTicker);
     // Annotate with absLast so lastTradeDate is always populated
-    built.forEach(s=>{
-      const ab=absLast[s.ticker];
-      if(!s.lastTradeDate&&ab) s.lastTradeDate=ab.d;
-      if(!s.lastTradeType&&ab) s.lastTradeType=ab.type;
+    built.forEach(s => {
+      const ab = absLast[s.ticker];
+      if (!s.lastTradeDate && ab) s.lastTradeDate = ab.d;
+      if (!s.lastTradeType && ab) s.lastTradeType = ab.type;
       // Always override with absLast to ensure freshness
-      if(ab&&ab.d>(s.lastTradeDate||'')) { s.lastTradeDate=ab.d; s.lastTradeType=ab.type; }
+      if (ab && ab.d > (s.lastTradeDate || '')) { s.lastTradeDate = ab.d; s.lastTradeType = ab.type; }
     });
     // Ensure every watched ticker appears even with zero signals
-    const seen=new Set(built.map(s=>s.ticker));
-    watchedTickers.forEach(t=>{
-      if(!seen.has(t)){
-        const ab=absLast[t];
-        built.push({ticker:t,company:'',conviction:0,netValue:0,cSuiteBuys:0,
-          insiderCount:0,lastTradeDate:ab?.d||null,lastTradeType:ab?.type||null,buys:0,sells:0,sector:''});
+    const seen = new Set(built.map(s => s.ticker));
+    watchedTickers.forEach(t => {
+      if (!seen.has(t)) {
+        const ab = absLast[t];
+        built.push({
+          ticker: t, company: '', conviction: 0, netValue: 0, cSuiteBuys: 0,
+          insiderCount: 0, lastTradeDate: ab?.d || null, lastTradeType: ab?.type || null, buys: 0, sells: 0, sector: ''
+        });
       }
     });
     return built;
-  },[filings,watchedTickers,cutoff]);
+  }, [filings, watchedTickers, cutoff]);
 
   // Insider rows — always populate lastDate from all-time absLast
-  const insiderRows = useMemo(()=>{
-    if(!watchedInsiders.length) return [];
-    const absLast={};
-    filings.filter(f=>f.isOpenMarket&&watchedInsiders.includes(f.insiderName)).forEach(f=>{
-      const d=f.transactionDate||f.date||'';
-      if(!absLast[f.insiderName]||d>absLast[f.insiderName].d) absLast[f.insiderName]={d,type:f.transactionType};
+  const insiderRows = useMemo(() => {
+    if (!watchedInsiders.length) return [];
+    const absLast = {};
+    filings.filter(f => f.isOpenMarket && watchedInsiders.includes(f.insiderName)).forEach(f => {
+      const d = f.transactionDate || f.date || '';
+      if (!absLast[f.insiderName] || d > absLast[f.insiderName].d) absLast[f.insiderName] = { d, type: f.transactionType };
     });
-    const byName={};
-    filings.filter(f=>f.isOpenMarket&&watchedInsiders.includes(f.insiderName)&&(!cutoff||(f.transactionDate||f.date||'')>=cutoff))
-      .forEach(f=>{
-        if(!byName[f.insiderName]) byName[f.insiderName]={name:f.insiderName,title:f.title||'',trades:0,netValue:0,lastDate:null,lastType:null};
+    const byName = {};
+    filings.filter(f => f.isOpenMarket && watchedInsiders.includes(f.insiderName) && (!cutoff || (f.transactionDate || f.date || '') >= cutoff))
+      .forEach(f => {
+        if (!byName[f.insiderName]) byName[f.insiderName] = { name: f.insiderName, title: f.title || '', trades: 0, netValue: 0, lastDate: null, lastType: null };
         byName[f.insiderName].trades++;
-        byName[f.insiderName].netValue+=(f.transactionType==='buy'?1:-1)*(f.value||0);
-        const d=f.transactionDate||f.date;
-        if(!byName[f.insiderName].lastDate||d>byName[f.insiderName].lastDate){
-          byName[f.insiderName].lastDate=d; byName[f.insiderName].lastType=f.transactionType;
+        byName[f.insiderName].netValue += (f.transactionType === 'buy' ? 1 : -1) * (f.value || 0);
+        const d = f.transactionDate || f.date;
+        if (!byName[f.insiderName].lastDate || d > byName[f.insiderName].lastDate) {
+          byName[f.insiderName].lastDate = d; byName[f.insiderName].lastType = f.transactionType;
         }
       });
     // Fill missing with absLast
-    watchedInsiders.forEach(n=>{
-      if(!byName[n]) {
-        const ab=absLast[n];
-        byName[n]={name:n,title:'',trades:0,netValue:0,lastDate:ab?.d||null,lastType:ab?.type||null};
-      } else if(!byName[n].lastDate&&absLast[n]) {
-        byName[n].lastDate=absLast[n].d; byName[n].lastType=absLast[n].type;
+    watchedInsiders.forEach(n => {
+      if (!byName[n]) {
+        const ab = absLast[n];
+        byName[n] = { name: n, title: '', trades: 0, netValue: 0, lastDate: ab?.d || null, lastType: ab?.type || null };
+      } else if (!byName[n].lastDate && absLast[n]) {
+        byName[n].lastDate = absLast[n].d; byName[n].lastType = absLast[n].type;
       }
     });
     return Object.values(byName);
-  },[filings,watchedInsiders,cutoff]);
+  }, [filings, watchedInsiders, cutoff]);
 
-  const sortedTickerRows=useMemo(()=>[...signals].sort((a,b)=>{
-    const av=a[sortKey]??'',bv=b[sortKey]??'';
-    if(typeof av==='string') return sortDir>0?av.localeCompare(bv):bv.localeCompare(av);
-    return sortDir>0?av-bv:bv-av;
-  }),[signals,sortKey,sortDir]);
+  const sortedTickerRows = useMemo(() => [...signals].sort((a, b) => {
+    const av = a[sortKey] ?? '', bv = b[sortKey] ?? '';
+    if (typeof av === 'string') return sortDir > 0 ? av.localeCompare(bv) : bv.localeCompare(av);
+    return sortDir > 0 ? av - bv : bv - av;
+  }), [signals, sortKey, sortDir]);
 
-  const sortedInsiderRows=useMemo(()=>{
-    const key=sortKey==='lastTradeDate'?'lastDate':sortKey==='netValue'?'netValue':'trades';
-    return [...insiderRows].sort((a,b)=>{
-      const av=a[key]??'',bv=b[key]??'';
-      if(typeof av==='string') return sortDir>0?av.localeCompare(bv):bv.localeCompare(av);
-      return sortDir>0?av-bv:bv-av;
+  const sortedInsiderRows = useMemo(() => {
+    const key = sortKey === 'lastTradeDate' ? 'lastDate' : sortKey === 'netValue' ? 'netValue' : 'trades';
+    return [...insiderRows].sort((a, b) => {
+      const av = a[key] ?? '', bv = b[key] ?? '';
+      if (typeof av === 'string') return sortDir > 0 ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir > 0 ? av - bv : bv - av;
     });
-  },[insiderRows,sortKey,sortDir]);
+  }, [insiderRows, sortKey, sortDir]);
 
-  function onSort(key){if(sortKey===key)setSortDir(d=>-d);else{setSortKey(key);setSortDir(-1);}}
+  function onSort(key) { if (sortKey === key) setSortDir(d => -d); else { setSortKey(key); setSortDir(-1); } }
 
-  const emptyNow=tab==='tickers'?watchedTickers.length===0:watchedInsiders.length===0;
-  const allEmpty=watchedTickers.length===0&&watchedInsiders.length===0;
+  const emptyNow = tab === 'tickers' ? watchedTickers.length === 0 : watchedInsiders.length === 0;
+  const allEmpty = watchedTickers.length === 0 && watchedInsiders.length === 0;
 
   // FREE USER — show conversion page
-  if(!pro) return (
+  if (!pro) return (
     <div className="ws-page">
-      <div style={{marginBottom:24}}>
+      <div style={{ marginBottom: 24 }}>
         <h1 className="ws-page-title">Watchlist</h1>
         <p className="ws-page-sub">Track stocks you own or want to own. Get notified when insiders trade them.</p>
       </div>
@@ -7677,18 +7683,18 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
           <div className="wl-upsell__icon">★</div>
           <h2 className="wl-upsell__title">Your personal insider signal tracker</h2>
           <p className="wl-upsell__sub">Star any ticker to watch it. Get alerts when C-suite executives buy or sell your stocks. Link your portfolio to see insider activity on every holding.</p>
-          <button className="wl-upsell__cta" onClick={()=>watchlist.setShowUpgrade&&watchlist.setShowUpgrade('watchlist')}>
+          <button className="wl-upsell__cta" onClick={() => watchlist.setShowUpgrade && watchlist.setShowUpgrade('watchlist')}>
             Upgrade to Pro — $6.99/mo →
           </button>
           <p className="wl-upsell__fine">Cancel any time. Includes full Data access, alert digests &amp; portfolio linking.</p>
         </div>
         <div className="wl-upsell__features">
           {[
-            {icon:'📈', title:'Track your portfolio', body:'Follow any ticker and see every insider trade on stocks you own or are watching.'},
-            {icon:'🔔', title:'Instant alerts', body:'Email alerts when a C-suite executive makes an open-market buy or sell on a stock you follow.'},
-            {icon:'🔗', title:'Link your brokerage', body:'Connect Fidelity, Alpaca, or 400+ brokers to automatically populate your watchlist from your real holdings.'},
-            {icon:'📊', title:'Insider history', body:'Deep-dive into any followed insider\'s full trade history, hit rate, and average return.'},
-          ].map(f=>(
+            { icon: '📈', title: 'Track your portfolio', body: 'Follow any ticker and see every insider trade on stocks you own or are watching.' },
+            { icon: '🔔', title: 'Instant alerts', body: 'Email alerts when a C-suite executive makes an open-market buy or sell on a stock you follow.' },
+            { icon: '🔗', title: 'Link your brokerage', body: 'Connect Fidelity, Alpaca, or 400+ brokers to automatically populate your watchlist from your real holdings.' },
+            { icon: '📊', title: 'Insider history', body: 'Deep-dive into any followed insider\'s full trade history, hit rate, and average return.' },
+          ].map(f => (
             <div key={f.title} className="wl-upsell__feature">
               <span className="wl-upsell__feature-icon">{f.icon}</span>
               <div>
@@ -7701,19 +7707,19 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
       </div>
 
       {/* Free preview — still let them star tickers */}
-      {!allEmpty&&(
-        <div className="ws-tile" style={{marginTop:20}}>
+      {!allEmpty && (
+        <div className="ws-tile" style={{ marginTop: 20 }}>
           <div className="ws-tile__hdr">
             <div className="ws-tile__hdr-left">
               <span className="ws-tile__title">Your watched tickers</span>
               <span className="ws-tile__sub">Upgrade to see activity</span>
             </div>
           </div>
-          <div style={{padding:'12px 16px',display:'flex',gap:10,flexWrap:'wrap'}}>
-            {watchedTickers.map(t=>(
-              <div key={t} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',background:'var(--surface-2)',borderRadius:'var(--radius-md)',border:'0.5px solid var(--border)'}}>
+          <div style={{ padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {watchedTickers.map(t => (
+              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'var(--surface-2)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--border)' }}>
                 <span className="ticker">{t}</span>
-                <StarBtn ticker={t} watchlist={watchlist}/>
+                <StarBtn ticker={t} watchlist={watchlist} />
               </div>
             ))}
           </div>
@@ -7723,13 +7729,13 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   );
 
   // PRO USER — full watchlist experience
-  if(allEmpty) return (
+  if (allEmpty) return (
     <div className="ws-page">
-      <div style={{marginBottom:20}}><h1 className="ws-page-title">Watchlist</h1></div>
+      <div style={{ marginBottom: 20 }}><h1 className="ws-page-title">Watchlist</h1></div>
       <div className="ws-tile">
-        <div className="ws-empty" style={{padding:'48px 20px'}}>
-          <div style={{fontSize:32,marginBottom:12}}>☆</div>
-          <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Nothing watched yet</div>
+        <div className="ws-empty" style={{ padding: '48px 20px' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>☆</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Nothing watched yet</div>
           <div>Star tickers or follow insiders from Data, Insiders, or any detail panel.</div>
         </div>
       </div>
@@ -7738,114 +7744,114 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 
   return (
     <div className="ws-page">
-      <div style={{marginBottom:20}}><h1 className="ws-page-title">Watchlist</h1></div>
+      <div style={{ marginBottom: 20 }}><h1 className="ws-page-title">Watchlist</h1></div>
 
       {/* ── Portfolio — full width at top for pro users with chart left + ticker list right ── */}
-      <div className="ws-tile" style={{marginBottom:16}}>
-        <WatchlistPortfolioFull filings={filings} cutoff={cutoff||'2010-01-01'} onOpenDetail={onOpenDetail}/>
+      <div className="ws-tile" style={{ marginBottom: 16 }}>
+        <WatchlistPortfolioFull filings={filings} cutoff={cutoff || '2010-01-01'} onOpenDetail={onOpenDetail} />
       </div>
 
       {/* ── Watchlist table + Recent activity side by side ── */}
-      <div className="ws-wl-bottom" style={{marginBottom:16,alignItems:'start'}}>
+      <div className="ws-wl-bottom" style={{ marginBottom: 16, alignItems: 'start' }}>
 
         {/* Left: ticker / insider table */}
         <div className="ws-tile">
           <div className="ws-filter-bar">
             <div className="ws-pills">
-              <button className={`ws-pill${tab==='tickers'?' ws-pill--active':''}`} onClick={()=>setTab('tickers')}>
-                Tickers{watchedTickers.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedTickers.length}</span>}
+              <button className={`ws-pill${tab === 'tickers' ? ' ws-pill--active' : ''}`} onClick={() => setTab('tickers')}>
+                Tickers{watchedTickers.length > 0 && <span className="ws-tile__count" style={{ marginLeft: 5 }}>{watchedTickers.length}</span>}
               </button>
-              <button className={`ws-pill${tab==='insiders'?' ws-pill--active':''}`} onClick={()=>setTab('insiders')}>
-                Insiders{watchedInsiders.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedInsiders.length}</span>}
+              <button className={`ws-pill${tab === 'insiders' ? ' ws-pill--active' : ''}`} onClick={() => setTab('insiders')}>
+                Insiders{watchedInsiders.length > 0 && <span className="ws-tile__count" style={{ marginLeft: 5 }}>{watchedInsiders.length}</span>}
               </button>
             </div>
             <div className="ws-filter-group">
               <span className="ws-filter-label">Activity</span>
               <div className="ws-pills">
-                {[{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
-                  <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`}
-                    onClick={()=>{setDays(o.v);if(o.v)ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
+                {[{ v: 7, l: '7d' }, { v: 30, l: '30d' }, { v: 90, l: '90d' }, { v: null, l: 'All' }].map(o => (
+                  <button key={o.l} className={`ws-pill${days === o.v ? ' ws-pill--active' : ''}`}
+                    onClick={() => { setDays(o.v); if (o.v) ensureFilingsWindow && ensureFilingsWindow(o.v); }}>{o.l}</button>
                 ))}
               </div>
             </div>
-            <span style={{marginLeft:'auto',fontSize:11,color:'var(--text-3)'}}>{(tab==='tickers'?sortedTickerRows:sortedInsiderRows).length} {tab}</span>
+            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)' }}>{(tab === 'tickers' ? sortedTickerRows : sortedInsiderRows).length} {tab}</span>
           </div>
 
-          {emptyNow?(
-            <div className="ws-empty">{tab==='tickers'?'No tickers watched. Star any ticker from Data or Insiders.':'No insiders followed. Follow any insider from the leaderboard.'}</div>
-          ):(
+          {emptyNow ? (
+            <div className="ws-empty">{tab === 'tickers' ? 'No tickers watched. Star any ticker from Data or Insiders.' : 'No insiders followed. Follow any insider from the leaderboard.'}</div>
+          ) : (
             <>
               <div className="ws-col-hdrs ws-col-hdrs--wl">
-                <button className="ws-col-sort" onClick={()=>onSort(tab==='tickers'?'ticker':'name')}>
-                  {tab==='tickers'?'Ticker · Company':'Insider'}
-                  {(sortKey==='ticker'||sortKey==='name')&&(sortDir<0?' ↓':' ↑')}
+                <button className="ws-col-sort" onClick={() => onSort(tab === 'tickers' ? 'ticker' : 'name')}>
+                  {tab === 'tickers' ? 'Ticker · Company' : 'Insider'}
+                  {(sortKey === 'ticker' || sortKey === 'name') && (sortDir < 0 ? ' ↓' : ' ↑')}
                 </button>
-                <button className="ws-col-sort" onClick={()=>onSort('lastTradeDate')}>Last activity{sortKey==='lastTradeDate'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ws-col-sort ws-col-sort--right" onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
+                <button className="ws-col-sort" onClick={() => onSort('lastTradeDate')}>Last activity{sortKey === 'lastTradeDate' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
+                <button className="ws-col-sort ws-col-sort--right" onClick={() => onSort('netValue')}>Net flow{sortKey === 'netValue' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
               </div>
               <div>
-                {tab==='tickers' ? sortedTickerRows.map(s=>{
-                  const lastType=s.lastTradeType;
+                {tab === 'tickers' ? sortedTickerRows.map(s => {
+                  const lastType = s.lastTradeType;
                   return (
                     <div key={s.ticker} className="ws-data-row ws-data-row--clickable"
-                      onClick={()=>onOpenDetail({type:'ticker',ticker:s.ticker,company:s.company,expand:true})}>
+                      onClick={() => onOpenDetail({ type: 'ticker', ticker: s.ticker, company: s.company, expand: true })}>
                       <div className="ws-data-row__main ws-row__main--wl">
                         {/* Ticker + company */}
-                        <div className="ws-data-row__cell" style={{display:'flex',alignItems:'center',gap:8}}>
-                          <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
-                            <StarBtn ticker={s.ticker} watchlist={watchlist}/>
+                        <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
+                            <StarBtn ticker={s.ticker} watchlist={watchlist} />
                           </div>
-                          <div style={{minWidth:0}}>
-                            <div style={{display:'flex',alignItems:'center',gap:5}}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                               <span className="ticker">{s.ticker}</span>
                             </div>
-                            <div style={{fontSize:11,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.company}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.company}</div>
                           </div>
                         </div>
                         {/* Last activity */}
                         <div className="ws-data-row__cell">
-                          {s.lastTradeDate?(
-                            <div style={{display:'flex',alignItems:'center',gap:5}}>
-                              <span style={{fontSize:11,color:'var(--text-2)'}}>{fmt.ago(s.lastTradeDate)}</span>
-                              {lastType&&<span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`}>{lastType==='buy'?'Buy':'Sell'}</span>}
+                          {s.lastTradeDate ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{fmt.ago(s.lastTradeDate)}</span>
+                              {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType === 'buy' ? 'buy' : 'sell'}`}>{lastType === 'buy' ? 'Buy' : 'Sell'}</span>}
                             </div>
-                          ):<span style={{fontSize:11,color:'var(--text-3)'}}>{loading?'Loading…':'—'}</span>}
+                          ) : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{loading ? 'Loading…' : '—'}</span>}
                         </div>
                         {/* Net flow */}
                         <div className="ws-data-row__cell ws-data-row__cell--right">
-                          <span className={`ws-data-mono${s.netValue>=0?' val-buy':' val-sell'}`} style={{fontSize:12}}>
-                            {s.netValue>=0?'+':''}{fmt.money(s.netValue)}
+                          <span className={`ws-data-mono${s.netValue >= 0 ? ' val-buy' : ' val-sell'}`} style={{ fontSize: 12 }}>
+                            {s.netValue >= 0 ? '+' : ''}{fmt.money(s.netValue)}
                           </span>
                         </div>
                       </div>
                     </div>
                   );
-                }) : sortedInsiderRows.map(r=>(
+                }) : sortedInsiderRows.map(r => (
                   <div key={r.name} className="ws-data-row ws-data-row--clickable"
-                    onClick={()=>onOpenDetail({type:'trader',name:r.name,title:r.title,expand:true})}>
+                    onClick={() => onOpenDetail({ type: 'trader', name: r.name, title: r.title, expand: true })}>
                     <div className="ws-data-row__main ws-row__main--wl">
                       {/* Insider name + title */}
-                      <div className="ws-data-row__cell" style={{display:'flex',alignItems:'center',gap:8}}>
-                        <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
-                          <FollowBtn name={r.name} watchlist={watchlist} compact/>
+                      <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
+                          <FollowBtn name={r.name} watchlist={watchlist} compact />
                         </div>
-                        <div style={{minWidth:0}}>
-                          <div style={{fontWeight:600,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
-                          {r.title&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</div>}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                          {r.title && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>}
                         </div>
                       </div>
                       {/* Last activity */}
                       <div className="ws-data-row__cell">
-                        {r.lastDate?(
-                          <div style={{display:'flex',alignItems:'center',gap:5}}>
-                            <span style={{fontSize:11,color:'var(--text-2)'}}>{fmt.ago(r.lastDate)}</span>
-                            {r.lastType&&<span className={`wl-feed__badge wl-feed__badge--${r.lastType==='buy'?'buy':'sell'}`}>{r.lastType==='buy'?'Buy':'Sell'}</span>}
+                        {r.lastDate ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{fmt.ago(r.lastDate)}</span>
+                            {r.lastType && <span className={`wl-feed__badge wl-feed__badge--${r.lastType === 'buy' ? 'buy' : 'sell'}`}>{r.lastType === 'buy' ? 'Buy' : 'Sell'}</span>}
                           </div>
-                        ):<span style={{fontSize:11,color:'var(--text-3)'}}>{loading?'Loading…':'—'}</span>}
+                        ) : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{loading ? 'Loading…' : '—'}</span>}
                       </div>
                       {/* Trades */}
                       <div className="ws-data-row__cell ws-data-row__cell--right">
-                        <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-2)'}}>{r.trades} trade{r.trades!==1?'s':''}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{r.trades} trade{r.trades !== 1 ? 's' : ''}</span>
                       </div>
                     </div>
                   </div>
@@ -7860,24 +7866,24 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
           <div className="ws-tile__hdr">
             <div className="ws-tile__hdr-left">
               <span className="ws-tile__title">Recent activity</span>
-              {recentActivity.length>0&&<span className="ws-tile__count">{recentActivity.length}</span>}
+              {recentActivity.length > 0 && <span className="ws-tile__count">{recentActivity.length}</span>}
             </div>
-            {recentActivity.length>0&&<button className="ws-tile__action" onClick={()=>setFeedCollapsed(c=>!c)}>{feedCollapsed?'Show':'Hide'}</button>}
+            {recentActivity.length > 0 && <button className="ws-tile__action" onClick={() => setFeedCollapsed(c => !c)}>{feedCollapsed ? 'Show' : 'Hide'}</button>}
           </div>
-          {!feedCollapsed&&(recentActivity.length===0?(
-            <div className="ws-empty" style={{padding:'16px 14px'}}>{loading?'Loading…':'No open-market trades from your watched items yet.'}</div>
-          ):(
-            <div style={{maxHeight:420,overflowY:'auto'}}>
-              {recentActivity.map((f,i)=>(
-                <div key={`${f.accessionNumber||i}`} className="ws-filing-row"
-                  onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company,expand:true})}>
-                  <div className="ws-filing-row__bar" style={{background:f.transactionType==='buy'?'var(--green-600)':'var(--red-600)'}}/>
+          {!feedCollapsed && (recentActivity.length === 0 ? (
+            <div className="ws-empty" style={{ padding: '16px 14px' }}>{loading ? 'Loading…' : 'No open-market trades from your watched items yet.'}</div>
+          ) : (
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              {recentActivity.map((f, i) => (
+                <div key={`${f.accessionNumber || i}`} className="ws-filing-row"
+                  onClick={() => onOpenDetail({ type: 'ticker', ticker: f.ticker, company: f.company, expand: true })}>
+                  <div className="ws-filing-row__bar" style={{ background: f.transactionType === 'buy' ? 'var(--green-600)' : 'var(--red-600)' }} />
                   <div className="ws-filing-row__body">
                     <div className="ws-filing-row__top">
-                      <span className="td-muted" style={{fontSize:10,minWidth:44}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                      <span className="td-muted" style={{ fontSize: 10, minWidth: 44 }}>{fmt.dateShort(f.transactionDate || f.date)}</span>
                       <span className="ticker">{f.ticker}</span>
-                      <span className={`wl-feed__badge wl-feed__badge--${f.transactionType==='buy'?'buy':'sell'}`} style={{marginLeft:'auto'}}>{f.transactionType==='buy'?'Buy':'Sell'}</span>
-                      <span style={{fontWeight:600,fontSize:11,minWidth:52,textAlign:'right'}}>{f.value?fmt.money(f.value):'—'}</span>
+                      <span className={`wl-feed__badge wl-feed__badge--${f.transactionType === 'buy' ? 'buy' : 'sell'}`} style={{ marginLeft: 'auto' }}>{f.transactionType === 'buy' ? 'Buy' : 'Sell'}</span>
+                      <span style={{ fontWeight: 600, fontSize: 11, minWidth: 52, textAlign: 'right' }}>{f.value ? fmt.money(f.value) : '—'}</span>
                     </div>
                     <div className="ws-filing-row__meta">{f.insiderName}</div>
                   </div>
@@ -7897,27 +7903,27 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
               <span className="ws-tile__sub">Email alerts for your watchlist</span>
             </div>
           </div>
-          {!localPrefs?(
-            <div className="ws-empty" style={{padding:'16px 14px'}}>Loading…</div>
-          ):(
-            <div style={{padding:'4px 0'}}>
-              <SettingsToggle label="Watched ticker traded" sub="Any insider makes an open-market buy or sell on a stock you follow" checked={localPrefs.instant_watchlist_ticker} onChange={e=>updPref('instant_watchlist_ticker',e.target.checked)} pro={pro}/>
-              <SettingsToggle label="Signal on followed ticker" sub="A new high-conviction signal appears for a stock you watch" checked={localPrefs.instant_high_conviction||false} onChange={e=>updPref('instant_high_conviction',e.target.checked)} pro={pro}/>
-              <SettingsToggle label="Followed insider files" sub="Someone you follow submits a new Form 4 to the SEC" checked={localPrefs.instant_followed_insider} onChange={e=>updPref('instant_followed_insider',e.target.checked)} pro={pro}/>
-              <div style={{padding:'12px 16px',borderTop:'0.5px solid var(--border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-                <button className="btn btn--primary" style={{padding:'7px 16px',fontSize:12}} onClick={()=>save(localPrefs)} disabled={saving}>
-                  {saving?'Saving…':saved?'✓ Saved':'Save alerts'}
+          {!localPrefs ? (
+            <div className="ws-empty" style={{ padding: '16px 14px' }}>Loading…</div>
+          ) : (
+            <div style={{ padding: '4px 0' }}>
+              <SettingsToggle label="Watched ticker traded" sub="Any insider makes an open-market buy or sell on a stock you follow" checked={localPrefs.instant_watchlist_ticker} onChange={e => updPref('instant_watchlist_ticker', e.target.checked)} pro={pro} />
+              <SettingsToggle label="Signal on followed ticker" sub="A new high-conviction signal appears for a stock you watch" checked={localPrefs.instant_high_conviction || false} onChange={e => updPref('instant_high_conviction', e.target.checked)} pro={pro} />
+              <SettingsToggle label="Followed insider files" sub="Someone you follow submits a new Form 4 to the SEC" checked={localPrefs.instant_followed_insider} onChange={e => updPref('instant_followed_insider', e.target.checked)} pro={pro} />
+              <div style={{ padding: '12px 16px', borderTop: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button className="btn btn--primary" style={{ padding: '7px 16px', fontSize: 12 }} onClick={() => save(localPrefs)} disabled={saving}>
+                  {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save alerts'}
                 </button>
                 <button className="ws-tile__action"
-                  style={{fontSize:11,background:'none',border:'none',cursor:'pointer',padding:0,animation:'wl-blink 2s ease-in-out 3'}}
-                  onClick={()=>{ const e=new CustomEvent('seli:nav',{detail:'settings'}); window.dispatchEvent(e); }}>
+                  style={{ fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', padding: 0, animation: 'wl-blink 2s ease-in-out 3' }}
+                  onClick={() => { const e = new CustomEvent('seli:nav', { detail: 'settings' }); window.dispatchEvent(e); }}>
                   More alert options in Settings →
                 </button>
               </div>
             </div>
           )}
         </div>
-        <div/>
+        <div />
       </div>
     </div>
   );
@@ -7941,12 +7947,12 @@ function TermsPage() {
       <nav className="lp-nav">
         <div className="lp-nav__frame">
           <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="lp-wordmark">Seli</span>
             <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </a>
-          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
-            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{ marginLeft: 'auto' }} onClick={() => setDark(d => !d)} title="Toggle theme">
+            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
           </button>
         </div>
       </nav>
@@ -8031,22 +8037,22 @@ function TermsPage() {
         <p>These Terms, together with the <a href="/privacy">Privacy Policy</a> and <a href="/cookies">Cookie Policy</a>, constitute the entire agreement between you and SELI LLC regarding your use of Seli and supersede any prior agreements.</p>
 
         <h2>16. Contact</h2>
-        <p>SELI LLC<br/>Albuquerque, New Mexico<br/><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
+        <p>SELI LLC<br />Albuquerque, New Mexico<br /><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__frame">
-        <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-        </div>
-        <div className="lp-footer__links">
-          <a href="/">Home</a>
-          <span>·</span>
-          <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
-          <span>·</span>
-          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
-        </div>
+          <div className="lp-footer__logo">
+            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+          </div>
+          <div className="lp-footer__links">
+            <a href="/">Home</a>
+            <span>·</span>
+            <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+            <span>·</span>
+            <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
+          </div>
         </div>
       </footer>
     </div>
@@ -8061,12 +8067,12 @@ function PrivacyPage() {
       <nav className="lp-nav">
         <div className="lp-nav__frame">
           <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="lp-wordmark">Seli</span>
             <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </a>
-          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
-            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{ marginLeft: 'auto' }} onClick={() => setDark(d => !d)} title="Toggle theme">
+            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
           </button>
         </div>
       </nav>
@@ -8160,22 +8166,22 @@ function PrivacyPage() {
         <p>We may update this Privacy Policy periodically. Material changes will be communicated by email or a notice within the Service. The "Last updated" date at the top of this page reflects when it was most recently revised.</p>
 
         <h2>13. Contact</h2>
-        <p>SELI LLC<br/>Albuquerque, New Mexico<br/><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
+        <p>SELI LLC<br />Albuquerque, New Mexico<br /><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__frame">
-        <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-        </div>
-        <div className="lp-footer__links">
-          <a href="/">Home</a>
-          <span>·</span>
-          <a href="/terms" className="lp-footer__link-muted">Terms</a>
-          <span>·</span>
-          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
-        </div>
+          <div className="lp-footer__logo">
+            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+          </div>
+          <div className="lp-footer__links">
+            <a href="/">Home</a>
+            <span>·</span>
+            <a href="/terms" className="lp-footer__link-muted">Terms</a>
+            <span>·</span>
+            <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
+          </div>
         </div>
       </footer>
     </div>
@@ -8190,12 +8196,12 @@ function CookiePage() {
       <nav className="lp-nav">
         <div className="lp-nav__frame">
           <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="lp-wordmark">Seli</span>
             <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </a>
-          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
-            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{ marginLeft: 'auto' }} onClick={() => setDark(d => !d)} title="Toggle theme">
+            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
           </button>
         </div>
       </nav>
@@ -8229,16 +8235,16 @@ function CookiePage() {
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__frame">
-        <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-        </div>
-        <div className="lp-footer__links">
-          <a href="/">Home</a>
-          <span>·</span>
-          <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
-        </div>
+          <div className="lp-footer__logo">
+            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+          </div>
+          <div className="lp-footer__links">
+            <a href="/">Home</a>
+            <span>·</span>
+            <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
+          </div>
         </div>
       </footer>
     </div>
@@ -8259,19 +8265,19 @@ const HELP_SECTIONS = [
         <p>Seli has five sections, each doing a different job. Here's what each one is actually for.</p>
         <h3>Dashboard</h3>
         <p>Your <strong>daily overview</strong>: market sentiment, sector performance, the biggest insider signals from the last few days, top-ranked insiders, and market news. Start here if you just want to know what's happening today.</p>
-        <EnvPreview type="dashboard"/>
+        <EnvPreview type="dashboard" />
         <h3>Insights</h3>
         <p>The full, filterable signal feed. Every trade Seli has scored, filterable by window, score, type (corporate vs. congressional), and sector — the complete, raw feed behind the Dashboard's highlights.</p>
-        <EnvPreview type="insights"/>
+        <EnvPreview type="insights" />
         <h3>Data</h3>
         <p>The <strong>raw, unscored filings</strong>. Every trade, searchable and filterable, with a link back to the original government filing. No ranking or opinion applied. If you want to draw your own conclusions, this is where to work.</p>
-        <EnvPreview type="data"/>
+        <EnvPreview type="data" />
         <h3>Watchlist</h3>
         <p>Tickers and insiders you've chosen to follow (Pro). Their activity surfaces ahead of everything else, and it's what <strong>instant alerts and email digests</strong> are built from.</p>
-        <EnvPreview type="watchlist"/>
+        <EnvPreview type="watchlist" />
         <h3>Settings</h3>
         <p>Your plan, billing, notification preferences, and brokerage connection all live here.</p>
-        <EnvPreview type="settings"/>
+        <EnvPreview type="settings" />
       </>
     ),
   },
@@ -8355,32 +8361,32 @@ function DataDownloadPage() {
   const [dark, setDark] = useTheme();
 
   const SAMPLE_ROWS = [
-    { date:'2026-07-28', ticker:'AAPL', company:'Apple Inc.', insider:'WILLIAMS JEFFREY E', title:'General Counsel', type:'Buy', shares:'10,500', price:'$198.42', value:'$2.1M', pct:'+12.3%', role:'Executive', routine:'No' },
-    { date:'2026-07-25', ticker:'NVDA', company:'NVIDIA Corp', insider:'HUANG JEN HSUN', title:'CEO', type:'Buy', shares:'50,000', price:'$112.80', value:'$5.6M', pct:'+3.1%', role:'Executive', routine:'No' },
-    { date:'2026-07-24', ticker:'JPM', company:'JPMorgan Chase', insider:'DIMON JAMES', title:'CEO', type:'Buy', shares:'25,000', price:'$221.35', value:'$5.5M', pct:'+1.8%', role:'Executive', routine:'Yes' },
-    { date:'2026-07-22', ticker:'MSFT', company:'Microsoft Corp', insider:'NADELLA SATYA', title:'CEO', type:'Sell', shares:'8,000', price:'$438.90', value:'$3.5M', pct:'-0.4%', role:'Executive', routine:'Yes' },
-    { date:'2026-07-20', ticker:'TSLA', company:'Tesla, Inc.', insider:'TANEJA VAIBHAV', title:'CFO', type:'Buy', shares:'5,000', price:'$248.15', value:'$1.2M', pct:'+8.7%', role:'Executive', routine:'No' },
+    { date: '2026-07-28', ticker: 'AAPL', company: 'Apple Inc.', insider: 'WILLIAMS JEFFREY E', title: 'General Counsel', type: 'Buy', shares: '10,500', price: '$198.42', value: '$2.1M', pct: '+12.3%', role: 'Executive', routine: 'No' },
+    { date: '2026-07-25', ticker: 'NVDA', company: 'NVIDIA Corp', insider: 'HUANG JEN HSUN', title: 'CEO', type: 'Buy', shares: '50,000', price: '$112.80', value: '$5.6M', pct: '+3.1%', role: 'Executive', routine: 'No' },
+    { date: '2026-07-24', ticker: 'JPM', company: 'JPMorgan Chase', insider: 'DIMON JAMES', title: 'CEO', type: 'Buy', shares: '25,000', price: '$221.35', value: '$5.5M', pct: '+1.8%', role: 'Executive', routine: 'Yes' },
+    { date: '2026-07-22', ticker: 'MSFT', company: 'Microsoft Corp', insider: 'NADELLA SATYA', title: 'CEO', type: 'Sell', shares: '8,000', price: '$438.90', value: '$3.5M', pct: '-0.4%', role: 'Executive', routine: 'Yes' },
+    { date: '2026-07-20', ticker: 'TSLA', company: 'Tesla, Inc.', insider: 'TANEJA VAIBHAV', title: 'CFO', type: 'Buy', shares: '5,000', price: '$248.15', value: '$1.2M', pct: '+8.7%', role: 'Executive', routine: 'No' },
   ];
 
   const COLUMNS = [
-    { name:'transaction_date',     desc:'Date the trade occurred' },
-    { name:'filing_date',          desc:'Date the SEC filing was published' },
-    { name:'ticker',               desc:'Stock ticker symbol' },
-    { name:'company_name',         desc:'Full company name' },
-    { name:'insider_name',         desc:'Reporting insider' },
-    { name:'insider_title',        desc:'Title or role at the company' },
-    { name:'transaction_type',     desc:'Buy or Sell' },
-    { name:'transaction_code',     desc:'SEC code (P = purchase, S = sale)' },
-    { name:'is_open_market',       desc:'Voluntary open-market trade' },
-    { name:'shares',               desc:'Shares traded' },
-    { name:'price_per_share',      desc:'Price at time of trade' },
-    { name:'value',                desc:'Total dollar value' },
-    { name:'shares_owned_after',   desc:'Holdings after the trade' },
-    { name:'pct_owned_change',     desc:'Position change (%)' },
-    { name:'relationship',         desc:'Executive, Officer, or Director' },
-    { name:'is_routine',           desc:'Routine pattern flag (Cohen et al. 2012)' },
-    { name:'sector',               desc:'Sector classification' },
-    { name:'accession_number',     desc:'SEC EDGAR accession number for source verification' },
+    { name: 'transaction_date', desc: 'Date the trade occurred' },
+    { name: 'filing_date', desc: 'Date the SEC filing was published' },
+    { name: 'ticker', desc: 'Stock ticker symbol' },
+    { name: 'company_name', desc: 'Full company name' },
+    { name: 'insider_name', desc: 'Reporting insider' },
+    { name: 'insider_title', desc: 'Title or role at the company' },
+    { name: 'transaction_type', desc: 'Buy or Sell' },
+    { name: 'transaction_code', desc: 'SEC code (P = purchase, S = sale)' },
+    { name: 'is_open_market', desc: 'Voluntary open-market trade' },
+    { name: 'shares', desc: 'Shares traded' },
+    { name: 'price_per_share', desc: 'Price at time of trade' },
+    { name: 'value', desc: 'Total dollar value' },
+    { name: 'shares_owned_after', desc: 'Holdings after the trade' },
+    { name: 'pct_owned_change', desc: 'Position change (%)' },
+    { name: 'relationship', desc: 'Executive, Officer, or Director' },
+    { name: 'is_routine', desc: 'Routine pattern flag (Cohen et al. 2012)' },
+    { name: 'sector', desc: 'Sector classification' },
+    { name: 'accession_number', desc: 'SEC EDGAR accession number for source verification' },
   ];
 
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -8400,7 +8406,7 @@ function DataDownloadPage() {
   }
 
   const buyCTA = (
-    <div style={{textAlign:'center'}}>
+    <div style={{ textAlign: 'center' }}>
       <button className="lp-btn-primary lp-btn-primary--lg" onClick={handleBuy} disabled={checkoutLoading}>
         {checkoutLoading ? 'Loading checkout...' : 'Buy now — $39.99'}
       </button>
@@ -8412,31 +8418,31 @@ function DataDownloadPage() {
       <nav className="lp-nav">
         <div className="lp-nav__frame">
           <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="lp-wordmark">Seli</span>
             <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </a>
-          <div style={{display:'flex',alignItems:'center',gap:12,marginLeft:'auto'}}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
             <a href="/about" className="lp-nav__link">About</a>
-            <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={()=>setDark(d=>!d)} title="Toggle theme">
-              {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+            <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={() => setDark(d => !d)} title="Toggle theme">
+              {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
             </button>
           </div>
         </div>
       </nav>
-      <div className="legal-content" style={{maxWidth:960}}>
+      <div className="legal-content" style={{ maxWidth: 960 }}>
 
         <div className="lp-info__eyebrow">Insider Trading Data Export</div>
-        <h1 style={{fontSize:'clamp(1.375rem, 5vw, 2.25rem)',fontWeight:800,letterSpacing:'-1px',lineHeight:1.1,marginBottom:20}}>Download 10+ Years of SEC Insider Trading Data</h1>
-        <p style={{fontSize:'0.9375rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:8}}>
+        <h1 style={{ fontSize: 'clamp(1.375rem, 5vw, 2.25rem)', fontWeight: 800, letterSpacing: '-1px', lineHeight: 1.1, marginBottom: 20 }}>Download 10+ Years of SEC Insider Trading Data</h1>
+        <p style={{ fontSize: '0.9375rem', color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 8 }}>
           The same insider trading data that powers Bloomberg terminals and institutional research desks — structured, clean, and
           a fraction of the cost. Every open-market SEC Form 4 filing from corporate executives, directors, and 10% owners,
           with routine-trade flags for separating signal from noise. One-time purchase, yours forever.
         </p>
-        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginBottom:12}}>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', marginBottom: 12 }}>
           Compressed ZIP · one CSV per calendar year · {COLUMNS.length} fields per transaction · Excel, Python, R, or any tool that reads CSV
         </p>
-        <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:28}}>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 28 }}>
           Researchers, quants, and serious investors use insider trading data to build models, screen for
           investment ideas, and backtest strategies. Academic studies show insider purchases outperform the
           market by 4–5% annually. This is the raw data behind those findings — ready for your own analysis.
@@ -8445,53 +8451,53 @@ function DataDownloadPage() {
 
         {buyCTA}
 
-        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',textAlign:'center',marginTop:10,marginBottom:0}}>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', textAlign: 'center', marginTop: 10, marginBottom: 0 }}>
           Checkout powered by Stripe. No account required.
         </p>
 
-        <hr style={{border:'none',borderTop:'0.5px solid var(--border)',margin:'40px 0'}}/>
+        <hr style={{ border: 'none', borderTop: '0.5px solid var(--border)', margin: '40px 0' }} />
 
         <section className="lp-info__section">
           <h2>Sample data</h2>
-          <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch',margin:'12px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem',minWidth:420}}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', margin: '12px 0', border: '0.5px solid var(--border)', borderRadius: 8 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', minWidth: 420 }}>
               <thead>
-                <tr style={{borderBottom:'1px solid var(--border)'}}>
-                  {['Date','Ticker','Insider','Type','Value','Role'].map(h=>(
-                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,fontSize:'0.6875rem',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>{h}</th>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {['Date', 'Ticker', 'Insider', 'Type', 'Value', 'Role'].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {SAMPLE_ROWS.map((r,i)=>(
-                  <tr key={i} style={{borderBottom:'0.5px solid var(--border)'}}>
-                    <td style={{padding:'8px 10px',whiteSpace:'nowrap'}}>{r.date}</td>
-                    <td style={{padding:'8px 10px',fontWeight:600,color:'var(--accent-strong)',whiteSpace:'nowrap'}}>{r.ticker}</td>
-                    <td style={{padding:'8px 10px',whiteSpace:'nowrap'}}>{r.insider}</td>
-                    <td style={{padding:'8px 10px'}}><span style={{color:r.type==='Buy'?'var(--green-600)':'var(--red-600)',fontWeight:600}}>{r.type}</span></td>
-                    <td style={{padding:'8px 10px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{r.value}</td>
-                    <td style={{padding:'8px 10px',whiteSpace:'nowrap'}}>{r.role}</td>
+                {SAMPLE_ROWS.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.date}</td>
+                    <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--accent-strong)', whiteSpace: 'nowrap' }}>{r.ticker}</td>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.insider}</td>
+                    <td style={{ padding: '8px 10px' }}><span style={{ color: r.type === 'Buy' ? 'var(--green-600)' : 'var(--red-600)', fontWeight: 600 }}>{r.type}</span></td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{r.value}</td>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.role}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',fontStyle:'italic'}}>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', fontStyle: 'italic' }}>
             Representative sample showing 6 of {COLUMNS.length} fields. Actual export contains all columns listed below.
           </p>
         </section>
 
         <section className="lp-info__section">
           <h2>Column schema ({COLUMNS.length} fields)</h2>
-          <div style={{overflowX:'auto',margin:'12px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
-            <table className="legal-table" style={{margin:0}}>
+          <div style={{ overflowX: 'auto', margin: '12px 0', border: '0.5px solid var(--border)', borderRadius: 8 }}>
+            <table className="legal-table" style={{ margin: 0 }}>
               <thead>
-                <tr><th style={{width:200}}>Column</th><th>Description</th></tr>
+                <tr><th style={{ width: 200 }}>Column</th><th>Description</th></tr>
               </thead>
               <tbody>
-                {COLUMNS.map(c=>(
+                {COLUMNS.map(c => (
                   <tr key={c.name}>
-                    <td><code style={{fontSize:'0.75rem',background:'var(--surface-2)',padding:'2px 6px',borderRadius:3}}>{c.name}</code></td>
+                    <td><code style={{ fontSize: '0.75rem', background: 'var(--surface-2)', padding: '2px 6px', borderRadius: 3 }}>{c.name}</code></td>
                     <td>{c.desc}</td>
                   </tr>
                 ))}
@@ -8514,18 +8520,18 @@ function DataDownloadPage() {
             <li><strong>Build your own models.</strong> The raw data behind Seli's scoring, available
               for your own methodology.</li>
           </ul>
-          <p style={{fontSize:'0.875rem',color:'var(--text-2)'}}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-2)' }}>
             Raw EDGAR XML is free but requires heavy parsing. Commercial insider data APIs run
             $200-500+/month. This is a one-time $39.99 purchase with no recurring fee.
           </p>
         </section>
 
-        <section style={{textAlign:'center',padding:'40px 0',borderTop:'0.5px solid var(--border)',marginTop:24}}>
+        <section style={{ textAlign: 'center', padding: '40px 0', borderTop: '0.5px solid var(--border)', marginTop: 24 }}>
           {buyCTA}
-          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:16,marginBottom:20}}>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', marginTop: 16, marginBottom: 20 }}>
             One-time purchase. No subscription. Re-download anytime from your account.
           </p>
-          <a href="/" style={{fontSize:'0.875rem',color:'var(--accent-strong)',textDecoration:'none',fontWeight:500}}>
+          <a href="/" style={{ fontSize: '0.875rem', color: 'var(--accent-strong)', textDecoration: 'none', fontWeight: 500 }}>
             Or explore Seli free — real-time signals, scoring, and alerts →
           </a>
         </section>
@@ -8534,7 +8540,7 @@ function DataDownloadPage() {
       <footer className="lp-footer">
         <div className="lp-footer__frame">
           <div className="lp-footer__logo">
-            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="lp-wordmark">Seli</span>
             <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </div>
@@ -8612,61 +8618,61 @@ function PurchaseCompletePage() {
       <nav className="lp-nav">
         <div className="lp-nav__frame">
           <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="lp-wordmark">Seli</span>
           </a>
         </div>
       </nav>
-      <div className="legal-content" style={{maxWidth:600,textAlign:'center',paddingTop:60}}>
+      <div className="legal-content" style={{ maxWidth: 600, textAlign: 'center', paddingTop: 60 }}>
         {status === 'loading' && (
           <>
-            <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:12}}>Verifying your purchase...</div>
-            <SkeletonRows count={3}/>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 12 }}>Verifying your purchase...</div>
+            <SkeletonRows count={3} />
           </>
         )}
         {status === 'ready' && (
           <>
-            <div style={{fontSize:'2.5rem',marginBottom:8}}>✓</div>
-            <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Payment confirmed</div>
-            <p style={{color:'var(--text-2)',marginBottom:24}}>
+            <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>✓</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Payment confirmed</div>
+            <p style={{ color: 'var(--text-2)', marginBottom: 24 }}>
               Your insider trading dataset is ready to download.
             </p>
             <button
               className="lp-btn-primary lp-btn-primary--lg"
               onClick={handleDownload}
               disabled={downloading}
-              style={{marginBottom:24}}
+              style={{ marginBottom: 24 }}
             >
               {downloading ? 'Preparing download...' : 'Download dataset (.zip)'}
             </button>
 
-            <div style={{background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8,padding:'20px 24px',textAlign:'left',marginBottom:24}}>
-              <div style={{fontSize:'0.75rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',color:'var(--text-3)',marginBottom:12}}>Order details — save this</div>
-              <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 16px',fontSize:'0.875rem'}}>
-                <span style={{color:'var(--text-3)'}}>Order ID</span>
-                <span style={{fontFamily:'monospace',fontSize:'0.8125rem',wordBreak:'break-all'}}>{orderInfo?.orderId || '—'}</span>
-                <span style={{color:'var(--text-3)'}}>Email</span>
+            <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 8, padding: '20px 24px', textAlign: 'left', marginBottom: 24 }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 12 }}>Order details — save this</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontSize: '0.875rem' }}>
+                <span style={{ color: 'var(--text-3)' }}>Order ID</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '0.8125rem', wordBreak: 'break-all' }}>{orderInfo?.orderId || '—'}</span>
+                <span style={{ color: 'var(--text-3)' }}>Email</span>
                 <span>{orderInfo?.email || '—'}</span>
-                <span style={{color:'var(--text-3)'}}>Data through</span>
+                <span style={{ color: 'var(--text-3)' }}>Data through</span>
                 <span>{orderInfo?.date || '—'}</span>
               </div>
             </div>
 
-            <p style={{fontSize:'0.8125rem',color:'var(--text-3)',lineHeight:1.6}}>
-              Need to re-download later? Go to <a href="/redownload" style={{color:'var(--accent-strong)'}}>seli.app/redownload</a> and
+            <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', lineHeight: 1.6 }}>
+              Need to re-download later? Go to <a href="/redownload" style={{ color: 'var(--accent-strong)' }}>seli.app/redownload</a> and
               enter your Order ID and email. A receipt has been sent to your email by Stripe.
             </p>
           </>
         )}
         {status === 'error' && (
           <>
-            <div style={{fontSize:'2.5rem',marginBottom:8}}>×</div>
-            <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Something went wrong</div>
-            <p style={{color:'var(--text-2)',marginBottom:24}}>
+            <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>×</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Something went wrong</div>
+            <p style={{ color: 'var(--text-2)', marginBottom: 24 }}>
               We couldn't verify your purchase. If you were charged, your payment is safe.
             </p>
-            <p style={{fontSize:'0.875rem',color:'var(--text-3)',marginBottom:24}}>
-              Contact <a href="mailto:admin@seli.app" style={{color:'var(--accent-strong)'}}>admin@seli.app</a> with
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-3)', marginBottom: 24 }}>
+              Contact <a href="mailto:admin@seli.app" style={{ color: 'var(--accent-strong)' }}>admin@seli.app</a> with
               your Stripe receipt and we'll get your download sorted.
             </p>
             <a href="/data-download" className="lp-btn-primary">Back to Data Export</a>
@@ -8721,7 +8727,7 @@ function RedownloadPage() {
             const d = await r.json();
             if (d.error) msg = d.error;
           }
-        } catch {}
+        } catch { }
         throw new Error(msg);
       }
       const total = parseInt(r.headers.get('content-length') || '0', 10);
@@ -8787,11 +8793,11 @@ function RedownloadPage() {
   }
 
   const tabStyle = (active) => ({
-    padding:'10px 20px',fontSize:'0.875rem',fontWeight:active?600:400,
-    color:active?'var(--accent-strong)':'var(--text-3)',
-    background:'none',border:'none',
-    borderBottom:active?'2px solid var(--accent-strong)':'2px solid transparent',
-    cursor:'pointer',fontFamily:'var(--font)',
+    padding: '10px 20px', fontSize: '0.875rem', fontWeight: active ? 600 : 400,
+    color: active ? 'var(--accent-strong)' : 'var(--text-3)',
+    background: 'none', border: 'none',
+    borderBottom: active ? '2px solid var(--accent-strong)' : '2px solid transparent',
+    cursor: 'pointer', fontFamily: 'var(--font)',
   });
 
   return (
@@ -8799,49 +8805,49 @@ function RedownloadPage() {
       <nav className="lp-nav">
         <div className="lp-nav__frame">
           <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="lp-wordmark">Seli</span>
           </a>
-          <div style={{display:'flex',alignItems:'center',gap:12,marginLeft:'auto'}}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
             <a href="/help" className="lp-nav__link">Help</a>
             <a href="/data-download" className="lp-nav__link">Buy data</a>
           </div>
         </div>
       </nav>
-      <div className="legal-content" style={{maxWidth:560,paddingTop:48}}>
+      <div className="legal-content" style={{ maxWidth: 560, paddingTop: 48 }}>
 
-        <h1 style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Download your data export</h1>
-        <p style={{color:'var(--text-2)',marginBottom:24,fontSize:'0.9375rem'}}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Download your data export</h1>
+        <p style={{ color: 'var(--text-2)', marginBottom: 24, fontSize: '0.9375rem' }}>
           Already purchased? Re-download your dataset below.
         </p>
 
         {downloadProgress && (
-          <div style={{marginBottom:24,padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
-            <div style={{fontSize:'0.8125rem',fontWeight:500,marginBottom:8}}>{downloadProgress.label}</div>
-            <div style={{width:'100%',height:6,background:'var(--surface-3)',borderRadius:3,overflow:'hidden'}}>
+          <div style={{ marginBottom: 24, padding: '16px 20px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 8 }}>
+            <div style={{ fontSize: '0.8125rem', fontWeight: 500, marginBottom: 8 }}>{downloadProgress.label}</div>
+            <div style={{ width: '100%', height: 6, background: 'var(--surface-3)', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{
                 width: downloadProgress.pct != null ? `${downloadProgress.pct}%` : '60%',
-                height:'100%', background:'var(--accent-strong)', borderRadius:3,
-                transition:'width 0.3s ease',
+                height: '100%', background: 'var(--accent-strong)', borderRadius: 3,
+                transition: 'width 0.3s ease',
                 animation: downloadProgress.pct == null ? 'skel-fade 1s ease-in-out infinite alternate' : 'none',
-              }}/>
+              }} />
             </div>
           </div>
         )}
 
-        <div style={{display:'flex',gap:0,marginBottom:24,borderBottom:'1px solid var(--border)'}}>
-          <button onClick={() => setActiveTab('history')} style={tabStyle(activeTab==='history')}>My purchases</button>
-          <button onClick={() => setActiveTab('lookup')} style={tabStyle(activeTab==='lookup')}>Look up an order</button>
+        <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid var(--border)' }}>
+          <button onClick={() => setActiveTab('history')} style={tabStyle(activeTab === 'history')}>My purchases</button>
+          <button onClick={() => setActiveTab('lookup')} style={tabStyle(activeTab === 'lookup')}>Look up an order</button>
         </div>
 
         {/* Fixed-height tab content area prevents width/height jumping */}
-        <div style={{minHeight:260}}>
+        <div style={{ minHeight: 260 }}>
 
           {activeTab === 'history' && (
             <section>
               {!isSignedIn ? (
-                <div style={{textAlign:'center',padding:'32px 0'}}>
-                  <p style={{color:'var(--text-2)',marginBottom:16,fontSize:'0.9375rem'}}>
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <p style={{ color: 'var(--text-2)', marginBottom: 16, fontSize: '0.9375rem' }}>
                     Sign in to see purchases linked to your account.
                   </p>
                   <SignInButton mode="modal" afterSignInUrl="/redownload">
@@ -8849,25 +8855,25 @@ function RedownloadPage() {
                   </SignInButton>
                 </div>
               ) : history === null ? (
-                <SkeletonRows count={3}/>
+                <SkeletonRows count={3} />
               ) : history.length === 0 ? (
-                <div style={{textAlign:'center',padding:'32px 0'}}>
-                  <p style={{color:'var(--text-3)',fontSize:'0.9375rem',marginBottom:16}}>
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <p style={{ color: 'var(--text-3)', fontSize: '0.9375rem', marginBottom: 16 }}>
                     {historyError ? 'Could not load purchase history.' : 'No data export purchases on this account.'}
                   </p>
-                  <a href="/data-download" style={{color:'var(--accent-strong)',fontSize:'0.875rem',fontWeight:500,textDecoration:'none'}}>
+                  <a href="/data-download" style={{ color: 'var(--accent-strong)', fontSize: '0.875rem', fontWeight: 500, textDecoration: 'none' }}>
                     Purchase the dataset →
                   </a>
                 </div>
               ) : (
-                <div style={{border:'0.5px solid var(--border)',borderRadius:8,overflow:'hidden'}}>
+                <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
                   {history.map((p, i) => {
                     const dateStr = p.purchased_at ? p.purchased_at.slice(0, 10) : null;
                     return (
-                      <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:i < history.length - 1 ? '0.5px solid var(--border)' : 'none'}}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: i < history.length - 1 ? '0.5px solid var(--border)' : 'none' }}>
                         <div>
-                          <div style={{fontWeight:600,fontSize:'0.875rem'}}>Insider Trading Dataset</div>
-                          <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:2}}>
+                          <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Insider Trading Dataset</div>
+                          <div style={{ fontSize: '0.8125rem', color: 'var(--text-3)', marginTop: 2 }}>
                             {dateStr ? fmt.date(dateStr) : '—'} · ${(p.amount_cents / 100).toFixed(2)}
                             {p.downloaded_at ? ' · downloaded' : ''}
                           </div>
@@ -8883,12 +8889,12 @@ function RedownloadPage() {
                 </div>
               )}
               {isSignedIn && history && history.length > 0 && errorMsg && (
-                <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6,marginTop:12}}>
+                <div style={{ fontSize: '0.8125rem', color: 'var(--red-600)', padding: '10px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 6, marginTop: 12 }}>
                   {errorMsg}
                 </div>
               )}
               {isSignedIn && history && history.length > 0 && (
-                <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:12}}>
+                <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', marginTop: 12 }}>
                   Each re-download delivers the data as it stood on that purchase's date.
                 </p>
               )}
@@ -8897,30 +8903,30 @@ function RedownloadPage() {
 
           {activeTab === 'lookup' && (
             <section>
-              <p style={{color:'var(--text-2)',marginBottom:20,fontSize:'0.875rem'}}>
+              <p style={{ color: 'var(--text-2)', marginBottom: 20, fontSize: '0.875rem' }}>
                 Enter the Order ID and email from your Stripe receipt to re-download.
               </p>
-              <div style={{display:'flex',flexDirection:'column',gap:16}}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div>
-                  <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Order ID</label>
+                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>Order ID</label>
                   <input type="text" value={orderId} onChange={e => setOrderId(e.target.value)}
                     placeholder="pi_3Nk8..."
-                    style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontFamily:'monospace',boxSizing:'border-box'}}
+                    style={{ width: '100%', padding: '10px 12px', fontSize: '0.875rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontFamily: 'monospace', boxSizing: 'border-box' }}
                   />
                 </div>
                 <div>
-                  <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Email used at checkout</label>
+                  <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>Email used at checkout</label>
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',boxSizing:'border-box'}}
+                    style={{ width: '100%', padding: '10px 12px', fontSize: '0.875rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', boxSizing: 'border-box' }}
                   />
                 </div>
                 <button className="lp-btn-primary" onClick={handleLookup}
                   disabled={lookupStatus === 'loading' || !orderId.trim() || !email.trim() || downloadProgress != null}
-                  style={{width:'100%',padding:'12px'}}
+                  style={{ width: '100%', padding: '12px' }}
                 >{lookupStatus === 'loading' ? 'Verifying...' : 'Download'}</button>
                 {lookupStatus === 'error' && (
-                  <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6}}>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--red-600)', padding: '10px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
                     {errorMsg || 'Could not verify this order. Double-check your Order ID and email.'}
                   </div>
                 )}
@@ -8929,8 +8935,8 @@ function RedownloadPage() {
           )}
         </div>
 
-        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:28,lineHeight:1.6,textAlign:'center'}}>
-          Need help? Contact <a href="mailto:admin@seli.app" style={{color:'var(--accent-strong)'}}>admin@seli.app</a>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', marginTop: 28, lineHeight: 1.6, textAlign: 'center' }}>
+          Need help? Contact <a href="mailto:admin@seli.app" style={{ color: 'var(--accent-strong)' }}>admin@seli.app</a>
         </p>
       </div>
     </div>
@@ -8948,12 +8954,12 @@ function HelpCenterPage() {
       <nav className="lp-nav">
         <div className="lp-nav__frame">
           <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="lp-wordmark">Seli</span>
             <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
           </a>
-          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{marginLeft:'auto'}} onClick={()=>setDark(d=>!d)} title="Toggle theme">
-            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{ marginLeft: 'auto' }} onClick={() => setDark(d => !d)} title="Toggle theme">
+            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
           </button>
         </div>
       </nav>
@@ -8978,20 +8984,20 @@ function HelpCenterPage() {
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__frame">
-        <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-        </div>
-        <div className="lp-footer__links">
-          <a href="/">Home</a>
-          <span>·</span>
-          <a href="/terms" className="lp-footer__link-muted">Terms</a>
-          <span>·</span>
-          <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
-          <span>·</span>
-          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
-        </div>
+          <div className="lp-footer__logo">
+            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+          </div>
+          <div className="lp-footer__links">
+            <a href="/">Home</a>
+            <span>·</span>
+            <a href="/terms" className="lp-footer__link-muted">Terms</a>
+            <span>·</span>
+            <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+            <span>·</span>
+            <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
+          </div>
         </div>
       </footer>
     </div>
@@ -9009,37 +9015,37 @@ function HelpCenterPage() {
 // Default prefs — matches expanded Neon schema
 const DEFAULT_PREFS = {
   // Digests
-  daily_digest:           false,
-  weekly_digest:          false,
-  digest_top_signals:     true,
-  digest_congressional:   true,
-  digest_corporate:       true,
-  digest_watchlist_only:  false,
-  digest_min_conviction:  'any',
-  digest_max_signals:     10,   // 0 = unlimited
-  digest_min_value:       0,    // 0 = any amount
+  daily_digest: false,
+  weekly_digest: false,
+  digest_top_signals: true,
+  digest_congressional: true,
+  digest_corporate: true,
+  digest_watchlist_only: false,
+  digest_min_conviction: 'any',
+  digest_max_signals: 10,   // 0 = unlimited
+  digest_min_value: 0,    // 0 = any amount
   // Instant alerts
   instant_watchlist_ticker: false,
   instant_followed_insider: false,
-  instant_high_conviction:  false,
-  instant_reversal:         false,
-  instant_min_value:                 0,        // 0 = any amount
+  instant_high_conviction: false,
+  instant_reversal: false,
+  instant_min_value: 0,        // 0 = any amount
   instant_high_conviction_threshold: 1000000,   // was hardcoded server-side before
 };
 
 function useNotificationPrefs(userId, pro) {
-  const [prefs,  setPrefs]  = useState(null);
+  const [prefs, setPrefs] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(false);
-  const [error,  setError]  = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState(null);
 
-  useEffect(()=>{
+  useEffect(() => {
     if (!userId) return;
     // Try localStorage first for instant load — avoids a blank flash while
     // the real network request is in flight.
     const cached = localStorage.getItem(`seli_prefs_${userId}`);
-    if (cached) { try { setPrefs({...DEFAULT_PREFS,...JSON.parse(cached)}); } catch {} }
-    if (!cfg.NEON_PROXY_URL || !pro) { setPrefs(p=>p||{...DEFAULT_PREFS}); return; }
+    if (cached) { try { setPrefs({ ...DEFAULT_PREFS, ...JSON.parse(cached) }); } catch { } }
+    if (!cfg.NEON_PROXY_URL || !pro) { setPrefs(p => p || { ...DEFAULT_PREFS }); return; }
 
     (async () => {
       try {
@@ -9047,14 +9053,14 @@ function useNotificationPrefs(userId, pro) {
         const res = await fetch(`${cfg.NEON_PROXY_URL}/prefs`, { headers });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not load preferences');
-        const p = data.prefs ? {...DEFAULT_PREFS, ...data.prefs} : {...DEFAULT_PREFS};
+        const p = data.prefs ? { ...DEFAULT_PREFS, ...data.prefs } : { ...DEFAULT_PREFS };
         setPrefs(p);
         localStorage.setItem(`seli_prefs_${userId}`, JSON.stringify(p));
       } catch {
-        setPrefs(p=>p||{...DEFAULT_PREFS});
+        setPrefs(p => p || { ...DEFAULT_PREFS });
       }
     })();
-  },[userId, pro]);
+  }, [userId, pro]);
 
   async function save(updated) {
     if (!userId) return;
@@ -9069,8 +9075,8 @@ function useNotificationPrefs(userId, pro) {
       if (!res.ok) throw new Error(data.error || 'Save failed');
       setPrefs(updated);
       setSaved(true);
-      setTimeout(()=>setSaved(false), 2500);
-    } catch(e) { setError(e.message || 'Save failed — try again'); }
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) { setError(e.message || 'Save failed — try again'); }
     setSaving(false);
   }
 
@@ -9080,14 +9086,14 @@ function useNotificationPrefs(userId, pro) {
 // ── Settings toggle row ────────────────────────────────────────────────────────
 function SettingsToggle({ label, sub, checked, onChange, pro, disabled }) {
   return (
-    <div className={`settings-row settings-row--toggle${disabled?' settings-row--disabled':''}`}>
-      <div style={{flex:1}}>
+    <div className={`settings-row settings-row--toggle${disabled ? ' settings-row--disabled' : ''}`}>
+      <div style={{ flex: 1 }}>
         <div className="settings-row__label">{label}</div>
-        {sub&&<div className="settings-row__sub">{sub}</div>}
+        {sub && <div className="settings-row__sub">{sub}</div>}
       </div>
-      <label className={`settings-toggle${(!pro||disabled)?' settings-toggle--locked':''}`}>
-        <input type="checkbox" checked={!!checked} onChange={onChange} disabled={!pro||disabled}/>
-        <span className="settings-toggle__track"/>
+      <label className={`settings-toggle${(!pro || disabled) ? ' settings-toggle--locked' : ''}`}>
+        <input type="checkbox" checked={!!checked} onChange={onChange} disabled={!pro || disabled} />
+        <span className="settings-toggle__track" />
       </label>
     </div>
   );
@@ -9174,7 +9180,7 @@ function useSnapTrade(pro) {
 }
 
 function SettingsPage({ user, onUpgrade }) {
-  const pro   = isPro(user);
+  const pro = isPro(user);
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
   const snaptrade = useSnapTrade(pro);
   const portfolio = usePortfolio(pro);
@@ -9182,12 +9188,12 @@ function SettingsPage({ user, onUpgrade }) {
     const params = new URLSearchParams(window.location.search);
     return params.get('section') || (params.has('connection_id') || params.get('snaptrade') ? 'brokers' : 'billing');
   });
-  const [local,   setLocal]   = useState(null);
+  const [local, setLocal] = useState(null);
   const [testState, setTestState] = useState(null); // null | 'sending' | 'sent' | error string
 
-  useEffect(()=>{ if (prefs && !local) setLocal({...prefs}); },[prefs]);
+  useEffect(() => { if (prefs && !local) setLocal({ ...prefs }); }, [prefs]);
 
-  function upd(key, val) { setLocal(p=>({...p, [key]:val})); }
+  function upd(key, val) { setLocal(p => ({ ...p, [key]: val })); }
 
   async function sendTestEmail() {
     setTestState('sending');
@@ -9197,17 +9203,17 @@ function SettingsPage({ user, onUpgrade }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Test email failed');
       setTestState('sent');
-      setTimeout(()=>setTestState(null), 4000);
+      setTimeout(() => setTestState(null), 4000);
     } catch (e) {
       setTestState(e.message || 'Test email failed');
-      setTimeout(()=>setTestState(null), 5000);
+      setTimeout(() => setTestState(null), 5000);
     }
   }
 
   const SECTIONS = [
-    {id:'billing',       label:'Billing',          icon:'$'},
-    {id:'notifications', label:'Notifications',    Icon:IconMail},
-    {id:'brokers',       label:'Link Portfolio',   Icon:IconLink},
+    { id: 'billing', label: 'Billing', icon: '$' },
+    { id: 'notifications', label: 'Notifications', Icon: IconMail },
+    { id: 'brokers', label: 'Link Portfolio', Icon: IconLink },
   ];
   const [notifTab, setNotifTab] = useState('digests'); // sub-tab within Notifications
 
@@ -9215,18 +9221,18 @@ function SettingsPage({ user, onUpgrade }) {
     <div className="ws-page ws-page--narrow">
 
       {/* Page header */}
-      <div style={{marginBottom:20}}>
+      <div style={{ marginBottom: 20 }}>
         <h1 className="ws-page-title">Settings</h1>
         <p className="ws-page-sub">Manage your plan, alerts, and connected accounts.</p>
       </div>
 
       {/* Horizontal tab nav — replaces left sidebar */}
       <div className="ws-settings-tabs">
-        {SECTIONS.map(s=>(
+        {SECTIONS.map(s => (
           <button key={s.id}
-            className={`ws-settings-tab${section===s.id?' ws-settings-tab--active':''}`}
-            onClick={()=>setSection(s.id)}>
-            <span className="ws-settings-tab__icon">{s.Icon ? <s.Icon style={{width:13,height:13}}/> : s.icon}</span>
+            className={`ws-settings-tab${section === s.id ? ' ws-settings-tab--active' : ''}`}
+            onClick={() => setSection(s.id)}>
+            <span className="ws-settings-tab__icon">{s.Icon ? <s.Icon style={{ width: 13, height: 13 }} /> : s.icon}</span>
             {s.label}
           </button>
         ))}
@@ -9236,7 +9242,7 @@ function SettingsPage({ user, onUpgrade }) {
       <div>
 
         {/* BILLING */}
-        {section==='billing'&&(
+        {section === 'billing' && (
           <div className="ws-tile">
             <div className="ws-tile__hdr">
               <div className="ws-tile__hdr-left">
@@ -9251,63 +9257,63 @@ function SettingsPage({ user, onUpgrade }) {
         )}
 
         {/* NOTIFICATIONS */}
-        {section==='notifications'&&(<>
+        {section === 'notifications' && (<>
           {/* Sub-tabs for digests vs instant */}
-          <div className="ws-toolbar-hdr" style={{background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',marginBottom:14,overflow:'hidden'}}>
+          <div className="ws-toolbar-hdr" style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)', marginBottom: 14, overflow: 'hidden' }}>
             <div className="ws-toolbar-tabs">
-              <button className={`ws-toolbar-tab${notifTab==='digests'?' ws-toolbar-tab--active':''}`} onClick={()=>setNotifTab('digests')}>Email digests</button>
-              <button className={`ws-toolbar-tab${notifTab==='instant'?' ws-toolbar-tab--active':''}`} onClick={()=>setNotifTab('instant')}>Instant alerts</button>
+              <button className={`ws-toolbar-tab${notifTab === 'digests' ? ' ws-toolbar-tab--active' : ''}`} onClick={() => setNotifTab('digests')}>Email digests</button>
+              <button className={`ws-toolbar-tab${notifTab === 'instant' ? ' ws-toolbar-tab--active' : ''}`} onClick={() => setNotifTab('instant')}>Instant alerts</button>
             </div>
-            {!pro&&(
+            {!pro && (
               <div className="ws-toolbar-right">
-                <span style={{fontSize:11,color:'var(--text-3)'}}>Pro required · </span>
-                <button className="ws-tile__action" style={{fontSize:11}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Pro required · </span>
+                <button className="ws-tile__action" style={{ fontSize: 11 }} onClick={() => onUpgrade('default')}>Upgrade →</button>
               </div>
             )}
           </div>
 
           {/* EMAIL DIGESTS */}
-          {notifTab==='digests'&&(
+          {notifTab === 'digests' && (
             <div className="ws-tile">
               <div className="ws-tile__hdr">
                 <div className="ws-tile__hdr-left">
                   <span className="ws-tile__title">Email digests</span>
-                  {!pro&&<span className="settings-pro-badge" style={{marginLeft:8,fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:999,background:'var(--accent-50)',color:'var(--accent)'}}>Pro</span>}
+                  {!pro && <span className="settings-pro-badge" style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: 'var(--accent-50)', color: 'var(--accent)' }}>Pro</span>}
                 </div>
               </div>
               <div className="ws-tile__body">
-                {!pro&&(
+                {!pro && (
                   <div className="ws-settings-upgrade-banner">
                     Scheduled digests are a Pro feature. Upgrade to get daily or weekly summaries delivered to your inbox.
-                    <button className="ws-tile__action" style={{marginLeft:10}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
+                    <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Upgrade →</button>
                   </div>
                 )}
 
                 {!local ? (
-                  <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+                  <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}><Spinner /></div>
                 ) : (<>
                   <div className="ws-settings-group">
                     <div className="ws-settings-group__label">Frequency</div>
-                    <SettingsToggle label="Daily digest" sub="Every weekday morning at 8am ET" checked={local.daily_digest} onChange={e=>upd('daily_digest',e.target.checked)} pro={pro}/>
-                    <SettingsToggle label="Weekly digest" sub="Every Monday morning at 8am ET" checked={local.weekly_digest} onChange={e=>upd('weekly_digest',e.target.checked)} pro={pro}/>
+                    <SettingsToggle label="Daily digest" sub="Every weekday morning at 8am ET" checked={local.daily_digest} onChange={e => upd('daily_digest', e.target.checked)} pro={pro} />
+                    <SettingsToggle label="Weekly digest" sub="Every Monday morning at 8am ET" checked={local.weekly_digest} onChange={e => upd('weekly_digest', e.target.checked)} pro={pro} />
                   </div>
 
-                  <div className={`ws-settings-group${((!local.daily_digest&&!local.weekly_digest)||!pro)?' ws-settings-group--dimmed':''}`}>
+                  <div className={`ws-settings-group${((!local.daily_digest && !local.weekly_digest) || !pro) ? ' ws-settings-group--dimmed' : ''}`}>
                     <div className="ws-settings-group__label">Include in digests</div>
-                    <SettingsToggle label="Top insider signals" sub="Highest-scoring buys from the selected window" checked={local.digest_top_signals} onChange={e=>upd('digest_top_signals',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
-                    <SettingsToggle label="Corporate trades (Form 4)" sub="C-suite and officer open-market transactions" checked={local.digest_corporate} onChange={e=>upd('digest_corporate',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
-                    <SettingsToggle label="Congressional trades (STOCK Act)" sub="Senator and representative disclosures" checked={local.digest_congressional} onChange={e=>upd('digest_congressional',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
-                    <SettingsToggle label="Watchlist activity only" sub="Limit digest to tickers and insiders you follow" checked={local.digest_watchlist_only} onChange={e=>upd('digest_watchlist_only',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
+                    <SettingsToggle label="Top insider signals" sub="Highest-scoring buys from the selected window" checked={local.digest_top_signals} onChange={e => upd('digest_top_signals', e.target.checked)} pro={pro} disabled={!local.daily_digest && !local.weekly_digest} />
+                    <SettingsToggle label="Corporate trades (Form 4)" sub="C-suite and officer open-market transactions" checked={local.digest_corporate} onChange={e => upd('digest_corporate', e.target.checked)} pro={pro} disabled={!local.daily_digest && !local.weekly_digest} />
+                    <SettingsToggle label="Congressional trades (STOCK Act)" sub="Senator and representative disclosures" checked={local.digest_congressional} onChange={e => upd('digest_congressional', e.target.checked)} pro={pro} disabled={!local.daily_digest && !local.weekly_digest} />
+                    <SettingsToggle label="Watchlist activity only" sub="Limit digest to tickers and insiders you follow" checked={local.digest_watchlist_only} onChange={e => upd('digest_watchlist_only', e.target.checked)} pro={pro} disabled={!local.daily_digest && !local.weekly_digest} />
                   </div>
 
-                  <div className={`ws-settings-group${((!local.daily_digest&&!local.weekly_digest)||!pro)?' ws-settings-group--dimmed':''}`}>
+                  <div className={`ws-settings-group${((!local.daily_digest && !local.weekly_digest) || !pro) ? ' ws-settings-group--dimmed' : ''}`}>
                     <div className="ws-settings-group__label">Filters</div>
                     <div className="ws-settings-row">
-                      <div style={{flex:1}}>
+                      <div style={{ flex: 1 }}>
                         <div className="ws-settings-row__label">Minimum conviction score</div>
                         <div className="ws-settings-row__sub">Only include signals at or above this score</div>
                       </div>
-                      <select className="ws-select" value={local.digest_min_conviction} disabled={!pro} onChange={e=>upd('digest_min_conviction',Number(e.target.value))}>
+                      <select className="ws-select" value={local.digest_min_conviction} disabled={!pro} onChange={e => upd('digest_min_conviction', Number(e.target.value))}>
                         <option value={0}>Any score</option>
                         <option value={5}>5+</option>
                         <option value={7}>7+</option>
@@ -9316,11 +9322,11 @@ function SettingsPage({ user, onUpgrade }) {
                       </select>
                     </div>
                     <div className="ws-settings-row">
-                      <div style={{flex:1}}>
+                      <div style={{ flex: 1 }}>
                         <div className="ws-settings-row__label">Minimum trade value</div>
                         <div className="ws-settings-row__sub">Skip tickers where no single trade reaches this size</div>
                       </div>
-                      <select className="ws-select" value={local.digest_min_value} disabled={!pro} onChange={e=>upd('digest_min_value',Number(e.target.value))}>
+                      <select className="ws-select" value={local.digest_min_value} disabled={!pro} onChange={e => upd('digest_min_value', Number(e.target.value))}>
                         <option value={0}>Any amount</option>
                         <option value={10000}>$10K+</option>
                         <option value={50000}>$50K+</option>
@@ -9331,14 +9337,14 @@ function SettingsPage({ user, onUpgrade }) {
                   </div>
 
                   <div className="ws-settings-save-row">
-                    <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
-                      {saving?'Saving…':saved?'✓ Saved':'Save digest settings'}
+                    <button className="btn btn--primary" onClick={() => save(local)} disabled={saving || !pro}>
+                      {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save digest settings'}
                     </button>
-                    {pro&&<button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>{testState==='sending'?'Sending…':'Send test email'}</button>}
-                    {saved&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Saved</span>}
-                    {testState==='sent'&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Test sent</span>}
-                    {testState&&testState!=='sending'&&testState!=='sent'&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{testState}</span>}
-                    {error&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{error}</span>}
+                    {pro && <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState === 'sending'}>{testState === 'sending' ? 'Sending…' : 'Send test email'}</button>}
+                    {saved && <span className="ws-settings-saved"><IconCheck style={{ width: 11, height: 11, marginRight: 3 }} />Saved</span>}
+                    {testState === 'sent' && <span className="ws-settings-saved"><IconCheck style={{ width: 11, height: 11, marginRight: 3 }} />Test sent</span>}
+                    {testState && testState !== 'sending' && testState !== 'sent' && <span className="ws-settings-saved" style={{ color: 'var(--red-600)' }}>{testState}</span>}
+                    {error && <span className="ws-settings-saved" style={{ color: 'var(--red-600)' }}>{error}</span>}
                   </div>
                 </>)}
               </div>
@@ -9346,35 +9352,35 @@ function SettingsPage({ user, onUpgrade }) {
           )}
 
           {/* INSTANT ALERTS */}
-          {notifTab==='instant'&&(
+          {notifTab === 'instant' && (
             <div className="ws-tile">
               <div className="ws-tile__hdr">
                 <div className="ws-tile__hdr-left">
                   <span className="ws-tile__title">Instant alerts</span>
-                  {!pro&&<span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:999,background:'var(--accent-50)',color:'var(--accent)',marginLeft:8}}>Pro</span>}
+                  {!pro && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: 'var(--accent-50)', color: 'var(--accent)', marginLeft: 8 }}>Pro</span>}
                 </div>
               </div>
               <div className="ws-tile__body">
-                {!pro&&(
+                {!pro && (
                   <div className="ws-settings-upgrade-banner">
                     Real-time email alerts are a Pro feature. Upgrade to get notified within minutes of a filing.
-                    <button className="ws-tile__action" style={{marginLeft:10}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
+                    <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Upgrade →</button>
                   </div>
                 )}
 
-                {!local?(
-                  <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
-                ):(<>
+                {!local ? (
+                  <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}><Spinner /></div>
+                ) : (<>
                   <div className="ws-settings-group">
                     <div className="ws-settings-group__label">Watchlist triggers</div>
-                    <SettingsToggle label="Watched ticker traded" sub="Any insider trades a stock on your watchlist" checked={local.instant_watchlist_ticker} onChange={e=>upd('instant_watchlist_ticker',e.target.checked)} pro={pro}/>
-                    <SettingsToggle label="Followed insider filed" sub="Someone you follow submits a new Form 4" checked={local.instant_followed_insider} onChange={e=>upd('instant_followed_insider',e.target.checked)} pro={pro}/>
+                    <SettingsToggle label="Watched ticker traded" sub="Any insider trades a stock on your watchlist" checked={local.instant_watchlist_ticker} onChange={e => upd('instant_watchlist_ticker', e.target.checked)} pro={pro} />
+                    <SettingsToggle label="Followed insider filed" sub="Someone you follow submits a new Form 4" checked={local.instant_followed_insider} onChange={e => upd('instant_followed_insider', e.target.checked)} pro={pro} />
                     <div className="ws-settings-row">
-                      <div style={{flex:1}}>
+                      <div style={{ flex: 1 }}>
                         <div className="ws-settings-row__label">Minimum trade value</div>
                         <div className="ws-settings-row__sub">Applies to both watchlist triggers above</div>
                       </div>
-                      <select className="ws-select" value={local.instant_min_value} disabled={!pro} onChange={e=>upd('instant_min_value',Number(e.target.value))}>
+                      <select className="ws-select" value={local.instant_min_value} disabled={!pro} onChange={e => upd('instant_min_value', Number(e.target.value))}>
                         <option value={0}>Any amount</option>
                         <option value={10000}>$10K+</option>
                         <option value={50000}>$50K+</option>
@@ -9385,13 +9391,13 @@ function SettingsPage({ user, onUpgrade }) {
 
                   <div className="ws-settings-group">
                     <div className="ws-settings-group__label">Signal triggers</div>
-                    <SettingsToggle label="Large executive buy" sub="C-suite open-market buy at or above the threshold below" checked={local.instant_high_conviction} onChange={e=>upd('instant_high_conviction',e.target.checked)} pro={pro}/>
+                    <SettingsToggle label="Large executive buy" sub="C-suite open-market buy at or above the threshold below" checked={local.instant_high_conviction} onChange={e => upd('instant_high_conviction', e.target.checked)} pro={pro} />
                     <div className="ws-settings-row">
-                      <div style={{flex:1}}>
+                      <div style={{ flex: 1 }}>
                         <div className="ws-settings-row__label">Minimum trade size</div>
                         <div className="ws-settings-row__sub">Single-trade size required to trigger this alert</div>
                       </div>
-                      <select className="ws-select" value={local.instant_high_conviction_threshold} disabled={!pro} onChange={e=>upd('instant_high_conviction_threshold',Number(e.target.value))}>
+                      <select className="ws-select" value={local.instant_high_conviction_threshold} disabled={!pro} onChange={e => upd('instant_high_conviction_threshold', Number(e.target.value))}>
                         <option value={250000}>$250K+</option>
                         <option value={500000}>$500K+</option>
                         <option value={1000000}>$1M+</option>
@@ -9399,18 +9405,18 @@ function SettingsPage({ user, onUpgrade }) {
                         <option value={5000000}>$5M+</option>
                       </select>
                     </div>
-                    <SettingsToggle label="Reversal detected" sub="An insider on a watched ticker changes direction" checked={local.instant_reversal} onChange={e=>upd('instant_reversal',e.target.checked)} pro={pro}/>
+                    <SettingsToggle label="Reversal detected" sub="An insider on a watched ticker changes direction" checked={local.instant_reversal} onChange={e => upd('instant_reversal', e.target.checked)} pro={pro} />
                   </div>
 
                   <div className="ws-settings-save-row">
-                    <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
-                      {saving?'Saving…':saved?'✓ Saved':'Save alert settings'}
+                    <button className="btn btn--primary" onClick={() => save(local)} disabled={saving || !pro}>
+                      {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save alert settings'}
                     </button>
-                    {pro&&<button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>{testState==='sending'?'Sending…':'Send test email'}</button>}
-                    {saved&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Saved</span>}
-                    {testState==='sent'&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Test sent</span>}
-                    {testState&&testState!=='sending'&&testState!=='sent'&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{testState}</span>}
-                    {error&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{error}</span>}
+                    {pro && <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState === 'sending'}>{testState === 'sending' ? 'Sending…' : 'Send test email'}</button>}
+                    {saved && <span className="ws-settings-saved"><IconCheck style={{ width: 11, height: 11, marginRight: 3 }} />Saved</span>}
+                    {testState === 'sent' && <span className="ws-settings-saved"><IconCheck style={{ width: 11, height: 11, marginRight: 3 }} />Test sent</span>}
+                    {testState && testState !== 'sending' && testState !== 'sent' && <span className="ws-settings-saved" style={{ color: 'var(--red-600)' }}>{testState}</span>}
+                    {error && <span className="ws-settings-saved" style={{ color: 'var(--red-600)' }}>{error}</span>}
                   </div>
                 </>)}
               </div>
@@ -9419,53 +9425,53 @@ function SettingsPage({ user, onUpgrade }) {
         </>)}
 
         {/* LINK PORTFOLIO */}
-        {section==='brokers'&&(
+        {section === 'brokers' && (
           <div className="ws-tile">
             <div className="ws-tile__hdr">
               <div className="ws-tile__hdr-left">
                 <span className="ws-tile__title">Link Portfolio</span>
-                {!pro&&<span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:999,background:'var(--accent-50)',color:'var(--accent)',marginLeft:8}}>Pro</span>}
+                {!pro && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: 'var(--accent-50)', color: 'var(--accent)', marginLeft: 8 }}>Pro</span>}
               </div>
             </div>
             <div className="ws-tile__body">
-              {!pro&&(
+              {!pro && (
                 <div className="ws-settings-upgrade-banner">
                   Portfolio linking is a Pro feature. Connect your brokerage to see insider activity on your holdings.
-                  <button className="ws-tile__action" style={{marginLeft:10}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
+                  <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Upgrade →</button>
                 </div>
               )}
 
-              {pro&&(<>
-                {snaptrade.status===null?(
+              {pro && (<>
+                {snaptrade.status === null ? (
                   <div className="ws-settings-broker-card"><span className="td-muted">Checking connection status…</span></div>
-                ):!snaptrade.status.connection?(
+                ) : !snaptrade.status.connection ? (
                   <div className="ws-settings-broker-card">
                     <div className="ws-settings-broker-card__left">
                       <div className="ws-settings-broker-card__name">No brokerage connected</div>
                       <div className="ws-settings-broker-card__sub">Fidelity, Alpaca, and 400M+ other accounts supported via SnapTrade</div>
                     </div>
                     <button className="btn btn--primary btn--sm" onClick={snaptrade.connect} disabled={snaptrade.connecting}>
-                      {snaptrade.connecting?'Redirecting…':'Connect brokerage'}
+                      {snaptrade.connecting ? 'Redirecting…' : 'Connect brokerage'}
                     </button>
                   </div>
-                ):(
+                ) : (
                   <div className="ws-settings-broker-card ws-settings-broker-card--connected">
                     <div className="ws-settings-broker-card__left">
-                      <div className="ws-settings-broker-card__name">{snaptrade.status.connection.broker||'Brokerage connected'}</div>
+                      <div className="ws-settings-broker-card__name">{snaptrade.status.connection.broker || 'Brokerage connected'}</div>
                       <div className="ws-settings-broker-card__sub">
-                        Read-only · Connected {new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})}
+                        Read-only · Connected {new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
                       </div>
                     </div>
-                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span className="settings-broker-status settings-broker-status--connected">● Connected</span>
                       <button className="btn btn--ghost btn--sm" onClick={snaptrade.disconnect}>Disconnect</button>
                     </div>
                   </div>
                 )}
-                {snaptrade.error&&<p style={{color:'var(--red-600)',fontSize:12,marginTop:10}}>{snaptrade.error}</p>}
+                {snaptrade.error && <p style={{ color: 'var(--red-600)', fontSize: 12, marginTop: 10 }}>{snaptrade.error}</p>}
               </>)}
 
-              <p style={{fontSize:12,color:'var(--text-3)',marginTop:14,lineHeight:1.6}}>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 14, lineHeight: 1.6 }}>
                 Connections are read-only — positions and balances only, no trading access. Your login credentials go directly to your brokerage, never to Seli.
                 Fidelity and Alpaca live-account access is pending broker approval — testing via Alpaca Paper (no real account needed).
               </p>
@@ -9476,7 +9482,7 @@ function SettingsPage({ user, onUpgrade }) {
       </div>
 
       {/* Legal links */}
-      <div className="ws-footer" style={{marginTop:24,border:'none',paddingTop:0}}>
+      <div className="ws-footer" style={{ marginTop: 24, border: 'none', paddingTop: 0 }}>
         <a href="/help" target="_blank" rel="noreferrer">Help</a>
         <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
         <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
@@ -9500,22 +9506,22 @@ function SettingsPage({ user, onUpgrade }) {
 // not just marketing copy.
 // Illustrative sample data for the landing page marquee — not live data.
 const MARQUEE_TICKERS = [
-  { symbol:'NVDA', buy:true,  delta:'12.4%' },
-  { symbol:'AAPL', buy:true,  delta:'3.1%'  },
-  { symbol:'TSLA', buy:false, delta:'8.7%'  },
-  { symbol:'MSFT', buy:true,  delta:'2.9%'  },
-  { symbol:'META', buy:true,  delta:'5.6%'  },
-  { symbol:'JPM',  buy:false, delta:'1.8%'  },
-  { symbol:'AMZN', buy:true,  delta:'4.2%'  },
-  { symbol:'GOOGL',buy:true,  delta:'6.3%'  },
-  { symbol:'AVGO', buy:true,  delta:'7.1%'  },
-  { symbol:'XOM',  buy:false, delta:'2.4%'  },
-  { symbol:'UNH',  buy:true,  delta:'3.8%'  },
-  { symbol:'V',    buy:false, delta:'1.2%'  },
-  { symbol:'CRM',  buy:true,  delta:'5.9%'  },
-  { symbol:'DIS',  buy:false, delta:'2.7%'  },
-  { symbol:'ADBE', buy:true,  delta:'4.5%'  },
-  { symbol:'PFE',  buy:false, delta:'1.6%'  },
+  { symbol: 'NVDA', buy: true, delta: '12.4%' },
+  { symbol: 'AAPL', buy: true, delta: '3.1%' },
+  { symbol: 'TSLA', buy: false, delta: '8.7%' },
+  { symbol: 'MSFT', buy: true, delta: '2.9%' },
+  { symbol: 'META', buy: true, delta: '5.6%' },
+  { symbol: 'JPM', buy: false, delta: '1.8%' },
+  { symbol: 'AMZN', buy: true, delta: '4.2%' },
+  { symbol: 'GOOGL', buy: true, delta: '6.3%' },
+  { symbol: 'AVGO', buy: true, delta: '7.1%' },
+  { symbol: 'XOM', buy: false, delta: '2.4%' },
+  { symbol: 'UNH', buy: true, delta: '3.8%' },
+  { symbol: 'V', buy: false, delta: '1.2%' },
+  { symbol: 'CRM', buy: true, delta: '5.9%' },
+  { symbol: 'DIS', buy: false, delta: '2.7%' },
+  { symbol: 'ADBE', buy: true, delta: '4.5%' },
+  { symbol: 'PFE', buy: false, delta: '1.6%' },
 ];
 
 function InfoTrustPage({ onBack, onEnter }) {
@@ -9542,25 +9548,25 @@ function InfoTrustPage({ onBack, onEnter }) {
           </p>
           <div className="lp-findings-grid">
             <div className="lp-finding-card reveal reveal--delay-0">
-              <div className="lp-finding-card__icon"><IconInsights style={{width:18,height:18}}/></div>
+              <div className="lp-finding-card__icon"><IconInsights style={{ width: 18, height: 18 }} /></div>
               <div className="lp-finding-card__title">Buying beats selling as a signal</div>
               <div className="lp-finding-card__body">Insiders face real legal exposure for selling on non-public information. That risk doesn't apply the same way to buying, which is why purchases carry more predictive weight than sales.</div>
               <div className="lp-finding-card__cite">Seyhun, 1980s–90s</div>
             </div>
             <div className="lp-finding-card reveal reveal--delay-1">
-              <div className="lp-finding-card__icon"><IconFavorites style={{width:18,height:18}}/></div>
+              <div className="lp-finding-card__icon"><IconFavorites style={{ width: 18, height: 18 }} /></div>
               <div className="lp-finding-card__title">Clusters matter more than one trade</div>
               <div className="lp-finding-card__body">Several insiders buying independently around the same time is a stronger signal than one person acting alone. Seli's scoring is built around this directly.</div>
               <div className="lp-finding-card__cite">Lakonishok &amp; Lee, 2001</div>
             </div>
             <div className="lp-finding-card reveal reveal--delay-2">
-              <div className="lp-finding-card__icon"><IconZap style={{width:18,height:18}}/></div>
+              <div className="lp-finding-card__icon"><IconZap style={{ width: 18, height: 18 }} /></div>
               <div className="lp-finding-card__title">Timing separates signal from noise</div>
               <div className="lp-finding-card__body">Routine, calendar-driven insider trades carry little predictive value. Opportunistic, irregularly timed ones carry almost all of it.</div>
               <div className="lp-finding-card__cite">Cohen, Malloy &amp; Pomorski, 2012</div>
             </div>
             <div className="lp-finding-card reveal reveal--delay-3">
-              <div className="lp-finding-card__icon"><IconData style={{width:18,height:18}}/></div>
+              <div className="lp-finding-card__icon"><IconData style={{ width: 18, height: 18 }} /></div>
               <div className="lp-finding-card__title">The rules keep changing, and matter</div>
               <div className="lp-finding-card__body">A 2023 SEC rule change to pre-scheduled 10b5-1 trading plans measurably shifted how insiders structure their disclosed sales. This is an active area of research.</div>
               <div className="lp-finding-card__cite">Avci, Schipani, Seyhun &amp; Verstein, 2025</div>
@@ -9580,18 +9586,18 @@ function InfoTrustPage({ onBack, onEnter }) {
           <h2>How Seli gets and scores the data</h2>
           <div className="lp-pipeline">
             {[
-              { label:'SEC EDGAR + Congress', desc:'Form 4 filings and STOCK Act disclosures, straight from the source.' },
-              { label:'Ingested & parsed', desc:'New filings pulled and structured automatically, typically within minutes of publication.' },
-              { label:'Scored', desc:'Weighted by who is trading, how much relative to what they hold, and whether others are too.' },
-              { label:'Surfaced', desc:'Ranked and shown as a signal, with the raw filing always accessible alongside it.' },
-            ].map((step,i,arr)=>(
+              { label: 'SEC EDGAR + Congress', desc: 'Form 4 filings and STOCK Act disclosures, straight from the source.' },
+              { label: 'Ingested & parsed', desc: 'New filings pulled and structured automatically, typically within minutes of publication.' },
+              { label: 'Scored', desc: 'Weighted by who is trading, how much relative to what they hold, and whether others are too.' },
+              { label: 'Surfaced', desc: 'Ranked and shown as a signal, with the raw filing always accessible alongside it.' },
+            ].map((step, i, arr) => (
               <React.Fragment key={i}>
                 <div className="lp-pipeline__step">
-                  <div className="lp-pipeline__num">{i+1}</div>
+                  <div className="lp-pipeline__num">{i + 1}</div>
                   <div className="lp-pipeline__label">{step.label}</div>
                   <div className="lp-pipeline__desc">{step.desc}</div>
                 </div>
-                {i<arr.length-1 && <div className="lp-pipeline__arrow">→</div>}
+                {i < arr.length - 1 && <div className="lp-pipeline__arrow">→</div>}
               </React.Fragment>
             ))}
           </div>
@@ -9629,14 +9635,14 @@ function InfoTrustPage({ onBack, onEnter }) {
           <h2>Historical analysis</h2>
           <div className="lp-timeline">
             {[
-              { year:'1934', label:'Securities Exchange Act', desc:'Establishes the requirement that corporate insiders disclose their own trades to the public.' },
-              { year:'2002', label:'Sarbanes-Oxley Act', desc:'Shortens the filing deadline from 10 days down to 2 business days, the modern Form 4 window.' },
-              { year:'2012', label:'STOCK Act', desc:'Extends mandatory trade disclosure to members of Congress.' },
-              { year:'Today', label:'Seli', desc:'Ingests every new filing, corporate and congressional, within minutes of publication.' },
-            ].map((t,i)=>(
+              { year: '1934', label: 'Securities Exchange Act', desc: 'Establishes the requirement that corporate insiders disclose their own trades to the public.' },
+              { year: '2002', label: 'Sarbanes-Oxley Act', desc: 'Shortens the filing deadline from 10 days down to 2 business days, the modern Form 4 window.' },
+              { year: '2012', label: 'STOCK Act', desc: 'Extends mandatory trade disclosure to members of Congress.' },
+              { year: 'Today', label: 'Seli', desc: 'Ingests every new filing, corporate and congressional, within minutes of publication.' },
+            ].map((t, i) => (
               <div key={i} className="lp-timeline__item">
                 <div className="lp-timeline__year">{t.year}</div>
-                <div className="lp-timeline__dot"/>
+                <div className="lp-timeline__dot" />
                 <div className="lp-timeline__label">{t.label}</div>
                 <div className="lp-timeline__desc">{t.desc}</div>
               </div>
@@ -9722,25 +9728,25 @@ function LPFeatureMock({ type }) {
         </div>
         <div className="port-mini-tile__chart">
           <svg viewBox="0 0 240 70" width="100%" height="70" preserveAspectRatio="none" aria-hidden="true">
-            <line x1="0" y1="12" x2="240" y2="12" stroke="var(--border)" strokeWidth="0.5"/>
-            <line x1="0" y1="35" x2="240" y2="35" stroke="var(--border)" strokeWidth="0.5"/>
-            <line x1="0" y1="58" x2="240" y2="58" stroke="var(--border)" strokeWidth="0.5"/>
-            <path d="M0,50 L30,46 L60,48 L90,38 L120,40 L150,26 L180,28 L210,12 L240,8" fill="none" stroke="var(--green-600)" strokeWidth="2"/>
+            <line x1="0" y1="12" x2="240" y2="12" stroke="var(--border)" strokeWidth="0.5" />
+            <line x1="0" y1="35" x2="240" y2="35" stroke="var(--border)" strokeWidth="0.5" />
+            <line x1="0" y1="58" x2="240" y2="58" stroke="var(--border)" strokeWidth="0.5" />
+            <path d="M0,50 L30,46 L60,48 L90,38 L120,40 L150,26 L180,28 L210,12 L240,8" fill="none" stroke="var(--green-600)" strokeWidth="2" />
           </svg>
         </div>
         <div className="port-mini-tile__list">
           {[
-            {t:'NVDA',  v:'$18,204', pnl:'+6.2%', sig:true},
-            {t:'AAPL',  v:'$9,880',  pnl:'+2.1%', sig:false},
-            {t:'MSFT',  v:'$6,340',  pnl:'+3.7%', sig:true},
-            {t:'TSLA',  v:'$4,110',  pnl:'-3.4%', sig:true},
-            {t:'GOOGL', v:'$2,660',  pnl:'+1.4%', sig:false},
+            { t: 'NVDA', v: '$18,204', pnl: '+6.2%', sig: true },
+            { t: 'AAPL', v: '$9,880', pnl: '+2.1%', sig: false },
+            { t: 'MSFT', v: '$6,340', pnl: '+3.7%', sig: true },
+            { t: 'TSLA', v: '$4,110', pnl: '-3.4%', sig: true },
+            { t: 'GOOGL', v: '$2,660', pnl: '+1.4%', sig: false },
           ].map(r => (
             <div key={r.t} className="port-mini-row">
-              <span className="ticker" style={{fontSize:'0.75rem',minWidth:50}}>{r.t}</span>
-              {r.sig && <span className="ins-port-chip__signal-badge" style={{fontSize:'0.5rem'}}>activity</span>}
-              <span className="td-muted" style={{fontSize:'0.625rem',flex:1,textAlign:'right'}}>{r.v}</span>
-              <span className={parseFloat(r.pnl)>=0?'val-buy':'val-sell'} style={{fontSize:'0.625rem',fontFamily:'var(--font-mono)',minWidth:50,textAlign:'right'}}>{r.pnl}</span>
+              <span className="ticker" style={{ fontSize: '0.75rem', minWidth: 50 }}>{r.t}</span>
+              {r.sig && <span className="ins-port-chip__signal-badge" style={{ fontSize: '0.5rem' }}>activity</span>}
+              <span className="td-muted" style={{ fontSize: '0.625rem', flex: 1, textAlign: 'right' }}>{r.v}</span>
+              <span className={parseFloat(r.pnl) >= 0 ? 'val-buy' : 'val-sell'} style={{ fontSize: '0.625rem', fontFamily: 'var(--font-mono)', minWidth: 50, textAlign: 'right' }}>{r.pnl}</span>
             </div>
           ))}
         </div>
@@ -9753,7 +9759,7 @@ function LPFeatureMock({ type }) {
         <span className="dash-tile__title">Alerts</span>
         <span className="dash-tile__sub">Instant</span>
       </div>
-      <div className="dash-tile__body" style={{padding:0}}>
+      <div className="dash-tile__body" style={{ padding: 0 }}>
         {/* Reproduces send_instant_alerts.py's build_email() output — same
             gradient header, colors (C_ACCENT/C_ACCENT_STR/C_AQUA/C_GREEN/
             C_RED etc.), and row layout, as fixed hex values rather than the
@@ -9769,25 +9775,25 @@ function LPFeatureMock({ type }) {
             <p className="lp-mock-alert-email__intro">3 of your instant alerts were triggered:</p>
             <table className="lp-mock-alert-email__table"><tbody>
               {[
-                {t:'NVDA', co:'NVIDIA Corp',    reason:'Watched ticker traded',  who:'Jensen Huang',   date:'Jul 22, 2026', action:'Buy',  detail:'12,000 sh @ $118.42', val:'$1.42M',    buy:true},
-                {t:'TSLA', co:'Tesla Inc',      reason:'Large executive sale',   who:'Elon Musk',       date:'Jul 21, 2026', action:'Sell', detail:'610 sh @ $248.55',    val:'$151,616',  buy:false},
-                {t:'MSFT', co:'Microsoft Corp', reason:'Followed insider filed', who:'Satya Nadella',   date:'Jul 21, 2026', action:'Buy',  detail:'340 sh @ $421.10',    val:'$143,174',  buy:true},
+                { t: 'NVDA', co: 'NVIDIA Corp', reason: 'Watched ticker traded', who: 'Jensen Huang', date: 'Jul 22, 2026', action: 'Buy', detail: '12,000 sh @ $118.42', val: '$1.42M', buy: true },
+                { t: 'TSLA', co: 'Tesla Inc', reason: 'Large executive sale', who: 'Elon Musk', date: 'Jul 21, 2026', action: 'Sell', detail: '610 sh @ $248.55', val: '$151,616', buy: false },
+                { t: 'MSFT', co: 'Microsoft Corp', reason: 'Followed insider filed', who: 'Satya Nadella', date: 'Jul 21, 2026', action: 'Buy', detail: '340 sh @ $421.10', val: '$143,174', buy: true },
               ].map(r => (
                 <tr key={r.t}>
                   <td>
-                    <span className="lp-mock-alert-email__ticker">{r.t}</span><br/>
+                    <span className="lp-mock-alert-email__ticker">{r.t}</span><br />
                     <span className="lp-mock-alert-email__muted">{r.co}</span>
                   </td>
                   <td className="lp-mock-alert-email__muted">{r.reason}</td>
                   <td>
-                    <span className="lp-mock-alert-email__muted">{r.who}</span><br/>
+                    <span className="lp-mock-alert-email__muted">{r.who}</span><br />
                     <span className="lp-mock-alert-email__faint">{r.date}</span>
                   </td>
                   <td>
-                    <span className={r.buy?'lp-mock-alert-email__buy':'lp-mock-alert-email__sell'}>{r.action}</span><br/>
+                    <span className={r.buy ? 'lp-mock-alert-email__buy' : 'lp-mock-alert-email__sell'}>{r.action}</span><br />
                     <span className="lp-mock-alert-email__muted">{r.detail}</span>
                   </td>
-                  <td className={`lp-mock-alert-email__val ${r.buy?'lp-mock-alert-email__buy':'lp-mock-alert-email__sell'}`}>{r.val}</td>
+                  <td className={`lp-mock-alert-email__val ${r.buy ? 'lp-mock-alert-email__buy' : 'lp-mock-alert-email__sell'}`}>{r.val}</td>
                 </tr>
               ))}
             </tbody></table>
@@ -9803,8 +9809,8 @@ function LPFeatureMock({ type }) {
         <span className="dash-tile__title">Data</span>
         <span className="dash-tile__sub">Filings</span>
       </div>
-      <div className="dash-tile__body" style={{padding:0}}>
-        <div className="table-wrap" style={{border:'none',borderRadius:0,boxShadow:'none'}}>
+      <div className="dash-tile__body" style={{ padding: 0 }}>
+        <div className="table-wrap" style={{ border: 'none', borderRadius: 0, boxShadow: 'none' }}>
           <table>
             <thead><tr>
               <th>Date</th><th>Ticker</th><th>Type</th>
@@ -9812,25 +9818,25 @@ function LPFeatureMock({ type }) {
             </tr></thead>
             <tbody>
               {[
-                {d:'Jul 22', t:'NVDA', tt:'buy',  sh:'1,200', px:'$118.42', val:'$142,104'},
-                {d:'Jul 21', t:'MSFT', tt:'buy',  sh:'340',   px:'$421.10', val:'$143,174'},
-                {d:'Jul 21', t:'TSLA', tt:'sell', sh:'610',   px:'$248.55', val:'$151,616'},
-                {d:'Jul 19', t:'ADSK', tt:'buy',  sh:'95',    px:'$289.77', val:'$27,528'},
-                {d:'Jul 18', t:'AAPL', tt:'sell', sh:'32,528',px:'$250.12', val:'$8.1M'},
-                {d:'Jul 18', t:'JPM',  tt:'buy',  sh:'2,400', px:'$267.30', val:'$641,520'},
-                {d:'Jul 17', t:'GOOGL',tt:'buy',  sh:'780',   px:'$192.45', val:'$150,111'},
-              ].map((r,i) => (
+                { d: 'Jul 22', t: 'NVDA', tt: 'buy', sh: '1,200', px: '$118.42', val: '$142,104' },
+                { d: 'Jul 21', t: 'MSFT', tt: 'buy', sh: '340', px: '$421.10', val: '$143,174' },
+                { d: 'Jul 21', t: 'TSLA', tt: 'sell', sh: '610', px: '$248.55', val: '$151,616' },
+                { d: 'Jul 19', t: 'ADSK', tt: 'buy', sh: '95', px: '$289.77', val: '$27,528' },
+                { d: 'Jul 18', t: 'AAPL', tt: 'sell', sh: '32,528', px: '$250.12', val: '$8.1M' },
+                { d: 'Jul 18', t: 'JPM', tt: 'buy', sh: '2,400', px: '$267.30', val: '$641,520' },
+                { d: 'Jul 17', t: 'GOOGL', tt: 'buy', sh: '780', px: '$192.45', val: '$150,111' },
+              ].map((r, i) => (
                 <tr key={i} className={`row-${r.tt}`}>
                   <td className="td-date"><span className="td-date-main">{r.d}</span></td>
                   <td><span className="ticker">{r.t}</span></td>
                   <td>
                     <Badge type={r.tt}>
-                      {r.tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>}
+                      {r.tt === 'buy' ? <><IconBuyTri style={{ width: 8, height: 8, marginRight: 3 }} />Buy</> : <><IconSellTri style={{ width: 8, height: 8, marginRight: 3 }} />Sell</>}
                     </Badge>
                   </td>
                   <td className="td-right td-mono td-secondary">{r.sh}</td>
                   <td className="td-right td-mono td-secondary">{r.px}</td>
-                  <td className="td-right td-mono"><span className={r.tt==='buy'?'val-buy':'val-sell'}>{r.val}</span></td>
+                  <td className="td-right td-mono"><span className={r.tt === 'buy' ? 'val-buy' : 'val-sell'}>{r.val}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -9845,27 +9851,27 @@ function LPFeatureMock({ type }) {
         <span className="dash-tile__title">Top insiders</span>
         <span className="dash-tile__sub">All-time</span>
       </div>
-      <div className="dash-tile__body" style={{padding:0}}>
+      <div className="dash-tile__body" style={{ padding: 0 }}>
         <div className="ins-lb-list">
           {[
-            {n:'A.L. Sarroff Fund', title:'10% Owner',    rel:'weak',   buys:'48 buys', val:'$4.2M', rate:94, score:4.8},
-            {n:'Jason T. Adelman',  title:'Chief Exec.',  rel:'strong', buys:'3 buys',  val:'$820K', rate:87, score:4.2},
-            {n:'325 Capital LLC',   title:'10% Owner',    rel:'weak',   buys:'2 buys',  val:'$610K', rate:71, score:3.6},
-            {n:'AC Nordic ApS',     title:'Director',     rel:'medium', buys:'6 buys',  val:'$390K', rate:52, score:2.1},
-          ].map((r,i) => (
+            { n: 'A.L. Sarroff Fund', title: '10% Owner', rel: 'weak', buys: '48 buys', val: '$4.2M', rate: 94, score: 4.8 },
+            { n: 'Jason T. Adelman', title: 'Chief Exec.', rel: 'strong', buys: '3 buys', val: '$820K', rate: 87, score: 4.2 },
+            { n: '325 Capital LLC', title: '10% Owner', rel: 'weak', buys: '2 buys', val: '$610K', rate: 71, score: 3.6 },
+            { n: 'AC Nordic ApS', title: 'Director', rel: 'medium', buys: '6 buys', val: '$390K', rate: 52, score: 2.1 },
+          ].map((r, i) => (
             <div key={r.n} className="ins-lb-card">
-              <div className="ins-lb-card__rank">{i+1}</div>
+              <div className="ins-lb-card__rank">{i + 1}</div>
               <div className="ins-lb-card__body">
                 <div className="ins-lb-card__name">{r.n}</div>
-                <div className="td-muted" style={{fontSize:'0.6875rem'}}>{r.title}</div>
+                <div className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.title}</div>
                 <div className="ins-lb-card__meta">
-                  <Badge type={`rel-${r.rel}`}>{r.rel==='strong'?'Exec':r.rel==='medium'?'Officer':'Dir'}</Badge>
-                  <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.buys} · {r.val}</span>
+                  <Badge type={`rel-${r.rel}`}>{r.rel === 'strong' ? 'Exec' : r.rel === 'medium' ? 'Officer' : 'Dir'}</Badge>
+                  <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.buys} · {r.val}</span>
                 </div>
               </div>
               <div className="ins-lb-card__score">
-                <div className={`ins-lb-card__rate ${r.rate>=70?'val-buy':r.rate>=50?'':'val-sell'}`}>{r.rate}%</div>
-                <ConvictionBar score={r.score} max={4}/>
+                <div className={`ins-lb-card__rate ${r.rate >= 70 ? 'val-buy' : r.rate >= 50 ? '' : 'val-sell'}`}>{r.rate}%</div>
+                <ConvictionBar score={r.score} max={4} />
               </div>
             </div>
           ))}
@@ -9898,7 +9904,7 @@ function LandingPage({ onEnter, dark, setDark }) {
           if (y && y > 2000 && y <= new Date().getFullYear()) setDataSinceYear(y);
         }
       })
-      .catch(() => {}); // keep the 2018 fallback silently — this is a single word on a marketing page, not worth surfacing an error for
+      .catch(() => { }); // keep the 2018 fallback silently — this is a single word on a marketing page, not worth surfacing an error for
   }, []);
 
   // "What's Inside" content — four concrete things the product does, not
@@ -9939,8 +9945,8 @@ function LandingPage({ onEnter, dark, setDark }) {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
-  function goToAbout(e) { e.preventDefault(); navigateTo('/about'); setView('about'); window.scrollTo(0,0); }
-  function goHome(e) { if (e) e.preventDefault(); navigateTo('/'); setView('home'); window.scrollTo(0,0); }
+  function goToAbout(e) { e.preventDefault(); navigateTo('/about'); setView('about'); window.scrollTo(0, 0); }
+  function goHome(e) { if (e) e.preventDefault(); navigateTo('/'); setView('home'); window.scrollTo(0, 0); }
   // Section links (Features/Pricing) need to work from the About view too —
   // a plain anchor tag does nothing there, since those sections don't exist
   // in the DOM while view==='about'. Navigate home first, then scroll once
@@ -9949,9 +9955,9 @@ function LandingPage({ onEnter, dark, setDark }) {
     e.preventDefault();
     if (view === 'about') {
       navigateTo('/'); setView('home');
-      setTimeout(() => document.querySelector(hash)?.scrollIntoView({behavior:'smooth'}), 60);
+      setTimeout(() => document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' }), 60);
     } else {
-      document.querySelector(hash)?.scrollIntoView({behavior:'smooth'});
+      document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' });
     }
   }
 
@@ -9960,330 +9966,330 @@ function LandingPage({ onEnter, dark, setDark }) {
   // and /about are conditionally rendered, so switching between them
   // unmounts and remounts a whole tree of .reveal elements that need to be
   // freshly observed each time, not just the ones present at first load.
-  useEffect(()=>{
-    const obs = new IntersectionObserver((entries)=>{
-      entries.forEach(e=>{
-        if(e.isIntersecting) { e.target.classList.add('reveal--visible'); obs.unobserve(e.target); }
+  useEffect(() => {
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('reveal--visible'); obs.unobserve(e.target); }
       });
-    },{ threshold:0.12, rootMargin:'0px 0px -40px 0px' });
-    document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
-    return ()=>obs.disconnect();
-  },[view]);
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+    return () => obs.disconnect();
+  }, [view]);
 
   return (
-    <div className="lp" data-theme={dark?'dark':'light'}>
+    <div className="lp" data-theme={dark ? 'dark' : 'light'}>
 
       {/* Nav */}
       <nav className="lp-nav">
         <div className="lp-nav__frame">
-        <a href="/" onClick={goHome} className="lp-nav__logo">
-          <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-        </a>
-        <div className="lp-nav__links">
-          <a href="#features" onClick={(e)=>goToSection(e,'#features')} className="lp-nav__link">Features</a>
-          <a href="#pricing"  onClick={(e)=>goToSection(e,'#pricing')} className="lp-nav__link">Pricing</a>
-          <a href="/about" onClick={goToAbout} className="lp-nav__link">About</a>
-        </div>
-        <div className="lp-nav__actions">
-          <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={()=>setDark(d=>!d)} title="Toggle theme">
-            {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
-          </button>
-          <SignedOut>
-            <SignInButton mode="modal">
-              <button className="lp-btn-primary">Open Seli →</button>
-            </SignInButton>
-          </SignedOut>
-          <SignedIn>
-            <button className="lp-btn-primary" onClick={onEnter}>Open Seli →</button>
-          </SignedIn>
-        </div>
+          <a href="/" onClick={goHome} className="lp-nav__logo">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+          </a>
+          <div className="lp-nav__links">
+            <a href="#features" onClick={(e) => goToSection(e, '#features')} className="lp-nav__link">Features</a>
+            <a href="#pricing" onClick={(e) => goToSection(e, '#pricing')} className="lp-nav__link">Pricing</a>
+            <a href="/about" onClick={goToAbout} className="lp-nav__link">About</a>
+          </div>
+          <div className="lp-nav__actions">
+            <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={() => setDark(d => !d)} title="Toggle theme">
+              {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
+            </button>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="lp-btn-primary">Open Seli →</button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <button className="lp-btn-primary" onClick={onEnter}>Open Seli →</button>
+            </SignedIn>
+          </div>
         </div>
       </nav>
 
-      {view==='about' ? (
-        <InfoTrustPage onBack={goHome} onEnter={onEnter}/>
+      {view === 'about' ? (
+        <InfoTrustPage onBack={goHome} onEnter={onEnter} />
       ) : (<>
-      {/* Hero */}
-      <section className="lp-hero">
-        <div className="lp-hero-bg" aria-hidden="true"/>
-        <p className="lp-hero__eyebrow reveal reveal--delay-1">SEC Insider Trading & Congressional Stock Tracker</p>
-        <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          See what insiders are buying<br/>
-          <span className="lp-hero__h1-accent">before the market reacts.</span>
-        </h1>
-        <p className="lp-hero__sub reveal reveal--delay-2">
-          CEOs, directors, and members of Congress are legally required to disclose their stock trades.
-          Seli watches every SEC Form 4 filing and STOCK Act disclosure, scores each trade by conviction,
-          and alerts you within minutes — not hours.
-        </p>
-        <div className="lp-hero__cta reveal reveal--delay-3">
-          <SignedOut>
-            <SignInButton mode="modal">
-              <button className="lp-btn-primary lp-btn-primary--lg">Explore Seli →</button>
-            </SignInButton>
-          </SignedOut>
-          <SignedIn>
-            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Explore Seli →</button>
-          </SignedIn>
-        </div>
-        <p className="lp-hero__trust reveal reveal--delay-3">SEC Form 4 filings · STOCK Act disclosures · Real-time alerts · Free to start</p>
-
-        {/* Product preview strip */}
-        <div className="lp-preview reveal reveal--delay-4">
-          <div className="lp-preview__bar">
-            <div className="lp-preview__dots">
-              <span/><span/><span/>
-            </div>
-            <span className="lp-preview__url">seli.app · Dashboard</span>
+        {/* Hero */}
+        <section className="lp-hero">
+          <div className="lp-hero-bg" aria-hidden="true" />
+          <p className="lp-hero__eyebrow reveal reveal--delay-1">SEC Insider Trading & Congressional Stock Tracker</p>
+          <h1 className="lp-hero__h1 reveal reveal--delay-1">
+            See what insiders are buying<br />
+            <span className="lp-hero__h1-accent">before the market reacts.</span>
+          </h1>
+          <p className="lp-hero__sub reveal reveal--delay-2">
+            CEOs, directors, and members of Congress are legally required to disclose their stock trades.
+            Seli watches every SEC Form 4 filing and STOCK Act disclosure, scores each trade by conviction,
+            and alerts you within minutes — not hours.
+          </p>
+          <div className="lp-hero__cta reveal reveal--delay-3">
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="lp-btn-primary lp-btn-primary--lg">Explore Seli →</button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Explore Seli →</button>
+            </SignedIn>
           </div>
-          <div className="lp-preview__screen">
-            {/* Simulated dashboard UI */}
-            <div className="lp-screen-strip">
-              {[['SENTIMENT','47 Neutral'],['SPY','$733.58 −1.45%'],['QQQ','$713.65 −3.29%'],['VIX','—'],['IWM','$295.32 −0.96%'],['INSIDER FLOW (30D)','Bullish 95% buying']].map(([l,v])=>(
-                <div key={l} className="lp-screen-stat">
-                  <span className="lp-screen-stat__label">{l}</span>
-                  <span className="lp-screen-stat__val">{v}</span>
-                </div>
-              ))}
+          <p className="lp-hero__trust reveal reveal--delay-3">SEC Form 4 filings · STOCK Act disclosures · Real-time alerts · Free to start</p>
+
+          {/* Product preview strip */}
+          <div className="lp-preview reveal reveal--delay-4">
+            <div className="lp-preview__bar">
+              <div className="lp-preview__dots">
+                <span /><span /><span />
+              </div>
+              <span className="lp-preview__url">seli.app · Dashboard</span>
             </div>
-            <div className="lp-screen-body">
-              <div className="lp-screen-signals">
-                <div className="lp-screen-hdr">INSIDER SIGNALS <span style={{opacity:.4,fontWeight:400}}>· 7d · 26 signals</span></div>
-                {[
-                  {t:'FMBM', c:'F&M Bank Corp',     v:'+$51K',   b:'8× exec', hi:true},
-                  {t:'FISV', c:'Fiserv Inc',         v:'+$1.7M',  b:'6× exec', hi:true},
-                  {t:'MSTR', c:'Strategy Inc',       v:'+$817K',  b:'1× exec', hi:false, rev:true},
-                  {t:'COR',  c:'Cencora Inc',        v:'+$1.1M',  b:'1× exec', hi:false},
-                  {t:'ADSK', c:'Autodesk Inc',       v:'+$499K',  b:'1× exec', hi:false},
-                ].map(r=>(
-                  <div key={r.t} className="lp-screen-row">
-                    <div>
-                      <span className="lp-screen-ticker">{r.t}</span>
-                      {r.rev&&<span className="lp-screen-rev">↺</span>}
-                      <span className="lp-screen-co">{r.c}</span>
-                    </div>
-                    <div style={{display:'flex',alignItems:'center',gap:8}}>
-                      {r.b&&<span className="lp-screen-badge">{r.b}</span>}
-                      <span className={`lp-screen-val ${r.hi?'lp-screen-val--hi':''}`}>{r.v}</span>
-                      <div className="lp-screen-bar">
-                        <div className="lp-screen-bar__fill" style={{width:r.hi?'85%':'55%',background:r.hi?'#3ECF8E':'#7C6FFF'}}/>
+            <div className="lp-preview__screen">
+              {/* Simulated dashboard UI */}
+              <div className="lp-screen-strip">
+                {[['SENTIMENT', '47 Neutral'], ['SPY', '$733.58 −1.45%'], ['QQQ', '$713.65 −3.29%'], ['VIX', '—'], ['IWM', '$295.32 −0.96%'], ['INSIDER FLOW (30D)', 'Bullish 95% buying']].map(([l, v]) => (
+                  <div key={l} className="lp-screen-stat">
+                    <span className="lp-screen-stat__label">{l}</span>
+                    <span className="lp-screen-stat__val">{v}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="lp-screen-body">
+                <div className="lp-screen-signals">
+                  <div className="lp-screen-hdr">INSIDER SIGNALS <span style={{ opacity: .4, fontWeight: 400 }}>· 7d · 26 signals</span></div>
+                  {[
+                    { t: 'FMBM', c: 'F&M Bank Corp', v: '+$51K', b: '8× exec', hi: true },
+                    { t: 'FISV', c: 'Fiserv Inc', v: '+$1.7M', b: '6× exec', hi: true },
+                    { t: 'MSTR', c: 'Strategy Inc', v: '+$817K', b: '1× exec', hi: false, rev: true },
+                    { t: 'COR', c: 'Cencora Inc', v: '+$1.1M', b: '1× exec', hi: false },
+                    { t: 'ADSK', c: 'Autodesk Inc', v: '+$499K', b: '1× exec', hi: false },
+                  ].map(r => (
+                    <div key={r.t} className="lp-screen-row">
+                      <div>
+                        <span className="lp-screen-ticker">{r.t}</span>
+                        {r.rev && <span className="lp-screen-rev">↺</span>}
+                        <span className="lp-screen-co">{r.c}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {r.b && <span className="lp-screen-badge">{r.b}</span>}
+                        <span className={`lp-screen-val ${r.hi ? 'lp-screen-val--hi' : ''}`}>{r.v}</span>
+                        <div className="lp-screen-bar">
+                          <div className="lp-screen-bar__fill" style={{ width: r.hi ? '85%' : '55%', background: r.hi ? '#3ECF8E' : '#7C6FFF' }} />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-              <div className="lp-screen-right">
-                <div className="lp-screen-hdr">TOP INSIDERS <span style={{opacity:.4,fontWeight:400}}>· hit rate · all-time</span></div>
-                {[
-                  {n:'A.L. Sarroff Fund', r:'94%', buys:'48 buys'},
-                  {n:'Adelman Jason T',   r:'100%',buys:'3 buys'},
-                  {n:'325 Capital LLC',   r:'100%',buys:'2 buys'},
-                  {n:'AC Nordic ApS',     r:'50%', buys:'6 buys'},
-                ].map((r,i)=>(
-                  <div key={i} className="lp-screen-lb-row">
-                    <span className="lp-screen-lb-rank">{i+1}</span>
-                    <span className="lp-screen-lb-name">{r.n}</span>
-                    <span className="lp-screen-lb-buys">{r.buys}</span>
-                    <span className={`lp-screen-lb-rate ${parseFloat(r.r)>=70?'lp-screen-lb-rate--hi':''}`}>{r.r}</span>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <div className="lp-screen-right">
+                  <div className="lp-screen-hdr">TOP INSIDERS <span style={{ opacity: .4, fontWeight: 400 }}>· hit rate · all-time</span></div>
+                  {[
+                    { n: 'A.L. Sarroff Fund', r: '94%', buys: '48 buys' },
+                    { n: 'Adelman Jason T', r: '100%', buys: '3 buys' },
+                    { n: '325 Capital LLC', r: '100%', buys: '2 buys' },
+                    { n: 'AC Nordic ApS', r: '50%', buys: '6 buys' },
+                  ].map((r, i) => (
+                    <div key={i} className="lp-screen-lb-row">
+                      <span className="lp-screen-lb-rank">{i + 1}</span>
+                      <span className="lp-screen-lb-name">{r.n}</span>
+                      <span className="lp-screen-lb-buys">{r.buys}</span>
+                      <span className={`lp-screen-lb-rate ${parseFloat(r.r) >= 70 ? 'lp-screen-lb-rate--hi' : ''}`}>{r.r}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Scrolling ticker marquee — sample data, illustrative only.
+        {/* Scrolling ticker marquee — sample data, illustrative only.
           Duplicated content + translateX(-50%) for a seamless infinite
           loop. Deliberately different technique from the hero spiral, so
           the page has real animation even if one approach doesn't render
           well in a given environment. */}
-      <div className="lp-marquee">
-        <div className="lp-marquee__frame">
-        <div className="lp-marquee__track">
-          {[...MARQUEE_TICKERS, ...MARQUEE_TICKERS].map((t,i)=>(
-            <div key={i} className="lp-marquee__chip">
-              <span className="lp-marquee__ticker">{t.symbol}</span>
-              <span className={`lp-marquee__delta ${t.buy?'val-buy':'val-sell'}`}>{t.buy?'▲':'▼'} {t.delta}</span>
-            </div>
-          ))}
-        </div>
-        </div>
-      </div>
-
-      {/* Features */}
-      <section className="lp-features" id="features">
-        <div className="lp-section-label reveal">What Seli does</div>
-        <h2 className="lp-section-h2 reveal reveal--delay-1">Insider trading signals, alerts, and data</h2>
-        <div className="lp-benefit-list">
-          {WHATS_INSIDE.map((f,i)=>{
-            const Icon = LP_FEATURE_ICON_MAP[f.icon];
-            return (
-              <div key={f.title} className={`lp-benefit-row ${i%2===1?'lp-benefit-row--reverse':''} reveal reveal--delay-${i%3}`}>
-                <div className="lp-benefit-row__text">
-                  <div className="lp-benefit-row__icon">{Icon && <Icon style={{width:24,height:24}}/>}</div>
-                  <div className="lp-benefit-row__eyebrow">{f.eyebrow}</div>
-                  <div className="lp-benefit-row__title">{f.title}</div>
-                  <div className="lp-benefit-row__body">{f.body}</div>
+        <div className="lp-marquee">
+          <div className="lp-marquee__frame">
+            <div className="lp-marquee__track">
+              {[...MARQUEE_TICKERS, ...MARQUEE_TICKERS].map((t, i) => (
+                <div key={i} className="lp-marquee__chip">
+                  <span className="lp-marquee__ticker">{t.symbol}</span>
+                  <span className={`lp-marquee__delta ${t.buy ? 'val-buy' : 'val-sell'}`}>{t.buy ? '▲' : '▼'} {t.delta}</span>
                 </div>
-                <div className="lp-benefit-row__snippet">
-                  <div className="lp-benefit-snippet-box" aria-hidden="true">
-                    <LPFeatureMock type={f.env}/>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Features */}
+        <section className="lp-features" id="features">
+          <div className="lp-section-label reveal">What Seli does</div>
+          <h2 className="lp-section-h2 reveal reveal--delay-1">Insider trading signals, alerts, and data</h2>
+          <div className="lp-benefit-list">
+            {WHATS_INSIDE.map((f, i) => {
+              const Icon = LP_FEATURE_ICON_MAP[f.icon];
+              return (
+                <div key={f.title} className={`lp-benefit-row ${i % 2 === 1 ? 'lp-benefit-row--reverse' : ''} reveal reveal--delay-${i % 3}`}>
+                  <div className="lp-benefit-row__text">
+                    <div className="lp-benefit-row__icon">{Icon && <Icon style={{ width: 24, height: 24 }} />}</div>
+                    <div className="lp-benefit-row__eyebrow">{f.eyebrow}</div>
+                    <div className="lp-benefit-row__title">{f.title}</div>
+                    <div className="lp-benefit-row__body">{f.body}</div>
+                  </div>
+                  <div className="lp-benefit-row__snippet">
+                    <div className="lp-benefit-snippet-box" aria-hidden="true">
+                      <LPFeatureMock type={f.env} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section className="lp-pricing" id="pricing">
-        <div className="lp-section-label reveal">Pricing</div>
-        <h2 className="lp-section-h2 reveal reveal--delay-1">Start researching for free</h2>
-
-        {/* Main plans — two vertical cards */}
-        <div className="lp-pricing-top">
-          <div className="lp-price-card reveal reveal--delay-1">
-            <div className="lp-price-card__name">Free</div>
-            <div className="lp-price-card__price">$0<span>/mo</span></div>
-            <div className="lp-price-card__desc">Explore insider activity and see what's moving. No card required.</div>
-            <ul className="lp-price-card__features">
-              {['Dashboard & sector heatmap','7-day signal window','Top insiders leaderboard','Corporate + congressional trades','All filed SEC transactions dating back 1 year'].map(f=>(
-                <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
-              ))}
-            </ul>
-            <div className="lp-price-card__spacer"/>
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="lp-btn-ghost lp-btn-ghost--full">Get started free →</button>
-              </SignInButton>
-            </SignedOut>
-            <SignedIn>
-              <button className="lp-btn-ghost lp-btn-ghost--full" onClick={onEnter}>Open Seli →</button>
-            </SignedIn>
+              );
+            })}
           </div>
-          <div className="lp-price-card lp-price-card--featured reveal reveal--delay-2">
-            <div className="lp-price-card__badge">Half-off</div>
-            <div className="lp-price-card__name">Pro</div>
-            <div className="lp-price-card__price">
-              <span className="lp-price-card__price-strike">$13.99</span> $6.99<span>/mo</span>
+        </section>
+
+        {/* Pricing */}
+        <section className="lp-pricing" id="pricing">
+          <div className="lp-section-label reveal">Pricing</div>
+          <h2 className="lp-section-h2 reveal reveal--delay-1">Start researching for free</h2>
+
+          {/* Main plans — two vertical cards */}
+          <div className="lp-pricing-top">
+            <div className="lp-price-card reveal reveal--delay-1">
+              <div className="lp-price-card__name">Free</div>
+              <div className="lp-price-card__price">$0<span>/mo</span></div>
+              <div className="lp-price-card__desc">Explore insider activity and see what's moving. No card required.</div>
+              <ul className="lp-price-card__features">
+                {['Dashboard & sector heatmap', '7-day signal window', 'Top insiders leaderboard', 'Corporate + congressional trades', 'All filed SEC transactions dating back 1 year'].map(f => (
+                  <li key={f}><span className="lp-check"><IconCheck style={{ width: 12, height: 12 }} /></span>{f}</li>
+                ))}
+              </ul>
+              <div className="lp-price-card__spacer" />
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button className="lp-btn-ghost lp-btn-ghost--full">Get started free →</button>
+                </SignInButton>
+              </SignedOut>
+              <SignedIn>
+                <button className="lp-btn-ghost lp-btn-ghost--full" onClick={onEnter}>Open Seli →</button>
+              </SignedIn>
             </div>
-            <div className="lp-price-card__beta-note">Half off, forever — for the first 25 Beta users</div>
-            <div className="lp-price-card__desc">Full history, every alert, every score — for serious research.</div>
-            <ul className="lp-price-card__features">
-              {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Customizable email alerts, instant or digest','Full score breakdown on every trade','Connect your brokerage (SnapTrade)','Full insiders deep-dive'].map(f=>(
-                <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
-              ))}
-            </ul>
-            <div className="lp-price-card__spacer"/>
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="lp-btn-primary lp-btn-primary--full">Upgrade to Pro →</button>
-              </SignInButton>
-            </SignedOut>
-            <SignedIn>
-              <button className="lp-btn-primary lp-btn-primary--full" onClick={onEnter}>Upgrade to Pro →</button>
-            </SignedIn>
+            <div className="lp-price-card lp-price-card--featured reveal reveal--delay-2">
+              <div className="lp-price-card__badge">Half-off</div>
+              <div className="lp-price-card__name">Pro</div>
+              <div className="lp-price-card__price">
+                <span className="lp-price-card__price-strike">$13.99</span> $6.99<span>/mo</span>
+              </div>
+              <div className="lp-price-card__beta-note">Half off, forever — for the first 25 Beta users</div>
+              <div className="lp-price-card__desc">Full history, every alert, every score — for serious research.</div>
+              <ul className="lp-price-card__features">
+                {['Everything in Free', `Full historical data (${dataSinceYear}→present)`, 'Customizable email alerts, instant or digest', 'Full score breakdown on every trade', 'Connect your brokerage (SnapTrade)', 'Full insiders deep-dive'].map(f => (
+                  <li key={f}><span className="lp-check"><IconCheck style={{ width: 12, height: 12 }} /></span>{f}</li>
+                ))}
+              </ul>
+              <div className="lp-price-card__spacer" />
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button className="lp-btn-primary lp-btn-primary--full">Upgrade to Pro →</button>
+                </SignInButton>
+              </SignedOut>
+              <SignedIn>
+                <button className="lp-btn-primary lp-btn-primary--full" onClick={onEnter}>Upgrade to Pro →</button>
+              </SignedIn>
+            </div>
           </div>
-        </div>
 
-        <div className="lp-price-card lp-price-card--landscape reveal reveal--delay-3">
-          <div className="lp-price-card--landscape__info">
-            <div className="lp-price-card__name">Data export</div>
-            <div className="lp-price-card__desc">Just need the dataset? No subscription — download and own it.</div>
-            <ul className="lp-price-card__features lp-price-card__features--inline">
-              {['Complete Form 4 dataset',`${dataSinceYear}→present`,'Congressional trades included','CSV, instant download'].map(f=>(
-                <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
-              ))}
-            </ul>
+          <div className="lp-price-card lp-price-card--landscape reveal reveal--delay-3">
+            <div className="lp-price-card--landscape__info">
+              <div className="lp-price-card__name">Data export</div>
+              <div className="lp-price-card__desc">Just need the dataset? No subscription — download and own it.</div>
+              <ul className="lp-price-card__features lp-price-card__features--inline">
+                {['Complete Form 4 dataset', `${dataSinceYear}→present`, 'Congressional trades included', 'CSV, instant download'].map(f => (
+                  <li key={f}><span className="lp-check"><IconCheck style={{ width: 12, height: 12 }} /></span>{f}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="lp-price-card--landscape__action">
+              <div className="lp-price-card__price">$39.99<span>/one-time</span></div>
+              <a href="/data-download" className="lp-btn-ghost lp-btn-ghost--full" style={{ textDecoration: 'none', textAlign: 'center' }}>Download dataset →</a>
+            </div>
           </div>
-          <div className="lp-price-card--landscape__action">
-            <div className="lp-price-card__price">$39.99<span>/one-time</span></div>
-            <a href="/data-download" className="lp-btn-ghost lp-btn-ghost--full" style={{textDecoration:'none',textAlign:'center'}}>Download dataset →</a>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* About teaser — left-aligned, real substance, not a centered blurb.
+        {/* About teaser — left-aligned, real substance, not a centered blurb.
           Fades out into a clear "read the rest" CTA rather than being
           truncated abruptly. */}
-      <section className="lp-about-teaser reveal reveal--delay-1" id="about-teaser">
-        <div className="lp-about-teaser__grid">
-          <div className="lp-about-teaser__lead">
-            <h2 className="lp-section-h2">The information is public. Finding what's important isn't.</h2>
-            <p className="lp-about-teaser__intro">
-              Federal law forces every corporate insider and member of Congress to disclose their stock
-              trades. The data is there — buried in thousands of SEC filings per week. Academic research
-              shows these trades outperform the market: insider purchases generate +4.3% abnormal returns
-              annually (Seyhun, 1986), and cluster buying — multiple insiders at the same company — is
-              an even stronger signal (Lakonishok & Lee, 2001). Seli turns that pile of government filings
-              into something you can actually act on.
-            </p>
+        <section className="lp-about-teaser reveal reveal--delay-1" id="about-teaser">
+          <div className="lp-about-teaser__grid">
+            <div className="lp-about-teaser__lead">
+              <h2 className="lp-section-h2">The information is public. Finding what's important isn't.</h2>
+              <p className="lp-about-teaser__intro">
+                Federal law forces every corporate insider and member of Congress to disclose their stock
+                trades. The data is there — buried in thousands of SEC filings per week. Academic research
+                shows these trades outperform the market: insider purchases generate +4.3% abnormal returns
+                annually (Seyhun, 1986), and cluster buying — multiple insiders at the same company — is
+                an even stronger signal (Lakonishok & Lee, 2001). Seli turns that pile of government filings
+                into something you can actually act on.
+              </p>
+            </div>
+            <div className="lp-about-teaser__advantages">
+              <div className="lp-advantage">
+                <div className="lp-advantage__stat val-buy">+4.3%</div>
+                <div className="lp-advantage__label">Abnormal return over 300 days for firms with more insider buying than selling.</div>
+                <div className="lp-advantage__source">Seyhun (1986)</div>
+              </div>
+              <div className="lp-advantage">
+                <div className="lp-advantage__stat">2 days</div>
+                <div className="lp-advantage__label">The legal maximum an insider can wait before disclosing a trade — and Seli ingests it within minutes.</div>
+                <div className="lp-advantage__source">Sarbanes-Oxley, 2002</div>
+              </div>
+              <div className="lp-advantage">
+                <div className="lp-advantage__stat val-buy">4.8%</div>
+                <div className="lp-advantage__label">Spread between strong-buy and strong-sell insider portfolios in the year after the trade.</div>
+                <div className="lp-advantage__source">Lakonishok & Lee (2001)</div>
+              </div>
+              <div className="lp-advantage">
+                <div className="lp-advantage__stat">↑ stronger</div>
+                <div className="lp-advantage__label">Signal strengthens measurably when multiple insiders buy the same stock independently.</div>
+                <div className="lp-advantage__source">Lakonishok & Lee (2001)</div>
+              </div>
+            </div>
           </div>
-          <div className="lp-about-teaser__advantages">
-            <div className="lp-advantage">
-              <div className="lp-advantage__stat val-buy">+4.3%</div>
-              <div className="lp-advantage__label">Abnormal return over 300 days for firms with more insider buying than selling.</div>
-              <div className="lp-advantage__source">Seyhun (1986)</div>
-            </div>
-            <div className="lp-advantage">
-              <div className="lp-advantage__stat">2 days</div>
-              <div className="lp-advantage__label">The legal maximum an insider can wait before disclosing a trade — and Seli ingests it within minutes.</div>
-              <div className="lp-advantage__source">Sarbanes-Oxley, 2002</div>
-            </div>
-            <div className="lp-advantage">
-              <div className="lp-advantage__stat val-buy">4.8%</div>
-              <div className="lp-advantage__label">Spread between strong-buy and strong-sell insider portfolios in the year after the trade.</div>
-              <div className="lp-advantage__source">Lakonishok & Lee (2001)</div>
-            </div>
-            <div className="lp-advantage">
-              <div className="lp-advantage__stat">↑ stronger</div>
-              <div className="lp-advantage__label">Signal strengthens measurably when multiple insiders buy the same stock independently.</div>
-              <div className="lp-advantage__source">Lakonishok & Lee (2001)</div>
-            </div>
-          </div>
-        </div>
-        <a href="/about" onClick={goToAbout} className="lp-about-teaser__link">
-          Read the full research, methodology, and disclosures <span className="lp-explore-hint" aria-hidden="true">→</span>
-        </a>
-      </section>
+          <a href="/about" onClick={goToAbout} className="lp-about-teaser__link">
+            Read the full research, methodology, and disclosures <span className="lp-explore-hint" aria-hidden="true">→</span>
+          </a>
+        </section>
 
-      {/* Footer */}
-      <footer className="lp-footer">
-        <div className="lp-footer__frame">
-        <div className="lp-footer__logo">
-          <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-          <span className="lp-wordmark">Seli</span>
-          <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-        </div>
-        <div className="lp-footer__links">
-          <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
-          <span>·</span>
-          <a href="/help" className="lp-footer__link-muted">Help</a>
-          <span>·</span>
-          <a href="/terms" className="lp-footer__link-muted">Terms</a>
-          <span>·</span>
-          <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
-          <span>·</span>
-          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
-          <span>·</span>
-          <span>Not financial advice</span>
-        </div>
-        <div style={{marginLeft:'auto',display:'flex',gap:8}}>
-          <SignedOut>
-            <SignInButton mode="modal">
-              <button className="lp-btn-ghost">Sign in →</button>
-            </SignInButton>
-          </SignedOut>
-          <SignedIn>
-            <button className="lp-btn-ghost" onClick={onEnter}>Open Seli →</button>
-          </SignedIn>
-        </div>
-        </div>
-      </footer>
+        {/* Footer */}
+        <footer className="lp-footer">
+          <div className="lp-footer__frame">
+            <div className="lp-footer__logo">
+              <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+              <span className="lp-wordmark">Seli</span>
+              <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+            </div>
+            <div className="lp-footer__links">
+              <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
+              <span>·</span>
+              <a href="/help" className="lp-footer__link-muted">Help</a>
+              <span>·</span>
+              <a href="/terms" className="lp-footer__link-muted">Terms</a>
+              <span>·</span>
+              <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+              <span>·</span>
+              <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
+              <span>·</span>
+              <span>Not financial advice</span>
+            </div>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button className="lp-btn-ghost">Sign in →</button>
+                </SignInButton>
+              </SignedOut>
+              <SignedIn>
+                <button className="lp-btn-ghost" onClick={onEnter}>Open Seli →</button>
+              </SignedIn>
+            </div>
+          </div>
+        </footer>
       </>)}
 
     </div>
@@ -10295,8 +10301,8 @@ function LandingPage({ onEnter, dark, setDark }) {
 // External paths are deliberately friendlier than internal page ids
 // (page id 'signals' -> path 'insights') so shared/indexed URLs read well
 // without renaming the internal id everywhere it's already used.
-const PAGE_TO_PATH = { home:'home', dashboard:'', signals:'insights', data:'data', watchlist:'watchlist', settings:'settings' };
-const PATH_TO_PAGE = { '':'dashboard', home:'home', insights:'signals', data:'data', watchlist:'watchlist', settings:'settings' };
+const PAGE_TO_PATH = { home: 'home', dashboard: '', signals: 'insights', data: 'data', watchlist: 'watchlist', settings: 'settings' };
+const PATH_TO_PAGE = { '': 'dashboard', home: 'home', insights: 'signals', data: 'data', watchlist: 'watchlist', settings: 'settings' };
 
 function pathFromAppState(page, detail) {
   // Detail deep-link takes priority — the panel overlays whatever page is
@@ -10329,7 +10335,7 @@ function appStateFromPath(pathname) {
   return { page: page || 'dashboard', detail: null };
 }
 
-const PAGE_TITLES = { home:'Home', dashboard:'Dashboard', signals:'Insights', data:'Data', watchlist:'Watchlist', settings:'Settings' };
+const PAGE_TITLES = { home: 'Home', dashboard: 'Dashboard', signals: 'Insights', data: 'Data', watchlist: 'Watchlist', settings: 'Settings' };
 
 function titleFromAppState(page, detail) {
   if (detail?.type === 'ticker' && detail.ticker) {
@@ -10349,20 +10355,20 @@ import * as Sentry from '@sentry/react';
 // parent of it, not something nested inside its own return, which
 // wouldn't catch a crash in this component's own body.
 function AppInner() {
-  const [dark,setDark] = useTheme();
+  const [dark, setDark] = useTheme();
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
 
   // Register Clerk token getter globally so edgar.js can use it without
   // needing to import Clerk directly (edgar.js is a plain ES module)
   const { signOut } = useAuth();
-  useEffect(()=>{
+  useEffect(() => {
     if (isSignedIn && getToken) {
       window.__clerkGetToken = () => getToken();
-      window.__clerkSignOut  = () => signOut({ redirectUrl: '/' });
+      window.__clerkSignOut = () => signOut({ redirectUrl: '/' });
     } else {
       window.__clerkGetToken = null;
-      window.__clerkSignOut  = null;
+      window.__clerkSignOut = null;
     }
   }, [isSignedIn, getToken, signOut]);
 
@@ -10381,20 +10387,20 @@ function AppInner() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  const [page,setPage] = useState(()=>appStateFromPath(window.location.pathname).page);
-  const [filings,setFilings]  = useState([]);
-  const [loading,setLoading]  = useState(true);
-  const [error,setError]      = useState(null);
-  const [selSignal,setSelSig] = useState(null);
-  const [hlTicker,setHlTick]  = useState(null);
-  const [detail,setDetail]    = useState(()=>appStateFromPath(window.location.pathname).detail);
+  const [page, setPage] = useState(() => appStateFromPath(window.location.pathname).page);
+  const [filings, setFilings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selSignal, setSelSig] = useState(null);
+  const [hlTicker, setHlTick] = useState(null);
+  const [detail, setDetail] = useState(() => appStateFromPath(window.location.pathname).detail);
   // Back-history for the Data/Dashboard right-hand detail panel — previously
   // non-existent, meaning clicking a second item while one was already open
   // silently discarded the first with no way back. Not a breadcrumb (per
   // design intent) — just enough history for a single "back" affordance to
   // step through, matching the pattern already used by Insights/Watchlist/
   // Portfolio's own drawers.
-  const [detailStack,setDetailStack] = useState([]);
+  const [detailStack, setDetailStack] = useState([]);
   // Deep-linked ticker/insider URLs open straight to the full drawer — no
   // reason to make a shared link require an extra click to reach the content
   // it's actually linking to. Organic clicks from Dashboard/Data (via
@@ -10402,7 +10408,7 @@ function AppInner() {
   // on why those two pages get a lighter-weight first step and Insights/
   // Watchlist (which have their own separate, untouched drawer triggers)
   // don't need this distinction at all.
-  const [detailFull,setDetailFull] = useState(()=>!!appStateFromPath(window.location.pathname).detail);
+  const [detailFull, setDetailFull] = useState(() => !!appStateFromPath(window.location.pathname).detail);
   const [portfolioTickers, setPortfolioTickers] = useState([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(null); // null | 'default' | 'data_export' | 'portfolio' | 'notifications' | 'risk_management'
 
@@ -10437,7 +10443,7 @@ function AppInner() {
     // reverts to the dashboard a moment later": the URL got silently
     // overwritten, and the early-return check above reads the URL fresh
     // on every render, so it stopped matching once that happened.
-    if (['/terms','/privacy','/cookies','/help','/data-download','/purchase-complete','/redownload'].includes(window.location.pathname)) return;
+    if (['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload'].includes(window.location.pathname)) return;
     const path = pathFromAppState(page, detail);
     if (window.location.pathname !== path) {
       window.history.pushState({ page, detail }, '', path);
@@ -10460,11 +10466,11 @@ function AppInner() {
   }, []);
 
   // Listen for cross-component navigation events (e.g. watchlist → settings)
-  useEffect(()=>{
-    function onSeliNav(e){ if(e.detail) navTo(e.detail); }
+  useEffect(() => {
+    function onSeliNav(e) { if (e.detail) navTo(e.detail); }
     window.addEventListener('seli:nav', onSeliNav);
-    return ()=>window.removeEventListener('seli:nav', onSeliNav);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => window.removeEventListener('seli:nav', onSeliNav);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // How far back the currently-loaded `filings` array actually covers.
@@ -10475,22 +10481,22 @@ function AppInner() {
 
   // enterApp now triggers Clerk sign-in via SignInButton — kept for
   // compatibility with LandingPage's onEnter prop
-  function enterApp() {}
+  function enterApp() { }
 
-  const load = useCallback(async(daysBack)=>{
-    setLoading(true);setError(null);
-    try{const d=await loadFilings(daysBack);setFilings(d);}
-    catch(e){setError(e.message);}
-    finally{setLoading(false);}
-  },[]);
+  const load = useCallback(async (daysBack) => {
+    setLoading(true); setError(null);
+    try { const d = await loadFilings(daysBack); setFilings(d); }
+    catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }, []);
 
-  useEffect(()=>{
+  useEffect(() => {
     // Wait for Clerk to finish loading before fetching — on mobile fresh
     // loads, the JWT isn't ready when this effect fires, causing a 401
     // that shows the error banner until manual reload.
     if (!isLoaded || !isSignedIn) return;
     load(filingsWindowDays);
-  },[isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Called by any component whose own time-range control lets a user pick
   // something wider than what's currently loaded (e.g. Explore drawer's
@@ -10512,23 +10518,23 @@ function AppInner() {
   // transaction_date here (as this used to) meant the "Through" indicator
   // showed how recent the underlying trades were, not how fresh our own
   // data pull is — which is what this is actually supposed to communicate.
-  const lastFilingDate = useMemo(()=>{
+  const lastFilingDate = useMemo(() => {
     if (!filings.length) return null;
     const today = new Date().toISOString().split('T')[0];
-    const max = filings.reduce((best,f)=>{
-      const d = f.date||f.transactionDate||'';
-      return d>best?d:best;
-    },'');
+    const max = filings.reduce((best, f) => {
+      const d = f.date || f.transactionDate || '';
+      return d > best ? d : best;
+    }, '');
     // Clamp to today — future dates indicate a bad DB row (malformed XML date)
     // Run: SELECT MAX(transaction_date) FROM public.filings to find and fix it
-    return max>today ? today : max;
-  },[filings]);
+    return max > today ? today : max;
+  }, [filings]);
   // Shared by both the subtle status-bar indicator and the more prominent
   // top banner below — one computation, not two copies of the same date
   // math that could quietly drift apart from each other.
   const daysSinceLastFiling = useMemo(() => {
     if (!lastFilingDate) return null;
-    return Math.floor((new Date() - new Date(lastFilingDate + 'T12:00:00')) / (1000*60*60*24));
+    return Math.floor((new Date() - new Date(lastFilingDate + 'T12:00:00')) / (1000 * 60 * 60 * 24));
   }, [lastFilingDate]);
   // Weekend-aware: Friday's filing is the latest expected on Sat/Sun/Mon morning.
   // Fri→Sat=1d, Fri→Sun=2d, Fri→Mon=3d — all normal. Alert at 4 on those days
@@ -10538,7 +10544,7 @@ function AppInner() {
   const staleThreshold = (dayOfWeek === 0 || dayOfWeek === 1 || dayOfWeek === 6) ? 4 : 2;
   const isDataStale = daysSinceLastFiling != null && daysSinceLastFiling >= staleThreshold;
 
-  useEffect(()=>{
+  useEffect(() => {
     if (!cfg.NEON_PROXY_URL) return;
     (async () => {
       const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
@@ -10567,42 +10573,42 @@ function AppInner() {
           }
           setPortfolioTickers([...tickers]);
         })
-        .catch(()=>{}); // a real network failure here just leaves the filter showing no results, not a crash
+        .catch(() => { }); // a real network failure here just leaves the filter showing no results, not a crash
     })();
-  },[]);
+  }, []);
 
-  function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setDetailStack([]);setDetailFull(true);setPage('signals');}
-  function selectSignal(s){setSelSig(s);if(s)setHlTick(s.ticker);}
-  function openDetail(d, opts = {}){
+  function drillSignal(s) { setHlTick(s.ticker); setSelSig(s); setDetail({ type: 'signal', ...s }); setDetailStack([]); setDetailFull(true); setPage('signals'); }
+  function selectSignal(s) { setSelSig(s); if (s) setHlTick(s.ticker); }
+  function openDetail(d, opts = {}) {
     setDetailStack(prev => detail ? [...prev, detail] : prev);
     setDetail(d);
     setDetailFull(opts.expand ? true : false);
   }
-  function goBackDetail(){
-    setDetailStack(prev=>{
-      const next=[...prev];
-      const p=next.pop();
-      setDetail(p||null);
+  function goBackDetail() {
+    setDetailStack(prev => {
+      const next = [...prev];
+      const p = next.pop();
+      setDetail(p || null);
       return next;
     });
   }
-  function expandDetail(){setDetailFull(true);}
-  function closeDetail(){setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);}
+  function expandDetail() { setDetailFull(true); }
+  function closeDetail() { setDetail(null); setDetailStack([]); setDetailFull(false); setSelSig(null); }
   // cameFromHome powers the "Home › Section" breadcrumb bar on mobile —
   // any *other* way of reaching a page (bottom nav, a shared link, the
   // desktop sidebar) should not show a breadcrumb back to a Home the
   // person never actually came from, so plain navTo() always clears it.
   // Only seeAllFromHome (used by Home's own "See all →" links) sets it.
   const [cameFromHome, setCameFromHome] = useState(false);
-  function navTo(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);setCameFromHome(false);}
-  function seeAllFromHome(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);setCameFromHome(false);}
+  function navTo(p) { setPage(p); setDetail(null); setDetailStack([]); setDetailFull(false); setSelSig(null); setHlTick(null); setCameFromHome(false); }
+  function seeAllFromHome(p) { setPage(p); setDetail(null); setDetailStack([]); setDetailFull(false); setSelSig(null); setHlTick(null); setCameFromHome(false); }
 
   // Sort state for the shared full-drawer explorer — independent from
   // InsightsPage's own internal sort state, since this instance is opened
   // from Dashboard/Data/anywhere-else and isn't nested inside InsightsPage.
   const [expSort, setExpSort] = useState('conviction');
-  const [expDir,  setExpDir]  = useState(-1);
-  function expOnSort(col){ if(expSort===col) setExpDir(d=>-d); else { setExpSort(col); setExpDir(-1); } }
+  const [expDir, setExpDir] = useState(-1);
+  function expOnSort(col) { if (expSort === col) setExpDir(d => -d); else { setExpSort(col); setExpDir(-1); } }
 
   const panelOpen = !!detail;
   const watchlist = useWatchlist(user);
@@ -10622,89 +10628,89 @@ function AppInner() {
   // Prevents the flash of landing page that appears for ~200ms on first load
   if (!isLoaded) return (
     <div style={{
-      minHeight:'100vh', background:'var(--bg)',
-      display:'flex', alignItems:'center', justifyContent:'center',
+      minHeight: '100vh', background: 'var(--bg)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      <div className="spinner" style={{width:32,height:32}}/>
+      <div className="spinner" style={{ width: 32, height: 32 }} />
     </div>
   );
 
-  if (showLanding || isAboutPath) return <LandingPage onEnter={enterApp} dark={dark} setDark={setDark} isLoaded={isLoaded}/>;
+  if (showLanding || isAboutPath) return <LandingPage onEnter={enterApp} dark={dark} setDark={setDark} isLoaded={isLoaded} />;
 
   return (
     <>
-    {isDataStale && !error && (
-      <button className="stale-banner" onClick={() => setShowStaleDataModal(true)}>
-        <IconWarning style={{width:14,height:14}}/>
-        Live data isn't updating right now — tap for details
-      </button>
-    )}
-    {error && (
-      <div className="stale-banner stale-banner--error" role="alert">
-        <IconWarning style={{width:14,height:14}}/>
-        <span>Failed to load filing data. <button className="stale-banner__retry" onClick={()=>load(filingsWindowDays)}>Retry</button></span>
-      </div>
-    )}
-    {showStaleDataModal && (
-      <div className="modal-overlay" onClick={(e)=>{if(e.target===e.currentTarget)setShowStaleDataModal(false);}}>
-        <div className="modal-panel stale-modal">
-          <div className="modal-panel__hdr">
-            <span className="modal-panel__title">Data isn't updating</span>
-            <button className="modal-close" onClick={()=>setShowStaleDataModal(false)} title="Close (Esc)"><IconClose style={{width:12,height:12}}/></button>
-          </div>
-          <div className="modal-body stale-modal__body">
-            <p>Live filing data hasn't updated in a few days. We're aware and working on it.</p>
-            <p className="stale-modal__timestamp">
-              Last new filing: <strong>{lastFilingDate ? fmt.dateShort(lastFilingDate) : 'unknown'}</strong>
-              {daysSinceLastFiling != null && ` (${daysSinceLastFiling} day${daysSinceLastFiling===1?'':'s'} ago)`}
-            </p>
+      {isDataStale && !error && (
+        <button className="stale-banner" onClick={() => setShowStaleDataModal(true)}>
+          <IconWarning style={{ width: 14, height: 14 }} />
+          Live data isn't updating right now — tap for details
+        </button>
+      )}
+      {error && (
+        <div className="stale-banner stale-banner--error" role="alert">
+          <IconWarning style={{ width: 14, height: 14 }} />
+          <span>Failed to load filing data. <button className="stale-banner__retry" onClick={() => load(filingsWindowDays)}>Retry</button></span>
+        </div>
+      )}
+      {showStaleDataModal && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowStaleDataModal(false); }}>
+          <div className="modal-panel stale-modal">
+            <div className="modal-panel__hdr">
+              <span className="modal-panel__title">Data isn't updating</span>
+              <button className="modal-close" onClick={() => setShowStaleDataModal(false)} title="Close (Esc)"><IconClose style={{ width: 12, height: 12 }} /></button>
+            </div>
+            <div className="modal-body stale-modal__body">
+              <p>Live filing data hasn't updated in a few days. We're aware and working on it.</p>
+              <p className="stale-modal__timestamp">
+                Last new filing: <strong>{lastFilingDate ? fmt.dateShort(lastFilingDate) : 'unknown'}</strong>
+                {daysSinceLastFiling != null && ` (${daysSinceLastFiling} day${daysSinceLastFiling === 1 ? '' : 's'} ago)`}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-    <GuideProvider>
-    <div className={`ws-shell${panelOpen?' ws-shell--panel-open':''}${page==='settings'?' ws-shell--settings':''}`}>
-      <TopNav
-        page={page} setPage={navTo} dark={dark} setDark={setDark} user={user}
-        onUpgrade={(f) => setShowUpgradeModal(f || 'default')}
-        lastFilingDate={lastFilingDate} isDataStale={isDataStale} loading={loading}
-      />
-      <main className="ws-main">
-        {cameFromHome && page !== 'home' && (
-          <button className="home-breadcrumb" onClick={() => navTo('home')}>
-            <span className="home-breadcrumb__arrow"></span>
-            Home <span className="home-breadcrumb__sep">›</span> {PAGE_TITLES[page]}
-          </button>
-        )}
-        {page==='home'      && <HomePage filings={filings} loading={loading} watchlist={watchlist} user={user} onOpenDetail={openDetail} onSeeAll={seeAllFromHome}/>}
-        {page==='dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-        {page==='signals'   && <InsightsPage filings={filings} loading={loading} highlightTicker={hlTicker} setHighlightTicker={setHlTick} onSelectSignal={selectSignal} selectedSignal={selSignal} onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user} ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-        {page==='data'      && <DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'data_export')}/>}
-        {page==='settings'  && <SettingsPage user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-        {page==='watchlist' && <WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow} user={user}/>}
-      </main>
-      {/* Footer outside ws-main — pinned at bottom of ws-shell, always same height */}
-      <footer className="ws-footer">
-        <span>Private Beta · Not financial advice.</span>
-        <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
-        <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
-        <a href="/help" target="_blank" rel="noreferrer">Help</a>
-      </footer>
-      {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={isPro(user)} onClose={()=>watchlist.setShowUpgrade(null)}/>}
-      {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={isPro(user)} onClose={()=>setShowUpgradeModal(null)}/>}
-      {panelOpen && !detailFull && (
-        <>
-          <div className="panel-overlay" onClick={closeDetail}/>
-          <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
-        </>
       )}
-      {panelOpen && detailFull && (
-        detail?.dataFilters
-          ? <DataDrawer initialDetail={detail} initialDetailStack={detailStack} filterState={detail.dataFilters} onClose={closeDetail} watchlist={watchlist} portfolioTickers={portfolioTickers} pro={isPro(user)} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>
-          : <InsightsDrawer type={detail?.type==='trader'?'insiders':'signals'} filings={filings} onClose={closeDetail} initialDetail={detail} initialDetailStack={detailStack} sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort} ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading} watchlist={watchlist} pro={isPro(user)}/>
-      )}
-    </div>
-    </GuideProvider>
+      <GuideProvider>
+        <div className={`ws-shell${panelOpen ? ' ws-shell--panel-open' : ''}${page === 'settings' ? ' ws-shell--settings' : ''}`}>
+          <TopNav
+            page={page} setPage={navTo} dark={dark} setDark={setDark} user={user}
+            onUpgrade={(f) => setShowUpgradeModal(f || 'default')}
+            lastFilingDate={lastFilingDate} isDataStale={isDataStale} loading={loading}
+          />
+          <main className="ws-main">
+            {cameFromHome && page !== 'home' && (
+              <button className="home-breadcrumb" onClick={() => navTo('home')}>
+                <span className="home-breadcrumb__arrow"></span>
+                Home <span className="home-breadcrumb__sep">›</span> {PAGE_TITLES[page]}
+              </button>
+            )}
+            {page === 'home' && <HomePage filings={filings} loading={loading} watchlist={watchlist} user={user} onOpenDetail={openDetail} onSeeAll={seeAllFromHome} />}
+            {page === 'dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f) => setShowUpgradeModal(f || 'default')} />}
+            {page === 'signals' && <InsightsPage filings={filings} loading={loading} highlightTicker={hlTicker} setHighlightTicker={setHlTick} onSelectSignal={selectSignal} selectedSignal={selSignal} onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user} ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist} onUpgrade={(f) => setShowUpgradeModal(f || 'default')} />}
+            {page === 'data' && <DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f) => setShowUpgradeModal(f || 'data_export')} />}
+            {page === 'settings' && <SettingsPage user={user} onUpgrade={(f) => setShowUpgradeModal(f || 'default')} />}
+            {page === 'watchlist' && <WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow} user={user} />}
+          </main>
+          {/* Footer outside ws-main — pinned at bottom of ws-shell, always same height */}
+          <footer className="ws-footer">
+            <span>Private Beta · Not financial advice.</span>
+            <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
+            <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+            <a href="/help" target="_blank" rel="noreferrer">Help</a>
+          </footer>
+          {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={isPro(user)} onClose={() => watchlist.setShowUpgrade(null)} />}
+          {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={isPro(user)} onClose={() => setShowUpgradeModal(null)} />}
+          {panelOpen && !detailFull && (
+            <>
+              <div className="panel-overlay" onClick={closeDetail} />
+              <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length > 0} watchlist={watchlist} />
+            </>
+          )}
+          {panelOpen && detailFull && (
+            detail?.dataFilters
+              ? <DataDrawer initialDetail={detail} initialDetailStack={detailStack} filterState={detail.dataFilters} onClose={closeDetail} watchlist={watchlist} portfolioTickers={portfolioTickers} pro={isPro(user)} onUpgrade={(f) => setShowUpgradeModal(f || 'default')} />
+              : <InsightsDrawer type={detail?.type === 'trader' ? 'insiders' : 'signals'} filings={filings} onClose={closeDetail} initialDetail={detail} initialDetailStack={detailStack} sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort} ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading} watchlist={watchlist} pro={isPro(user)} />
+          )}
+        </div>
+      </GuideProvider>
     </>
   );
 
@@ -10760,17 +10766,17 @@ function AppErrorFallback({ error }) {
 // homepage." This sets it correctly per route so /about, /data-download, etc.
 // get indexed as separate pages.
 const SEO_TITLES = {
-  '/':              'Seli — Know When Insiders Move | SEC Form 4 & Congressional Stock Trades',
-  '/about':         'How Insider Trades Beat the Market | Research & Methodology — Seli',
+  '/': 'Seli — Know When Insiders Move | SEC Form 4 & Congressional Stock Trades',
+  '/about': 'How Insider Trades Beat the Market | Research & Methodology — Seli',
   '/data-download': 'Download SEC Insider Trading Data (CSV) | 10+ Years of Form 4 Filings — Seli',
-  '/terms':         'Terms of Service — Seli',
-  '/privacy':       'Privacy Policy — Seli',
-  '/cookies':       'Cookie Policy — Seli',
-  '/help':          'Help Center — Seli',
+  '/terms': 'Terms of Service — Seli',
+  '/privacy': 'Privacy Policy — Seli',
+  '/cookies': 'Cookie Policy — Seli',
+  '/help': 'Help Center — Seli',
 };
 const SEO_DESCRIPTIONS = {
-  '/':              'Track SEC Form 4 insider trades and congressional stock disclosures in real time. Scored by conviction, with instant alerts and portfolio integration. Free to start.',
-  '/about':         'The peer-reviewed research behind insider trading signals. How corporate insider buying outperforms the market by 4-5% annually, and how Seli scores each trade using findings from Seyhun, Lakonishok & Lee, and Cohen et al.',
+  '/': 'Track SEC Form 4 insider trades and congressional stock disclosures in real time. Scored by conviction, with instant alerts and portfolio integration. Free to start.',
+  '/about': 'The peer-reviewed research behind insider trading signals. How corporate insider buying outperforms the market by 4-5% annually, and how Seli scores each trade using findings from Seyhun, Lakonishok & Lee, and Cohen et al.',
   '/data-download': 'Download the complete SEC Form 4 insider trading dataset. 10+ years of corporate executive trades as structured CSV. One-time purchase, $39.99. Works with Excel, Python, R.',
 };
 
@@ -10805,7 +10811,7 @@ export default function App() {
   useSEO();
   return (
     <Sentry.ErrorBoundary fallback={AppErrorFallback}>
-      <AppInner/>
+      <AppInner />
     </Sentry.ErrorBoundary>
   );
 }
