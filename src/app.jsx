@@ -4291,75 +4291,84 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
         {/* Filter bar */}
         <div className="ws-filter-bar">
-          <div className="ws-search-wrap">
-            <span className="ws-search-icon">⌕</span>
-            <input className="ws-search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder={tab==='signals'?'Ticker or company…':'Ticker, company, or insider…'}/>
-            {search&&<button className="ws-search-clear" onClick={()=>setSearch('')}>×</button>}
+          <div className="ws-filter-bar__row">
+            <div className="ws-search-wrap">
+              <span className="ws-search-icon">⌕</span>
+              <input className="ws-search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder={tab==='signals'?'Ticker or company…':'Ticker, company, or insider…'}/>
+              {search&&<button className="ws-search-clear" onClick={()=>setSearch('')}>×</button>}
+            </div>
+
+            {tab==='signals'&&<>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Window</span>
+                <div className="ws-pills">
+                  {[{v:1,l:'1d'},{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>{
+                    if (!pro&&(o.v===null||o.v>7)) return null;
+                    return <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`} onClick={()=>setDays(o.v)}>{o.l}</button>;
+                  })}
+                  {!pro&&<button className="ws-pill ws-pill--locked" onClick={()=>onUpgrade('full_history')}>More ↑</button>}
+                </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Strength</span>
+                <div className="ws-pills">
+                  {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
+                    <button key={o.v} className={`ws-pill${minStr===o.v?' ws-pill--active':''}`}
+                      style={o.v===3&&minStr===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:o.v===2&&minStr===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
+                      onClick={()=>setMinStr(o.v)}>{o.l}</button>
+                  ))}
+                </div>
+              </div>
+            </>}
+
+            {tab==='raw'&&<>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Date</span>
+                <div className="ws-pills">
+                  {[{v:1,l:'1d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:null,l:'All'}].map(o=>(
+                    <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`} onClick={()=>setDays(o.v)}>{o.l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Type</span>
+                <div className="ws-pills">
+                  {[['all','All'],['buy','Buys'],['sell','Sells']].map(([v,l])=>(
+                    <button key={v} className={`ws-pill${txType===v?' ws-pill--active':''}`} onClick={()=>setTxType(v)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Role</span>
+                <div className="ws-pills">
+                  {[['','All'],['strong','C-Suite'],['medium','Officer']].map(([v,l])=>(
+                    <button key={v} className={`ws-pill${rawRoleF===v?' ws-pill--active':''}`} onClick={()=>setRawRoleF(v)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            </>}
           </div>
 
-          {tab==='signals'&&<>
-            <div className="ws-filter-group">
-              <span className="ws-filter-label">Window</span>
-              <div className="ws-pills">
-                {[{v:1,l:'1d'},{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>{
-                  if (!pro&&(o.v===null||o.v>7)) return null;
-                  return <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`} onClick={()=>setDays(o.v)}>{o.l}</button>;
-                })}
-                {!pro&&<button className="ws-pill ws-pill--locked" onClick={()=>onUpgrade('full_history')}>More ↑</button>}
+          <div className="ws-filter-bar__row">
+            {tab==='signals'&&<>
+              <div className="ws-filter-group" style={{borderLeft:'none',paddingLeft:0}}>
+                <span className="ws-filter-label">Type</span>
+                <div className="ws-pills">
+                  {[['','All'],['corporate','Corp'],['political','Congress']].map(([v,l])=>(
+                    <button key={v} className={`ws-pill${sourceF===v?' ws-pill--active':''}`} onClick={()=>setSourceF(v)}>{l}</button>
+                  ))}
+                </div>
               </div>
+            </>}
+            <div className="ws-filter-group" style={{borderLeft:tab==='raw'?'none':'',paddingLeft:tab==='raw'?0:''}}>
+              <span className="ws-filter-label">Sector</span>
+              <select className="ws-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
+                <option value="">All sectors</option>
+                {sectors.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
-            <div className="ws-filter-group">
-              <span className="ws-filter-label">Strength</span>
-              <div className="ws-pills">
-                {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
-                  <button key={o.v} className={`ws-pill${minStr===o.v?' ws-pill--active':''}`}
-                    style={o.v===3&&minStr===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:o.v===2&&minStr===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
-                    onClick={()=>setMinStr(o.v)}>{o.l}</button>
-                ))}
-              </div>
-            </div>
-            <div className="ws-filter-group">
-              <span className="ws-filter-label">Type</span>
-              <div className="ws-pills">
-                {[['','All'],['corporate','Corp'],['political','Congress']].map(([v,l])=>(
-                  <button key={v} className={`ws-pill${sourceF===v?' ws-pill--active':''}`} onClick={()=>setSourceF(v)}>{l}</button>
-                ))}
-              </div>
-            </div>
-          </>}
-
-          {tab==='raw'&&<>
-            <div className="ws-filter-group">
-              <span className="ws-filter-label">Date</span>
-              <div className="ws-pills">
-                {[{v:1,l:'1d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:null,l:'All'}].map(o=>(
-                  <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`} onClick={()=>setDays(o.v)}>{o.l}</button>
-                ))}
-              </div>
-            </div>
-            <div className="ws-filter-group">
-              <span className="ws-filter-label">Type</span>
-              <div className="ws-pills">
-                {[['all','All'],['buy','Buys'],['sell','Sells']].map(([v,l])=>(
-                  <button key={v} className={`ws-pill${txType===v?' ws-pill--active':''}`} onClick={()=>setTxType(v)}>{l}</button>
-                ))}
-              </div>
-            </div>
-            <div className="ws-filter-group">
-              <span className="ws-filter-label">Role</span>
-              <div className="ws-pills">
-                {[['','All'],['strong','C-Suite'],['medium','Officer']].map(([v,l])=>(
-                  <button key={v} className={`ws-pill${rawRoleF===v?' ws-pill--active':''}`} onClick={()=>setRawRoleF(v)}>{l}</button>
-                ))}
-              </div>
-            </div>
-          </>}
-
-          <select className="ws-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
-            <option value="">All sectors</option>
-            {sectors.map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
-          {hasFilters&&<button className="ws-clear-btn" onClick={resetFilters}>Clear</button>}
+            {hasFilters&&<button className="ws-clear-btn" onClick={resetFilters}>Clear</button>}
+          </div>
         </div>
 
         {/* ── SIGNALS TABLE ─────────────────────────────────────────────── */}
