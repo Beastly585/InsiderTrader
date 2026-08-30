@@ -2501,6 +2501,200 @@ function FollowBtn({ name, watchlist, compact=false }) {
   );
 }
 
+// RelBadge and TRow extracted to module level to prevent TDZ
+const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{rel==='strong'?'Exec':rel==='medium'?'Officer':'Director'}</Badge>;
+
+const TRow=({r,showTicker,showInsider})=>{
+  const tt=r.transaction_type||r.transactionType;
+  const code=r.transaction_code||r.transactionCode;
+  const isOM=r.is_open_market||r.isOpenMarket;
+  const pr=r.price||r.price_per_share;
+  const cur=r.current_price||r.currentPrice;
+  // Only P/S codes carry a real market price. A/M/J/etc often show $0 or a
+  // strike price that isn't comparable — don't compute a misleading return.
+  const hasRealPrice = isOM && pr>0;
+  const isForeign=r.is_foreign_price||r.isForeignPrice||(hasRealPrice&&cur&&Math.abs((cur-pr)/pr)>=3);
+  // For a BUY, price rising afterward is a good outcome. For a SELL, it's
+  // the opposite — price rising after you sold means you left money on
+  // the table. The percentage shown stays true to the actual price move
+  // (so it never contradicts the prices displayed next to it — a sale
+  // shown at $6.94 → $7.69 should never read as a negative number, that
+  // would look like a math error), but the color now reflects whether
+  // this was actually a good outcome for THIS trade's direction, which
+  // previously used the same green-if-positive logic for both buys and
+  // sells — backwards for every sell.
+  const ret=(hasRealPrice&&cur&&!isForeign)?((cur-pr)/pr*100):null;
+  const isGoodOutcome = ret!=null ? (tt==='sell' ? ret<0 : ret>=0) : null;
+  const dt=r.transaction_date||r.transactionDate||r.date;
+  const codeLabel = TX_CODE_TOOLTIPS[code]||code;
+  const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
+  const secUrl = secFilingUrl(r.accessionNumber || r.accession_number, r.cikIssuer || r.cik_issuer);
+  const secIcon = secUrl ? (
+    <a href={secUrl} target="_blank" rel="noopener noreferrer"
+       className="dp-trade-sec-link"
+       title="View original SEC filing"
+       onClick={e => e.stopPropagation()}>
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V11"/>
+        <path d="M9 2h5v5"/>
+        <path d="M14 2 7 9"/>
+      </svg>
+      <span className="dp-trade-sec-tooltip">View SEC filing</span>
+    </a>
+  ) : null;
+  // Scopes the eventual "expand to full Explore view" to whatever this
+  // panel itself represents — DataDrawer already restores every filter
+  // from this object and scrolls to/highlights the exact row that opened
+  // it (see its own scrolledOnOpenRef effect), it just needed a caller
+  // that actually attaches a dataFilters payload. Ticker/trader panels
+  // are the two contexts this row list is used in with a real single
+  // subject to scope to; anywhere else (a compact signals widget with no
+  // one fixed subject) this stays null and expand falls back to the
+  // existing general Insights drawer, unchanged.
+  const rowDataFilters = d.type==='ticker' && d.ticker ? { search: d.ticker }
+                        : d.type==='trader' && d.name ? { search: d.name }
+                        : null;
+  const openTransaction = () => nav('transaction', { trade: r, dataFilters: rowDataFilters });
+  return (
+    <div className={`dp-trade dp-trade--${tt} dp-clickable`}
+         role="button" tabIndex={0}
+         onClick={openTransaction}
+         onKeyDown={(e)=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); openTransaction(); } }}>
+      <div className={`dp-trade-split${inline?'':' dp-trade-split--stacked'}`}>
+        {/* LEFT — context: what kind of trade, when, who/what ticker.
+
+            The wide inline drawer (Filings Explore) keeps this to just
+            name+date — Buy/Sell + code become their OWN column in the
+            grid below, aligned with Shares/Price/etc., instead of a
+            separate badge cluster floating next to the name that didn't
+            line up with anything. The narrow docked panel has room to
+            keep badges attached to the row's top line instead. */}
+        {inline ? (
+          <div className="dp-trade-left">
+            <div className="dp-trade-left__top">
+              {showInsider && r.insider_name
+                ? <span className="dp-clickable dp-trade-row2__name dp-trade-row2__name--lg" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
+                : <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
+              {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+              {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+            </div>
+            <div className="dp-trade-left__bottom">
+              {showInsider && r.insider_name && <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
+              {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
+            </div>
+          </div>
+        ) : showInsider && r.insider_name ? (
+          <div className="dp-trade-toprow">
+            <div className="dp-trade-toprow__left">
+              <span className="dp-clickable dp-trade-row2__name" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
+              <div className="dp-trade-toprow__meta">
+                <span className="dp-trade-date">{dateLabel}</span>
+                {secIcon}
+                {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+                {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+              </div>
+            </div>
+            <div className="dp-trade-toprow__badges">
+              <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+              <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+              {isOM&&<span className="dp-trade-om-label">Open market</span>}
+            </div>
+          </div>
+        ) : (
+          <div className="dp-trade-left">
+            <div className="dp-trade-left__top">
+              <span className="dp-trade-date">{dateLabel}</span>
+              {secIcon}
+              {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+            </div>
+            <div className="dp-trade-left__bottom">
+              <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+              <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+              {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
+              {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+            </div>
+          </div>
+        )}
+        {/* RIGHT — every number that describes the purchase itself, all
+            grouped together and explicitly labeled: shares, price then,
+            price now, position change, and the total dollar amount.
+
+            In the wide inline drawer (`inline`), this is a fixed 5-column
+            grid where EVERY column slot always renders — showing "—" when
+            a value doesn't apply — so the columns line up vertically across
+            every transaction row regardless of which fields each row has.
+            In the narrow docked side panel there isn't room for a rigid
+            5-column table, so it keeps the original content-width flex
+            layout that only shows the cells that apply. */}
+        {inline ? (
+          <div className="dp-trade-right dp-trade-right--grid">
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Type</span>
+              <span className="dp-trade-detail__val dp-trade-detail__val--type">
+                <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+                <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+              </span>
+            </div>
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Shares</span>
+              <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+            </div>
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Price</span>
+              <span className="dp-trade-detail__val">{hasRealPrice?fmt.price(pr):'—'}</span>
+            </div>
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Now</span>
+              {hasRealPrice&&ret!=null
+                ? <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span>
+                : <span className="dp-trade-detail__val td-muted">—</span>}
+            </div>
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">% of position</span>
+              <span className="dp-trade-detail__val val-buy">{(r.pct_owned_change||r.pctOwnedChange)!=null?`+${(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%`:'—'}</span>
+            </div>
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Total</span>
+              <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="dp-trade-right">
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Shares</span>
+              <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+            </div>
+            {hasRealPrice ? (<>
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Price</span>
+                <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
+              </div>
+              {ret!=null && (
+                <div className="dp-trade-detail">
+                  <span className="dp-trade-detail__label">Now</span>
+                  <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
+                    {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
+                  </span>
+                </div>
+              )}
+            </>) : null}
+            {(r.pct_owned_change||r.pctOwnedChange)!=null && (
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">% of position</span>
+                <span className="dp-trade-detail__val val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%</span>
+              </div>
+            )}
+            <div className="dp-trade-detail">
+              <span className="dp-trade-detail__label">Total</span>
+              <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, watchlist, inline=false, onExpand, hideProfileCard=false }) {
   // Note: this component is only ever mounted by the caller when `detail` is
   // truthy (see App's panelOpen guard), so `d` is always defined here. No
@@ -2849,199 +3043,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   },[d]);
 
   const score=traderStats?trustScore(traderStats):null;
-  const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{rel==='strong'?'Exec':rel==='medium'?'Officer':'Director'}</Badge>;
-
-  const TRow=({r,showTicker,showInsider})=>{
-    const tt=r.transaction_type||r.transactionType;
-    const code=r.transaction_code||r.transactionCode;
-    const isOM=r.is_open_market||r.isOpenMarket;
-    const pr=r.price||r.price_per_share;
-    const cur=r.current_price||r.currentPrice;
-    // Only P/S codes carry a real market price. A/M/J/etc often show $0 or a
-    // strike price that isn't comparable — don't compute a misleading return.
-    const hasRealPrice = isOM && pr>0;
-    const isForeign=r.is_foreign_price||r.isForeignPrice||(hasRealPrice&&cur&&Math.abs((cur-pr)/pr)>=3);
-    // For a BUY, price rising afterward is a good outcome. For a SELL, it's
-    // the opposite — price rising after you sold means you left money on
-    // the table. The percentage shown stays true to the actual price move
-    // (so it never contradicts the prices displayed next to it — a sale
-    // shown at $6.94 → $7.69 should never read as a negative number, that
-    // would look like a math error), but the color now reflects whether
-    // this was actually a good outcome for THIS trade's direction, which
-    // previously used the same green-if-positive logic for both buys and
-    // sells — backwards for every sell.
-    const ret=(hasRealPrice&&cur&&!isForeign)?((cur-pr)/pr*100):null;
-    const isGoodOutcome = ret!=null ? (tt==='sell' ? ret<0 : ret>=0) : null;
-    const dt=r.transaction_date||r.transactionDate||r.date;
-    const codeLabel = TX_CODE_TOOLTIPS[code]||code;
-    const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
-    const secUrl = secFilingUrl(r.accessionNumber || r.accession_number, r.cikIssuer || r.cik_issuer);
-    const secIcon = secUrl ? (
-      <a href={secUrl} target="_blank" rel="noopener noreferrer"
-         className="dp-trade-sec-link"
-         title="View original SEC filing"
-         onClick={e => e.stopPropagation()}>
-        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V11"/>
-          <path d="M9 2h5v5"/>
-          <path d="M14 2 7 9"/>
-        </svg>
-        <span className="dp-trade-sec-tooltip">View SEC filing</span>
-      </a>
-    ) : null;
-    // Scopes the eventual "expand to full Explore view" to whatever this
-    // panel itself represents — DataDrawer already restores every filter
-    // from this object and scrolls to/highlights the exact row that opened
-    // it (see its own scrolledOnOpenRef effect), it just needed a caller
-    // that actually attaches a dataFilters payload. Ticker/trader panels
-    // are the two contexts this row list is used in with a real single
-    // subject to scope to; anywhere else (a compact signals widget with no
-    // one fixed subject) this stays null and expand falls back to the
-    // existing general Insights drawer, unchanged.
-    const rowDataFilters = d.type==='ticker' && d.ticker ? { search: d.ticker }
-                          : d.type==='trader' && d.name ? { search: d.name }
-                          : null;
-    const openTransaction = () => nav('transaction', { trade: r, dataFilters: rowDataFilters });
-    return (
-      <div className={`dp-trade dp-trade--${tt} dp-clickable`}
-           role="button" tabIndex={0}
-           onClick={openTransaction}
-           onKeyDown={(e)=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); openTransaction(); } }}>
-        <div className={`dp-trade-split${inline?'':' dp-trade-split--stacked'}`}>
-          {/* LEFT — context: what kind of trade, when, who/what ticker.
-
-              The wide inline drawer (Filings Explore) keeps this to just
-              name+date — Buy/Sell + code become their OWN column in the
-              grid below, aligned with Shares/Price/etc., instead of a
-              separate badge cluster floating next to the name that didn't
-              line up with anything. The narrow docked panel has room to
-              keep badges attached to the row's top line instead. */}
-          {inline ? (
-            <div className="dp-trade-left">
-              <div className="dp-trade-left__top">
-                {showInsider && r.insider_name
-                  ? <span className="dp-clickable dp-trade-row2__name dp-trade-row2__name--lg" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
-                  : <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
-                {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
-                {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
-              </div>
-              <div className="dp-trade-left__bottom">
-                {showInsider && r.insider_name && <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
-                {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
-              </div>
-            </div>
-          ) : showInsider && r.insider_name ? (
-            <div className="dp-trade-toprow">
-              <div className="dp-trade-toprow__left">
-                <span className="dp-clickable dp-trade-row2__name" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
-                <div className="dp-trade-toprow__meta">
-                  <span className="dp-trade-date">{dateLabel}</span>
-                  {secIcon}
-                  {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
-                  {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
-                </div>
-              </div>
-              <div className="dp-trade-toprow__badges">
-                <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-                <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
-                {isOM&&<span className="dp-trade-om-label">Open market</span>}
-              </div>
-            </div>
-          ) : (
-            <div className="dp-trade-left">
-              <div className="dp-trade-left__top">
-                <span className="dp-trade-date">{dateLabel}</span>
-                {secIcon}
-                {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
-              </div>
-              <div className="dp-trade-left__bottom">
-                <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-                <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
-                {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
-                {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
-              </div>
-            </div>
-          )}
-          {/* RIGHT — every number that describes the purchase itself, all
-              grouped together and explicitly labeled: shares, price then,
-              price now, position change, and the total dollar amount.
-
-              In the wide inline drawer (`inline`), this is a fixed 5-column
-              grid where EVERY column slot always renders — showing "—" when
-              a value doesn't apply — so the columns line up vertically across
-              every transaction row regardless of which fields each row has.
-              In the narrow docked side panel there isn't room for a rigid
-              5-column table, so it keeps the original content-width flex
-              layout that only shows the cells that apply. */}
-          {inline ? (
-            <div className="dp-trade-right dp-trade-right--grid">
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Type</span>
-                <span className="dp-trade-detail__val dp-trade-detail__val--type">
-                  <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-                  <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
-                </span>
-              </div>
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Shares</span>
-                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
-              </div>
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Price</span>
-                <span className="dp-trade-detail__val">{hasRealPrice?fmt.price(pr):'—'}</span>
-              </div>
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Now</span>
-                {hasRealPrice&&ret!=null
-                  ? <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span>
-                  : <span className="dp-trade-detail__val td-muted">—</span>}
-              </div>
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">% of position</span>
-                <span className="dp-trade-detail__val val-buy">{(r.pct_owned_change||r.pctOwnedChange)!=null?`+${(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%`:'—'}</span>
-              </div>
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Total</span>
-                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
-              </div>
-            </div>
-          ) : (
-            <div className="dp-trade-right">
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Shares</span>
-                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
-              </div>
-              {hasRealPrice ? (<>
-                <div className="dp-trade-detail">
-                  <span className="dp-trade-detail__label">Price</span>
-                  <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
-                </div>
-                {ret!=null && (
-                  <div className="dp-trade-detail">
-                    <span className="dp-trade-detail__label">Now</span>
-                    <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
-                      {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
-                    </span>
-                  </div>
-                )}
-              </>) : null}
-              {(r.pct_owned_change||r.pctOwnedChange)!=null && (
-                <div className="dp-trade-detail">
-                  <span className="dp-trade-detail__label">% of position</span>
-                  <span className="dp-trade-detail__val val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%</span>
-                </div>
-              )}
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Total</span>
-                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   const header=()=>{
     if(d.type==='trader'){
       const affs = traderStats?.affiliations || [];
