@@ -4090,6 +4090,20 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
               <button className="ws-tile__see-all-btn" onClick={()=>onSeeAll('dashboard')}>View all signals with full filters →</button>
             </div>
           </div>
+
+          {/* 3. Top insiders tile — below signals, same column width */}
+          <div className="ws-tile">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Top insiders</span>
+                <span className="ws-tile__sub">By composite score</span>
+              </div>
+              <button className="ws-tile__action" onClick={()=>onSeeAll('signals')}>Full leaderboard →</button>
+            </div>
+            <div className="ws-tile__body">
+              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
+            </div>
+          </div>
         </div>
 
         {/* RIGHT — market news fills the full column height */}
@@ -4114,20 +4128,6 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
               <MarketNews watchlist={watchlist} filings={filings} limit={30} myNewsOn={myNews}/>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Top insiders — below the two left tiles, full width */}
-      <div className="ws-tile" style={{marginTop:18}}>
-        <div className="ws-tile__hdr">
-          <div className="ws-tile__hdr-left">
-            <span className="ws-tile__title">Top insiders</span>
-            <span className="ws-tile__sub">By composite score</span>
-          </div>
-          <button className="ws-tile__action" onClick={()=>onSeeAll('signals')}>Full leaderboard →</button>
-        </div>
-        <div className="ws-tile__body">
-          <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
         </div>
       </div>
     </div>
@@ -4212,8 +4212,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
   const rawFilings = useMemo(() =>
     [...allRaw].sort((a,b)=>{
-      const aV = rawSort==='date'?(a.transactionDate||a.date||''):rawSort==='value'?(a.value||0):(a.shares||0);
-      const bV = rawSort==='date'?(b.transactionDate||b.date||''):rawSort==='value'?(b.value||0):(b.shares||0);
+      const aV = rawSort==='date'?(a.transactionDate||a.date||''):rawSort==='value'?(a.value||0):rawSort==='pctChange'?(a.pctOwnedChange||0):(a.shares||0);
+      const bV = rawSort==='date'?(b.transactionDate||b.date||''):rawSort==='value'?(b.value||0):rawSort==='pctChange'?(b.pctOwnedChange||0):(b.shares||0);
       return rawDir>0?(aV>bV?1:-1):(bV>aV?1:-1);
     }).slice(0,300),
   [allRaw, rawSort, rawDir]);
@@ -4371,7 +4371,9 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               <div className="ws-col-hdrs ws-col-hdrs--data">
                 <button className={`ws-col-sort${sigSort==='ticker'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('ticker')}>Ticker{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
                 {!isMobile&&<button className={`ws-col-sort${sigSort==='company'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('company')}>Company{sigSort==='company'&&(sigDir<0?' ↓':' ↑')}</button>}
+                {!isMobile&&<button className={`ws-col-sort${sigSort==='lastTradeDate'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('lastTradeDate')}>Date{sigSort==='lastTradeDate'&&(sigDir<0?' ↓':' ↑')}</button>}
                 <button className={`ws-col-sort ws-col-sort--right${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}>Insiders{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>
+                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sigSort==='buys'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('buys')}>Trades{sigSort==='buys'&&(sigDir<0?' ↓':' ↑')}</button>}
                 <button className={`ws-col-sort ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}>Net value{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
                 <button className={`ws-col-sort ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}>Conviction{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
               </div>
@@ -4400,10 +4402,14 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                           {isMobile&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:2,paddingLeft:18}}>{s.company}</div>}
                         </div>
                         {!isMobile&&<div className="ws-row__cell ws-row__cell--overflow">{s.company}</div>}
+                        {!isMobile&&<div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>{fmt.dateShort(s.lastTradeDate)}</div>}
                         <div className="ws-row__cell ws-row__cell--right">
                           <span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{s.insiderCount}</span>
                           {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:9,padding:'0 4px',marginLeft:3}}>{s.cSuiteBuys}×</span>}
                         </div>
+                        {!isMobile&&<div className="ws-row__cell ws-row__cell--right">
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{s.buys+s.sells}</span>
+                        </div>}
                         <div className="ws-row__cell ws-row__cell--right">
                           <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</span>
                         </div>
@@ -4474,12 +4480,12 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             <>
               {/* Same outer width as signals. 7-col grid: chevron+date | ticker | insider | role | type | ±position | value */}
               <div className="ws-col-hdrs ws-col-hdrs--raw">
-                <button className={`ws-col-sort${rawSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('date')}>Date{rawSort==='date'&&(rawDir<0?' ↓':' ↑')}</button>
                 <span className="ws-col-sort">Ticker</span>
                 {!isMobile&&<span className="ws-col-sort">Insider</span>}
+                <button className={`ws-col-sort${rawSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('date')}>Date{rawSort==='date'&&(rawDir<0?' ↓':' ↑')}</button>
                 {!isMobile&&<span className="ws-col-sort">Role</span>}
                 <span className="ws-col-sort">Type</span>
-                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${rawSort==='shares'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('shares')}>± Position{rawSort==='shares'&&(rawDir<0?' ↓':' ↑')}</button>}
+                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${rawSort==='pctChange'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('pctChange')}>% Position{rawSort==='pctChange'&&(rawDir<0?' ↓':' ↑')}</button>}
                 <button className={`ws-col-sort ws-col-sort--right${rawSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('value')}>Value{rawSort==='value'&&(rawDir<0?' ↓':' ↑')}</button>
               </div>
               <div>
@@ -4495,21 +4501,22 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
                       <div className="ws-row__main ws-row__main--raw" style={{cursor:'pointer'}}
                         onClick={()=>toggleRaw(i)}>
-                        <div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>
-                          <span className="ws-row__chevron ws-row__chevron--lg">{isExp?'▾':'▸'}</span>
-                          {fmt.dateShort(f.transactionDate||f.date)}
-                        </div>
                         <div className="ws-row__cell">
-                          <span className="ticker">{f.ticker}</span>
-                          {isMobile&&<div style={{fontSize:10,color:'var(--text-3)',marginTop:2}}>{f.insiderName}</div>}
+                          <div style={{display:'flex',alignItems:'center',gap:5}}>
+                            <span className="ws-row__chevron ws-row__chevron--lg">{isExp?'▾':'▸'}</span>
+                            <span className="ticker">{f.ticker}</span>
+                          </div>
+                          {isMobile&&<div style={{fontSize:10,color:'var(--text-3)',marginTop:2,paddingLeft:18}}>{f.insiderName}</div>}
                         </div>
                         {!isMobile&&<div className="ws-row__cell ws-row__cell--overflow" style={{fontSize:12}}>{f.insiderName}</div>}
+                        <div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>
+                          {fmt.dateShort(f.transactionDate||f.date)}
+                        </div>
                         {!isMobile&&<div className="ws-row__cell"><Badge type={`rel-${f.relationship||'weak'}`}>{f.relationship==='strong'?'C-Suite':f.relationship==='medium'?'Officer':'Dir'}</Badge></div>}
                         <div className="ws-row__cell"><span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span></div>
-                        {/* Net position change — signed shares count */}
                         {!isMobile&&<div className="ws-row__cell ws-row__cell--right">
                           <span className={`ws-row__pos-change${isBuy?' val-buy':' val-sell'}`}>
-                            {isBuy?'+':'−'}{f.shares?fmt.number(f.shares)+' sh':'—'}
+                            {f.pctOwnedChange!=null ? `${isBuy?'+':'−'}${Math.abs(f.pctOwnedChange).toFixed(1)}%` : '—'}
                           </span>
                         </div>}
                         <div className="ws-row__cell ws-row__cell--right">
