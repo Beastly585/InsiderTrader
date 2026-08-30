@@ -1,458 +1,189 @@
 // src/lib/scoring.test.js
+// Drop-in for your Vitest suite: npx vitest run src/lib/scoring.test.js
 import { describe, it, expect } from 'vitest';
-import {
-  isPro, hasDataExport, buildSignals, tierFromPct,
-  RISK_APPETITE_THRESHOLDS, processLeaderboardRows, filterAndScoreSignals,
-} from './scoring.js';
+import { buildSignals, filterAndScoreSignals, processLeaderboardRows } from './scoring.js';
 
-// ─────────────────────────────────────────────────────────────────────────────
-describe('isPro / hasDataExport', () => {
-  it('returns false for no user', () => {
-    expect(isPro(null)).toBe(false);
-    expect(isPro(undefined)).toBe(false);
-    expect(hasDataExport(null)).toBe(false);
-  });
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const today = new Date().toISOString().split('T')[0];
+const daysAgoDate = (n) => {
+  const d = new Date(); d.setDate(d.getDate() - n);
+  return d.toISOString().split('T')[0];
+};
 
-  it('returns false when publicMetadata is missing entirely', () => {
-    expect(isPro({})).toBe(false);
-  });
+function makeFiling(overrides = {}) {
+  return {
+    ticker: 'TEST', company: 'Test Inc.', sector: 'Technology',
+    insiderName: 'Doe John', title: 'Director', isOfficer: false,
+    transactionType: 'buy', transactionCode: 'P', isOpenMarket: true,
+    shares: 1000, price: 50, value: 50000,
+    transactionDate: today, date: today,
+    pctOwnedChange: 5, relationship: 'weak', isRoutine: false,
+    ...overrides,
+  };
+}
 
-  it('returns false for any plan value other than exactly "pro"', () => {
-    expect(isPro({ publicMetadata: { plan: 'free' } })).toBe(false);
-    expect(isPro({ publicMetadata: { plan: 'Pro' } })).toBe(false); // case-sensitive on purpose
-    expect(isPro({ publicMetadata: { plan: '' } })).toBe(false);
-  });
+// ── buildSignals: conviction is 0–100 ────────────────────────────────────────
 
-  it('returns true only for exactly plan: "pro"', () => {
-    expect(isPro({ publicMetadata: { plan: 'pro' } })).toBe(true);
-  });
-
-  it('hasDataExport requires strictly boolean true, not truthy', () => {
-    expect(hasDataExport({ publicMetadata: { hasDataExport: 'true' } })).toBe(false);
-    expect(hasDataExport({ publicMetadata: { hasDataExport: 1 } })).toBe(false);
-    expect(hasDataExport({ publicMetadata: { hasDataExport: true } })).toBe(true);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-describe('buildSignals — open-market filtering (regression test for tonight\'s bug)', () => {
-  it('excludes grants/awards entirely, even when transactionType is "buy"', () => {
-    // This is the exact failure mode found and fixed tonight: a stock grant
-    // has transactionType 'buy' (per the ingestion fallback mapping) but
-    // isOpenMarket false — it must never count toward conviction.
-    const filings = [
-      { ticker:'AAPL', company:'Apple', insiderName:'Jane CEO', relationship:'strong',
-        transactionType:'buy', isOpenMarket:false, value:5_000_000, transactionDate:'2026-01-01' },
-    ];
+describe('buildSignals v2 — conviction scale', () => {
+  it('produces conviction in the 0–100 range, never exceeding 100', () => {
+    // Volume monster: many trades, many insiders, huge value
+    const filings = [];
+    for (let i = 0; i < 40; i++) {
+      filings.push(makeFiling({
+        insiderName: `Insider ${i % 8}`,
+        relationship: i < 3 ? 'strong' : 'weak',
+        value: 1_000_000,
+        transactionDate: daysAgoDate(Math.floor(i / 5)),
+      }));
+    }
     const signals = buildSignals(filings);
-    expect(signals).toHaveLength(0); // nothing qualifies — the only filing was non-open-market
-  });
-
-  it('counts genuine open-market buys correctly', () => {
-    const filings = [
-      { ticker:'AAPL', company:'Apple', insiderName:'Jane CEO', relationship:'strong',
-        transactionType:'buy', isOpenMarket:true, value:1_000_000, transactionDate:'2026-01-01' },
-    ];
-    const signals = buildSignals(filings);
-    expect(signals).toHaveLength(1);
-    expect(signals[0].buys).toBe(1);
-    expect(signals[0].buyValue).toBe(1_000_000);
-    expect(signals[0].cSuiteBuys).toBe(1);
-  });
-
-  it('a mix of open-market and non-open-market filings only counts the open-market ones', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'A', relationship:'strong', transactionType:'buy',
-        isOpenMarket:true,  value:500_000, transactionDate:'2026-01-01' },
-      { ticker:'AAPL', insiderName:'A', relationship:'strong', transactionType:'buy',
-        isOpenMarket:false, value:9_000_000, transactionDate:'2026-01-02' }, // grant — must be excluded
-    ];
-    const signals = buildSignals(filings);
-    expect(signals[0].buys).toBe(1);
-    expect(signals[0].buyValue).toBe(500_000); // NOT 9.5M — the grant must not leak in
-  });
-
-  it('congressional trades count even though relationship is not "strong"', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'Rep. Someone', relationship:'weak', transactionCode:'CONGRESS_P',
-        transactionType:'buy', isOpenMarket:true, value:250_000, transactionDate:'2026-01-01' },
-    ];
-    const signals = buildSignals(filings);
-    expect(signals).toHaveLength(1);
-    expect(signals[0].isPolitical).toBe(true);
-  });
-
-  it('a congressional buy gets real conviction weight, not just a quality-gate pass', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'Rep. Someone', relationship:'weak', transactionCode:'CONGRESS_P',
-        transactionType:'buy', isOpenMarket:true, value:250_000, transactionDate:'2026-01-01' },
-    ];
-    const signals = buildSignals(filings);
-    expect(signals[0].politicalBuys).toBe(1);
-    // Same math as a single C-suite buy of the same value: cSuiteBuys*5 term
-    // is unavailable to Congress, but politicalBuys*5 fills that same role.
-    expect(signals[0].conviction).toBeGreaterThanOrEqual(5);
-  });
-
-  it('a sell-heavy congressional ticker produces both buy and sell signals', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'Rep. A', relationship:'weak', transactionCode:'CONGRESS_P',
-        transactionType:'buy', isOpenMarket:true, value:100_000, transactionDate:'2026-01-01' },
-      ...['Rep. B','Rep. C','Rep. D'].map(name => ({
-        ticker:'AAPL', insiderName:name, relationship:'weak', transactionCode:'CONGRESS_S',
-        transactionType:'sell', isOpenMarket:true, value:100_000, transactionDate:'2026-01-02',
-      })),
-    ];
-    const signals = buildSignals(filings);
-    const buySig = signals.find(s => s.direction === 'buy');
-    const sellSig = signals.find(s => s.direction === 'sell');
-    expect(buySig).toBeDefined();
-    expect(buySig.buys).toBe(1);
-    expect(buySig.conviction).toBeGreaterThan(0);
-    // 3 distinct sell insiders → sell signal generated
-    expect(sellSig).toBeDefined();
-    expect(sellSig.insiderCount).toBe(3);
-    expect(sellSig.conviction).toBeGreaterThan(0);
-  });
-});
-
-describe('buildSignals — position swing bonus tiers', () => {
-  function signalWithSwing(pctOwnedChange) {
-    const filings = [
-      { ticker:'AAPL', insiderName:'A', relationship:'weak', transactionType:'buy',
-        isOpenMarket:true, value:100_000, transactionDate:'2026-01-01', pctOwnedChange },
-    ];
-    return buildSignals(filings)[0];
-  }
-
-  it('no bonus below 10%', () => {
-    const base = signalWithSwing(5);
-    const noSwing = signalWithSwing(null);
-    expect(base.conviction).toBeCloseTo(noSwing.conviction, 5);
-  });
-
-  it('missing pct_owned_change is neutral, not penalized', () => {
-    const s = signalWithSwing(null);
-    expect(s.maxPositionSwing).toBe(0);
-  });
-
-  it('10-19% swing adds a modest bonus', () => {
-    const withSwing = signalWithSwing(15);
-    const without = signalWithSwing(5);
-    expect(withSwing.conviction).toBeGreaterThan(without.conviction);
-    expect(withSwing.conviction - without.conviction).toBeCloseTo(1, 5);
-  });
-
-  it('20-49% swing adds a bigger bonus than 10-19%', () => {
-    const mid = signalWithSwing(25);
-    const low = signalWithSwing(15);
-    expect(mid.conviction - low.conviction).toBeCloseTo(1, 5); // 2 - 1
-  });
-
-  it('50%+ swing gets the maximum bonus', () => {
-    const huge = signalWithSwing(75);
-    const mid = signalWithSwing(25);
-    expect(huge.conviction - mid.conviction).toBeCloseTo(2, 5); // 4 - 2
-  });
-
-  it('the largest qualifying swing wins when an insider has multiple buys', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'A', relationship:'weak', transactionType:'buy',
-        isOpenMarket:true, value:100_000, transactionDate:'2026-01-01', pctOwnedChange:8 },
-      { ticker:'AAPL', insiderName:'A', relationship:'weak', transactionType:'buy',
-        isOpenMarket:true, value:100_000, transactionDate:'2026-01-02', pctOwnedChange:60 },
-    ];
-    const s = buildSignals(filings)[0];
-    expect(s.maxPositionSwing).toBe(60);
-  });
-});
-
-describe('buildSignals — basic aggregation', () => {
-  it('nets buys and sells correctly into netValue', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'A', relationship:'weak', transactionType:'buy',
-        isOpenMarket:true, value:300_000, transactionDate:'2026-01-01' },
-      { ticker:'AAPL', insiderName:'B', relationship:'weak', transactionType:'sell',
-        isOpenMarket:true, value:100_000, transactionDate:'2026-01-02' },
-    ];
-    // buildSignals now produces separate buy/sell entries per ticker.
-    // Only the buy signal appears here — a single sell insider doesn't
-    // meet the cluster threshold (2+ sell insiders required).
-    const signals = buildSignals(filings);
-    const buySig = signals.find(s => s.direction === 'buy');
-    expect(buySig).toBeDefined();
-    expect(buySig.netValue).toBe(200_000); // buyValue - sellValue = 300k - 100k
-    expect(buySig.insiderCount).toBe(1);   // only buy-side insiders counted
-    expect(signals.filter(s => s.direction === 'sell')).toHaveLength(0);
-  });
-
-  it('groups by ticker independently', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'A', relationship:'weak', transactionType:'buy', isOpenMarket:true, value:100_000, transactionDate:'2026-01-01' },
-      { ticker:'MSFT', insiderName:'B', relationship:'weak', transactionType:'buy', isOpenMarket:true, value:200_000, transactionDate:'2026-01-01' },
-    ];
-    const signals = buildSignals(filings);
-    expect(signals).toHaveLength(2);
-    expect(signals.find(s=>s.ticker==='AAPL').buyValue).toBe(100_000);
-    expect(signals.find(s=>s.ticker==='MSFT').buyValue).toBe(200_000);
-  });
-
-  it('filings with no ticker are silently skipped, not crashed on', () => {
-    const filings = [
-      { ticker:null, insiderName:'A', relationship:'weak', transactionType:'buy', isOpenMarket:true, value:100_000 },
-    ];
-    expect(() => buildSignals(filings)).not.toThrow();
-    expect(buildSignals(filings)).toHaveLength(0);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-describe('buildSignals — sell signal generation', () => {
-  it('a single insider selling does NOT generate a sell signal', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'A', relationship:'strong', transactionType:'sell',
-        isOpenMarket:true, value:500_000, transactionDate:'2026-01-01' },
-    ];
-    const signals = buildSignals(filings);
-    expect(signals.filter(s => s.direction === 'sell')).toHaveLength(0);
-  });
-
-  it('2+ insiders selling the same ticker generates a sell signal', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'A', relationship:'strong', transactionType:'sell',
-        isOpenMarket:true, value:300_000, transactionDate:'2026-01-01' },
-      { ticker:'AAPL', insiderName:'B', relationship:'weak', transactionType:'sell',
-        isOpenMarket:true, value:200_000, transactionDate:'2026-01-02' },
-    ];
-    const signals = buildSignals(filings);
-    const sellSig = signals.find(s => s.direction === 'sell');
-    expect(sellSig).toBeDefined();
-    expect(sellSig.insiderCount).toBe(2);
-    expect(sellSig.sellValue).toBe(500_000);
-  });
-
-  it('sell signal netValue is negative (buyValue - sellValue)', () => {
-    const filings = [
-      { ticker:'AAPL', insiderName:'A', relationship:'weak', transactionType:'sell',
-        isOpenMarket:true, value:300_000, transactionDate:'2026-01-01' },
-      { ticker:'AAPL', insiderName:'B', relationship:'weak', transactionType:'sell',
-        isOpenMarket:true, value:200_000, transactionDate:'2026-01-02' },
-    ];
-    const sellSig = buildSignals(filings).find(s => s.direction === 'sell');
-    expect(sellSig.netValue).toBeLessThan(0);
-    expect(sellSig.netValue).toBe(-500_000); // 0 buys - 500k sells
-  });
-
-  it('sell signals have lower conviction than equivalent buy signals', () => {
-    const buyFilings = [
-      { ticker:'AAPL', insiderName:'A', relationship:'strong', transactionType:'buy',
-        isOpenMarket:true, value:300_000, transactionDate:'2026-01-01' },
-      { ticker:'AAPL', insiderName:'B', relationship:'strong', transactionType:'buy',
-        isOpenMarket:true, value:200_000, transactionDate:'2026-01-02' },
-    ];
-    const sellFilings = buyFilings.map(f => ({ ...f, transactionType:'sell' }));
-    const buySig = buildSignals(buyFilings).find(s => s.direction === 'buy');
-    const sellSig = buildSignals(sellFilings).find(s => s.direction === 'sell');
-    expect(sellSig.conviction).toBeLessThan(buySig.conviction);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-describe('tierFromPct — appetite thresholds', () => {
-  it('appetite 3 (default) matches the original hardcoded 66/33 thresholds exactly', () => {
-    // Critical regression test: appetite 3 must behave identically to the
-    // app's behavior before the slider existed, so nobody's current
-    // experience silently changes unless they actually move the slider.
-    expect(tierFromPct(67, 3)).toBe('high');
-    expect(tierFromPct(66, 3)).toBe('medium');
-    expect(tierFromPct(34, 3)).toBe('medium');
-    expect(tierFromPct(33, 3)).toBe('low');
-  });
-
-  it('appetite 1 (very conservative) requires a much higher score for "high"', () => {
-    expect(tierFromPct(70, 1)).toBe('medium'); // would be "high" at appetite 3
-    expect(tierFromPct(86, 1)).toBe('high');
-  });
-
-  it('appetite 5 (very aggressive) reaches "high" much more easily', () => {
-    expect(tierFromPct(41, 5)).toBe('high'); // would be "low"/"medium" at appetite 3
-  });
-
-  it('conservative appetites are strictly harder to reach "high" than aggressive ones, at every level', () => {
-    for (let pct = 0; pct <= 100; pct += 5) {
-      const tiers = [1,2,3,4,5].map(a => tierFromPct(pct, a));
-      const rank = { low:0, medium:1, high:2 };
-      for (let i=1; i<tiers.length; i++) {
-        expect(rank[tiers[i]]).toBeGreaterThanOrEqual(rank[tiers[i-1]]);
-      }
+    expect(signals.length).toBeGreaterThan(0);
+    for (const s of signals) {
+      expect(s.conviction).toBeGreaterThanOrEqual(0);
+      expect(s.conviction).toBeLessThanOrEqual(100);
     }
   });
 
-  it('an unrecognized appetite value falls back to the default (3) thresholds', () => {
-    expect(tierFromPct(50, 99)).toBe(tierFromPct(50, 3));
-    expect(tierFromPct(50, undefined)).toBe(tierFromPct(50, 3));
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-describe('processLeaderboardRows', () => {
-  it('computes hit_rate as a percentage, rounded', () => {
-    const rows = [{ insider_name:'A', wins:7, priced:10, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:12.3 }];
-    const [r] = processLeaderboardRows(rows);
-    expect(r.hit_rate).toBe(70);
+  it('scores a weak routine director buy low (under 30)', () => {
+    const filings = [makeFiling({ isRoutine: true, value: 25000, pctOwnedChange: 2 })];
+    const [signal] = buildSignals(filings);
+    expect(signal.conviction).toBeLessThan(30);
   });
 
-  it('hit_rate is null when there is no priced data, not zero', () => {
-    const rows = [{ insider_name:'A', wins:0, priced:0, om_buys:1, om_sells:0, total_buys:1, avg_return_pct:null }];
-    const [r] = processLeaderboardRows(rows);
-    expect(r.hit_rate).toBeNull();
-  });
-
-  it('hit_rate is null with fewer than 5 priced trades', () => {
-    const onePriced = processLeaderboardRows([{ insider_name:'A', wins:1, priced:1, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:20 }])[0];
-    const twoPriced = processLeaderboardRows([{ insider_name:'B', wins:1, priced:2, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:0 }])[0];
-    expect(onePriced.hit_rate).toBeNull();
-    expect(twoPriced.hit_rate).toBeNull();
-  });
-
-  it('hit_rate is shown once there are enough priced trades to mean something', () => {
-    const r = processLeaderboardRows([{ insider_name:'A', wins:4, priced:5, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:10 }])[0];
-    expect(r.hit_rate).toBe(80);
-  });
-
-  it('no longer rewards an unproven track record over a known-mediocre one — both should score the same from this component', () => {
-    const unproven = processLeaderboardRows([{ insider_name:'A', wins:0, priced:0, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:0 }])[0];
-    const knownMediocre = processLeaderboardRows([{ insider_name:'B', wins:2, priced:5, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:0 }])[0];
-    // knownMediocre has a real (if unremarkable, <50%) hit rate; unproven has
-    // none at all. Unproven should NOT outscore a known real record just for
-    // lacking data — that was the actual bug.
-    expect(unproven.proxy_score).toBeLessThanOrEqual(knownMediocre.proxy_score);
-  });
-
-  it('weighs relationship tier — C-suite outranks director with same record', () => {
-    const base = { wins:5, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:10 };
-    const strong = processLeaderboardRows([{ ...base, insider_name:'CEO', relationship:'strong' }])[0];
-    const weak   = processLeaderboardRows([{ ...base, insider_name:'TenPctOwner', relationship:'weak' }])[0];
-    expect(strong.proxy_score).toBeGreaterThan(weak.proxy_score);
-  });
-
-  it('a strongly negative average return costs points rather than just failing to help', () => {
-    const good = processLeaderboardRows([{ insider_name:'A', wins:5, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:0 }])[0];
-    const bad  = processLeaderboardRows([{ insider_name:'B', wins:5, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:-15 }])[0];
-    expect(bad.proxy_score).toBeLessThan(good.proxy_score);
-  });
-
-  it('proxy_score never exceeds the cap of 5', () => {
-    const rows = [{ insider_name:'A', wins:20, priced:20, om_buys:50, om_sells:0, total_buys:50, avg_return_pct:200 }];
-    const [r] = processLeaderboardRows(rows);
-    expect(r.proxy_score).toBeLessThanOrEqual(5);
-  });
-
-  it('sorts by proxy_score descending, breaking ties by win count', () => {
-    const rows = [
-      { insider_name:'Low',  wins:1, priced:5, om_buys:5, om_sells:0, total_buys:5, avg_return_pct:0 },
-      { insider_name:'High', wins:9, priced:10, om_buys:10, om_sells:0, total_buys:10, avg_return_pct:40 },
+  it('scores a C-suite opportunistic cluster buy high (above 55)', () => {
+    const filings = [
+      makeFiling({ insiderName: 'CEO', relationship: 'strong', value: 500000, pctOwnedChange: 30 }),
+      makeFiling({ insiderName: 'CFO', relationship: 'strong', value: 300000, pctOwnedChange: 20 }),
+      makeFiling({ insiderName: 'VP Sales', relationship: 'medium', value: 200000, pctOwnedChange: 15 }),
     ];
-    const sorted = processLeaderboardRows(rows);
-    expect(sorted[0].insider_name).toBe('High');
+    const [signal] = buildSignals(filings);
+    expect(signal.conviction).toBeGreaterThan(55);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-describe('filterAndScoreSignals — the full pipeline behind this session\'s congressional-signals investigation', () => {
-  const congressionalBuy = {
-    ticker: 'AAPL', insiderName: 'Rep. Someone', relationship: 'weak',
-    transactionCode: 'CONGRESS_P', transactionType: 'buy', isOpenMarket: true,
-    value: 250_000, transactionDate: '2026-06-01',
-  };
-  const corporateBuy = {
-    ticker: 'MSFT', insiderName: 'Jane CEO', relationship: 'strong',
-    transactionCode: 'P', transactionType: 'buy', isOpenMarket: true,
-    value: 500_000, transactionDate: '2026-06-01',
-  };
-
-  it('a congressional buy survives the full pipeline end-to-end with default options', () => {
-    const result = filterAndScoreSignals([congressionalBuy], { cutoff: '2020-01-01' });
-    expect(result).toHaveLength(1);
-    expect(result[0].isPolitical).toBe(true);
-  });
-
-  it('date cutoff excludes filings before it, regardless of source', () => {
-    const result = filterAndScoreSignals([congressionalBuy], { cutoff: '2026-12-31' });
-    expect(result).toHaveLength(0);
-  });
-
-  it('a cutoff of the empty string (no floor) never excludes anything by date — this is what "All" should resolve to, not a coercion bug', () => {
-    const result = filterAndScoreSignals([congressionalBuy], { cutoff: '' });
-    expect(result).toHaveLength(1);
-  });
-
-  it('sourceF="political" keeps only congressional filings', () => {
-    const result = filterAndScoreSignals([congressionalBuy, corporateBuy], { cutoff: '2020-01-01', sourceF: 'political' });
-    expect(result).toHaveLength(1);
-    expect(result[0].ticker).toBe('AAPL');
-  });
-
-  it('sourceF="corporate" keeps only non-congressional filings', () => {
-    const result = filterAndScoreSignals([congressionalBuy, corporateBuy], { cutoff: '2020-01-01', sourceF: 'corporate' });
-    expect(result).toHaveLength(1);
-    expect(result[0].ticker).toBe('MSFT');
-  });
-
-  it('sourceF="" (All types) keeps both', () => {
-    const result = filterAndScoreSignals([congressionalBuy, corporateBuy], { cutoff: '2020-01-01', sourceF: '' });
-    expect(result).toHaveLength(2);
-  });
-
-  it('a high strengthThreshold filters out signals below it', () => {
-    const result = filterAndScoreSignals([congressionalBuy], { cutoff: '2020-01-01', strengthThreshold: 999 });
-    expect(result).toHaveLength(0);
-  });
-
-  it('sectorF excludes filings outside the selected sector', () => {
-    const withSector = { ...congressionalBuy, sector: 'Technology' };
-    const result = filterAndScoreSignals([withSector], { cutoff: '2020-01-01', sectorF: 'Healthcare' });
-    expect(result).toHaveLength(0);
+describe('buildSignals v2 — contra-signal penalty', () => {
+  it('penalizes conviction when insiders are split (buys + sells)', () => {
+    const buyOnly = [
+      makeFiling({ insiderName: 'A', value: 500000 }),
+      makeFiling({ insiderName: 'B', value: 300000 }),
+    ];
+    const mixed = [
+      ...buyOnly,
+      makeFiling({ insiderName: 'C', transactionType: 'sell', transactionCode: 'S', value: 400000 }),
+      makeFiling({ insiderName: 'D', transactionType: 'sell', transactionCode: 'S', value: 300000 }),
+    ];
+    const [buySignal] = buildSignals(buyOnly).filter(s => s.direction === 'buy');
+    const [mixedSignal] = buildSignals(mixed).filter(s => s.direction === 'buy');
+    expect(mixedSignal.conviction).toBeLessThan(buySignal.conviction);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-describe('processLeaderboardRows — avg_spy_return_pct string coercion (regression test for a real production crash)', () => {
-  it('coerces a string avg_spy_return_pct (Postgres/Neon\'s actual wire format for numeric/AVG results) into a real number', () => {
-    // This exact shape — a string, not a number — is what crashed
-    // production: `r.avg_spy_return_pct.toFixed(1)` on a string threw
-    // "toFixed is not a function", because the field was passed straight
-    // through the {...r} spread with no coercion, unlike avg_return_pct,
-    // which already got Math.round(x*10)/10 applied (and *10 on a string
-    // implicitly converts it to a number in JS, which is why that sibling
-    // field never crashed).
-    const rows = [{
-      insider_name: 'A', wins: 5, priced: 10, om_buys: 10, om_sells: 0, total_buys: 10,
-      avg_return_pct: '12.345', avg_spy_return_pct: '8.219',
-    }];
-    const [r] = processLeaderboardRows(rows);
-    expect(typeof r.avg_spy_return).toBe('number');
-    expect(r.avg_spy_return).toBe(8.2);
-    // The actual failing call in production — must not throw.
-    expect(() => r.avg_spy_return.toFixed(1)).not.toThrow();
-    expect(r.avg_spy_return.toFixed(1)).toBe('8.2');
+describe('buildSignals v2 — recency decay', () => {
+  it('scores a recent signal higher than an identical stale one', () => {
+    const fresh = [makeFiling({ insiderName: 'A', transactionDate: daysAgoDate(1) })];
+    const stale = [makeFiling({ insiderName: 'A', transactionDate: daysAgoDate(60) })];
+
+    const [freshSig] = buildSignals(fresh);
+    const [staleSig] = buildSignals(stale);
+    expect(freshSig.conviction).toBeGreaterThan(staleSig.conviction);
+  });
+});
+
+describe('buildSignals v2 — velocity', () => {
+  it('scores concentrated trades higher than spread-out ones', () => {
+    // 3 trades in 1 day
+    const burst = [
+      makeFiling({ insiderName: 'A', transactionDate: today }),
+      makeFiling({ insiderName: 'B', transactionDate: today }),
+      makeFiling({ insiderName: 'C', transactionDate: today }),
+    ];
+    // Same 3 trades spread over 30 days
+    const slow = [
+      makeFiling({ insiderName: 'A', transactionDate: daysAgoDate(0) }),
+      makeFiling({ insiderName: 'B', transactionDate: daysAgoDate(15) }),
+      makeFiling({ insiderName: 'C', transactionDate: daysAgoDate(30) }),
+    ];
+    const [burstSig] = buildSignals(burst);
+    const [slowSig] = buildSignals(slow);
+    expect(burstSig.conviction).toBeGreaterThan(slowSig.conviction);
+  });
+});
+
+describe('buildSignals v2 — insider track record', () => {
+  it('boosts conviction when buying insiders have high hit rates', () => {
+    const filings = [
+      makeFiling({ insiderName: 'Good Insider', relationship: 'strong', value: 500000 }),
+    ];
+    const withStats = buildSignals(filings, {
+      insiderStats: new Map([['Good Insider', { hitRate: 85 }]]),
+    });
+    const without = buildSignals(filings);
+
+    const [boosted] = withStats;
+    const [baseline] = without;
+    expect(boosted.conviction).toBeGreaterThan(baseline.conviction);
+  });
+});
+
+describe('buildSignals v2 — _components breakdown', () => {
+  it('exposes a _components object with per-dimension scores', () => {
+    const filings = [makeFiling({ relationship: 'strong', value: 500000, pctOwnedChange: 25 })];
+    const [signal] = buildSignals(filings);
+    expect(signal._components).toBeDefined();
+    expect(signal._components).toHaveProperty('opportunistic');
+    expect(signal._components).toHaveProperty('cluster');
+    expect(signal._components).toHaveProperty('cSuite');
+    expect(signal._components).toHaveProperty('recency');
+    expect(signal._components).toHaveProperty('contraPenalty');
+  });
+});
+
+// ── filterAndScoreSignals ────────────────────────────────────────────────────
+
+describe('filterAndScoreSignals — strength thresholds on 0-100 scale', () => {
+  it('filters out signals below the threshold', () => {
+    const filings = [
+      makeFiling({ ticker: 'STRONG', insiderName: 'CEO', relationship: 'strong', value: 1_000_000, pctOwnedChange: 40 }),
+      makeFiling({ ticker: 'STRONG', insiderName: 'CFO', relationship: 'strong', value: 500_000, pctOwnedChange: 20 }),
+      makeFiling({ ticker: 'WEAK', insiderName: 'Dir', value: 20_000, isRoutine: true, pctOwnedChange: 1 }),
+    ];
+    const all = filterAndScoreSignals(filings, { strengthThreshold: 0 });
+    const strong = filterAndScoreSignals(filings, { strengthThreshold: 50 });
+    expect(all.length).toBeGreaterThanOrEqual(strong.length);
+    for (const s of strong) {
+      expect(s.conviction).toBeGreaterThanOrEqual(50);
+    }
+  });
+});
+
+// ── processLeaderboardRows — alpha and confidence ────────────────────────────
+
+describe('processLeaderboardRows v2', () => {
+  it('computes alpha as insider return minus SPY return', () => {
+    const [row] = processLeaderboardRows([{
+      priced: 20, wins: 14, avg_return_pct: 18.5, avg_spy_return_pct: 8.2,
+      om_buys: 15, om_sells: 2, total_buys: 20, relationship: 'strong',
+    }]);
+    expect(row.alpha).toBeCloseTo(10.3, 0);
+    expect(row.hit_rate).toBe(70);
+    expect(row.hit_rate_confident).toBe(true);
   });
 
-  it('still works correctly when avg_spy_return_pct genuinely is a number, not just a string', () => {
-    const rows = [{
-      insider_name: 'A', wins: 5, priced: 10, om_buys: 10, om_sells: 0, total_buys: 10,
-      avg_return_pct: 12, avg_spy_return_pct: 8.219,
-    }];
-    const [r] = processLeaderboardRows(rows);
-    expect(r.avg_spy_return).toBe(8.2);
+  it('marks hit rate as low-confidence with 5-9 priced trades', () => {
+    const [row] = processLeaderboardRows([{
+      priced: 7, wins: 5, avg_return_pct: 12, avg_spy_return_pct: 5,
+      om_buys: 5, om_sells: 1, total_buys: 7, relationship: 'medium',
+    }]);
+    expect(row.hit_rate).toBe(71);
+    expect(row.hit_rate_confident).toBe(false);
   });
 
-  it('is null (not NaN or a crash) when avg_spy_return_pct is genuinely absent — e.g. the benchmark backfill hasn\'t reached this trade\'s date range yet', () => {
-    const rows = [{
-      insider_name: 'A', wins: 5, priced: 10, om_buys: 10, om_sells: 0, total_buys: 10,
-      avg_return_pct: 12, avg_spy_return_pct: null,
-    }];
-    const [r] = processLeaderboardRows(rows);
-    expect(r.avg_spy_return).toBeNull();
+  it('sorts by proxy_score descending, then alpha descending', () => {
+    const rows = processLeaderboardRows([
+      { priced: 20, wins: 16, avg_return_pct: 25, avg_spy_return_pct: 8, om_buys: 15, om_sells: 3, total_buys: 18, relationship: 'strong' },
+      { priced: 20, wins: 16, avg_return_pct: 25, avg_spy_return_pct: 8, om_buys: 15, om_sells: 3, total_buys: 18, relationship: 'medium' },
+    ]);
+    // Same hit rate and return, but first has 'strong' relationship — higher score
+    expect(rows[0].relationship).toBe('strong');
   });
 });

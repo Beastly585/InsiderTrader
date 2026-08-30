@@ -1131,7 +1131,7 @@ function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
     </th>
   );
 }
-function ConvictionBar({ score, max=20, showLabel=false }) {
+function ConvictionBar({ score, max=100, showLabel=false }) {
   const pct = Math.min((score/max)*100, 100);
   // 5-tier system: Very Low → Low → Medium → High → Very High
   // Thresholds at 20%/40%/60%/85% of max (scores 4/8/12/17 out of 20)
@@ -1620,15 +1620,15 @@ const GUIDE_SECTIONS = [
             <div className="guide-signal-examples">
               <div className="guide-signal-ex">
                 <span className="guide-signal-ex__label" style={{color:'var(--green-600)'}}>Very High</span>
-                <ConvictionBar score={17} max={20}/>
+                <ConvictionBar score={80} max={100}/>
               </div>
               <div className="guide-signal-ex">
                 <span className="guide-signal-ex__label" style={{color:'var(--amber-600)'}}>Medium</span>
-                <ConvictionBar score={9} max={20}/>
+                <ConvictionBar score={45} max={100}/>
               </div>
               <div className="guide-signal-ex">
                 <span className="guide-signal-ex__label" style={{color:'var(--text-3)'}}>Low</span>
-                <ConvictionBar score={3} max={20}/>
+                <ConvictionBar score={15} max={100}/>
               </div>
             </div>
           </div>
@@ -2065,7 +2065,7 @@ const TILE_HELP = {
       { term: 'Type', def: 'Corporate (SEC Form 4) or Congressional (STOCK Act disclosure).' },
       { term: 'Moves', def: 'Total buy + sell transactions from all insiders at this ticker.' },
       { term: 'Date', def: 'How recently the most recent transaction occurred.' },
-      { term: 'Signal', def: 'Conviction score (0–20). Composed of: executive participation (×5 for opportunistic buys), C-suite buys (×2), buy value (log-scaled), position sizing (>10% of holdings = +2), and cluster bonus (3+ insiders = +3).' },
+      { term: 'Signal', def: 'Conviction score (0–100) with diminishing returns. Weighted dimensions: opportunistic trades (non-routine), insider cluster size, C-suite involvement, position swing, dollar value, trade velocity (concentration in time), political origin, recency, and insider track record. Split buy/sell activity applies a contra-signal penalty.' },
       { term: 'Net flow', def: 'Total dollar value of buys minus sells across all insiders.' },
     ],
     methodology: 'The score is buy-side only — insider selling is excluded from conviction because the academic literature shows it\'s much less predictive (insiders sell for diversification, taxes, and liquidity reasons unrelated to company outlook).',
@@ -3976,7 +3976,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
       {/* Stat strip */}
       <div className="ws-stat-strip">
         <div className="ws-stat"><div className="ws-stat__label">Buy value · 24h</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{loading?'—':fmt.money(stats.buyValYd)}</div><div className="ws-stat__sub">{stats.buyCntYd} transactions</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">High-conviction · 3d</div><div className="ws-stat__value">{loading?'—':stats.highConv3}</div><div className="ws-stat__sub">Score ≥10/15</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">High-conviction · 3d</div><div className="ws-stat__value">{loading?'—':stats.highConv3}</div><div className="ws-stat__sub">Score ≥60</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Tickers active · 3d</div><div className="ws-stat__value">{loading?'—':stats.tickers3}</div><div className="ws-stat__sub">With open-market trades</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Data freshness</div><div className="ws-stat__value" style={{fontSize:15}}>{loading?'Syncing…':'Live'}</div><div className="ws-stat__sub">SEC Form 4 · STOCK Act</div></div>
       </div>
@@ -4073,7 +4073,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
                           <div style={{fontSize:11,color:'var(--text-2)',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.company}</div>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             {!isMobile&&<span style={{fontSize:11,color:'var(--text-3)'}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>}
-                            <ConvictionBar score={s.conviction} max={15} showLabel/>
+                            <ConvictionBar score={s.conviction} max={100} showLabel/>
                           </div>
                         </div>
                         <div className="ws-sig-compact-row__right">
@@ -4179,7 +4179,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
     [...new Set(filings.map(f=>f.sector).filter(s=>s&&s!=='Other'))].sort(),
   [filings]);
 
-  const strengthThreshold = minStr===3?10:minStr===2?5:0;
+  const strengthThreshold = minStr===3?60:minStr===2?35:0;
 
   // ── Signals ───────────────────────────────────────────────────────────────
   const allSignals = useMemo(() => {
@@ -4261,7 +4261,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
       {/* Stat strip */}
       <div className="ws-stat-strip">
         <div className="ws-stat"><div className="ws-stat__label">Showing</div><div className="ws-stat__value">{tab==='signals'?signals.length:rawFilings.length}</div><div className="ws-stat__sub">{tab==='signals'?'signals':'filings'} after filters</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">High conviction</div><div className="ws-stat__value">{loading?'—':signals.filter(s=>s.conviction>=10).length}</div><div className="ws-stat__sub">Score ≥10/15</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">High conviction</div><div className="ws-stat__value">{loading?'—':signals.filter(s=>s.conviction>=60).length}</div><div className="ws-stat__sub">Score ≥60</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Unique tickers</div><div className="ws-stat__value">{loading?'—':tab==='signals'?new Set(signals.map(s=>s.ticker)).size:new Set(rawFilings.map(f=>f.ticker)).size}</div><div className="ws-stat__sub">In current view</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Net flow</div><div className="ws-stat__value" style={{color:signals.reduce((s,x)=>s+x.netValue,0)>=0?'var(--green-600)':'var(--red-600)'}}>{loading?'—':fmt.money(signals.reduce((s,x)=>s+x.netValue,0))}</div><div className="ws-stat__sub">Buys − sells</div></div>
       </div>
@@ -4423,7 +4423,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                           <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</span>
                         </div>
                         <div className="ws-row__cell" style={{minWidth:90}}>
-                          <ConvictionBar score={s.conviction} max={15} showLabel/>
+                          <ConvictionBar score={s.conviction} max={100} showLabel/>
                         </div>
                       </div>
 
@@ -5183,7 +5183,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const sectors = useMemo(()=>[...new Set(filings.map(f=>f.sector).filter(s=>s&&s!=='Other'))].sort(),[filings]);
 
   // Strength threshold
-  const strengthThreshold = minStr===3?10:minStr===2?5:0;
+  const strengthThreshold = minStr===3?60:minStr===2?35:0;
 
   // Filtered signals — computed directly from raw `filings`, NOT from the
   // `signals` prop the parent page passes in. The parent's own signal set is
@@ -5470,7 +5470,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   ? <div className="drawer__empty">No signals match your filters</div>
                   : filteredSignals.map(s=>{
                     const isActive = detail?.ticker===s.ticker && detail?.activeTab==='signal';
-                    const convPct  = Math.min((s.conviction/15)*100,100);
+                    const convPct  = Math.min((s.conviction/100)*100,100);
                     const tier     = tierFromPct(convPct, appetite);
                     return (
                       <div key={s.ticker}
@@ -9345,10 +9345,10 @@ function SettingsPage({ user, onUpgrade }) {
                       </div>
                       <select className="ws-select" value={local.digest_min_conviction} disabled={!pro} onChange={e=>upd('digest_min_conviction',Number(e.target.value))}>
                         <option value={0}>Any score</option>
-                        <option value={5}>5+</option>
-                        <option value={7}>7+</option>
-                        <option value={9}>9+</option>
-                        <option value={11}>11+</option>
+                        <option value={25}>25+</option>
+                        <option value={40}>40+</option>
+                        <option value={60}>60+</option>
+                        <option value={75}>75+</option>
                       </select>
                     </div>
                     <div className="ws-settings-row">
