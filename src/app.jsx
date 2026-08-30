@@ -10,6 +10,7 @@ import XLSX from 'xlsx-js-style'; // npm install xlsx-js-style — same API as p
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
 import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
+import * as Sentry from '@sentry/react';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
@@ -10357,8 +10358,6 @@ function titleFromAppState(page, detail) {
   }
   return `${PAGE_TITLES[page] || 'Dashboard'} — Seli`;
 }
-
-import * as Sentry from '@sentry/react';
 
 // Not exported directly — see the wrapped default export at the bottom of
 // this file. Renamed from App so an ErrorBoundary can sit ABOVE it: if
