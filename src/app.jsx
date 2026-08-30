@@ -4260,10 +4260,10 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
       {/* Stat strip */}
       <div className="ws-stat-strip">
-        <div className="ws-stat"><div className="ws-stat__label">Open-mkt buys</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{loading?'—':filings.filter(f=>f.isOpenMarket&&f.transactionType==='buy').length}</div><div className="ws-stat__sub">{fmt.money(filings.filter(f=>f.isOpenMarket&&f.transactionType==='buy').reduce((s,f)=>s+(f.value||0),0))}</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">High conviction</div><div className="ws-stat__value">{loading?'—':allSignals.filter(s=>s.conviction>=10).length}</div><div className="ws-stat__sub">Score ≥10/15</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Unique tickers</div><div className="ws-stat__value">{loading?'—':new Set(filings.filter(f=>f.isOpenMarket).map(f=>f.ticker)).size}</div><div className="ws-stat__sub">With activity</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Showing</div><div className="ws-stat__value">{tab==='signals'?signals.length:rawFilings.length}</div><div className="ws-stat__sub">{tab==='signals'?'signals':'filings'} after filters</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">High conviction</div><div className="ws-stat__value">{loading?'—':signals.filter(s=>s.conviction>=10).length}</div><div className="ws-stat__sub">Score ≥10/15</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Unique tickers</div><div className="ws-stat__value">{loading?'—':tab==='signals'?new Set(signals.map(s=>s.ticker)).size:new Set(rawFilings.map(f=>f.ticker)).size}</div><div className="ws-stat__sub">In current view</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Net flow</div><div className="ws-stat__value" style={{color:signals.reduce((s,x)=>s+x.netValue,0)>=0?'var(--green-600)':'var(--red-600)'}}>{loading?'—':fmt.money(signals.reduce((s,x)=>s+x.netValue,0))}</div><div className="ws-stat__sub">Buys − sells</div></div>
       </div>
 
       <div className="ws-tile">
