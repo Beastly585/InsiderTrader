@@ -10855,7 +10855,7 @@ function useSEO() {
 export default function App() {
   useSEO();
   return (
-    <Sentry.ErrorBoundary fallback={AppErrorFallback}>
+    <Sentry.ErrorBoundary fallback={({ error }) => <AppErrorFallback error={error} />}>
       <AppInner/>
     </Sentry.ErrorBoundary>
   );
