@@ -2501,6 +2501,33 @@ function FollowBtn({ name, watchlist, compact=false }) {
   );
 }
 
+
+// DetailPanelHeader extracted from DetailPanel to avoid TDZ
+function DetailPanelHeader({ d, traderStats, traderRows, inline, watchlist, nav }) {
+    if(d.type==='trader'){
+      const affs = traderStats?.affiliations || [];
+      const maxChips = inline ? affs.length : 3; // inline = explore, show all
+      const visibleAffs = affs.slice(0, maxChips);
+      const hiddenCount = affs.length - visibleAffs.length;
+      return <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{affs.length>0&&<div className="trader-aff-list">{visibleAffs.map((a)=><span key={a.ticker} className="trader-aff-chip" title={`${a.title||REL_LABELS[a.relationship]||'Director'} at ${a.ticker}`}><span className="trader-aff-chip__role">{shortRole(a.title)||REL_LABELS[a.relationship]||'Director'}</span> at <span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span></span>)}{hiddenCount>0&&<span className="trader-aff-chip trader-aff-chip--more">+{hiddenCount} more</span>}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+    }
+    if(d.type==='ticker')return(
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
+        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
+        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
+      </div>
+    );
+    if(d.type==='signal')return(
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
+        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
+        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
+      </div>
+    );
+    if(d.type==='transaction')return<div><div style={{display:'flex',alignItems:'baseline',gap:8}}><span className="ticker" style={{fontSize:15}}>{d.trade?.ticker}</span><span style={{fontSize:'0.75rem',color:'var(--text-2)'}}>{d.trade?.company_name||d.trade?.company}</span></div><div className="td-muted" style={{fontSize:'0.6875rem'}}>Transaction</div></div>;
+}
+
 // RelBadge and TRow extracted to module level to prevent TDZ
 const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{rel==='strong'?'Exec':rel==='medium'?'Officer':'Director'}</Badge>;
 
@@ -3043,36 +3070,12 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   },[d]);
 
   const score=traderStats?trustScore(traderStats):null;
-  const header=()=>{
-    if(d.type==='trader'){
-      const affs = traderStats?.affiliations || [];
-      const maxChips = inline ? affs.length : 3; // inline = explore, show all
-      const visibleAffs = affs.slice(0, maxChips);
-      const hiddenCount = affs.length - visibleAffs.length;
-      return <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{affs.length>0&&<div className="trader-aff-list">{visibleAffs.map((a)=><span key={a.ticker} className="trader-aff-chip" title={`${a.title||REL_LABELS[a.relationship]||'Director'} at ${a.ticker}`}><span className="trader-aff-chip__role">{shortRole(a.title)||REL_LABELS[a.relationship]||'Director'}</span> at <span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span></span>)}{hiddenCount>0&&<span className="trader-aff-chip trader-aff-chip--more">+{hiddenCount} more</span>}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
-    }
-    if(d.type==='ticker')return(
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
-        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
-        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
-      </div>
-    );
-    if(d.type==='signal')return(
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
-        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
-        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
-      </div>
-    );
-    if(d.type==='transaction')return<div><div style={{display:'flex',alignItems:'baseline',gap:8}}><span className="ticker" style={{fontSize:15}}>{d.trade?.ticker}</span><span style={{fontSize:'0.75rem',color:'var(--text-2)'}}>{d.trade?.company_name||d.trade?.company}</span></div><div className="td-muted" style={{fontSize:'0.6875rem'}}>Transaction</div></div>;
-  };
 
   return (
     <div className={inline?'detail-panel detail-panel--inline':'detail-panel'}>
       <div className="detail-panel__header">
         {canGoBack&&<button className="btn btn--ghost btn--icon" onClick={onBack} title="Back"></button>}
-        <div style={{minWidth:0,flex:1}}>{header()}</div>
+        <div style={{minWidth:0,flex:1}}>{<DetailPanelHeader d={d} traderStats={traderStats} traderRows={traderRows} inline={inline} watchlist={watchlist} nav={nav}/>}</div>
         {!inline&&onExpand&&<button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
         {!inline&&<button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>}
         {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:'0.6875rem'}} onClick={onClose} title="Clear"><IconClose style={{width:12,height:12}}/></button>}
