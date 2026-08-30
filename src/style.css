@@ -5703,12 +5703,12 @@ td { padding:7px 11px; vertical-align:middle; }
 /* ── Main + background wash ────────────────────────────────────────── */
 .ws-main { flex:1; overflow-y:scroll; overflow-x:hidden; position:relative; display:flex; flex-direction:column; scrollbar-width:none; -ms-overflow-style:none; }
 .ws-main::before {
-  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:-1;
   background:
     radial-gradient(ellipse 800px 450px at 15% 10%,var(--accent-wash) 0%,transparent 60%),
     radial-gradient(ellipse 600px 400px at 88% 80%,var(--aqua-wash) 0%,transparent 55%);
 }
-.ws-main>* { position:relative; z-index:1; }
+.ws-main>* { position:relative; }
 
 /* ── Page wrapper ──────────────────────────────────────────────────── */
 .ws-page { width: 100%; max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; box-sizing: border-box; }
