@@ -10480,6 +10480,7 @@ function AppInner() {
   }, []);
 
   // Lock body scroll and adjust z-index when any explore drawer is open
+  const panelOpen = !!detail;
   const anyDrawerOpen = panelOpen && detailFull;
   useEffect(()=>{
     if (anyDrawerOpen) {
@@ -10634,7 +10635,6 @@ function AppInner() {
   const [expDir,  setExpDir]  = useState(-1);
   function expOnSort(col){ if(expSort===col) setExpDir(d=>-d); else { setExpSort(col); setExpDir(-1); } }
 
-  const panelOpen = !!detail;
   const watchlist = useWatchlist(user);
 
   // ── Landing page gate ──────────────────────────────────────────────────────
