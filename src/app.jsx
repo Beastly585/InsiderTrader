@@ -10479,9 +10479,9 @@ function AppInner() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  // Lock body scroll and adjust z-index when any explore drawer is open
+  // Lock body scroll and adjust z-index when any drawer/panel is open
   const panelOpen = !!detail;
-  const anyDrawerOpen = panelOpen && detailFull;
+  const anyDrawerOpen = panelOpen;
   useEffect(()=>{
     if (anyDrawerOpen) {
       document.body.classList.add('drawer-open');

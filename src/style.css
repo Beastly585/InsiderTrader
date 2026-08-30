@@ -6407,6 +6407,8 @@ td { padding:7px 11px; vertical-align:middle; }
 body.drawer-open .topnav,
 body.drawer-open .bottomnav { z-index: 94; }  /* step below overlay */
 body.drawer-open { overflow: hidden; }        /* lock background scroll */
+body.drawer-open .ws-main { overflow: hidden; } /* ws-main is the real scroll container */
+body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 
 /* DetailPanel slide-in */
 .panel-overlay { z-index: 90; }
