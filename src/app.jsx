@@ -3906,6 +3906,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
   const isMobile = useIsMobile();
   const [myNews, setMyNews] = useState(false);
   const [sigDays, setSigDays] = useState(14);
+  const [sigSort, setSigSort] = useState('conviction');
   const [sigDir,  setSigDir]  = useState(-1);
   const [filSort, setFilSort] = useState('date');
   const [filDir,  setFilDir]  = useState(-1);
