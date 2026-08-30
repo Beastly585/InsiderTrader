@@ -1844,6 +1844,10 @@ const LP_FEATURE_ICON_MAP = {
   IconData, IconInsights, IconLink, IconZap,
 };
 
+// Shared context so all TileInfoButtons can see the nudge state
+// Must be defined before GuideProvider which uses it as a JSX element
+const TileNudgeContext = createContext({ nudgeActive: false, dismissNudge: () => {} });
+
 function GuideProvider({ children }) {
   const [openSection, setOpenSection] = useState(null); // null = closed, else a GUIDE_SECTIONS id
 
@@ -2164,8 +2168,7 @@ function useTileNudge() {
   return { nudgeActive: active, dismissNudge: dismiss, triggerNudge: trigger };
 }
 
-// Shared context so all TileInfoButtons can see the nudge state
-const TileNudgeContext = createContext({ nudgeActive: false, dismissNudge: () => {} });
+// TileNudgeContext defined below after its creation point (moved to avoid TDZ)
 
 function TileInfoButton({ section, title, tileId }) {
   const guide = useContext(GuideContext);
@@ -5764,15 +5767,12 @@ function PortfolioPerformanceChart({ points, onClick, compact=true }) {
           <line x1={hover.coord.x} y1={PAD_T} x2={hover.coord.x} y2={H-PAD_B}
             stroke="var(--text-3)" strokeWidth="1" strokeDasharray="2,2"/>
           <circle cx={hover.coord.x} cy={hover.coord.y} r="3.5" fill={color} stroke="var(--surface)" strokeWidth="1.5"/>
-          {/* Tooltip box — flipped to the left side of the guide line past
-              the chart's own midpoint, so it never renders partially off
-              the right edge for points late in the series. */}
-          {(() => {
-            const boxW = 92, boxH = 30;
-            const flip = hover.coord.x > PAD_L + plotW/2;
-            const boxX = flip ? hover.coord.x - boxW - 8 : hover.coord.x + 8;
-            const boxY = Math.max(PAD_T, Math.min(H-PAD_B-boxH, hover.coord.y - boxH/2));
-            return (
+          {/* Tooltip box — flipped past chart midpoint so it never clips right edge */}
+          {(()=>{
+            const boxW=92,boxH=30,flip=hover.coord.x>PAD_L+plotW/2;
+            const boxX=flip?hover.coord.x-boxW-8:hover.coord.x+8;
+            const boxY=Math.max(PAD_T,Math.min(H-PAD_B-boxH,hover.coord.y-boxH/2));
+            return(
               <g>
                 <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="4"
                   fill="var(--surface)" stroke="var(--border-md)" strokeWidth="0.5"/>
