@@ -4736,7 +4736,7 @@ function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpa
         <div className="ip-profile__identity">
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div className="ip-profile__name">{r.insider_name}</div>
-            <div onClick={e=>e.stopPropagation()}><FollowBtn name={r.insider_name} watchlist={watchlist}/></div>
+            <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}><FollowBtn name={r.insider_name} watchlist={watchlist}/></div>
           </div>
           {profileCompanies.length>0&&(
             <div className="ip-profile__affiliations">
@@ -4769,9 +4769,13 @@ function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpa
         ))}
       </div>
 
-      {profileCompanies.length>0&&(
-        <div className="ip-profile__section">
-          <div className="ip-profile__section-label">Companies traded</div>
+      <div className="ip-profile__section">
+        <div className="ip-profile__section-label">Companies traded</div>
+        {loading?(
+          <SkeletonRows count={2}/>
+        ):profileCompanies.length===0?(
+          <div className="ws-empty" style={{padding:'8px 0',fontSize:11}}>No company data yet.</div>
+        ):(
           <div className="ip-profile__companies">
             {profileCompanies.slice(0,8).map(c=>(
               <div key={c.ticker} className="ip-company-chip"
@@ -4785,8 +4789,8 @@ function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpa
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="ip-profile__section" style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
         <div className="ip-profile__section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -4981,25 +4985,16 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         <div className="ws-stat"><div className="ws-stat__label">Total buy value</div><div className="ws-stat__value" style={{fontSize:16}}>{rows?totalValDisplay:'—'}</div><div className="ws-stat__sub">{yearsBack?`${yearsBack}yr window`:'All time'}</div></div>
       </div>
 
-      {/* Main: insider list (left) + profile viewer (right) */}
-      <div className="ip-layout">
-
-        {/* Insider list — left column (screener) */}
-        <div className="ws-tile ip-rail">
-          <div className="ip-rail__hdr">
-            <div className="ws-search-wrap" style={{maxWidth:'100%',flex:1}}>
+      {/* Filter tile — full width above list/profile */}
+      <div className="ws-tile" style={{marginBottom:16}}>
+        <div className="ws-filter-bar">
+          <div className="ws-filter-bar__row">
+            <div className="ws-search-wrap" style={{maxWidth:200}}>
               <span className="ws-search-icon">⌕</span>
               <input className="ws-search-input" value={search}
                 onChange={e=>setSearch(e.target.value)} placeholder="Search…"/>
               {search&&<button className="ws-search-clear" onClick={()=>setSearch('')}>×</button>}
             </div>
-          </div>
-          <div className="ip-rail__filter-toggle" onClick={()=>setFiltersOpen(f=>!f)}>
-            <span style={{fontSize:11,fontWeight:600,color:'var(--text-2)'}}>Filters{hasInsiderFilters?' ·':''}</span>
-            {hasInsiderFilters&&<span style={{fontSize:10,color:'var(--accent)',fontWeight:600}}>{[minTrades>0&&`${minTrades}+ trades`,minHitRate>0&&`${minHitRate}%+ hit`,minScore>0&&`${minScore}+ score`,roleFilter&&(roleFilter==='strong'?'C-Suite':'Officer'),dirFilter].filter(Boolean).join(', ')}</span>}
-            <span style={{marginLeft:'auto',fontSize:10,color:'var(--text-3)'}}>{filtersOpen?'▴':'▾'}</span>
-          </div>
-          {filtersOpen&&<div className="ip-rail__filters">
             <div className="ws-filter-group">
               <span className="ws-filter-label">Window</span>
               <div className="ws-pills" style={{gap:3}}>
@@ -5027,7 +5022,12 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 ))}
               </div>
             </div>
-            <div className="ws-filter-group">
+            <button className="ip-rail__filter-more" onClick={()=>setFiltersOpen(f=>!f)}>
+              {filtersOpen?'Less ▴':'More ▾'}
+            </button>
+          </div>
+          {filtersOpen&&<div className="ws-filter-bar__row">
+            <div className="ws-filter-group" style={{borderLeft:'none',paddingLeft:0}}>
               <span className="ws-filter-label">Direction</span>
               <div className="ws-pills" style={{gap:3}}>
                 {[['','All'],['buyers','Buyers'],['sellers','Sellers']].map(([v,l])=>(
@@ -5063,8 +5063,16 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 ))}
               </div>
             </div>
-            {hasInsiderFilters&&<button className="ws-clear-btn" style={{fontSize:10,gridColumn:'1/-1'}} onClick={resetInsiderFilters}>Clear filters</button>}
+            {hasInsiderFilters&&<button className="ws-clear-btn" onClick={resetInsiderFilters}>Clear</button>}
           </div>}
+        </div>
+      </div>
+
+      {/* Main: insider list (left) + profile viewer (right) */}
+      <div className="ip-layout">
+
+        {/* Insider list — left column */}
+        <div className="ws-tile ip-rail">
           <div className="ip-rail__sort-bar">
             {[['proxy_score','Score'],['hit_rate','Hit %'],['avg_return','Return'],['om_buys','Buys']].map(([k,l])=>(
               <button key={k} className={`ip-rail__sort-btn${sort===k?' ip-rail__sort-btn--active':''}`}
@@ -5145,13 +5153,49 @@ function InsiderProfileDrawer({ name, title, filings, watchlist, lbRows, onOpenD
     const nameLower = (name||'').toLowerCase();
     return lbRows.find(x=>(x.insider_name||'').toLowerCase()===nameLower)||null;
   }, [lbRows, name]);
-  const profileTrades = useMemo(()=>{
-    const nameLower = (name||'').toLowerCase();
-    return filings
-      .filter(f=>(f.insiderName||'').toLowerCase()===nameLower)
-      .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
-      .slice(0,30);
-  },[filings, name]);
+  const role = insiderRoleLabel(r);
+
+  // Full trade history — query DB directly, no limit
+  const [profileTrades, setProfileTrades] = useState([]);
+  const [tradesLoading, setTradesLoading] = useState(true);
+  useEffect(()=>{
+    let cancelled = false;
+    setTradesLoading(true);
+    setProfileTrades([]);
+    const escaped = (name||'').replace(/'/g, "''");
+    queryNeon(`
+      SELECT accession_number, cik_issuer, transaction_date, filing_date AS date,
+             ticker, company_name AS company, insider_name, insider_title AS title,
+             transaction_type, transaction_code, is_open_market, is_officer,
+             shares::float, price_per_share::float AS price, value::float,
+             shares_owned_after::float, pct_owned_change::float, sector, relationship
+      FROM public.filings
+      WHERE LOWER(insider_name) = LOWER('${escaped}')
+        AND is_open_market = true
+      ORDER BY COALESCE(transaction_date, filing_date) DESC
+      LIMIT 200
+    `).then(rows => {
+      if (cancelled) return;
+      setProfileTrades((rows||[]).map(row => ({
+        accessionNumber: row.accession_number, cikIssuer: row.cik_issuer,
+        transactionDate: row.transaction_date, date: row.date,
+        ticker: row.ticker, company: row.company, insiderName: row.insider_name,
+        title: row.title, transactionType: row.transaction_type,
+        transactionCode: row.transaction_code, isOpenMarket: row.is_open_market,
+        shares: row.shares, price: row.price, value: row.value,
+        sharesOwnedAfter: row.shares_owned_after, pctOwnedChange: row.pct_owned_change,
+        sector: row.sector, relationship: row.relationship,
+      })));
+    }).catch(()=>{
+      if (cancelled) return;
+      const nameLower = (name||'').toLowerCase();
+      setProfileTrades(filings
+        .filter(f=>(f.insiderName||'').toLowerCase()===nameLower)
+        .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||'')));
+    }).finally(()=>{ if (!cancelled) setTradesLoading(false); });
+    return ()=>{ cancelled=true; };
+  },[name]);
+
   const profileCompanies = useMemo(()=>{
     const map={};
     profileTrades.forEach(f=>{
@@ -5171,12 +5215,21 @@ function InsiderProfileDrawer({ name, title, filings, watchlist, lbRows, onOpenD
       <div className="ip-profile__head">
         <div className="ip-profile__avatar">{initials}</div>
         <div className="ip-profile__identity">
-          <div className="ip-profile__name">{name}</div>
-          <div className="ip-profile__meta">
-            {r&&<Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>}
-            {(title||r?.insider_title)&&<span className="ip-profile__title">{title||r?.insider_title}</span>}
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div className="ip-profile__name">{name}</div>
+            <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}><FollowBtn name={name} watchlist={watchlist}/></div>
           </div>
-          <div style={{marginTop:8}} onClick={e=>e.stopPropagation()}><FollowBtn name={name} watchlist={watchlist}/></div>
+          {profileCompanies.length>0&&(
+            <div className="ip-profile__affiliations">
+              {profileCompanies.slice(0,4).map(c=>(
+                <span key={c.ticker} className="ip-aff-badge" onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company})}>
+                  <Badge type={role.badge}>{role.label}</Badge>
+                  <span style={{fontSize:11,color:'var(--text-2)'}}>at</span>
+                  <span className="ticker" style={{fontSize:11,cursor:'pointer'}}>{c.ticker}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <ScoreRing score={r?.proxy_score??0} size={72}/>
       </div>
@@ -5215,12 +5268,12 @@ function InsiderProfileDrawer({ name, title, filings, watchlist, lbRows, onOpenD
         </div>
       )}
       <div className="ip-profile__section" style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
-        <div className="ip-profile__section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <span>Transactions{profileTrades.length?` · ${profileTrades.length} found`:''}</span>
-          <button className="ws-tile__action" style={{fontSize:11,fontWeight:600}}
-            onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name,title})}>Full deep-dive →</button>
+        <div className="ip-profile__section-label">
+          <span>All transactions{profileTrades.length?` · ${profileTrades.length} found`:''}</span>
         </div>
-        {profileTrades.length===0?(
+        {tradesLoading?(
+          <SkeletonRows count={8}/>
+        ):profileTrades.length===0?(
           <div className="ws-empty" style={{padding:'12px 0',fontSize:12}}>No open-market transactions found.</div>
         ):(
           <div className="ip-tx-list">
