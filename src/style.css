@@ -6685,11 +6685,22 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 }
 .ip-rail__hdr { padding: 10px 12px; border-bottom: 0.5px solid var(--border); }
 .ip-rail__filters {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  padding: 0;
   border-bottom: 0.5px solid var(--border);
+  background: var(--border);
+}
+.ip-rail__filters > .ws-filter-group {
+  padding: 6px 10px;
+  border-left: none;
+  background: var(--surface);
+}
+.ip-rail__filters > .ws-clear-btn {
+  grid-column: 1 / -1;
+  background: var(--surface);
+  padding: 6px 10px;
 }
 .ip-rail__sort-bar {
   display: flex;

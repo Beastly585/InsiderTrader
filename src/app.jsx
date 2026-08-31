@@ -1068,6 +1068,14 @@ const RiskAppetiteContext = React.createContext([3, ()=>{}]);
 function Badge({ type, children }) {
   return <span className={`badge badge--${type}`}>{children}</span>;
 }
+// Returns the display label for an insider's role, distinguishing
+// congressional insiders from corporate C-suite.
+function insiderRoleLabel(r) {
+  if (r?.is_congress) return { badge: 'rel-strong', label: 'Congress' };
+  if (r?.relationship === 'strong') return { badge: 'rel-strong', label: 'C-Suite' };
+  if (r?.relationship === 'medium') return { badge: 'rel-medium', label: 'Officer' };
+  return { badge: 'rel-weak', label: 'Dir' };
+}
 function Spinner({ size=22 }) {
   return <div className="spinner" style={{width:size,height:size}}/>;
 }
@@ -1133,15 +1141,12 @@ function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
 }
 function ConvictionBar({ score, max=100, showLabel=false }) {
   const pct = Math.min((score/max)*100, 100);
-  // 5-tier system: Very Low → Low → Medium → High → Very High
-  // Thresholds at 20%/40%/60%/85% of max (scores 4/8/12/17 out of 20)
   const tier = pct>=85?'very-high':pct>=60?'high':pct>=40?'medium':pct>=20?'low':'very-low';
   const label = tier==='very-high'?'Very High':tier==='high'?'High':tier==='medium'?'Medium':tier==='low'?'Low':'Very Low';
   const color = tier==='very-high'?'var(--green-600)':tier==='high'?'#5EC26A':tier==='medium'?'var(--amber-600)':tier==='low'?'var(--text-3)':'var(--text-3)';
-  // Show label for anything below High — green color already communicates strength
   const showText = showLabel && tier!=='very-high' && tier!=='high';
   return (
-    <div className="conv-bar-wrap" title={`Conviction: ${label} (${score.toFixed(1)}/${max}) — combines exec participation, position size, and insider clustering`}>
+    <div className="conv-bar-wrap" title={`${Math.round(score)}/${max} — ${label}`}>
       <div className="conv-bar-track">
         <div className="conv-bar-tick" style={{left:'20%'}}/>
         <div className="conv-bar-tick" style={{left:'40%'}}/>
@@ -4723,6 +4728,7 @@ function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpa
   const hrC=r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-2)';
   const retC=(r.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
   const initials=(r.insider_name||'').split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const role=insiderRoleLabel(r);
   return (
     <div className="ip-profile">
       <div className="ip-profile__head">
@@ -4730,14 +4736,14 @@ function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpa
         <div className="ip-profile__identity">
           <div className="ip-profile__name">{r.insider_name}</div>
           <div className="ip-profile__meta">
-            <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
+            <Badge type={role.badge}>{role.label}</Badge>
             {r.insider_title&&<span className="ip-profile__title">{r.insider_title}</span>}
           </div>
           {profileCompanies.length>0&&(
             <div className="ip-profile__affiliations">
               {profileCompanies.slice(0,4).map(c=>(
                 <span key={c.ticker} className="ip-aff-badge" onClick={()=>onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company||c.ticker,expand:true})}>
-                  <Badge type={`rel-${r.relationship||'weak'}`} style={{fontSize:9}}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
+                  <Badge type={role.badge}>{role.label}</Badge>
                   <span style={{fontSize:11,color:'var(--text-2)'}}>at</span>
                   <span className="ticker" style={{fontSize:11,cursor:'pointer'}}>{c.ticker}</span>
                 </span>
@@ -4794,9 +4800,11 @@ function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpa
             Full deep-dive →
           </button>
         </div>
-        {profileTrades.length===0?(
+        {loading?(
+          <SkeletonRows count={5}/>
+        ):profileTrades.length===0?(
           <div className="ws-empty" style={{padding:'16px 0',fontSize:12}}>
-            {loading?'Loading…':'No transactions found.'}
+            No open-market transactions found.
           </div>
         ):(
           <div className="ip-tx-list">
@@ -5065,6 +5073,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             :sorted.map((r,i)=>{
               const isActive=selected?.insider_name===r.insider_name;
               const hrC=r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-3)';
+              const role=insiderRoleLabel(r);
               return (
                 <div key={r.insider_name}
                   className={`ip-rail-row${isActive?' ip-rail-row--active':''}`}
@@ -5073,7 +5082,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                   <div className="ip-rail-row__info">
                     <div className="ip-rail-row__name">{r.insider_name}</div>
                     <div className="ip-rail-row__meta">
-                      <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
+                      <Badge type={role.badge}>{role.label}</Badge>
                       {r.hit_rate!=null&&<span style={{fontSize:10,color:hrC,fontFamily:'var(--font-mono)',fontWeight:600}}>{r.hit_rate}%</span>}
                     </div>
                   </div>
@@ -6393,6 +6402,7 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
              -- across filings (e.g. "President" vs "President and CEO").
              MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
              MODE() WITHIN GROUP (ORDER BY f.relationship)  AS relationship,
+             BOOL_OR(f.transaction_code LIKE 'CONGRESS%') AS is_congress,
              COUNT(*) FILTER (WHERE f.transaction_type='buy' AND f.is_open_market) AS om_buys,
              COUNT(*) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market) AS om_sells,
              COUNT(*) FILTER (WHERE f.transaction_type='buy') AS total_buys,
