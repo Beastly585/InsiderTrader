@@ -6526,7 +6526,7 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 /* Main layout: profile viewer (3fr) + insider rail (1.4fr) */
 .ip-layout {
   display: grid;
-  grid-template-columns: 3fr 1.4fr;
+  grid-template-columns: 1.2fr 2fr;
   gap: 16px;
   align-items: start;
   min-height: 0;
@@ -6811,3 +6811,14 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
   overflow-y: auto;
   min-height: 0;
 }
+/* ── Insider profile affiliation badges ─────────────────────────── */
+.ip-profile__affiliations {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+}
+.ip-aff-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: var(--radius-md);
+  background: var(--surface-2); border: 0.5px solid var(--border);
+  cursor: pointer; transition: background .1s;
+}
+.ip-aff-badge:hover { background: var(--surface-3); }

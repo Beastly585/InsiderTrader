@@ -4733,6 +4733,17 @@ function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpa
             <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
             {r.insider_title&&<span className="ip-profile__title">{r.insider_title}</span>}
           </div>
+          {profileCompanies.length>0&&(
+            <div className="ip-profile__affiliations">
+              {profileCompanies.slice(0,4).map(c=>(
+                <span key={c.ticker} className="ip-aff-badge" onClick={()=>onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company||c.ticker,expand:true})}>
+                  <Badge type={`rel-${r.relationship||'weak'}`} style={{fontSize:9}}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
+                  <span style={{fontSize:11,color:'var(--text-2)'}}>at</span>
+                  <span className="ticker" style={{fontSize:11,cursor:'pointer'}}>{c.ticker}</span>
+                </span>
+              ))}
+            </div>
+          )}
           <div style={{marginTop:10}} onClick={e=>e.stopPropagation()}>
             <FollowBtn name={r.insider_name} watchlist={watchlist}/>
           </div>
@@ -4832,7 +4843,14 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const [search, setSearch]       = useState('');
   const [selected, setSelected]   = useState(null);
   const [txExpanded, setTxExpanded] = useState(new Set());
-  const [insiderDrawerDetail, setInsiderDrawerDetail] = useState(null); // {type:'trader',...} when drawer open
+  const [insiderDrawerDetail, setInsiderDrawerDetail] = useState(null);
+
+  // Discoverability filters
+  const [minTrades, setMinTrades] = useState(0);
+  const [minHitRate, setMinHitRate] = useState(0);
+  const [minScore, setMinScore] = useState(0);
+  const [roleFilter, setRoleFilter] = useState('');   // '' | 'strong' | 'medium'
+  const [dirFilter, setDirFilter] = useState('');     // '' | 'buyers' | 'sellers'
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL){setLbError('Not configured');return;}
@@ -4850,9 +4868,21 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
     if (!rows) return [];
     const q = search.toLowerCase();
     return [...rows]
-      .filter(r=>!q||(r.insider_name||'').toLowerCase().includes(q)||(r.insider_title||'').toLowerCase().includes(q))
+      .filter(r=>{
+        if (q && !(r.insider_name||'').toLowerCase().includes(q) && !(r.insider_title||'').toLowerCase().includes(q)) return false;
+        if (minTrades > 0 && (r.priced||0) < minTrades) return false;
+        if (minHitRate > 0 && (r.hit_rate==null || r.hit_rate < minHitRate)) return false;
+        if (minScore > 0 && (r.proxy_score||0) < minScore) return false;
+        if (roleFilter && r.relationship !== roleFilter) return false;
+        if (dirFilter === 'buyers' && (r.om_buys||0) === 0) return false;
+        if (dirFilter === 'sellers' && (r.om_sells||0) === 0) return false;
+        return true;
+      })
       .sort((a,b)=>{const av=a[sort]??-Infinity,bv=b[sort]??-Infinity;return dir>0?av-bv:bv-av;});
-  },[rows,search,sort,dir]);
+  },[rows,search,sort,dir,minTrades,minHitRate,minScore,roleFilter,dirFilter]);
+
+  const hasInsiderFilters = minTrades>0||minHitRate>0||minScore>0||roleFilter||dirFilter;
+  function resetInsiderFilters(){setMinTrades(0);setMinHitRate(0);setMinScore(0);setRoleFilter('');setDirFilter('');}
 
   function onSortClick(col){if(sort===col)setDir(d=>-d);else{setSort(col);setDir(-1);}}
 
@@ -4870,15 +4900,50 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
-  // Transactions for selected insider — case-insensitive name match, all types
-  const profileTrades = useMemo(()=>{
-    if (!selected) return [];
-    const name = (selected.insider_name||'').toLowerCase();
-    return filings
-      .filter(f=>(f.insiderName||'').toLowerCase()===name)
-      .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
-      .slice(0,30);
-  },[filings, selected?.insider_name]);
+  // Transactions for selected insider — query directly from DB so we always
+  // have data regardless of the main filings window. Falls back to filtering
+  // the in-memory filings if the query fails.
+  const [profileTrades, setProfileTrades] = useState([]);
+  const [profileLoading, setProfileLoading] = useState(false);
+  useEffect(()=>{
+    if (!selected?.insider_name) { setProfileTrades([]); return; }
+    let cancelled = false;
+    setProfileLoading(true);
+    const name = selected.insider_name.replace(/'/g, "''"); // SQL escape
+    queryNeon(`
+      SELECT accession_number, cik_issuer, transaction_date, filing_date AS date,
+             ticker, company_name AS company, insider_name, insider_title AS title,
+             transaction_type, transaction_code, is_open_market, is_officer,
+             shares::float, price_per_share::float AS price, value::float,
+             shares_owned_after::float, pct_owned_change::float, sector, relationship
+      FROM public.filings
+      WHERE LOWER(insider_name) = LOWER('${name}')
+        AND is_open_market = true
+      ORDER BY COALESCE(transaction_date, filing_date) DESC
+      LIMIT 50
+    `).then(rows => {
+      if (cancelled) return;
+      setProfileTrades((rows||[]).map(r => ({
+        accessionNumber: r.accession_number, cikIssuer: r.cik_issuer,
+        transactionDate: r.transaction_date, date: r.date,
+        ticker: r.ticker, company: r.company, insiderName: r.insider_name,
+        title: r.title, transactionType: r.transaction_type,
+        transactionCode: r.transaction_code, isOpenMarket: r.is_open_market,
+        isOfficer: r.is_officer, shares: r.shares, price: r.price, value: r.value,
+        sharesOwnedAfter: r.shares_owned_after, pctOwnedChange: r.pct_owned_change,
+        sector: r.sector, relationship: r.relationship,
+      })));
+    }).catch(()=>{
+      if (cancelled) return;
+      // Fallback: filter from in-memory filings
+      const nameLower = (selected.insider_name||'').toLowerCase();
+      setProfileTrades(filings
+        .filter(f=>(f.insiderName||'').toLowerCase()===nameLower)
+        .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
+        .slice(0,50));
+    }).finally(()=>{ if (!cancelled) setProfileLoading(false); });
+    return ()=>{ cancelled=true; };
+  },[selected?.insider_name]);
 
   // Companies this insider has traded at — all transaction types
   const profileCompanies = useMemo(()=>{
@@ -4908,25 +4973,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         <div className="ws-stat"><div className="ws-stat__label">Total buy value</div><div className="ws-stat__value" style={{fontSize:16}}>{rows?totalValDisplay:'—'}</div><div className="ws-stat__sub">{yearsBack?`${yearsBack}yr window`:'All time'}</div></div>
       </div>
 
-      {/* Main: profile viewer + insider rail */}
+      {/* Main: insider list (left) + profile viewer (right) */}
       <div className="ip-layout">
 
-        {/* Profile viewer — 80% width */}
-        <div className="ws-tile ip-profile-tile">
-          <ProfileCard
-            r={selected}
-            profileCompanies={profileCompanies}
-            profileTrades={profileTrades}
-            txExpanded={txExpanded}
-            setTxExpanded={setTxExpanded}
-            onOpenDetail={onOpenDetail}
-            watchlist={watchlist}
-            loading={loading}
-            setInsiderDrawerDetail={setInsiderDrawerDetail}
-          />
-        </div>
-
-        {/* Insider rail — 20% width, scrollable */}
+        {/* Insider list — left column (screener) */}
         <div className="ws-tile ip-rail">
           <div className="ip-rail__hdr">
             <div className="ws-search-wrap" style={{maxWidth:'100%',flex:1}}>
@@ -4937,18 +4987,70 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             </div>
           </div>
           <div className="ip-rail__filters">
-            <div className="ws-pills" style={{gap:3}}>
-              {[{v:1,l:'1yr'},{v:2,l:'2yr'},{v:5,l:'5yr'},{v:null,l:'All'}].map(o=>(
-                <button key={o.l} className={`ws-pill ws-pill--sm${yearsBack===o.v?' ws-pill--active':''}`}
-                  onClick={()=>setYearsBack(o.v)}>{o.l}</button>
-              ))}
+            <div className="ws-filter-group" style={{borderLeft:'none',paddingLeft:0}}>
+              <span className="ws-filter-label">Window</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[{v:1,l:'1yr'},{v:2,l:'2yr'},{v:5,l:'5yr'},{v:null,l:'All'}].map(o=>(
+                  <button key={o.l} className={`ws-pill ws-pill--sm${yearsBack===o.v?' ws-pill--active':''}`}
+                    onClick={()=>setYearsBack(o.v)}>{o.l}</button>
+                ))}
+              </div>
             </div>
-            <div className="ws-pills" style={{gap:3}}>
-              {[[null,'All'],['corporate','Corp'],['congress','Cong']].map(([v,l])=>(
-                <button key={l} className={`ws-pill ws-pill--sm${lbSource===v?' ws-pill--active':''}`}
-                  onClick={()=>setLbSource(v)}>{l}</button>
-              ))}
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Source</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[[null,'All'],['corporate','Corp'],['congress','Cong']].map(([v,l])=>(
+                  <button key={l} className={`ws-pill ws-pill--sm${lbSource===v?' ws-pill--active':''}`}
+                    onClick={()=>setLbSource(v)}>{l}</button>
+                ))}
+              </div>
             </div>
+            <div className="ws-filter-group" style={{borderLeft:'none',paddingLeft:0}}>
+              <span className="ws-filter-label">Role</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[['','All'],['strong','C-Suite'],['medium','Officer']].map(([v,l])=>(
+                  <button key={v} className={`ws-pill ws-pill--sm${roleFilter===v?' ws-pill--active':''}`}
+                    onClick={()=>setRoleFilter(v)}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Direction</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[['','All'],['buyers','Buyers'],['sellers','Sellers']].map(([v,l])=>(
+                  <button key={v} className={`ws-pill ws-pill--sm${dirFilter===v?' ws-pill--active':''}`}
+                    onClick={()=>setDirFilter(v)}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group" style={{borderLeft:'none',paddingLeft:0}}>
+              <span className="ws-filter-label">Min trades</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[{v:0,l:'Any'},{v:5,l:'5+'},{v:10,l:'10+'},{v:25,l:'25+'}].map(o=>(
+                  <button key={o.v} className={`ws-pill ws-pill--sm${minTrades===o.v?' ws-pill--active':''}`}
+                    onClick={()=>setMinTrades(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Min hit rate</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[{v:0,l:'Any'},{v:60,l:'60%+'},{v:70,l:'70%+'},{v:80,l:'80%+'}].map(o=>(
+                  <button key={o.v} className={`ws-pill ws-pill--sm${minHitRate===o.v?' ws-pill--active':''}`}
+                    onClick={()=>setMinHitRate(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group" style={{borderLeft:'none',paddingLeft:0}}>
+              <span className="ws-filter-label">Min score</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[{v:0,l:'Any'},{v:40,l:'40+'},{v:60,l:'60+'},{v:75,l:'75+'}].map(o=>(
+                  <button key={o.v} className={`ws-pill ws-pill--sm${minScore===o.v?' ws-pill--active':''}`}
+                    onClick={()=>setMinScore(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+            {hasInsiderFilters&&<button className="ws-clear-btn" style={{fontSize:10,marginTop:4}} onClick={resetInsiderFilters}>Clear filters</button>}
           </div>
           <div className="ip-rail__sort-bar">
             {[['proxy_score','Score'],['hit_rate','Hit %'],['avg_return','Return'],['om_buys','Buys']].map(([k,l])=>(
@@ -4975,11 +5077,26 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                       {r.hit_rate!=null&&<span style={{fontSize:10,color:hrC,fontFamily:'var(--font-mono)',fontWeight:600}}>{r.hit_rate}%</span>}
                     </div>
                   </div>
-                  <span className="ip-rail-row__score">{r.proxy_score??'—'}</span>
+                  <div style={{width:72,flexShrink:0}}><ConvictionBar score={r.proxy_score??0} max={100}/></div>
                 </div>
               );
             })}
           </div>
+        </div>
+
+        {/* Profile viewer — right column */}
+        <div className="ws-tile ip-profile-tile">
+          <ProfileCard
+            r={selected}
+            profileCompanies={profileCompanies}
+            profileTrades={profileTrades}
+            txExpanded={txExpanded}
+            setTxExpanded={setTxExpanded}
+            onOpenDetail={onOpenDetail}
+            watchlist={watchlist}
+            loading={profileLoading}
+            setInsiderDrawerDetail={setInsiderDrawerDetail}
+          />
         </div>
 
       </div>
