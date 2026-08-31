@@ -6833,3 +6833,36 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
   cursor: pointer; transition: background .1s;
 }
 .ip-aff-badge:hover { background: var(--surface-3); }
+
+/* ── Filter toggle strip ───────────────────────────────────────── */
+.ip-rail__filter-toggle {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 0.5px solid var(--border);
+  cursor: pointer;
+  transition: background .1s;
+}
+.ip-rail__filter-toggle:hover { background: var(--surface-2); }
+
+/* ── Height-matched columns ────────────────────────────────────── */
+.ip-layout { align-items: stretch; }
+.ip-rail { display: flex; flex-direction: column; max-height: 80vh; }
+.ip-rail__list { flex: 1; overflow-y: auto; min-height: 0; }
+.ip-profile-tile { display: flex; flex-direction: column; max-height: 80vh; overflow-y: auto; }
+
+/* ── Transaction list cap + fade ───────────────────────────────── */
+.ip-tx-list-wrap { position: relative; }
+.ip-tx-fade {
+  height: 40px; pointer-events: none;
+  background: linear-gradient(transparent, var(--bg));
+  margin-top: -40px; position: relative; z-index: 1;
+}
+.ip-tx-explore-btn {
+  display: block; width: 100%; padding: 10px;
+  font-size: 12px; font-weight: 600; font-family: var(--font);
+  color: var(--accent); background: var(--accent-50);
+  border: none; border-radius: var(--radius-md);
+  cursor: pointer; transition: opacity .1s;
+  margin-top: 4px; position: relative; z-index: 2;
+}
+.ip-tx-explore-btn:hover { opacity: .85; }
