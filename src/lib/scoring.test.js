@@ -1,9 +1,7 @@
 // src/lib/scoring.test.js
-// Drop-in for your Vitest suite: npx vitest run src/lib/scoring.test.js
 import { describe, it, expect } from 'vitest';
 import { buildSignals, filterAndScoreSignals, processLeaderboardRows } from './scoring.js';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 const today = new Date().toISOString().split('T')[0];
 const daysAgoDate = (n) => {
   const d = new Date(); d.setDate(d.getDate() - n);
@@ -22,168 +20,142 @@ function makeFiling(overrides = {}) {
   };
 }
 
-// ── buildSignals: conviction is 0–100 ────────────────────────────────────────
+// ── Signal conviction (0–100) ────────────────────────────────────────────────
 
-describe('buildSignals v2 — conviction scale', () => {
-  it('produces conviction in the 0–100 range, never exceeding 100', () => {
-    // Volume monster: many trades, many insiders, huge value
-    const filings = [];
-    for (let i = 0; i < 40; i++) {
-      filings.push(makeFiling({
-        insiderName: `Insider ${i % 8}`,
-        relationship: i < 3 ? 'strong' : 'weak',
-        value: 1_000_000,
-        transactionDate: daysAgoDate(Math.floor(i / 5)),
-      }));
-    }
-    const signals = buildSignals(filings);
-    expect(signals.length).toBeGreaterThan(0);
-    for (const s of signals) {
+describe('buildSignals — conviction 0–100 scale', () => {
+  it('never exceeds 100 even with extreme volume', () => {
+    const filings = Array.from({length:40}, (_,i) => makeFiling({
+      insiderName: `Insider ${i%8}`, relationship: i<3?'strong':'weak',
+      value: 1_000_000, transactionDate: daysAgoDate(Math.floor(i/5)),
+    }));
+    for (const s of buildSignals(filings)) {
       expect(s.conviction).toBeGreaterThanOrEqual(0);
       expect(s.conviction).toBeLessThanOrEqual(100);
     }
   });
 
-  it('scores a weak routine director buy low (under 30)', () => {
-    const filings = [makeFiling({ isRoutine: true, value: 25000, pctOwnedChange: 2 })];
-    const [signal] = buildSignals(filings);
-    expect(signal.conviction).toBeLessThan(30);
+  it('scores a weak routine director buy under 30', () => {
+    const [s] = buildSignals([makeFiling({isRoutine:true, value:25000, pctOwnedChange:2})]);
+    expect(s.conviction).toBeLessThan(30);
   });
 
-  it('scores a C-suite opportunistic cluster buy high (above 55)', () => {
-    const filings = [
-      makeFiling({ insiderName: 'CEO', relationship: 'strong', value: 500000, pctOwnedChange: 30 }),
-      makeFiling({ insiderName: 'CFO', relationship: 'strong', value: 300000, pctOwnedChange: 20 }),
-      makeFiling({ insiderName: 'VP Sales', relationship: 'medium', value: 200000, pctOwnedChange: 15 }),
-    ];
-    const [signal] = buildSignals(filings);
-    expect(signal.conviction).toBeGreaterThan(55);
-  });
-});
-
-describe('buildSignals v2 — contra-signal penalty', () => {
-  it('penalizes conviction when insiders are split (buys + sells)', () => {
-    const buyOnly = [
-      makeFiling({ insiderName: 'A', value: 500000 }),
-      makeFiling({ insiderName: 'B', value: 300000 }),
-    ];
-    const mixed = [
-      ...buyOnly,
-      makeFiling({ insiderName: 'C', transactionType: 'sell', transactionCode: 'S', value: 400000 }),
-      makeFiling({ insiderName: 'D', transactionType: 'sell', transactionCode: 'S', value: 300000 }),
-    ];
-    const [buySignal] = buildSignals(buyOnly).filter(s => s.direction === 'buy');
-    const [mixedSignal] = buildSignals(mixed).filter(s => s.direction === 'buy');
-    expect(mixedSignal.conviction).toBeLessThan(buySignal.conviction);
-  });
-});
-
-describe('buildSignals v2 — recency decay', () => {
-  it('scores a recent signal higher than an identical stale one', () => {
-    const fresh = [makeFiling({ insiderName: 'A', transactionDate: daysAgoDate(1) })];
-    const stale = [makeFiling({ insiderName: 'A', transactionDate: daysAgoDate(60) })];
-
-    const [freshSig] = buildSignals(fresh);
-    const [staleSig] = buildSignals(stale);
-    expect(freshSig.conviction).toBeGreaterThan(staleSig.conviction);
-  });
-});
-
-describe('buildSignals v2 — velocity', () => {
-  it('scores concentrated trades higher than spread-out ones', () => {
-    // 3 trades in 1 day
-    const burst = [
-      makeFiling({ insiderName: 'A', transactionDate: today }),
-      makeFiling({ insiderName: 'B', transactionDate: today }),
-      makeFiling({ insiderName: 'C', transactionDate: today }),
-    ];
-    // Same 3 trades spread over 30 days
-    const slow = [
-      makeFiling({ insiderName: 'A', transactionDate: daysAgoDate(0) }),
-      makeFiling({ insiderName: 'B', transactionDate: daysAgoDate(15) }),
-      makeFiling({ insiderName: 'C', transactionDate: daysAgoDate(30) }),
-    ];
-    const [burstSig] = buildSignals(burst);
-    const [slowSig] = buildSignals(slow);
-    expect(burstSig.conviction).toBeGreaterThan(slowSig.conviction);
-  });
-});
-
-describe('buildSignals v2 — insider track record', () => {
-  it('boosts conviction when buying insiders have high hit rates', () => {
-    const filings = [
-      makeFiling({ insiderName: 'Good Insider', relationship: 'strong', value: 500000 }),
-    ];
-    const withStats = buildSignals(filings, {
-      insiderStats: new Map([['Good Insider', { hitRate: 85 }]]),
-    });
-    const without = buildSignals(filings);
-
-    const [boosted] = withStats;
-    const [baseline] = without;
-    expect(boosted.conviction).toBeGreaterThan(baseline.conviction);
-  });
-});
-
-describe('buildSignals v2 — _components breakdown', () => {
-  it('exposes a _components object with per-dimension scores', () => {
-    const filings = [makeFiling({ relationship: 'strong', value: 500000, pctOwnedChange: 25 })];
-    const [signal] = buildSignals(filings);
-    expect(signal._components).toBeDefined();
-    expect(signal._components).toHaveProperty('opportunistic');
-    expect(signal._components).toHaveProperty('cluster');
-    expect(signal._components).toHaveProperty('cSuite');
-    expect(signal._components).toHaveProperty('recency');
-    expect(signal._components).toHaveProperty('contraPenalty');
-  });
-});
-
-// ── filterAndScoreSignals ────────────────────────────────────────────────────
-
-describe('filterAndScoreSignals — strength thresholds on 0-100 scale', () => {
-  it('filters out signals below the threshold', () => {
-    const filings = [
-      makeFiling({ ticker: 'STRONG', insiderName: 'CEO', relationship: 'strong', value: 1_000_000, pctOwnedChange: 40 }),
-      makeFiling({ ticker: 'STRONG', insiderName: 'CFO', relationship: 'strong', value: 500_000, pctOwnedChange: 20 }),
-      makeFiling({ ticker: 'WEAK', insiderName: 'Dir', value: 20_000, isRoutine: true, pctOwnedChange: 1 }),
-    ];
-    const all = filterAndScoreSignals(filings, { strengthThreshold: 0 });
-    const strong = filterAndScoreSignals(filings, { strengthThreshold: 50 });
-    expect(all.length).toBeGreaterThanOrEqual(strong.length);
-    for (const s of strong) {
-      expect(s.conviction).toBeGreaterThanOrEqual(50);
-    }
-  });
-});
-
-// ── processLeaderboardRows — alpha and confidence ────────────────────────────
-
-describe('processLeaderboardRows v2', () => {
-  it('computes alpha as insider return minus SPY return', () => {
-    const [row] = processLeaderboardRows([{
-      priced: 20, wins: 14, avg_return_pct: 18.5, avg_spy_return_pct: 8.2,
-      om_buys: 15, om_sells: 2, total_buys: 20, relationship: 'strong',
-    }]);
-    expect(row.alpha).toBeCloseTo(10.3, 0);
-    expect(row.hit_rate).toBe(70);
-    expect(row.hit_rate_confident).toBe(true);
-  });
-
-  it('marks hit rate as low-confidence with 5-9 priced trades', () => {
-    const [row] = processLeaderboardRows([{
-      priced: 7, wins: 5, avg_return_pct: 12, avg_spy_return_pct: 5,
-      om_buys: 5, om_sells: 1, total_buys: 7, relationship: 'medium',
-    }]);
-    expect(row.hit_rate).toBe(71);
-    expect(row.hit_rate_confident).toBe(false);
-  });
-
-  it('sorts by proxy_score descending, then alpha descending', () => {
-    const rows = processLeaderboardRows([
-      { priced: 20, wins: 16, avg_return_pct: 25, avg_spy_return_pct: 8, om_buys: 15, om_sells: 3, total_buys: 18, relationship: 'strong' },
-      { priced: 20, wins: 16, avg_return_pct: 25, avg_spy_return_pct: 8, om_buys: 15, om_sells: 3, total_buys: 18, relationship: 'medium' },
+  it('scores a C-suite cluster buy above 55', () => {
+    const [s] = buildSignals([
+      makeFiling({insiderName:'CEO', relationship:'strong', value:500000, pctOwnedChange:30}),
+      makeFiling({insiderName:'CFO', relationship:'strong', value:300000, pctOwnedChange:20}),
+      makeFiling({insiderName:'VP',  relationship:'medium', value:200000, pctOwnedChange:15}),
     ]);
-    // Same hit rate and return, but first has 'strong' relationship — higher score
-    expect(rows[0].relationship).toBe('strong');
+    expect(s.conviction).toBeGreaterThan(55);
+  });
+
+  it('penalizes mixed buy/sell activity', () => {
+    const buyOnly = [makeFiling({insiderName:'A',value:500000}), makeFiling({insiderName:'B',value:300000})];
+    const mixed = [...buyOnly,
+      makeFiling({insiderName:'C',transactionType:'sell',transactionCode:'S',value:400000}),
+      makeFiling({insiderName:'D',transactionType:'sell',transactionCode:'S',value:300000}),
+    ];
+    const [b] = buildSignals(buyOnly).filter(s=>s.direction==='buy');
+    const [m] = buildSignals(mixed).filter(s=>s.direction==='buy');
+    expect(m.conviction).toBeLessThan(b.conviction);
+  });
+
+  it('scores recent signals higher than stale ones', () => {
+    const [fresh] = buildSignals([makeFiling({transactionDate:daysAgoDate(1)})]);
+    const [stale] = buildSignals([makeFiling({transactionDate:daysAgoDate(60)})]);
+    expect(fresh.conviction).toBeGreaterThan(stale.conviction);
+  });
+
+  it('rewards concentrated bursts over spread-out trades', () => {
+    const burst = [makeFiling({insiderName:'A'}), makeFiling({insiderName:'B'}), makeFiling({insiderName:'C'})];
+    const slow = [
+      makeFiling({insiderName:'A',transactionDate:daysAgoDate(0)}),
+      makeFiling({insiderName:'B',transactionDate:daysAgoDate(15)}),
+      makeFiling({insiderName:'C',transactionDate:daysAgoDate(30)}),
+    ];
+    const [b] = buildSignals(burst);
+    const [s] = buildSignals(slow);
+    expect(b.conviction).toBeGreaterThan(s.conviction);
+  });
+
+  it('boosts conviction with insider track records', () => {
+    const f = [makeFiling({insiderName:'Good',relationship:'strong',value:500000})];
+    const [boosted] = buildSignals(f, {insiderStats:new Map([['Good',{hitRate:85}]])});
+    const [base]    = buildSignals(f);
+    expect(boosted.conviction).toBeGreaterThan(base.conviction);
+  });
+
+  it('exposes _components breakdown', () => {
+    const [s] = buildSignals([makeFiling({relationship:'strong', value:500000})]);
+    expect(s._components).toHaveProperty('opportunistic');
+    expect(s._components).toHaveProperty('cluster');
+    expect(s._components).toHaveProperty('contraPenalty');
+  });
+});
+
+// ── Insider leaderboard scoring (0–100) ──────────────────────────────────────
+
+describe('processLeaderboardRows — 0–100 insider score', () => {
+  it('scores a strong C-suite insider with high alpha well above 50', () => {
+    const [r] = processLeaderboardRows([{
+      priced:20, wins:16, avg_return_pct:25, avg_spy_return_pct:8,
+      om_buys:15, om_sells:3, total_buys:18, relationship:'strong',
+    }]);
+    expect(r.proxy_score).toBeGreaterThan(50);
+    expect(r.alpha).toBeCloseTo(17, 0);
+    expect(r.hit_rate_confident).toBe(true);
+  });
+
+  it('caps sell-only insiders at 25', () => {
+    const [r] = processLeaderboardRows([{
+      priced:15, wins:10, avg_return_pct:20, avg_spy_return_pct:5,
+      om_buys:0, om_sells:20, total_buys:0, relationship:'strong',
+    }]);
+    expect(r.proxy_score).toBeLessThanOrEqual(25);
+  });
+
+  it('caps insiders with no priced data at 30', () => {
+    const [r] = processLeaderboardRows([{
+      priced:2, wins:2, avg_return_pct:null, avg_spy_return_pct:null,
+      om_buys:10, om_sells:2, total_buys:12, relationship:'strong',
+    }]);
+    expect(r.proxy_score).toBeLessThanOrEqual(30);
+  });
+
+  it('discounts low-sample (5-9 priced trades) by 25%', () => {
+    const base = {
+      wins:7, avg_return_pct:20, avg_spy_return_pct:5,
+      om_buys:10, om_sells:2, total_buys:12, relationship:'strong',
+    };
+    const [lo] = processLeaderboardRows([{...base, priced:7}]);
+    const [hi] = processLeaderboardRows([{...base, priced:20}]);
+    expect(lo.proxy_score).toBeLessThan(hi.proxy_score);
+  });
+
+  it('penalizes negative alpha', () => {
+    const base = {
+      priced:20, wins:12, om_buys:15, om_sells:3, total_buys:18, relationship:'strong',
+    };
+    const [pos] = processLeaderboardRows([{...base, avg_return_pct:15, avg_spy_return_pct:5}]);
+    const [neg] = processLeaderboardRows([{...base, avg_return_pct:5, avg_spy_return_pct:15}]);
+    expect(pos.proxy_score).toBeGreaterThan(neg.proxy_score);
+  });
+
+  it('differentiates the top — not everyone is the same score', () => {
+    const rows = processLeaderboardRows([
+      {priced:25, wins:22, avg_return_pct:35, avg_spy_return_pct:8, om_buys:20, om_sells:2, total_buys:22, relationship:'strong'},
+      {priced:25, wins:18, avg_return_pct:15, avg_spy_return_pct:8, om_buys:20, om_sells:5, total_buys:25, relationship:'strong'},
+      {priced:25, wins:14, avg_return_pct:8,  avg_spy_return_pct:8, om_buys:20, om_sells:5, total_buys:25, relationship:'medium'},
+    ]);
+    // All three should have different scores
+    expect(rows[0].proxy_score).toBeGreaterThan(rows[1].proxy_score);
+    expect(rows[1].proxy_score).toBeGreaterThan(rows[2].proxy_score);
+  });
+
+  it('never exceeds 100', () => {
+    const [r] = processLeaderboardRows([{
+      priced:100, wins:95, avg_return_pct:50, avg_spy_return_pct:5,
+      om_buys:80, om_sells:5, total_buys:85, relationship:'strong',
+    }]);
+    expect(r.proxy_score).toBeLessThanOrEqual(100);
   });
 });

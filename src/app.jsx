@@ -1438,7 +1438,7 @@ function TrustStars({score}) {
   return (
     <span className="trust-stars-wrap">
       <span className="trust-stars__label" title="A weighted composite of hit rate, realized return size, trade volume, and how concentrated their buying is — not the same number as the hit-rate % shown below, which is a raw price outcome with no weighting.">Trust score</span>
-      <span className="trust-stars" title={`${score}/5 — composite score (hit rate + return size + volume + concentration), distinct from the hit-rate % below`}>
+      <span className="trust-stars" title={`${score}/100 — composite score (hit rate + return size + volume + concentration), distinct from the hit-rate % below`}>
         <span className="trust-stars__row">
           {stars.map((fill,i)=>(
             <span key={i} className="trust-star">
@@ -1447,7 +1447,7 @@ function TrustStars({score}) {
             </span>
           ))}
         </span>
-        <span className="trust-stars__num">{score}/5</span>
+        <span className="trust-stars__num">{score}</span>
       </span>
     </span>
   );
@@ -3129,7 +3129,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                 {score!=null&&<div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,minWidth:80}}>
                   <span style={{fontSize:'0.625rem',color:'var(--text-3)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.04em'}}>Score</span>
                   <span className="td-mono" style={{fontSize:'0.875rem',fontWeight:700}}>{score.toFixed(1)}</span>
-                  <ConvictionBar score={score} max={5}/>
+                  <ConvictionBar score={score} max={100}/>
                 </div>}
               </div>
               <div className="trader-hero__chips">
@@ -4691,9 +4691,9 @@ function detectReversals(filings) {
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
 // ─── Shared insider profile components (module-level, no closure) ─────────────
 function ScoreRing({ score=0, size=76 }) {
-  const pct=Math.min((score||0)/5,1);
+  const pct=Math.min((score||0)/100,1);
   const r2=(size-8)/2, circ=2*Math.PI*r2, dash=pct*circ;
-  const color=score>=4?'var(--green-600)':score>=2.5?'var(--accent)':'var(--amber-600)';
+  const color=score>=65?'var(--green-600)':score>=35?'var(--accent)':'var(--amber-600)';
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{flexShrink:0}}>
       <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke="var(--surface-3)" strokeWidth={6}/>
@@ -4703,11 +4703,11 @@ function ScoreRing({ score=0, size=76 }) {
         style={{transition:'stroke-dasharray .4s ease'}}/>
       <text x={size/2} y={size/2-4} textAnchor="middle" dominantBaseline="middle"
         style={{fontSize:size*0.22,fontWeight:700,fontFamily:'var(--font-mono)',fill:color,userSelect:'none'}}>
-        {score!=null?score.toFixed(1):'—'}
+        {score!=null?score:'—'}
       </text>
       <text x={size/2} y={size/2+size*0.2} textAnchor="middle" dominantBaseline="middle"
         style={{fontSize:size*0.13,fill:'var(--text-3)',fontFamily:'var(--font)',userSelect:'none'}}>
-        /5.0
+        /100
       </text>
     </svg>
   );
@@ -4860,7 +4860,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
     if(!rows?.length)return{};
     const withHR=rows.filter(r=>r.hit_rate!=null);
     const avgHit=withHR.length?Math.round(withHR.reduce((s,r)=>s+r.hit_rate,0)/withHR.length):null;
-    return{count:rows.length,avgHit,topScore:rows.length?Math.max(...rows.map(r=>r.proxy_score??0)).toFixed(1):'—',totalVal:rows.reduce((s,r)=>s+(r.bought_value||0),0)};
+    return{count:rows.length,avgHit,topScore:rows.length?Math.max(...rows.map(r=>r.proxy_score??0)):'—',totalVal:rows.reduce((s,r)=>s+(r.bought_value||0),0)};
   },[rows]);
   const totalValDisplay = isNaN(stats.totalVal) ? '—' : fmt.money(stats.totalVal||0);
 
@@ -4904,7 +4904,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
       <div className="ws-stat-strip">
         <div className="ws-stat"><div className="ws-stat__label">Tracked insiders</div><div className="ws-stat__value">{rows?stats.count:'—'}</div><div className="ws-stat__sub">Open-market traders</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Avg hit rate</div><div className="ws-stat__value" style={{color:stats.avgHit>=60?'var(--green-600)':undefined}}>{stats.avgHit!=null?`${stats.avgHit}%`:'—'}</div><div className="ws-stat__sub">Profitable trades</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Top score</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{rows?stats.topScore:'—'}</div><div className="ws-stat__sub">Out of 5.0</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Top score</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{rows?stats.topScore:'—'}</div><div className="ws-stat__sub">Out of 100</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Total buy value</div><div className="ws-stat__value" style={{fontSize:16}}>{rows?totalValDisplay:'—'}</div><div className="ws-stat__sub">{yearsBack?`${yearsBack}yr window`:'All time'}</div></div>
       </div>
 
@@ -4975,7 +4975,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                       {r.hit_rate!=null&&<span style={{fontSize:10,color:hrC,fontFamily:'var(--font-mono)',fontWeight:600}}>{r.hit_rate}%</span>}
                     </div>
                   </div>
-                  <span className="ip-rail-row__score">{r.proxy_score?.toFixed(1)??'—'}</span>
+                  <span className="ip-rail-row__score">{r.proxy_score??'—'}</span>
                 </div>
               );
             })}
@@ -5513,7 +5513,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                           <div className="drawer__list-row__main">
                             <span className="td-muted" style={{fontSize:'0.6875rem',width:18}}>{i+1}</span>
                             <span style={{fontSize:'0.75rem',fontWeight:500,flex:1}}>{r.insider_name}</span>
-                            <span className="td-mono" style={{fontSize:13,fontWeight:700}}>{r.proxy_score.toFixed(1)}</span>
+                            <span className="td-mono" style={{fontSize:13,fontWeight:700}}>{r.proxy_score}</span>
                           </div>
                           <div className="drawer__list-row__sub">
                             <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'Unknown'}</span>
@@ -6135,8 +6135,8 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
             </div>
             <div className="ins-lb-card__score">
               {watchlist&&<FollowBtn name={r.insider_name} watchlist={watchlist}/>}
-              <div className="ins-lb-card__rate td-mono" style={{fontWeight:700}}>{r.proxy_score.toFixed(1)}</div>
-              <ConvictionBar score={r.proxy_score} max={5}/>
+              <div className="ins-lb-card__rate td-mono" style={{fontWeight:700}}>{r.proxy_score}</div>
+              <ConvictionBar score={r.proxy_score} max={100}/>
             </div>
             {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
             {isExpanded && (

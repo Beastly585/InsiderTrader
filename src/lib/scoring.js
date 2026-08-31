@@ -303,68 +303,108 @@ export function filterAndScoreSignals(filings, { cutoff = '', sourceF = '', sect
 
 // ─── Leaderboard row processing ──────────────────────────────────────────────
 //
-// v2: proxy_score replaced with a continuous 0–5 score based on:
-//   • Expectancy (hit_rate × avg_win magnitude, penalized by losses)
-//   • Alpha over SPY (not raw return)
-//   • Role weight (exec > officer > director)
-//   • Sample size confidence (more trades = more reliable)
+// v3: 0–100 score with the same diminishing-returns philosophy as signals.
+//
+// Dimensions:
+//   1. Alpha over SPY — did they actually beat the market? (heaviest weight)
+//   2. Hit rate — but only above coin-flip, and penalized for low sample
+//   3. Role — C-suite has genuine operational knowledge
+//   4. Volume & discipline — active open-market trader vs occasional filer
+//   5. Sample confidence — more priced trades = more reliable everything above
+//
+// Penalties:
+//   • Low sample (<10 priced trades): score discounted by up to 50%
+//   • Sell-only (0 OM buys): hard cap at 25 — sells are diversification noise,
+//     not predictive signals worth tracking
+//   • No priced data: capped at 30 — unproven track record
+//   • Negative alpha: active penalty (dragged below what they'd score otherwise)
 //
 export function processLeaderboardRows(rows) {
   return rows.map(r => {
-    // ── Hit rate: require 10+ priced trades for a meaningful number ────
-    const hitRate = r.priced >= 10 ? Math.round((r.wins / r.priced) * 100)
-                  : r.priced >= 5  ? Math.round((r.wins / r.priced) * 100)
-                  : null;
-    // Flag for lower confidence (5-9 trades vs 10+)
+    const hitRate = r.priced >= 5 ? Math.round((r.wins / r.priced) * 100) : null;
     const hitRateConfident = r.priced >= 10;
 
     const avgReturn    = r.avg_return_pct != null ? Math.round(r.avg_return_pct * 10) / 10 : null;
     const avgSpyReturn = r.avg_spy_return_pct != null ? Math.round(r.avg_spy_return_pct * 10) / 10 : null;
     const omTotal      = (r.om_buys || 0) + (r.om_sells || 0);
+    const omBuys       = r.om_buys || 0;
+    const omSells      = r.om_sells || 0;
     const omDiscipline = r.total_buys > 0 ? (r.om_buys / r.total_buys) : 0;
 
-    // ── Alpha: insider return minus market return ─────────────────────
-    // This is the actual value-add. +15% when SPY did +20% is -5% alpha.
     const alpha = (avgReturn != null && avgSpyReturn != null)
       ? Math.round((avgReturn - avgSpyReturn) * 10) / 10
       : null;
 
-    // ── Composite score: 0–5 ─────────────────────────────────────────
-    let s = 0;
+    // ── Dimension scores (each 0–1, some can go negative) ────────────
 
-    // Dimension 1: Hit rate (but only meaningful above coin-flip)
-    // 50% = 0 (coin flip). 60% = +0.5. 70% = +1.0. 80%+ = +1.5.
-    // Below 50% = negative (actively bad signal).
-    if (hitRate != null) {
-      const hrScore = (hitRate - 50) / 20; // 50→0, 70→1, 90→2
-      s += Math.max(-1, Math.min(1.5, hrScore));
-      // Discount if low sample
-      if (!hitRateConfident) s *= 0.7;
-    }
-
-    // Dimension 2: Alpha over SPY (the real question: did they beat the market?)
-    // Positive alpha is valuable. Negative alpha means you'd have been
-    // better off buying SPY.
+    // 1. Alpha: the single most important number.
+    //    +30% alpha → ~0.95.  +15% → ~0.63.  +5% → ~0.28.  0% → 0.  -10% → -0.33
+    let alphaScore = 0;
     if (alpha != null) {
-      if (alpha >= 20) s += 1.5;
-      else if (alpha >= 10) s += 1.0;
-      else if (alpha >= 5) s += 0.5;
-      else if (alpha >= 0) s += 0.2;
-      else if (alpha < -5) s -= 0.5;
+      if (alpha >= 0) {
+        alphaScore = softcap(alpha, 20);          // 0→0, 15→0.53, 30→0.78
+      } else {
+        alphaScore = -softcap(Math.abs(alpha), 15); // -5→-0.28, -15→-0.63
+      }
     }
 
-    // Dimension 3: Role — execs have genuine operational knowledge,
-    // 10% owners and fund directors less so
-    if (r.relationship === 'strong') s += 1.0;
-    else if (r.relationship === 'medium') s += 0.5;
+    // 2. Hit rate: above 50% adds, below 50% subtracts.
+    //    Heavily discounted at low sample sizes.
+    let hitRateScore = 0;
+    if (hitRate != null) {
+      hitRateScore = (hitRate - 50) / 50;  // 50→0, 75→0.5, 100→1.0, 25→-0.5
+      // Confidence discount: 5 trades = 40% weight, 10 = 70%, 20+ = 100%
+      const confidence = Math.min(1, 0.2 + (r.priced / 25));
+      hitRateScore *= confidence;
+    }
 
-    // Dimension 4: Volume and discipline — are they an active, disciplined
-    // open-market trader, or do they occasionally dump restricted shares?
-    const volumeScore = softcap(omTotal, 15) * 0.8; // max ~0.8
-    const disciplineBonus = omDiscipline >= 0.7 ? 0.3 : 0;
-    s += volumeScore + disciplineBonus;
+    // 3. Role weight
+    const roleScore = r.relationship === 'strong' ? 1.0
+                    : r.relationship === 'medium' ? 0.5
+                    : 0.15;
 
-    const proxyScore = Math.max(0, Math.min(Math.round(s * 10) / 10, 5));
+    // 4. Volume: active traders are more interesting than one-time filers.
+    //    5 trades → ~0.28.  15 → ~0.63.  30+ → ~0.86.
+    const volumeScore = softcap(omTotal, 20);
+
+    // 5. Discipline: what fraction of their buys are open-market?
+    //    ≥80% → 1.0.  50% → 0.5.  All non-OM → 0.
+    const disciplineScore = Math.min(1, omDiscipline / 0.8);
+
+    // ── Weighted sum ─────────────────────────────────────────────────
+    const raw =
+      (alphaScore      * 30) +   // heaviest — "did they beat the market?"
+      (hitRateScore    * 22) +   // "how often are they right?"
+      (roleScore       * 15) +   // "do they have real operational knowledge?"
+      (volumeScore     * 12) +   // "are they active enough to matter?"
+      (disciplineScore *  8);    // "are they putting their own money in?"
+
+    // Compress through diminishing returns → 0–100
+    let score = 100 * softcap(Math.max(0, raw), 45);
+
+    // ── Penalties ────────────────────────────────────────────────────
+
+    // Sell-only: no open-market buys means this person only sells.
+    // Sells are diversification noise (Seyhun 1986), not actionable.
+    // Hard cap at 25 — they can appear on the list but never rank high.
+    if (omBuys === 0) {
+      score = Math.min(score, 25);
+    }
+
+    // No priced trades: we literally can't evaluate them.
+    // Cap at 30 — role and volume can get them on the board, but
+    // without a track record they can't rank above people who have one.
+    if (r.priced < 5) {
+      score = Math.min(score, 30);
+    }
+
+    // Low sample discount: 5-9 priced trades — we have a number but
+    // it's noisy. Discount the score by up to 30%.
+    if (r.priced >= 5 && r.priced < 10) {
+      score = Math.round(score * 0.75);
+    }
+
+    const proxyScore = Math.max(0, Math.min(Math.round(score), 100));
 
     return {
       ...r,
