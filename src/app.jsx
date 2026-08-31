@@ -4414,7 +4414,6 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                         {!isMobile&&<div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>{fmt.dateShort(s.lastTradeDate)}</div>}
                         <div className="ws-row__cell ws-row__cell--right">
                           <span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{s.insiderCount}</span>
-                          {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:9,padding:'0 4px',marginLeft:3}}>{s.cSuiteBuys}×</span>}
                         </div>
                         {!isMobile&&<div className="ws-row__cell ws-row__cell--right">
                           <span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{s.buys+s.sells}</span>
