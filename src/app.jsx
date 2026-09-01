@@ -1272,7 +1272,7 @@ const NAV = [
   {id:'watchlist', Icon:IconFavorites, label:'Watchlist'},
 ];
 // ─── Top Nav ──────────────────────────────────────────────────────────────────
-function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate, isDataStale, loading }) {
+function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate, isDataStale, loading, helpMode, setHelpMode }) {
   const pro = isPro(user);
   const isMobile = useIsMobile();
   const NAV_LINKS = [
@@ -11014,6 +11014,7 @@ function AppInner() {
         page={page} setPage={navTo} dark={dark} setDark={setDark} user={user}
         onUpgrade={(f) => setShowUpgradeModal(f || 'default')}
         lastFilingDate={lastFilingDate} isDataStale={isDataStale} loading={loading}
+        helpMode={helpMode} setHelpMode={setHelpMode}
       />
       <main className="ws-main">
         {cameFromHome && page !== 'home' && (
