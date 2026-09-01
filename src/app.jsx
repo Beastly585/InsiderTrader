@@ -4864,12 +4864,22 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const [dirFilter, setDirFilter] = useState('');     // '' | 'buyers' | 'sellers'
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Client-side cache: avoid re-fetching the same query when switching tabs/pages
+  const lbCache = useRef({});
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL){setLbError('Not configured');return;}
+    const cacheKey = `${yearsBack}-${lbSource}`;
+    if (lbCache.current[cacheKey]) {
+      const cached = lbCache.current[cacheKey];
+      setRows(cached);
+      setSelected(s => s ?? (cached[0]||null));
+      return;
+    }
     setRows(null);setLbError(null);
     queryNeon(LEADERBOARD_QUERY(500,null,2,yearsBack,lbSource))
       .then(r=>{
         const p = processLeaderboardRows(r);
+        lbCache.current[cacheKey] = p;
         setRows(p);
         setSelected(s => s ?? (p[0]||null));
       })
@@ -4917,11 +4927,19 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   // the in-memory filings if the query fails.
   const [profileTrades, setProfileTrades] = useState([]);
   const [profileLoading, setProfileLoading] = useState(false);
+  // Cache per-insider trades so revisiting is instant
+  const tradeCache = useRef({});
   useEffect(()=>{
     if (!selected?.insider_name) { setProfileTrades([]); return; }
+    const cacheKey = selected.insider_name.toLowerCase();
+    if (tradeCache.current[cacheKey]) {
+      setProfileTrades(tradeCache.current[cacheKey]);
+      setProfileLoading(false);
+      return;
+    }
     let cancelled = false;
     setProfileLoading(true);
-    const name = selected.insider_name.replace(/'/g, "''"); // SQL escape
+    const name = selected.insider_name.replace(/'/g, "''");
     queryNeon(`
       SELECT accession_number, cik_issuer, transaction_date, filing_date AS date,
              ticker, company_name AS company, insider_name, insider_title AS title,
@@ -4935,7 +4953,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
       LIMIT 50
     `).then(rows => {
       if (cancelled) return;
-      setProfileTrades((rows||[]).map(r => ({
+      const mapped = (rows||[]).map(r => ({
         accessionNumber: r.accession_number, cikIssuer: r.cik_issuer,
         transactionDate: r.transaction_date, date: r.date,
         ticker: r.ticker, company: r.company, insiderName: r.insider_name,
@@ -4944,7 +4962,9 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         isOfficer: r.is_officer, shares: r.shares, price: r.price, value: r.value,
         sharesOwnedAfter: r.shares_owned_after, pctOwnedChange: r.pct_owned_change,
         sector: r.sector, relationship: r.relationship,
-      })));
+      }));
+      tradeCache.current[cacheKey] = mapped;
+      setProfileTrades(mapped);
     }).catch(()=>{
       if (cancelled) return;
       // Fallback: filter from in-memory filings
@@ -5088,7 +5108,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               const role=insiderRoleLabel(r);
               // Show the metric matching the current sort column
               let metricText = null, metricColor = 'var(--text-3)';
-              if (sort === 'hit_rate' || sort === 'proxy_score') {
+              if (sort === 'proxy_score') {
+                metricText = `${r.proxy_score??0}/100`;
+                metricColor = r.proxy_score>=65?'var(--green-600)':r.proxy_score>=35?'var(--accent)':'var(--text-3)';
+              } else if (sort === 'hit_rate') {
                 if (r.hit_rate != null) {
                   metricColor = r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-3)';
                   metricText = `${r.hit_rate}% hit`;
