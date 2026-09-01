@@ -4867,7 +4867,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL){setLbError('Not configured');return;}
     setRows(null);setLbError(null);
-    queryNeon(LEADERBOARD_QUERY(200,null,2,yearsBack,lbSource))
+    queryNeon(LEADERBOARD_QUERY(500,null,2,yearsBack,lbSource))
       .then(r=>{
         const p = processLeaderboardRows(r);
         setRows(p);
@@ -4886,8 +4886,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         if (minHitRate > 0 && (r.hit_rate==null || r.hit_rate < minHitRate)) return false;
         if (minScore > 0 && (r.proxy_score||0) < minScore) return false;
         if (roleFilter && r.relationship !== roleFilter) return false;
-        if (dirFilter === 'buyers' && (r.om_buys||0) === 0) return false;
-        if (dirFilter === 'sellers' && (r.om_sells||0) === 0) return false;
+        if (dirFilter === 'buyers' && Number(r.om_buys||0) === 0) return false;
+        if (dirFilter === 'sellers' && Number(r.om_sells||0) === 0) return false;
         return true;
       })
       .sort((a,b)=>{const av=a[sort]??-Infinity,bv=b[sort]??-Infinity;return dir>0?av-bv:bv-av;});
@@ -4979,7 +4979,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 
       {/* Stat strip */}
       <div className="ws-stat-strip">
-        <div className="ws-stat"><div className="ws-stat__label">Tracked insiders</div><div className="ws-stat__value">{rows?stats.count:'—'}</div><div className="ws-stat__sub">Open-market traders</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Showing</div><div className="ws-stat__value">{rows?sorted.length:'—'}</div><div className="ws-stat__sub">{rows?`of ${stats.count} insiders`:''}</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Avg hit rate</div><div className="ws-stat__value" style={{color:stats.avgHit>=60?'var(--green-600)':undefined}}>{stats.avgHit!=null?`${stats.avgHit}%`:'—'}</div><div className="ws-stat__sub">Profitable trades</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Top score</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{rows?stats.topScore:'—'}</div><div className="ws-stat__sub">Out of 100</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Total buy value</div><div className="ws-stat__value" style={{fontSize:16}}>{rows?totalValDisplay:'—'}</div><div className="ws-stat__sub">{yearsBack?`${yearsBack}yr window`:'All time'}</div></div>
@@ -5085,8 +5085,22 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             :sorted.length===0?<div className="ws-empty" style={{fontSize:11}}>No results.</div>
             :sorted.map((r,i)=>{
               const isActive=selected?.insider_name===r.insider_name;
-              const hrC=r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-3)';
               const role=insiderRoleLabel(r);
+              // Show the metric matching the current sort column
+              let metricText = null, metricColor = 'var(--text-3)';
+              if (sort === 'hit_rate' || sort === 'proxy_score') {
+                if (r.hit_rate != null) {
+                  metricColor = r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-3)';
+                  metricText = `${r.hit_rate}% hit`;
+                }
+              } else if (sort === 'avg_return') {
+                if (r.avg_return != null) {
+                  metricColor = r.avg_return>=0?'var(--green-600)':'var(--red-600)';
+                  metricText = `${r.avg_return>=0?'+':''}${r.avg_return.toFixed(1)}% return`;
+                }
+              } else if (sort === 'om_buys') {
+                metricText = `${r.om_buys||0} buys · ${fmt.money(r.bought_value)}`;
+              }
               return (
                 <div key={r.insider_name}
                   className={`ip-rail-row${isActive?' ip-rail-row--active':''}`}
@@ -5096,7 +5110,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     <div className="ip-rail-row__name">{r.insider_name}</div>
                     <div className="ip-rail-row__meta">
                       <Badge type={role.badge}>{role.label}</Badge>
-                      {r.hit_rate!=null&&<span style={{fontSize:10,color:hrC,fontFamily:'var(--font-mono)',fontWeight:600}}>{r.hit_rate}%</span>}
+                      {metricText&&<span style={{fontSize:10,color:metricColor,fontFamily:'var(--font-mono)',fontWeight:600}}>{metricText}</span>}
                     </div>
                   </div>
                   <div style={{width:72,flexShrink:0}}><ConvictionBar score={r.proxy_score??0} max={100}/></div>
@@ -5405,7 +5419,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // Insiders
   useEffect(()=>{
     if (activeTab!=='insiders') return;
-    queryNeon(LEADERBOARD_QUERY(200, null, 2, lbYearsBack, lbSource))
+    queryNeon(LEADERBOARD_QUERY(500, null, 2, lbYearsBack, lbSource))
       .then(r=>setLbRows(processLeaderboardRows(r)))
       .catch(()=>setLbRows([]));
   },[type,lbYearsBack,lbSource]);
