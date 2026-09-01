@@ -6304,10 +6304,11 @@ td { padding:7px 11px; vertical-align:middle; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  align-items: stretch; /* both tiles same height */
+  align-items: stretch;
 }
-/* Cap tile height and scroll internally so page doesn't grow unbounded */
-.ws-wl-bottom .ws-tile {
+.ws-wl-bottom .ws-tile,
+.ws-wl-bottom .wl-list-tile {
+  min-height: 380px;
   max-height: 520px;
   display: flex;
   flex-direction: column;
@@ -6945,4 +6946,45 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 .ip-stat .info-tip-explain {
   font-size: 9px;
   max-width: 120px;
+}
+
+/* ── Tab-style pills (Tickers/Insiders) ────────────────────────── */
+.ws-pill--tab {
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  font-weight: 500;
+}
+.ws-pill--tab.ws-pill--active {
+  background: transparent;
+  color: var(--text);
+  border-color: transparent;
+  border-bottom-color: var(--accent);
+  font-weight: 700;
+}
+.ws-pill--tab:hover { background: transparent; }
+
+/* ── Alert settings 2-column grid ──────────────────────────────── */
+.wl-alerts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.wl-alerts-col {
+  padding: 0;
+}
+.wl-alerts-col__title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-3);
+  padding: 10px 16px 4px;
+  border-bottom: 0.5px solid var(--border);
+}
+.wl-alerts-col + .wl-alerts-col {
+  border-left: 0.5px solid var(--border);
+}
+@media (max-width: 640px) {
+  .wl-alerts-grid { grid-template-columns: 1fr; }
+  .wl-alerts-col + .wl-alerts-col { border-left: none; border-top: 0.5px solid var(--border); }
 }

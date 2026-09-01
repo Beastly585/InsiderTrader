@@ -1329,11 +1329,6 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
         <button className="topnav__icon-btn" onClick={()=>setDark(d=>!d)} title={dark?'Light mode':'Dark mode'}>
           {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
         </button>
-        <button className="topnav__icon-btn"
-          onClick={()=>setHelpMode(h=>!h)}
-          title="Open help guide">
-          <span style={{fontSize:14,fontWeight:700,lineHeight:1}}>?</span>
-        </button>
         {!pro&&<button className="topnav__upgrade" onClick={()=>onUpgrade('default')}>Upgrade → $6.99</button>}
         <SignedIn>
           <UserButton afterSignOutUrl="/" appearance={{elements:{avatarBox:'clerk-avatar',userButtonTrigger:'clerk-avatar-trigger',userButtonAvatarBox:'clerk-avatar-box'}}}/>
@@ -8062,26 +8057,25 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
       <div className="ws-wl-bottom" style={{marginBottom:16,alignItems:'start'}}>
 
         {/* Left: ticker / insider table */}
-        <div className="ws-tile">
-          <div className="ws-filter-bar">
-            <div className="ws-pills">
-              <button className={`ws-pill${tab==='tickers'?' ws-pill--active':''}`} onClick={()=>setTab('tickers')}>
+        <div className="ws-tile wl-list-tile">
+          <div className="ws-tile__hdr">
+            <div className="ws-pills" style={{gap:0}}>
+              <button className={`ws-pill ws-pill--tab${tab==='tickers'?' ws-pill--active':''}`} onClick={()=>setTab('tickers')}>
                 Tickers{watchedTickers.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedTickers.length}</span>}
               </button>
-              <button className={`ws-pill${tab==='insiders'?' ws-pill--active':''}`} onClick={()=>setTab('insiders')}>
+              <button className={`ws-pill ws-pill--tab${tab==='insiders'?' ws-pill--active':''}`} onClick={()=>setTab('insiders')}>
                 Insiders{watchedInsiders.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedInsiders.length}</span>}
               </button>
             </div>
-            <div className="ws-filter-group">
+            <div className="ws-filter-group" style={{marginLeft:'auto'}}>
               <span className="ws-filter-label">Activity</span>
-              <div className="ws-pills">
+              <div className="ws-pills" style={{gap:3}}>
                 {[{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
-                  <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`}
+                  <button key={o.l} className={`ws-pill ws-pill--sm${days===o.v?' ws-pill--active':''}`}
                     onClick={()=>{setDays(o.v);if(o.v)ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
                 ))}
               </div>
             </div>
-            <span style={{marginLeft:'auto',fontSize:11,color:'var(--text-3)'}}>{(tab==='tickers'?sortedTickerRows:sortedInsiderRows).length} {tab}</span>
           </div>
 
           {emptyNow?(
@@ -8201,9 +8195,9 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
         </div>
       </div>
 
-      {/* ── Alert settings — full width, compact ── */}
+      {/* ── Alert settings — full width ── */}
       <div style={{marginTop:16}}>
-        <div className="ws-tile" style={{maxWidth:600}}>
+        <div className="ws-tile">
           <div className="ws-tile__hdr">
             <div className="ws-tile__hdr-left">
               <span className="ws-tile__title">Alert settings</span>
@@ -8213,24 +8207,32 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
           {!localPrefs?(
             <div className="ws-empty" style={{padding:'16px 14px'}}>Loading…</div>
           ):(
-            <div style={{padding:'4px 0'}}>
-              <SettingsToggle label="Watched ticker traded" sub="Any insider makes an open-market buy or sell on a stock you follow" checked={localPrefs.instant_watchlist_ticker} onChange={e=>updPref('instant_watchlist_ticker',e.target.checked)} pro={pro}/>
-              <SettingsToggle label="Signal on followed ticker" sub="A new high-conviction signal appears for a stock you watch" checked={localPrefs.instant_high_conviction||false} onChange={e=>updPref('instant_high_conviction',e.target.checked)} pro={pro}/>
-              <SettingsToggle label="Followed insider files" sub="Someone you follow submits a new Form 4 to the SEC" checked={localPrefs.instant_followed_insider} onChange={e=>updPref('instant_followed_insider',e.target.checked)} pro={pro}/>
-              <div style={{padding:'12px 16px',borderTop:'0.5px solid var(--border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+            <div className="wl-alerts-grid">
+              <div className="wl-alerts-col">
+                <div className="wl-alerts-col__title">Instant alerts</div>
+                <SettingsToggle label="Watched ticker traded" sub="Any insider makes an open-market buy or sell on a stock you follow" checked={localPrefs.instant_watchlist_ticker} onChange={e=>updPref('instant_watchlist_ticker',e.target.checked)} pro={pro}/>
+                <SettingsToggle label="High-conviction signal" sub="A new signal scoring 60+ appears for a stock you watch" checked={localPrefs.instant_high_conviction||false} onChange={e=>updPref('instant_high_conviction',e.target.checked)} pro={pro}/>
+                <SettingsToggle label="Followed insider files" sub="Someone you follow submits a new Form 4 to the SEC" checked={localPrefs.instant_followed_insider} onChange={e=>updPref('instant_followed_insider',e.target.checked)} pro={pro}/>
+              </div>
+              <div className="wl-alerts-col">
+                <div className="wl-alerts-col__title">Digest & thresholds</div>
+                <SettingsToggle label="Daily digest email" sub="A summary of all watchlist activity from the previous trading day" checked={localPrefs.digest_daily||false} onChange={e=>updPref('digest_daily',e.target.checked)} pro={pro}/>
+                <SettingsToggle label="Large trade alert" sub="Any single trade above $500K on a watched ticker" checked={localPrefs.instant_large_trade||false} onChange={e=>updPref('instant_large_trade',e.target.checked)} pro={pro}/>
+                <SettingsToggle label="C-Suite activity only" sub="Only alert when a CEO, CFO, COO, or President trades — ignore directors" checked={localPrefs.csuite_only||false} onChange={e=>updPref('csuite_only',e.target.checked)} pro={pro}/>
+              </div>
+              <div style={{gridColumn:'1/-1',padding:'10px 16px',borderTop:'0.5px solid var(--border)',display:'flex',alignItems:'center',gap:12}}>
                 <button className="btn btn--primary" style={{padding:'7px 16px',fontSize:12}} onClick={()=>save(localPrefs)} disabled={saving}>
                   {saving?'Saving…':saved?'✓ Saved':'Save alerts'}
                 </button>
                 <button className="ws-tile__action"
-                  style={{fontSize:11,background:'none',border:'none',cursor:'pointer',padding:0,animation:'wl-blink 2s ease-in-out 3'}}
+                  style={{fontSize:11,background:'none',border:'none',cursor:'pointer',padding:0}}
                   onClick={()=>{ const e=new CustomEvent('seli:nav',{detail:'settings'}); window.dispatchEvent(e); }}>
-                  More alert options in Settings →
+                  All settings →
                 </button>
               </div>
             </div>
           )}
         </div>
-        <div/>
       </div>
     </div>
   );
