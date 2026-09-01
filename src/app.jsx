@@ -1076,6 +1076,47 @@ function insiderRoleLabel(r) {
   if (r?.relationship === 'medium') return { badge: 'rel-medium', label: 'Officer' };
   return { badge: 'rel-weak', label: 'Dir' };
 }
+
+// Inline info tooltip — hover to see explanation
+function InfoTip({ tip, children }) {
+  return (
+    <span className="info-tip-wrap">
+      {children}
+      <span className="info-tip" title={tip}>ⓘ</span>
+    </span>
+  );
+}
+
+// Tooltip definitions — single source of truth for all explanations
+const TIPS = {
+  // Signal columns
+  conviction:     'Composite score (0–100) combining trade type, insider clustering, C-suite involvement, position sizing, dollar value, timing, and recency. Higher = stronger signal.',
+  netValue:       'Total buy value minus total sell value for this ticker. Negative means more insider selling than buying.',
+  insiders:       'Number of distinct insiders who traded this ticker in the selected window.',
+  trades:         'Total number of open-market transactions (buys + sells) for this ticker.',
+  signalDate:     'Date of the most recent transaction for this ticker.',
+  // Raw filing columns
+  pctPosition:    'How much the insider\'s total holdings changed from this trade. +67% means they increased their position by two-thirds.',
+  tradeValue:     'Dollar value of the transaction (shares × price).',
+  role:           'Insider\'s relationship to the company. C-Suite = CEO/CFO/COO/etc. Officer = SVP/VP/GC. Dir = board director or 10% owner.',
+  tradeType:      'Buy = open-market purchase. Sell = open-market sale. Only open-market trades are shown — option exercises and gifts are excluded.',
+  // Insider profile
+  hitRate:        'Percentage of priced trades where the stock moved in the insider\'s favor within 6 months. Requires 5+ priced trades to display.',
+  avgReturn:      'Average percentage return across all priced trades, measured 6 months after the trade date.',
+  omBuys:         'Open-market buys — purchases made with the insider\'s own money on the open market.',
+  omSells:        'Open-market sells — sales executed on the open market (not option exercises or scheduled plans).',
+  pricedTrades:   'Trades where we could measure a 6-month return — the stock had pricing data for both the trade date and 6 months later.',
+  totalBought:    'Total dollar value of all open-market purchases.',
+  insiderScore:   'Composite score (0–100) based on alpha over SPY, hit rate, role, trade volume, and discipline. Low sample sizes and sell-only insiders are penalized.',
+  alpha:          'Return above what SPY delivered over the same period. +10% alpha means this insider beat the market by 10 percentage points.',
+  // Stat tiles
+  highConviction: 'Signals scoring 60 or above out of 100 — the strongest insider activity.',
+  netFlow:        'Total buy value minus total sell value across all signals. Shows whether insiders are net buying or selling.',
+  // Filters
+  windowFilter:   'How far back to look. A 7d window shows only trades from the last 7 days.',
+  strengthFilter: 'Minimum conviction score to show. "High" = 60+, "Med+" = 35+.',
+  sourceFilter:   'Corporate = SEC Form 4 filings. Congress = congressional trading disclosures.',
+};
 function Spinner({ size=22 }) {
   return <div className="spinner" style={{width:size,height:size}}/>;
 }
@@ -4266,9 +4307,9 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
       {/* Stat strip */}
       <div className="ws-stat-strip">
         <div className="ws-stat"><div className="ws-stat__label">Showing</div><div className="ws-stat__value">{tab==='signals'?signals.length:rawFilings.length}</div><div className="ws-stat__sub">{tab==='signals'?'signals':'filings'} after filters</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">High conviction</div><div className="ws-stat__value">{loading?'—':signals.filter(s=>s.conviction>=60).length}</div><div className="ws-stat__sub">Score ≥60</div></div>
+        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.highConviction}>High conviction</InfoTip></div><div className="ws-stat__value">{loading?'—':signals.filter(s=>s.conviction>=60).length}</div><div className="ws-stat__sub">Score ≥60</div></div>
         <div className="ws-stat"><div className="ws-stat__label">Unique tickers</div><div className="ws-stat__value">{loading?'—':tab==='signals'?new Set(signals.map(s=>s.ticker)).size:new Set(rawFilings.map(f=>f.ticker)).size}</div><div className="ws-stat__sub">In current view</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Net flow</div><div className="ws-stat__value" style={{color:signals.reduce((s,x)=>s+x.netValue,0)>=0?'var(--green-600)':'var(--red-600)'}}>{loading?'—':fmt.money(signals.reduce((s,x)=>s+x.netValue,0))}</div><div className="ws-stat__sub">Buys − sells</div></div>
+        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.netFlow}>Net flow</InfoTip></div><div className="ws-stat__value" style={{color:signals.reduce((s,x)=>s+x.netValue,0)>=0?'var(--green-600)':'var(--red-600)'}}>{loading?'—':fmt.money(signals.reduce((s,x)=>s+x.netValue,0))}</div><div className="ws-stat__sub">Buys − sells</div></div>
       </div>
 
       <div className="ws-tile">
@@ -4385,11 +4426,11 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
               <div className="ws-col-hdrs ws-col-hdrs--data">
                 <button className={`ws-col-sort${sigSort==='ticker'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('ticker')}>Ticker{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
                 {!isMobile&&<button className={`ws-col-sort${sigSort==='company'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('company')}>Company{sigSort==='company'&&(sigDir<0?' ↓':' ↑')}</button>}
-                {!isMobile&&<button className={`ws-col-sort${sigSort==='lastTradeDate'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('lastTradeDate')}>Date{sigSort==='lastTradeDate'&&(sigDir<0?' ↓':' ↑')}</button>}
-                <button className={`ws-col-sort ws-col-sort--right${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}>Insiders{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>
-                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sigSort==='buys'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('buys')}>Trades{sigSort==='buys'&&(sigDir<0?' ↓':' ↑')}</button>}
-                <button className={`ws-col-sort ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}>Net value{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
-                <button className={`ws-col-sort ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}>Conviction{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
+                {!isMobile&&<button className={`ws-col-sort${sigSort==='lastTradeDate'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('lastTradeDate')}><InfoTip tip={TIPS.signalDate}>Date</InfoTip>{sigSort==='lastTradeDate'&&(sigDir<0?' ↓':' ↑')}</button>}
+                <button className={`ws-col-sort ws-col-sort--right${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}><InfoTip tip={TIPS.insiders}>Insiders</InfoTip>{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>
+                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sigSort==='buys'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('buys')}><InfoTip tip={TIPS.trades}>Trades</InfoTip>{sigSort==='buys'&&(sigDir<0?' ↓':' ↑')}</button>}
+                <button className={`ws-col-sort ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}><InfoTip tip={TIPS.netValue}>Net value</InfoTip>{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
+                <button className={`ws-col-sort ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}><InfoTip tip={TIPS.conviction}>Conviction</InfoTip>{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
               </div>
               <div>
                 {signals.map(s=>{
@@ -4496,10 +4537,10 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                 <span className="ws-col-sort">Ticker</span>
                 {!isMobile&&<span className="ws-col-sort">Insider</span>}
                 <button className={`ws-col-sort${rawSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('date')}>Date{rawSort==='date'&&(rawDir<0?' ↓':' ↑')}</button>
-                {!isMobile&&<span className="ws-col-sort">Role</span>}
-                <span className="ws-col-sort">Type</span>
-                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${rawSort==='pctChange'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('pctChange')}>% Position{rawSort==='pctChange'&&(rawDir<0?' ↓':' ↑')}</button>}
-                <button className={`ws-col-sort ws-col-sort--right${rawSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('value')}>Value{rawSort==='value'&&(rawDir<0?' ↓':' ↑')}</button>
+                {!isMobile&&<span className="ws-col-sort"><InfoTip tip={TIPS.role}>Role</InfoTip></span>}
+                <span className="ws-col-sort"><InfoTip tip={TIPS.tradeType}>Type</InfoTip></span>
+                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${rawSort==='pctChange'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('pctChange')}><InfoTip tip={TIPS.pctPosition}>% Position</InfoTip>{rawSort==='pctChange'&&(rawDir<0?' ↓':' ↑')}</button>}
+                <button className={`ws-col-sort ws-col-sort--right${rawSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('value')}><InfoTip tip={TIPS.tradeValue}>Value</InfoTip>{rawSort==='value'&&(rawDir<0?' ↓':' ↑')}</button>
               </div>
               <div>
                 {rawFilings.map((f,i)=>{
@@ -4755,16 +4796,16 @@ function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpa
 
       <div className="ip-profile__stats">
         {[
-          {label:'Hit rate',val:r.hit_rate!=null?`${r.hit_rate}%`:'—',color:hrC},
-          {label:'Avg return',val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—',color:retC},
-          {label:'OM buys',val:r.om_buys,color:'var(--text)'},
-          {label:'OM sells',val:r.om_sells||0,color:'var(--text)'},
-          {label:'Priced trades',val:r.priced!=null?r.priced:'—',color:'var(--text)'},
-          {label:'Total bought',val:fmt.money(r.bought_value),color:'var(--text)'},
+          {label:'Hit rate',tip:TIPS.hitRate,val:r.hit_rate!=null?`${r.hit_rate}%`:'—',color:hrC},
+          {label:'Avg return',tip:TIPS.avgReturn,val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—',color:retC},
+          {label:'OM buys',tip:TIPS.omBuys,val:r.om_buys,color:'var(--text)'},
+          {label:'OM sells',tip:TIPS.omSells,val:r.om_sells||0,color:'var(--text)'},
+          {label:'Priced trades',tip:TIPS.pricedTrades,val:r.priced!=null?r.priced:'—',color:'var(--text)'},
+          {label:'Total bought',tip:TIPS.totalBought,val:fmt.money(r.bought_value),color:'var(--text)'},
         ].map(s=>(
           <div key={s.label} className="ip-stat">
             <span className="ip-stat__val" style={{color:s.color,fontFamily:'var(--font-mono)'}}>{s.val}</span>
-            <span className="ip-stat__label">{s.label}</span>
+            <span className="ip-stat__label">{s.tip?<InfoTip tip={s.tip}>{s.label}</InfoTip>:s.label}</span>
           </div>
         ))}
       </div>
@@ -5000,9 +5041,9 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
       {/* Stat strip */}
       <div className="ws-stat-strip">
         <div className="ws-stat"><div className="ws-stat__label">Showing</div><div className="ws-stat__value">{rows?sorted.length:'—'}</div><div className="ws-stat__sub">{rows?`of ${stats.count} insiders`:''}</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Avg hit rate</div><div className="ws-stat__value" style={{color:stats.avgHit>=60?'var(--green-600)':undefined}}>{stats.avgHit!=null?`${stats.avgHit}%`:'—'}</div><div className="ws-stat__sub">Profitable trades</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Top score</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{rows?stats.topScore:'—'}</div><div className="ws-stat__sub">Out of 100</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Total buy value</div><div className="ws-stat__value" style={{fontSize:16}}>{rows?totalValDisplay:'—'}</div><div className="ws-stat__sub">{yearsBack?`${yearsBack}yr window`:'All time'}</div></div>
+        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.hitRate}>Avg hit rate</InfoTip></div><div className="ws-stat__value" style={{color:stats.avgHit>=60?'var(--green-600)':undefined}}>{stats.avgHit!=null?`${stats.avgHit}%`:'—'}</div><div className="ws-stat__sub">Profitable trades</div></div>
+        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.insiderScore}>Top score</InfoTip></div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{rows?stats.topScore:'—'}</div><div className="ws-stat__sub">Out of 100</div></div>
+        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.totalBought}>Total buy value</InfoTip></div><div className="ws-stat__value" style={{fontSize:16}}>{rows?totalValDisplay:'—'}</div><div className="ws-stat__sub">{yearsBack?`${yearsBack}yr window`:'All time'}</div></div>
       </div>
 
       {/* Filter tile — full width above list/profile */}
