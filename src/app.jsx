@@ -1078,17 +1078,8 @@ function insiderRoleLabel(r) {
   return { badge: 'rel-weak', label: 'Dir' };
 }
 
-// Inline info tooltip — hover to see explanation, or flip in help mode
+// Inline info tooltip — hover to see explanation
 function InfoTip({ tip, children }) {
-  const helpMode = useContext(HelpModeContext);
-  if (helpMode) {
-    return (
-      <span className="info-tip-wrap info-tip-wrap--help">
-        {children}
-        <span className="info-tip-explain">{tip}</span>
-      </span>
-    );
-  }
   return (
     <span className="info-tip-wrap">
       {children}
@@ -1097,20 +1088,13 @@ function InfoTip({ tip, children }) {
   );
 }
 
-// Stat tile that flips to explanation in help mode
+// Stat tile with optional tooltip on label
 function HelpStat({ label, tip, value, sub, color, style }) {
-  const helpMode = useContext(HelpModeContext);
   return (
-    <div className={`ws-stat${helpMode?' ws-stat--help':''}`}>
+    <div className="ws-stat">
       <div className="ws-stat__label">{tip ? <InfoTip tip={tip}>{label}</InfoTip> : label}</div>
-      {helpMode ? (
-        <div className="ws-stat__explain">{tip}</div>
-      ) : (
-        <>
-          <div className="ws-stat__value" style={{color, ...style}}>{value}</div>
-          {sub && <div className="ws-stat__sub">{sub}</div>}
-        </>
-      )}
+      <div className="ws-stat__value" style={{color, ...style}}>{value}</div>
+      {sub && <div className="ws-stat__sub">{sub}</div>}
     </div>
   );
 }
@@ -1345,9 +1329,9 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
         <button className="topnav__icon-btn" onClick={()=>setDark(d=>!d)} title={dark?'Light mode':'Dark mode'}>
           {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
         </button>
-        <button className={`topnav__icon-btn${helpMode?' topnav__icon-btn--help':''}`}
+        <button className="topnav__icon-btn"
           onClick={()=>setHelpMode(h=>!h)}
-          title={helpMode?'Exit help mode':'Show explanations for every data point'}>
+          title="Open help guide">
           <span style={{fontSize:14,fontWeight:700,lineHeight:1}}>?</span>
         </button>
         {!pro&&<button className="topnav__upgrade" onClick={()=>onUpgrade('default')}>Upgrade → $6.99</button>}
@@ -4081,6 +4065,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
             {/* Sortable column headers */}
             <div className="ws-home-fil-hdrs">
               <span className="ws-col-sort ws-col-sort--sm">Ticker</span>
+              <span className="ws-col-sort ws-col-sort--sm">Insider</span>
               <button className={`ws-col-sort ws-col-sort--sm${filSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onFilSort('date')}>Date{filSort==='date'&&(filDir<0?' ↓':' ↑')}</button>
               <span className="ws-col-sort ws-col-sort--sm">Type</span>
               <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${filSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onFilSort('value')}>Value{filSort==='value'&&(filDir<0?' ↓':' ↑')}</button>
@@ -4093,8 +4078,8 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
                     style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
                     <div className="ws-fil-compact-row__ticker">
                       <span className="ticker">{f.ticker}</span>
-                      <div style={{fontSize:10,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName?.split(' ').slice(0,2).join(' ')}</div>
                     </div>
+                    <div className="ws-fil-compact-row__insider">{f.insiderName?.split(' ').slice(0,2).join(' ')}</div>
                     <div className="ws-fil-compact-row__date">{fmt.dateShort(f.transactionDate||f.date)}</div>
                     <div className="ws-fil-compact-row__type"><span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span></div>
                     <div className="ws-fil-compact-row__val"><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
@@ -4126,7 +4111,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
             {/* Sortable column headers */}
             <div className="ws-home-sig-hdrs">
               <button className={`ws-col-sort ws-col-sort--sm${sigSort==='ticker'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('ticker')}>Ticker{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
-              {!isMobile&&<button className={`ws-col-sort ws-col-sort--sm${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}>Ins.{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>}
+              {!isMobile&&<button className={`ws-col-sort ws-col-sort--sm${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}>Moves{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>}
               <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}>Net value{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
               <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}>Conviction{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
             </div>
@@ -4139,19 +4124,19 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
                   {signals.map(s=>{
                     const isBuy = s.direction!=='sell';
                     const hasRev = detectReversalForTicker(s.ticker, filings);
+                    const totalMoves = (s.buys||0) + (s.sells||0);
                     return (
                       <div key={s.ticker} className="ws-sig-compact-row" onClick={()=>onOpenDetail({type:'signal',...s})}
                         style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
                         <div className="ws-sig-compact-row__left">
                           <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',marginBottom:2}}>
                             <span className="ticker">{s.ticker}</span>
-                            {s.cSuiteBuys>0&&<span className="badge badge--rel-strong" style={{fontSize:10,padding:'1px 5px'}}>{s.cSuiteBuys} exec</span>}
                             {hasRev&&<span className="reversal-badge" style={{fontSize:9}}><IconReversal className="reversal-badge__icon"/>rev</span>}
                             <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                           </div>
                           <div style={{fontSize:11,color:'var(--text-2)',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.company}</div>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
-                            {!isMobile&&<span style={{fontSize:11,color:'var(--text-3)'}}>{s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>}
+                            {!isMobile&&<span style={{fontSize:11,color:'var(--text-3)'}}>{totalMoves} move{totalMoves!==1?'s':''} · {s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>}
                             <ConvictionBar score={s.conviction} max={100} showLabel/>
                           </div>
                         </div>
@@ -6107,10 +6092,7 @@ function PortfolioPerformanceChart({ points, onClick, compact=true }) {
 // points client-side rather than re-fetching per range — same pattern as
 // Insights' own day-window selector.
 const PORTFOLIO_CHART_RANGES = [
-  { key:'1w',  label:'1W',  days:7 },
   { key:'1m',  label:'1M',  days:30 },
-  { key:'3m',  label:'3M',  days:90 },
-  { key:'1y',  label:'1Y',  days:365 },
   { key:'all', label:'All', days:null },
 ];
 function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
@@ -8219,9 +8201,9 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
         </div>
       </div>
 
-      {/* ── Alert settings — half width at bottom ── */}
-      <div className="ws-wl-bottom">
-        <div className="ws-tile">
+      {/* ── Alert settings — full width, compact ── */}
+      <div style={{marginTop:16}}>
+        <div className="ws-tile" style={{maxWidth:600}}>
           <div className="ws-tile__hdr">
             <div className="ws-tile__hdr-left">
               <span className="ws-tile__title">Alert settings</span>

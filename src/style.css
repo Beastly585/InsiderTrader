@@ -6085,13 +6085,13 @@ td { padding:7px 11px; vertical-align:middle; }
 /* Compact filing row — 4-col grid inside the home filings tile */
 .ws-home-fil-hdrs {
   display: grid;
-  grid-template-columns: 80px 76px 54px 1fr;
+  grid-template-columns: 64px minmax(0,1fr) 72px 48px 80px;
   border-bottom: 0.5px solid var(--border-md);
   background: var(--surface);
 }
 .ws-fil-compact-row {
   display: grid;
-  grid-template-columns: 80px 76px 54px 1fr;
+  grid-template-columns: 64px minmax(0,1fr) 72px 48px 80px;
   align-items: center;
   border-bottom: 0.5px solid var(--border);
   border-left: 3px solid transparent;
@@ -6100,10 +6100,11 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .ws-fil-compact-row:last-child { border-bottom: none; }
 .ws-fil-compact-row:hover { background: var(--surface-2); }
-.ws-fil-compact-row__ticker { padding: 8px 8px 8px 12px; min-width: 0; }
+.ws-fil-compact-row__ticker { padding: 8px 4px 8px 10px; min-width: 0; }
+.ws-fil-compact-row__insider { padding: 8px 4px; font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-fil-compact-row__date   { padding: 8px 4px; font-size: 11px; color: var(--text-3); }
 .ws-fil-compact-row__type   { padding: 8px 4px; }
-.ws-fil-compact-row__val    { padding: 8px 12px 8px 4px; text-align: right; }
+.ws-fil-compact-row__val    { padding: 8px 10px 8px 4px; text-align: right; }
 
 /* Compact signal row — home signals tile */
 .ws-home-sig-hdrs {
