@@ -1063,6 +1063,7 @@ function useIsMobile() {
 // which level applies to them has been removed, not the underlying,
 // already-tested tiering math.)
 const RiskAppetiteContext = React.createContext([3, ()=>{}]);
+const HelpModeContext = React.createContext(false);
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 function Badge({ type, children }) {
@@ -1077,13 +1078,40 @@ function insiderRoleLabel(r) {
   return { badge: 'rel-weak', label: 'Dir' };
 }
 
-// Inline info tooltip — hover to see explanation
+// Inline info tooltip — hover to see explanation, or flip in help mode
 function InfoTip({ tip, children }) {
+  const helpMode = useContext(HelpModeContext);
+  if (helpMode) {
+    return (
+      <span className="info-tip-wrap info-tip-wrap--help">
+        {children}
+        <span className="info-tip-explain">{tip}</span>
+      </span>
+    );
+  }
   return (
     <span className="info-tip-wrap">
       {children}
       <span className="info-tip" title={tip}>ⓘ</span>
     </span>
+  );
+}
+
+// Stat tile that flips to explanation in help mode
+function HelpStat({ label, tip, value, sub, color, style }) {
+  const helpMode = useContext(HelpModeContext);
+  return (
+    <div className={`ws-stat${helpMode?' ws-stat--help':''}`}>
+      <div className="ws-stat__label">{tip ? <InfoTip tip={tip}>{label}</InfoTip> : label}</div>
+      {helpMode ? (
+        <div className="ws-stat__explain">{tip}</div>
+      ) : (
+        <>
+          <div className="ws-stat__value" style={{color, ...style}}>{value}</div>
+          {sub && <div className="ws-stat__sub">{sub}</div>}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1316,6 +1344,11 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
         <GuideStatusBarButton/>
         <button className="topnav__icon-btn" onClick={()=>setDark(d=>!d)} title={dark?'Light mode':'Dark mode'}>
           {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+        </button>
+        <button className={`topnav__icon-btn${helpMode?' topnav__icon-btn--help':''}`}
+          onClick={()=>setHelpMode(h=>!h)}
+          title={helpMode?'Exit help mode':'Show explanations for every data point'}>
+          <span style={{fontSize:14,fontWeight:700,lineHeight:1}}>?</span>
         </button>
         {!pro&&<button className="topnav__upgrade" onClick={()=>onUpgrade('default')}>Upgrade → $6.99</button>}
         <SignedIn>
@@ -4306,10 +4339,10 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
       {/* Stat strip */}
       <div className="ws-stat-strip">
-        <div className="ws-stat"><div className="ws-stat__label">Showing</div><div className="ws-stat__value">{tab==='signals'?signals.length:rawFilings.length}</div><div className="ws-stat__sub">{tab==='signals'?'signals':'filings'} after filters</div></div>
-        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.highConviction}>High conviction</InfoTip></div><div className="ws-stat__value">{loading?'—':signals.filter(s=>s.conviction>=60).length}</div><div className="ws-stat__sub">Score ≥60</div></div>
-        <div className="ws-stat"><div className="ws-stat__label">Unique tickers</div><div className="ws-stat__value">{loading?'—':tab==='signals'?new Set(signals.map(s=>s.ticker)).size:new Set(rawFilings.map(f=>f.ticker)).size}</div><div className="ws-stat__sub">In current view</div></div>
-        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.netFlow}>Net flow</InfoTip></div><div className="ws-stat__value" style={{color:signals.reduce((s,x)=>s+x.netValue,0)>=0?'var(--green-600)':'var(--red-600)'}}>{loading?'—':fmt.money(signals.reduce((s,x)=>s+x.netValue,0))}</div><div className="ws-stat__sub">Buys − sells</div></div>
+        <HelpStat label="Showing" value={tab==='signals'?signals.length:rawFilings.length} sub={`${tab==='signals'?'signals':'filings'} after filters`} tip="Number of results after all filters are applied."/>
+        <HelpStat label="High conviction" value={loading?'—':signals.filter(s=>s.conviction>=60).length} sub="Score ≥60" tip={TIPS.highConviction}/>
+        <HelpStat label="Unique tickers" value={loading?'—':tab==='signals'?new Set(signals.map(s=>s.ticker)).size:new Set(rawFilings.map(f=>f.ticker)).size} sub="In current view" tip="Number of distinct stocks with insider activity in the current filtered view."/>
+        <HelpStat label="Net flow" value={loading?'—':fmt.money(signals.reduce((s,x)=>s+x.netValue,0))} sub="Buys − sells" color={signals.reduce((s,x)=>s+x.netValue,0)>=0?'var(--green-600)':'var(--red-600)'} tip={TIPS.netFlow}/>
       </div>
 
       <div className="ws-tile">
@@ -5040,10 +5073,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 
       {/* Stat strip */}
       <div className="ws-stat-strip">
-        <div className="ws-stat"><div className="ws-stat__label">Showing</div><div className="ws-stat__value">{rows?sorted.length:'—'}</div><div className="ws-stat__sub">{rows?`of ${stats.count} insiders`:''}</div></div>
-        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.hitRate}>Avg hit rate</InfoTip></div><div className="ws-stat__value" style={{color:stats.avgHit>=60?'var(--green-600)':undefined}}>{stats.avgHit!=null?`${stats.avgHit}%`:'—'}</div><div className="ws-stat__sub">Profitable trades</div></div>
-        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.insiderScore}>Top score</InfoTip></div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{rows?stats.topScore:'—'}</div><div className="ws-stat__sub">Out of 100</div></div>
-        <div className="ws-stat"><div className="ws-stat__label"><InfoTip tip={TIPS.totalBought}>Total buy value</InfoTip></div><div className="ws-stat__value" style={{fontSize:16}}>{rows?totalValDisplay:'—'}</div><div className="ws-stat__sub">{yearsBack?`${yearsBack}yr window`:'All time'}</div></div>
+        <HelpStat label="Showing" value={rows?sorted.length:'—'} sub={rows?`of ${stats.count} insiders`:''} tip="Number of insiders matching your current filters, out of total tracked."/>
+        <HelpStat label="Avg hit rate" value={stats.avgHit!=null?`${stats.avgHit}%`:'—'} sub="Profitable trades" color={stats.avgHit>=60?'var(--green-600)':undefined} tip={TIPS.hitRate}/>
+        <HelpStat label="Top score" value={rows?stats.topScore:'—'} sub="Out of 100" color="var(--green-600)" tip={TIPS.insiderScore}/>
+        <HelpStat label="Total buy value" value={rows?totalValDisplay:'—'} sub={yearsBack?`${yearsBack}yr window`:'All time'} style={{fontSize:16}} tip={TIPS.totalBought}/>
       </div>
 
       {/* Filter tile — full width above list/profile */}
@@ -10648,6 +10681,7 @@ import * as Sentry from '@sentry/react';
 // wouldn't catch a crash in this component's own body.
 function AppInner() {
   const [dark,setDark] = useTheme();
+  const [helpMode, setHelpMode] = useState(false);
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
 
@@ -10973,6 +11007,7 @@ function AppInner() {
         </div>
       </div>
     )}
+    <HelpModeContext.Provider value={helpMode}>
     <GuideProvider>
     <div className={`ws-shell${panelOpen?' ws-shell--panel-open':''}${page==='settings'?' ws-shell--settings':''}`}>
       <TopNav
@@ -11038,6 +11073,7 @@ function AppInner() {
       )}
     </div>
     </GuideProvider>
+    </HelpModeContext.Provider>
     </>
   );
 

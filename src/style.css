@@ -6888,3 +6888,60 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 .info-tip:hover { opacity: 1; color: var(--accent); }
 /* Column headers: tighter spacing */
 .ws-col-sort .info-tip { font-size: 10px; margin-left: 1px; }
+
+/* ── Help mode ─────────────────────────────────────────────────── */
+.topnav__icon-btn--help {
+  background: var(--accent-50);
+  color: var(--accent-strong);
+  border-radius: var(--radius-md);
+}
+
+/* Stat tile in help mode: explanation replaces value */
+.ws-stat--help {
+  background: var(--accent-50);
+  border: 1px dashed var(--accent);
+}
+.ws-stat__explain {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+  padding-top: 4px;
+}
+
+/* InfoTip inline explanation (shown in help mode) */
+.info-tip-wrap--help {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.info-tip-explain {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--accent-strong);
+  font-weight: 400;
+  max-width: 200px;
+  white-space: normal;
+}
+
+/* Column headers show explanation below label in help mode */
+.ws-col-sort .info-tip-explain {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  z-index: 10;
+  min-width: 160px;
+  box-shadow: var(--shadow-md);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.ws-col-sort { position: relative; }
+
+/* Profile stats in help mode */
+.ip-stat .info-tip-explain {
+  font-size: 9px;
+  max-width: 120px;
+}
