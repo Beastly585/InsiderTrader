@@ -6306,22 +6306,23 @@ td { padding:7px 11px; vertical-align:middle; }
   gap: 16px;
   align-items: stretch;
 }
-.ws-wl-bottom .ws-tile,
-.ws-wl-bottom .wl-list-tile {
-  min-height: 380px;
+.ws-wl-bottom > .ws-tile,
+.ws-wl-bottom > .wl-list-tile {
+  min-height: 400px;
   max-height: 520px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-.ws-wl-bottom .ws-tile > div:last-child {
+/* The scrollable content area fills remaining space */
+.ws-wl-bottom > .ws-tile > *:last-child {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
 }
-@media (max-width: 900px) { .ws-wl-bottom { grid-template-columns: 1fr; } }
 @media (max-width: 900px) {
   .ws-wl-bottom { grid-template-columns: 1fr; }
+  .ws-wl-bottom > .ws-tile { min-height: 280px; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════

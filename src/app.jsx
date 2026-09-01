@@ -6032,8 +6032,8 @@ function PortfolioPerformanceChart({ points, onClick, compact=true }) {
   const hover = hoverIdx != null ? { point: points[hoverIdx], coord: coords[hoverIdx] } : null;
 
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none"
-      style={{display:'block',cursor:onClick?'pointer':'default'}}
+    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet"
+      style={{display:'block',cursor:onClick?'pointer':'default',maxHeight:compact?160:240}}
       onClick={onClick} role={onClick?'button':undefined} aria-label={onClick?'Open portfolio explorer':undefined}
       onMouseMove={handleMove} onMouseLeave={()=>setHoverIdx(null)}>
       {yTicks.map((v,i)=>{
@@ -6091,7 +6091,7 @@ const PORTFOLIO_CHART_RANGES = [
   { key:'all', label:'All', days:null },
 ];
 function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
-  const [range, setRange] = useState('1m');
+  const [range, setRange] = useState('all');
   const { display, fellBack } = useMemo(() => {
     const r = PORTFOLIO_CHART_RANGES.find(r=>r.key===range);
     if (!r || r.days==null) return { display: points, fellBack: false };
