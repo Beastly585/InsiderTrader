@@ -6103,7 +6103,7 @@ function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
       const d = p.date ? String(p.date).slice(0,10) : '';
       return d >= iso;
     });
-    return inRange.length>=2 ? { display: inRange, fellBack: false } : { display: points, fellBack: points.length>=2 };
+    return inRange.length>=3 ? { display: inRange, fellBack: false } : { display: points, fellBack: points.length>=3 };
   }, [points, range]);
 
   return (
@@ -6117,9 +6117,9 @@ function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
           </button>
         ))}
       </div>
-      {display.length<2 ? (
+      {display.length<3 ? (
         <p className="td-muted" style={{fontSize:compact?10:11,textAlign:'center',padding:compact?'0.5rem 0':'1rem 0'}}>
-          Not enough data yet.
+          Not enough data yet — portfolio history builds over time.
         </p>
       ) : (
         <>
@@ -7842,7 +7842,10 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   // Alert prefs — load only for pro users
   const { prefs, saving, saved, save } = useNotificationPrefs(user?.id, pro);
   const [localPrefs, setLocalPrefs] = useState(null);
-  useEffect(()=>{ if(prefs&&!localPrefs) setLocalPrefs({...prefs}); },[prefs]);
+  // Always sync from server when prefs loads/changes — merge with defaults
+  // for new fields that don't exist in the DB yet
+  const alertDefaults = { instant_watchlist_ticker:false, instant_high_conviction:false, instant_followed_insider:false, digest_daily:false, instant_large_trade:false, csuite_only:false };
+  useEffect(()=>{ if(prefs) setLocalPrefs(p=>({...alertDefaults,...prefs})); },[prefs]);
   function updPref(key,val){ setLocalPrefs(p=>({...p,[key]:val})); }
 
   // CRITICAL: ensure full history is loaded on mount so "Last activity" is
@@ -8054,7 +8057,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
       </div>
 
       {/* ── Watchlist table + Recent activity side by side ── */}
-      <div className="ws-wl-bottom" style={{marginBottom:16,alignItems:'start'}}>
+      <div className="ws-wl-bottom" style={{marginBottom:16}}>
 
         {/* Left: ticker / insider table */}
         <div className="ws-tile wl-list-tile">
