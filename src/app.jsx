@@ -7840,6 +7840,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   const alertDefaults = { instant_watchlist_ticker:false, instant_high_conviction:false, instant_followed_insider:false, daily_digest:false, instant_large_trade:false, csuite_only:false };
   useEffect(()=>{ if(prefs) setLocalPrefs(p=>({...alertDefaults,...prefs})); },[prefs]);
   function updPref(key,val){ setLocalPrefs(p=>({...p,[key]:val})); }
+  const hasUnsavedAlerts = localPrefs && prefs && JSON.stringify(localPrefs) !== JSON.stringify({...alertDefaults,...prefs});
 
   // CRITICAL: ensure full history is loaded on mount so "Last activity" is
   // never blank — the app only fetches 7d by default, but watchlist needs all-time
@@ -8198,6 +8199,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
             <div className="ws-tile__hdr-left">
               <span className="ws-tile__title">Alert settings</span>
               <span className="ws-tile__sub">Email alerts for your watchlist</span>
+              {hasUnsavedAlerts&&<span className="ws-unsaved-badge">Unsaved changes</span>}
             </div>
           </div>
           {!localPrefs?(
@@ -9497,9 +9499,10 @@ function SettingsPage({ user, onUpgrade }) {
     return params.get('section') || (params.has('connection_id') || params.get('snaptrade') ? 'brokers' : 'billing');
   });
   const [local,   setLocal]   = useState(null);
-  const [testState, setTestState] = useState(null); // null | 'sending' | 'sent' | error string
+  const [testState, setTestState] = useState(null);
 
-  useEffect(()=>{ if (prefs && !local) setLocal({...prefs}); },[prefs]);
+  useEffect(()=>{ if (prefs) setLocal(p=>({...DEFAULT_PREFS,...prefs})); },[prefs]);
+  const hasUnsavedSettings = local && prefs && JSON.stringify(local) !== JSON.stringify({...DEFAULT_PREFS,...prefs});
 
   function upd(key, val) { setLocal(p=>({...p, [key]:val})); }
 
@@ -9572,12 +9575,13 @@ function SettingsPage({ user, onUpgrade }) {
               <button className={`ws-toolbar-tab${notifTab==='digests'?' ws-toolbar-tab--active':''}`} onClick={()=>setNotifTab('digests')}>Email digests</button>
               <button className={`ws-toolbar-tab${notifTab==='instant'?' ws-toolbar-tab--active':''}`} onClick={()=>setNotifTab('instant')}>Instant alerts</button>
             </div>
-            {!pro&&(
-              <div className="ws-toolbar-right">
+            <div className="ws-toolbar-right" style={{display:'flex',alignItems:'center',gap:8}}>
+              {hasUnsavedSettings&&<span className="ws-unsaved-badge">Unsaved changes</span>}
+              {!pro&&<>
                 <span style={{fontSize:11,color:'var(--text-3)'}}>Pro required · </span>
                 <button className="ws-tile__action" style={{fontSize:11}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
-              </div>
-            )}
+              </>}
+            </div>
           </div>
 
           {/* EMAIL DIGESTS */}

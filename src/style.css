@@ -2467,6 +2467,11 @@ td { padding:7px 11px; vertical-align:middle; }
   background: rgba(0,0,0,0.55); backdrop-filter: blur(2px);
   display: flex; align-items: flex-start; justify-content: center;
   padding: 40px 24px 24px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 640px) {
+  .modal-overlay { padding: 0; align-items: flex-start; }
 }
 .modal-panel {
   background: var(--surface); border: 0.5px solid var(--border-md);
@@ -5075,6 +5080,16 @@ td { padding:7px 11px; vertical-align:middle; }
   background: rgba(0,0,0,0.6);
   display: flex; align-items: center; justify-content: center;
   backdrop-filter: blur(2px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 24px;
+}
+@media (max-width: 640px) {
+  .upgrade-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+}
 }
 .upgrade-modal {
   background: var(--surface);
@@ -5110,9 +5125,19 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 @media (max-width: 640px) {
   .upgrade-hero__cards { grid-template-columns: 1fr; padding: 0 16px; }
-  .upgrade-modal--hero { max-width: 100vw; width: 100%; margin: 0; border-radius: 0; min-height: 100vh; }
+  .upgrade-modal--hero {
+    max-width: 100vw; width: 100%; margin: 0; border-radius: 0;
+    min-height: auto; max-height: 100vh; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .upgrade-modal--hero .upgrade-modal__close {
+    position: sticky; top: 8px; z-index: 10;
+    float: right; margin: 8px 8px 0 0;
+  }
   .upgrade-hero__header { padding: 16px 16px 12px; }
   .upgrade-hero__title { font-size: 1.125rem; }
+  .upgrade-modal { max-width: 100vw; width: 100%; border-radius: 12px 12px 0 0; margin-top: auto; }
+  .upgrade-modal--export { max-width: 100vw; width: 100%; border-radius: 12px 12px 0 0; }
 }
 .upgrade-hero__card {
   padding: 20px; border-radius: 12px; text-align: left;
@@ -6988,4 +7013,50 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 @media (max-width: 640px) {
   .wl-alerts-grid { grid-template-columns: 1fr; }
   .wl-alerts-col + .wl-alerts-col { border-left: none; border-top: 0.5px solid var(--border); }
+}
+
+/* ── Unsaved changes badge ─────────────────────────────────────── */
+.ws-unsaved-badge {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 700;
+  color: var(--amber-600);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  animation: unsaved-pulse 2s ease-in-out infinite;
+}
+@keyframes unsaved-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ── Mobile modal: slide up from bottom, scrollable ────────────── */
+@media (max-width: 640px) {
+  .upgrade-modal__close {
+    position: sticky; top: 8px; z-index: 10;
+    float: right; margin: 8px 8px -20px 0;
+  }
+  /* Small modals (status, simple upgrade) slide up from bottom */
+  .upgrade-modal:not(.upgrade-modal--hero):not(.upgrade-modal--export) {
+    max-width: 100vw;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modal-slide-up .2s ease;
+  }
+  .upgrade-modal--export {
+    max-width: 100vw;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modal-slide-up .2s ease;
+  }
+}
+@keyframes modal-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
 }
