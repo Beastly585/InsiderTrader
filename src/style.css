@@ -3269,6 +3269,7 @@ td { padding:7px 11px; vertical-align:middle; }
 .drawer__detail {
   overflow-y: auto; position: relative; background: var(--bg);
   scrollbar-width: thin; scrollbar-color: var(--border-md) transparent;
+  padding-top: 0;
 }
 .drawer__detail::-webkit-scrollbar { width: 3px; }
 .drawer__detail::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 3px; }
@@ -7059,4 +7060,17 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 @keyframes modal-slide-up {
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
+}
+
+/* ── Signal detail "View all activity" button ──────────────────── */
+.dp-explore-btn {
+  font-size: 11px; font-weight: 600; font-family: var(--font);
+  color: var(--accent); background: var(--accent-50);
+  border: 1px solid var(--accent);
+  padding: 5px 12px; border-radius: var(--radius-md);
+  cursor: pointer; white-space: nowrap;
+  transition: background .1s, color .1s;
+}
+.dp-explore-btn:hover {
+  background: var(--accent); color: #fff;
 }

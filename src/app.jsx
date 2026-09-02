@@ -2574,8 +2574,12 @@ function DetailPanelHeader({ d, traderStats, traderRows, inline, watchlist, nav 
     );
     if(d.type==='signal')return(
       <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
+        <span className="ticker dp-clickable" style={{fontSize:17,cursor:'pointer'}}
+          onClick={()=>nav('ticker',{ticker:d.ticker,company:d.company})}>{d.ticker}</span>
         <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
+        <button className="dp-explore-btn" onClick={()=>nav('ticker',{ticker:d.ticker,company:d.company})}>
+          View all activity →
+        </button>
         {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
       </div>
     );
