@@ -5442,6 +5442,11 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 
   function navigate(d) {
     if (detail) setDetailStack(s=>[...s, detail]);
+    // When navigating to an insider profile, switch to the insiders tab
+    // so the new profile layout renders instead of the old inline one
+    if (d?.type === 'trader' && activeTab !== 'insiders') {
+      setActiveTab('insiders');
+    }
     setDetail(d);
   }
   function goBack() {
@@ -5493,10 +5498,11 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // Insiders
   useEffect(()=>{
     if (activeTab!=='insiders') return;
+    if (lbRows) return; // already loaded
     queryNeon(LEADERBOARD_QUERY(500, null, 2, lbYearsBack, lbSource))
       .then(r=>setLbRows(processLeaderboardRows(r)))
       .catch(()=>setLbRows([]));
-  },[type,lbYearsBack,lbSource]);
+  },[activeTab,lbYearsBack,lbSource]);
 
   const sortedLb = useMemo(()=>{
     if (!lbRows) return [];
@@ -5807,7 +5813,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {activeTab==='signals'?'signal':'trader'} to explore</div>
                 </div>
               : activeTab==='insiders' && detail.type==='trader'
-                ? <InsiderProfileDrawer name={detail.name} title={detail.title} filings={filings} watchlist={watchlist} lbRows={lbRows} onOpenDetail={(d)=>navigate(d)}/>
+                ? <InsiderProfileDrawer name={detail.name} title={detail.title} filings={filings} watchlist={watchlist} lbRows={lbRows||[]} onOpenDetail={(d)=>navigate(d)}/>
                 : <DetailPanel
                     detail={detail}
                     filings={filings}

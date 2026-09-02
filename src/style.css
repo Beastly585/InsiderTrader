@@ -3182,7 +3182,11 @@ td { padding:7px 11px; vertical-align:middle; }
   border-bottom: 0.5px solid var(--border-md);
   background: var(--surface-2);
   flex-shrink: 0;
+  margin-bottom: 0;
 }
+/* Ensure no gap between toolbar and body */
+.drawer__toolbar + .drawer__body,
+.drawer__toolbar ~ .drawer__body { margin-top: 0; }
 .drawer__toolbar-divider {
   width: 1px; align-self: stretch; background: var(--border); margin-bottom: 2px;
 }
