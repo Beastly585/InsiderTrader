@@ -1554,44 +1554,40 @@ const GUIDE_SECTIONS = [
         <div className="guide-env-row">
           <div className="guide-env-icon"><IconHome style={{width:18,height:18}}/></div>
           <div className="guide-env-body">
-            <p className="guide-env-label">Dashboard</p>
-            <p>Your daily briefing. Market sentiment, sector heatmap, the strongest insider signals, top-ranked insiders, and market news — all on one screen.</p>
+            <p className="guide-env-label">Home</p>
+            <p>Your daily briefing — the latest filings, strongest insider signals, top-ranked insiders, and market news, all on one screen.</p>
           </div>
         </div>
-        <EnvPreview type="dashboard"/>
-
-        <div className="guide-env-row">
-          <div className="guide-env-icon" style={{color:'var(--accent-strong)'}}><IconInsights style={{width:18,height:18}}/></div>
-          <div className="guide-env-body">
-            <p className="guide-env-label">Insights</p>
-            <p>The full scored signal feed. Every ticker with recent insider activity, ranked by conviction. Filter by sector, time window, and trade type. The leaderboard shows which insiders have the best track records.</p>
-          </div>
-        </div>
-        <EnvPreview type="insights"/>
 
         <div className="guide-env-row">
           <div className="guide-env-icon"><IconData style={{width:18,height:18}}/></div>
           <div className="guide-env-body">
             <p className="guide-env-label">Data</p>
-            <p>Raw filing data. Every trade, searchable and filterable, with a link to the original SEC filing. Use this when you want to draw your own conclusions.</p>
+            <p>Two views: <strong>Signals</strong> shows scored insider activity by ticker — conviction, cluster size, net value. <strong>Raw filings</strong> is every individual trade, searchable and filterable, with SEC filing links.</p>
           </div>
         </div>
-        <EnvPreview type="data"/>
+
+        <div className="guide-env-row">
+          <div className="guide-env-icon" style={{color:'var(--accent-strong)'}}><IconInsights style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Insiders</p>
+            <p>A screener for finding insiders worth following. Filter by role, hit rate, trade volume, and score. Each profile shows their track record, companies traded, and full transaction history.</p>
+          </div>
+        </div>
 
         <div className="guide-env-row">
           <div className="guide-env-icon"><IconFavorites style={{width:18,height:18}}/></div>
           <div className="guide-env-body">
             <p className="guide-env-label">Watchlist</p>
-            <p>Tickers and insiders you follow. Their activity drives your instant alerts, email digests, and the activity feed. Link a brokerage to see insider activity on stocks you actually hold.</p>
+            <p>Tickers and insiders you follow. Activity feed, alert settings, and optional brokerage connection to see insider trades on stocks you actually hold.</p>
           </div>
         </div>
-        <EnvPreview type="watchlist"/>
 
         <div className="guide-env-row">
           <div className="guide-env-icon"><IconSettings style={{width:18,height:18}}/></div>
           <div className="guide-env-body">
             <p className="guide-env-label">Settings</p>
-            <p>Your plan, billing, notification preferences, and brokerage connection.</p>
+            <p>Your plan, billing, notification preferences, risk appetite, and brokerage connection. Access via the gear icon.</p>
           </div>
         </div>
       </>
@@ -1664,10 +1660,14 @@ const GUIDE_SECTIONS = [
           <div className="guide-scoring-flow__stage guide-scoring-flow__stage--algo">
             <span className="guide-scoring-flow__stage-label">Scoring algorithm</span>
             <ul className="guide-scoring-flow__factors">
-              <li><strong>Who</strong> — C-suite / Congress weigh more</li>
+              <li><strong>Opportunistic</strong> — non-routine trades carry more weight</li>
               <li><strong>Clustering</strong> — multiple insiders, same stock</li>
+              <li><strong>C-suite / Congress</strong> — role and information access</li>
               <li><strong>Position %</strong> — large share of holdings</li>
-              <li><strong>Value</strong> — bigger trades score higher</li>
+              <li><strong>Value</strong> — dollar magnitude</li>
+              <li><strong>Velocity</strong> — concentrated bursts score higher</li>
+              <li><strong>Recency</strong> — recent trades weighted more</li>
+              <li><strong>Contra-signal</strong> — split buy/sell activity penalized</li>
             </ul>
           </div>
           <div className="guide-scoring-flow__arrow">
@@ -1701,16 +1701,16 @@ const GUIDE_SECTIONS = [
     label: 'Getting Help',
     render: (helpers) => (
       <>
-        <p>Every tile in Seli has a help button in its header:</p>
+        <p>Look for the <span style={{color:'var(--accent)'}}>ⓘ</span> icon next to column headers and stat labels — hover or tap to see what that data point means.</p>
 
         <div className="guide-help-demo">
           <div className="guide-help-demo__item">
             <div className="guide-help-demo__icon-circle">
-              <IconHelp style={{width:12,height:12}}/>
+              <span style={{fontSize:12,fontWeight:700}}>ⓘ</span>
             </div>
             <div className="guide-help-demo__body">
-              <span className="guide-help-demo__label">Tile help</span>
-              <span className="guide-help-demo__desc">Tap the <strong>?</strong> on any tile to see what each column means, the methodology, and where the data comes from.</span>
+              <span className="guide-help-demo__label">Inline tooltips</span>
+              <span className="guide-help-demo__desc">Hover any <strong>ⓘ</strong> icon next to a column header or stat for a plain-English explanation of what that number means and how it's calculated.</span>
             </div>
           </div>
           <div className="guide-help-demo__item">
@@ -1719,7 +1719,7 @@ const GUIDE_SECTIONS = [
             </div>
             <div className="guide-help-demo__body">
               <span className="guide-help-demo__label">Send feedback</span>
-              <span className="guide-help-demo__desc">Report bugs, request features, or share thoughts. In the status bar at the bottom of every page.</span>
+              <span className="guide-help-demo__desc">Report bugs, request features, or share thoughts. Use the feedback button in the top navigation bar.</span>
             </div>
           </div>
           <div className="guide-help-demo__item">
@@ -1728,17 +1728,10 @@ const GUIDE_SECTIONS = [
             </div>
             <div className="guide-help-demo__body">
               <span className="guide-help-demo__label">This guide</span>
-              <span className="guide-help-demo__desc">Reopen anytime from the status bar at the bottom of any page.</span>
+              <span className="guide-help-demo__desc">Reopen anytime from the help button in the top navigation bar.</span>
             </div>
           </div>
         </div>
-
-        <button
-          className="guide-flash-btn"
-          onClick={() => helpers?.flashHelpIcons?.()}
-        >
-          Need help finding them? Show me
-        </button>
       </>
     ),
   },
@@ -7844,7 +7837,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   const [localPrefs, setLocalPrefs] = useState(null);
   // Always sync from server when prefs loads/changes — merge with defaults
   // for new fields that don't exist in the DB yet
-  const alertDefaults = { instant_watchlist_ticker:false, instant_high_conviction:false, instant_followed_insider:false, digest_daily:false, instant_large_trade:false, csuite_only:false };
+  const alertDefaults = { instant_watchlist_ticker:false, instant_high_conviction:false, instant_followed_insider:false, daily_digest:false, instant_large_trade:false, csuite_only:false };
   useEffect(()=>{ if(prefs) setLocalPrefs(p=>({...alertDefaults,...prefs})); },[prefs]);
   function updPref(key,val){ setLocalPrefs(p=>({...p,[key]:val})); }
 
@@ -8219,7 +8212,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
               </div>
               <div className="wl-alerts-col">
                 <div className="wl-alerts-col__title">Digest & thresholds</div>
-                <SettingsToggle label="Daily digest email" sub="A summary of all watchlist activity from the previous trading day" checked={localPrefs.digest_daily||false} onChange={e=>updPref('digest_daily',e.target.checked)} pro={pro}/>
+                <SettingsToggle label="Daily digest email" sub="A summary of all watchlist activity from the previous trading day" checked={localPrefs.daily_digest||false} onChange={e=>updPref('daily_digest',e.target.checked)} pro={pro}/>
                 <SettingsToggle label="Large trade alert" sub="Any single trade above $500K on a watched ticker" checked={localPrefs.instant_large_trade||false} onChange={e=>updPref('instant_large_trade',e.target.checked)} pro={pro}/>
                 <SettingsToggle label="C-Suite activity only" sub="Only alert when a CEO, CFO, COO, or President trades — ignore directors" checked={localPrefs.csuite_only||false} onChange={e=>updPref('csuite_only',e.target.checked)} pro={pro}/>
               </div>
@@ -9334,15 +9327,18 @@ const DEFAULT_PREFS = {
   digest_corporate:       true,
   digest_watchlist_only:  false,
   digest_min_conviction:  'any',
-  digest_max_signals:     10,   // 0 = unlimited
-  digest_min_value:       0,    // 0 = any amount
+  digest_max_signals:     10,
+  digest_min_value:       0,
   // Instant alerts
   instant_watchlist_ticker: false,
   instant_followed_insider: false,
   instant_high_conviction:  false,
   instant_reversal:         false,
-  instant_min_value:                 0,        // 0 = any amount
-  instant_high_conviction_threshold: 1000000,   // was hardcoded server-side before
+  instant_large_trade:      false,
+  instant_min_value:        0,
+  instant_high_conviction_threshold: 1000000,
+  // Preferences
+  csuite_only:              false,
 };
 
 function useNotificationPrefs(userId, pro) {
