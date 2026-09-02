@@ -1364,32 +1364,54 @@ function navigateTo(path) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+// ─── Auth token cache ────────────────────────────────────────────────────────
+// On mount, 15-20+ callers across app.jsx AND edgar.js independently call
+// getAuthHeaders(), each one independently polling for window.__clerkGetToken
+// with 50ms sleeps for up to 2 seconds. loadFilings (the critical-path query)
+// lives in edgar.js with its own separate copy of getAuthHeaders — so even
+// caching here didn't help the main data fetch at all.
+//
+// Fix: store the poll promise and token cache on window.__seliAuth so both
+// files share a single polling loop and a single token cache. Whichever
+// file's getAuthHeaders runs first creates the shared state; every other
+// caller across both files piggybacks on it.
+if (!window.__seliAuth) window.__seliAuth = { poll: null, token: null, expiry: 0 };
+
 async function getAuthHeaders() {
-  // On a fresh page load, components can mount and fire their own
-  // data-fetching effects before App's own effect (which registers
-  // window.__clerkGetToken once Clerk finishes loading) has run — a real
-  // race condition, not cosmetic. Without this wait, that fetch gets an
-  // empty/wrong auth header, 401s, and nothing ever retries once the real
-  // token becomes available a moment later — only a full remount
-  // (navigating away and back) would trigger a fresh attempt. Poll briefly
-  // for the token getter to appear rather than give up immediately; Clerk
-  // typically finishes loading well within this window.
-  if (!window.__clerkGetToken) {
-    for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
-      await new Promise(r => setTimeout(r, 50)); // up to ~2s total
-    }
+  const auth = window.__seliAuth;
+
+  // Fast path: reuse a recently-fetched token (Clerk tokens are valid for
+  // 60s; we cache for 10s to stay well within that window while still
+  // avoiding 15+ concurrent getToken() calls on mount).
+  if (auth.token && Date.now() < auth.expiry) {
+    return { 'Authorization': `Bearer ${auth.token}` };
   }
-  // Phase 2: Clerk JWT — registered by App once Clerk loads
+
+  // If the token getter isn't registered yet, wait — but share a single
+  // polling promise across all concurrent callers (in BOTH files) instead
+  // of N independent polling loops.
+  if (!window.__clerkGetToken) {
+    if (!auth.poll) {
+      auth.poll = (async () => {
+        for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+        auth.poll = null;
+      })();
+    }
+    await auth.poll;
+  }
+
   if (window.__clerkGetToken) {
     try {
       const token = await window.__clerkGetToken();
-      if (token) return { 'Authorization': `Bearer ${token}` };
+      if (token) {
+        auth.token = token;
+        auth.expiry = Date.now() + 10_000; // cache 10s
+        return { 'Authorization': `Bearer ${token}` };
+      }
     } catch {}
   }
-  // No static-key fallback — a request without a valid Clerk token should
-  // fail with a real 401, not silently succeed via a key that would
-  // otherwise sit exposed in the public bundle the moment anyone set
-  // VITE_WORKER_API_KEY, used or not.
   return {};
 }
 
@@ -10793,6 +10815,8 @@ function AppInner() {
     } else {
       window.__clerkGetToken = null;
       window.__clerkSignOut  = null;
+      // Invalidate cached token so stale credentials don't survive sign-out
+      if (window.__seliAuth) { window.__seliAuth.token = null; window.__seliAuth.expiry = 0; }
     }
   }, [isSignedIn, getToken, signOut]);
 
@@ -10933,6 +10957,12 @@ function AppInner() {
     // that shows the error banner until manual reload.
     if (!isLoaded || !isSignedIn) return;
     load(filingsWindowDays);
+    // Pre-warm the leaderboard cache in parallel — the Insiders tab, sidebar
+    // preview, and InsightsDrawer all share the same module-level cache, so
+    // this fetch (which runs alongside loadFilings, not after) means the
+    // leaderboard is already warm by the time the user navigates there.
+    // fire-and-forget; components handle their own error states.
+    fetchLeaderboard(500, 2, 2, null).catch(()=>{});
   },[isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Called by any component whose own time-range control lets a user pick

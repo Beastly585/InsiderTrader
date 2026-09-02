@@ -39,26 +39,30 @@ export function secFilingUrl(accessionNumber, cikIssuer) {
   return `https://www.sec.gov/Archives/edgar/data/${cik}/${accNoDash}/${accDashed}-index.htm`;
 }
 
+// Pre-compiled patterns — getRel runs on every row, so these shouldn't
+// be re-created on each call.
+const RE_CSUITE = /chief|ceo|cfo|coo|cto|cio|cmo|cso|president/;
+const RE_OFFICER = /\bsvp\b|\bevp\b|senior v|managing|general counsel|treasurer|controller|secretary/;
+
 function getRel(title, isOfficer) {
   const t = (title||'').toLowerCase();
-  // Only actual C-suite / president get 'strong' (Executive badge)
-  if (/chief|ceo|cfo|coo|cto|cio|cmo|cso|president/.test(t)) return 'strong';
-  // Named senior officers get 'medium' (Officer badge)
-  if (isOfficer || /\bsvp\b|\bevp\b|senior v|managing|general counsel|treasurer|controller|secretary/.test(t)) return 'medium';
+  if (RE_CSUITE.test(t)) return 'strong';
+  if (isOfficer || RE_OFFICER.test(t)) return 'medium';
   return 'weak';
 }
 
 export function enrich(raw) {
+  // The database provides relationship, sector, and is_open_market for all
+  // modern rows — only fall back to client-side computation for legacy rows
+  // where these columns are NULL.
   const rel = raw.relationship || getRel(raw.title, raw.isOfficer);
-  const value = raw.value != null ? parseFloat(raw.value)
-              : (raw.shares && raw.price ? Math.round(raw.shares * parseFloat(raw.price)) : null);
+  const value = raw.value != null ? +raw.value
+              : (raw.shares && raw.price ? Math.round(raw.shares * +raw.price) : null);
   let signal = 0;
   if (OPEN_MARKET.has(raw.transactionCode)) signal += 2;
   if (rel === 'strong') signal += 2;
   if (rel === 'congress') signal += 2;
   if (rel === 'medium') signal += 1;
-  // Cohen et al. (2012): opportunistic trades contain ALL the predictive
-  // power in insider trading. Routine trades yield ~0% abnormal returns.
   if (raw.isRoutine === false) signal += 3;
   if (value && value >= 1_000_000) signal += 3;
   else if (value && value >= 100_000) signal += 1;
@@ -71,66 +75,79 @@ export function enrich(raw) {
     relLabel:     REL_LABELS[rel] || 'Director',
     value,
     signal,
-    // Trust the database's own is_open_market value when present — it's
-    // computed correctly at ingestion for every source (confirmed for both
-    // SEC Form 4 codes and congressional CONGRESS_P/CONGRESS_S codes).
-    // Previously this unconditionally overwrote that correct value with a
-    // client-side recomputation checking membership in OPEN_MARKET, a set
-    // containing only the bare SEC codes ('P', 'S') — which silently
-    // evaluated to false for every congressional trade regardless of what
-    // the database actually said, since their codes are 'CONGRESS_P' /
-    // 'CONGRESS_S', not bare 'P'/'S'. This was the actual root cause of
-    // congressional signals never appearing: buildSignals' very first
-    // guard (`if (!f.isOpenMarket) continue`) discarded every congressional
-    // filing before any downstream scoring logic ever ran, regardless of
-    // how correct that logic was. Only recompute as a fallback when the
-    // database value is genuinely missing, not to override a real one.
     isOpenMarket: raw.isOpenMarket ?? OPEN_MARKET.has(raw.transactionCode),
   };
 }
 
 // ── Auth header helper ────────────────────────────────────────────────────────
-// Phase 1: API key from config
-// Phase 2: Clerk JWT — set window.__clerkGetToken from app.jsx once Clerk loads
-// Everything in this file calls getAuthHeaders() — nothing else needs to change
+// Shares the poll promise and token cache with app.jsx via window.__seliAuth.
+// Whichever file's getAuthHeaders runs first creates the shared state; every
+// other caller across both files piggybacks on the same polling loop and the
+// same cached token. This eliminates the 0-2s independent polling loop that
+// loadFilings (the critical-path query) used to run separately from app.jsx's
+// own 15+ callers.
 async function getAuthHeaders() {
-  // Same race-condition fix as app.jsx's own getAuthHeaders — this file has
-  // its own separate copy of this function. On a fresh page load,
-  // fetchFromNeon (the function that loads filings, which everything
-  // signal-related is built from) can fire before App's own effect has
-  // registered window.__clerkGetToken, so this waits briefly for it rather
-  // than sending an empty/wrong auth header and 401ing with nothing to
-  // ever retry.
-  if (!window.__clerkGetToken) {
-    for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
-      await new Promise(r => setTimeout(r, 50)); // up to ~2s total, matching app.jsx's own version exactly
-    }
+  if (!window.__seliAuth) window.__seliAuth = { poll: null, token: null, expiry: 0 };
+  const auth = window.__seliAuth;
+
+  // Fast path: reuse a recently-fetched token
+  if (auth.token && Date.now() < auth.expiry) {
+    return { 'Authorization': `Bearer ${auth.token}` };
   }
-  // Clerk JWT is the only auth path now — no static-key fallback. A
-  // request with no valid token should fail with a real 401, not silently
-  // succeed via a key that would otherwise sit in the public bundle
-  // forever, used or not, the moment anyone set VITE_WORKER_API_KEY.
+
+  // Shared polling loop — same promise as app.jsx's callers
+  if (!window.__clerkGetToken) {
+    if (!auth.poll) {
+      auth.poll = (async () => {
+        for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+        auth.poll = null;
+      })();
+    }
+    await auth.poll;
+  }
+
   if (window.__clerkGetToken) {
     try {
       const token = await window.__clerkGetToken();
-      if (token) return { 'Authorization': `Bearer ${token}` };
+      if (token) {
+        auth.token = token;
+        auth.expiry = Date.now() + 10_000;
+        return { 'Authorization': `Bearer ${token}` };
+      }
     } catch {}
   }
   return {};
 }
 
 // ── Main data fetch ───────────────────────────────────────────────────────────
+// Performance notes for the Neon/Worker side:
+// - An index on (is_open_market, transaction_date DESC) or a partial index
+//   WHERE is_open_market = true ORDER BY transaction_date DESC would turn
+//   the narrow-window queries (7d/14d) from sequential scans into index
+//   scans — the single biggest server-side win.
+// - The Worker could pre-compute and cache the 7-day result set (the
+//   default initial load) and serve it from R2/KV, updating on each
+//   ingestion run, so the very first page load never hits Neon at all.
 async function fetchFromNeon(daysBack = 90) {
   // Absolute floor — matches the earliest data backfilled into Neon.
   // daysBack=null ("All") uses this floor; otherwise the computed date
-  // from daysBack will be more recent and override it. LIMIT 50000 in
-  // the query below caps the actual response size regardless.
+  // from daysBack will be more recent and override it.
   let floorDate = '2013-01-01';
   if (daysBack != null) {
     const d = new Date();
     d.setDate(d.getDate() - daysBack);
     floorDate = d.toISOString().split('T')[0];
   }
+
+  // Scale the LIMIT to the window size. The 7-day default rarely exceeds
+  // ~500 rows; 30d caps around 2-3K; wider windows get the full 50K ceiling.
+  // This keeps the JSON payload small for the critical initial load while
+  // still allowing full data for Pro users widening to "All".
+  const limit = daysBack != null && daysBack <= 7 ? 5000
+              : daysBack != null && daysBack <= 30 ? 15000
+              : 50000;
 
   const sql = `
     SELECT
@@ -160,7 +177,7 @@ async function fetchFromNeon(daysBack = 90) {
       AND is_open_market = true
     ORDER BY COALESCE(transaction_date, filing_date) DESC,
              value DESC NULLS LAST
-    LIMIT 50000
+    LIMIT ${limit}
   `;
 
   // Normal fetch — no XHR needed since Babel is gone
