@@ -3310,6 +3310,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* DetailPanel inline variant — no fixed position, fills container */
 .detail-panel--inline {
   position: relative !important;
+  top: 0 !important; /* reset the topnav offset applied to .detail-panel */
   width: 100% !important; height: auto !important;
   box-shadow: none !important; border: none !important;
   border-radius: 0 !important; border-left: none !important;

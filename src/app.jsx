@@ -4212,7 +4212,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [expandedSigs, setExpandedSigs] = useState(new Set()); // Set of tickers
   const [expandedRaws, setExpandedRaws] = useState(new Set()); // Set of indices
   // Full-screen explore drawer (top-right button)
-  const [drawer, setDrawer]     = useState(null); // null | 'signals' | 'raw'
+  const [drawer, setDrawer]     = useState(null); // null | 'signals' | 'insiders' | 'raw'
 
   // Lock body scroll when a local drawer is open
   useEffect(()=>{
@@ -4643,10 +4643,10 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
         )}
       </div>
 
-      {/* Full-screen explore drawer — signals uses InsightsDrawer, raw uses DataDrawer */}
-      {drawer==='signals'&&(
+      {/* Full-screen explore drawer — signals/insiders use InsightsDrawer, raw uses DataDrawer */}
+      {(drawer==='signals'||drawer==='insiders')&&(
         <InsightsDrawer
-          type="signals"
+          type={drawer}
           filings={filings}
           initialDetail={drawerInitSignal}
           onClose={()=>{setDrawer(null);setDrawerInitSignal(null);}}
