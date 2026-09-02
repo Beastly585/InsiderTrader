@@ -4222,7 +4222,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   },[drawer]);
 
   const cutoff = useMemo(() => {
-    if (days == null) return '2021-01-01';
+    if (days == null) return '2013-01-01'; // matches earliest backfilled data
     const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split('T')[0];
   }, [days]);
 
@@ -4898,6 +4898,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
 
   const [rows, setRows]           = useState(null);
   const [lbError, setLbError]     = useState(null);
+  const [lbLoading, setLbLoading] = useState(false);
   const [yearsBack, setYearsBack] = useState(2);
   const [lbSource, setLbSource]   = useState(null);
   const [sort, setSort]           = useState('proxy_score');
@@ -4915,34 +4916,44 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const [dirFilter, setDirFilter] = useState('');     // '' | 'buyers' | 'sellers'
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Client-side cache: avoid re-fetching the same query when switching tabs/pages
-  const lbCache = useRef({});
+  // Server-side search for insiders outside the top 500
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchRows, setSearchRows] = useState(null);
+  useEffect(()=>{
+    const t = setTimeout(()=>setSearchTerm(search), 300);
+    return ()=>clearTimeout(t);
+  },[search]);
+
+  // Base load — shared module-level cache, stale-while-revalidate
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL){setLbError('Not configured');return;}
-    const cacheKey = `${yearsBack}-${lbSource}`;
-    if (lbCache.current[cacheKey]) {
-      const cached = lbCache.current[cacheKey];
-      setRows(cached);
-      setSelected(s => s ?? (cached[0]||null));
-      return;
-    }
-    setRows(null);setLbError(null);
-    queryNeon(LEADERBOARD_QUERY(500,null,2,yearsBack,lbSource))
+    setLbLoading(true);setLbError(null);
+    fetchLeaderboard(500, 2, yearsBack, lbSource)
       .then(r=>{
-        const p = processLeaderboardRows(r);
-        lbCache.current[cacheKey] = p;
-        setRows(p);
-        setSelected(s => s ?? (p[0]||null));
+        setRows(r);
+        setSelected(s => s ?? (r[0]||null));
+        setLbLoading(false);
       })
-      .catch(e=>setLbError(e.message||'Failed to load'));
+      .catch(e=>{setLbError(e.message||'Failed to load');setRows(prev=>prev||[]);setLbLoading(false);});
   },[yearsBack,lbSource]);
 
+  // Server-side name search — queries the full database when typing
+  useEffect(()=>{
+    if (!searchTerm) { setSearchRows(null); return; }
+    setLbLoading(true);
+    fetchLeaderboard(500, 1, yearsBack, lbSource, searchTerm)
+      .then(r=>{setSearchRows(r);setLbLoading(false);})
+      .catch(()=>{setSearchRows([]);setLbLoading(false);});
+  },[searchTerm, yearsBack, lbSource]);
+
   const sorted = useMemo(()=>{
-    if (!rows) return [];
+    const source = searchTerm ? searchRows : rows;
+    if (!source) return [];
     const q = search.toLowerCase();
-    return [...rows]
+    return [...source]
       .filter(r=>{
-        if (q && !(r.insider_name||'').toLowerCase().includes(q) && !(r.insider_title||'').toLowerCase().includes(q)) return false;
+        // Client-side name filter for instant feedback while debounce is pending
+        if (q && !searchTerm && !(r.insider_name||'').toLowerCase().includes(q) && !(r.insider_title||'').toLowerCase().includes(q)) return false;
         if (minTrades > 0 && (r.priced||0) < minTrades) return false;
         if (minHitRate > 0 && (r.hit_rate==null || r.hit_rate < minHitRate)) return false;
         if (minScore > 0 && (r.proxy_score||0) < minScore) return false;
@@ -4952,7 +4963,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
         return true;
       })
       .sort((a,b)=>{const av=a[sort]??-Infinity,bv=b[sort]??-Infinity;return dir>0?av-bv:bv-av;});
-  },[rows,search,sort,dir,minTrades,minHitRate,minScore,roleFilter,dirFilter]);
+  },[rows,searchRows,searchTerm,search,sort,dir,minTrades,minHitRate,minScore,roleFilter,dirFilter]);
 
   const hasInsiderFilters = minTrades>0||minHitRate>0||minScore>0||roleFilter||dirFilter;
   function resetInsiderFilters(){setMinTrades(0);setMinHitRate(0);setMinScore(0);setRoleFilter('');setDirFilter('');}
@@ -5401,10 +5412,13 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // Tab switcher — user can pivot between views within the drawer
   const [activeTab, setActiveTab] = useState(type || 'signals'); // 'signals' | 'insiders' | 'data'
 
-  // Reset detail when switching tabs so the pane doesn't show stale content
+  // Reset detail when switching tabs so the pane doesn't show stale content.
+  // Pre-warm: start the leaderboard fetch on click BEFORE state updates, so
+  // data is already in flight by the time the tab renders.
   function switchTab(tab) {
     if (tab === activeTab) return;
     if (tab === 'data' && onSwitchToData) { onSwitchToData(); return; }
+    if (tab === 'insiders') fetchLeaderboard(500, 2, lbYearsBack, lbSource).catch(()=>{});
     setActiveTab(tab);
     setDetail(null);
     setDetailStack([]);
@@ -5495,25 +5509,57 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
     });
   },[filings,strengthThreshold,srcF,secF,daysBack,minValue,search,sigSort,sigDir]);
 
-  // Insiders
+  // ── Insiders: shared cache + server-side search ──────────────────────────
+  // Base load (no name filter) uses the shared module-level cache so
+  // navigating between Insights tile → drawer → back doesn't re-query.
+  // Stale-while-revalidate: filter changes keep showing previous rows with
+  // a loading indicator instead of wiping to a skeleton.
+  const [lbLoading, setLbLoading] = useState(false);
+  // Server-side search rows — when the user types a name, we query the
+  // server with the name in the WHERE clause so insiders outside the
+  // top 500 are findable. Null = not searching, use base rows.
+  const [lbSearchRows, setLbSearchRows] = useState(null);
+  // Debounced search term for server-side insider search
+  const [lbSearchTerm, setLbSearchTerm] = useState('');
   useEffect(()=>{
     if (activeTab!=='insiders') return;
-    if (lbRows) return; // already loaded
-    queryNeon(LEADERBOARD_QUERY(500, null, 2, lbYearsBack, lbSource))
-      .then(r=>setLbRows(processLeaderboardRows(r)))
-      .catch(()=>setLbRows([]));
+    const t = setTimeout(()=>setLbSearchTerm(search), 300);
+    return ()=>clearTimeout(t);
+  },[search, activeTab]);
+
+  // Base load — shared cache, stale-while-revalidate
+  useEffect(()=>{
+    if (activeTab!=='insiders') return;
+    setLbLoading(true);
+    fetchLeaderboard(500, 2, lbYearsBack, lbSource)
+      .then(r=>{setLbRows(r);setLbLoading(false);})
+      .catch(()=>{setLbRows(prev=>prev||[]);setLbLoading(false);});
   },[activeTab,lbYearsBack,lbSource]);
 
+  // Server-side name search — fires when debounced search term changes.
+  // Searches the full database, not just the cached top 500.
+  useEffect(()=>{
+    if (activeTab!=='insiders') return;
+    if (!lbSearchTerm) { setLbSearchRows(null); return; }
+    setLbLoading(true);
+    fetchLeaderboard(500, 1, lbYearsBack, lbSource, lbSearchTerm)
+      .then(r=>{setLbSearchRows(r);setLbLoading(false);})
+      .catch(()=>{setLbSearchRows([]);setLbLoading(false);});
+  },[lbSearchTerm, lbYearsBack, lbSource, activeTab]);
+
   const sortedLb = useMemo(()=>{
-    if (!lbRows) return [];
-    let rows = lbRows;
-    if (search) { const q=search.toLowerCase(); rows=rows.filter(r=>r.insider_name.toLowerCase().includes(q)); }
+    // Use server search results when searching, base rows otherwise
+    const source = lbSearchTerm ? lbSearchRows : lbRows;
+    if (!source) return [];
+    let rows = source;
+    // Client-side name filter for instant feedback while debounce is pending
+    if (search && !lbSearchTerm) { const q=search.toLowerCase(); rows=rows.filter(r=>r.insider_name.toLowerCase().includes(q)); }
     if (lbMinValue>0) { rows=rows.filter(r=>(r.bought_value||0)>=lbMinValue); }
     return [...rows].sort((a,b)=>{
       const av=a[lbSort]??-Infinity, bv=b[lbSort]??-Infinity;
       return lbDir>0?av-bv:bv-av;
     });
-  },[lbRows,lbSort,lbDir,search,lbMinValue]);
+  },[lbRows,lbSearchRows,lbSearchTerm,lbSort,lbDir,search,lbMinValue]);
   function lbOnSort(col){ if(lbSort===col)setLbDir(d=>-d); else{setLbSort(col);setLbDir(-1);} }
 
   function resetDrawerFilters(){setMinStr(1);setDaysBack(30);setMinValue(0);setSrcF('');setSecF('');setSearch('');}
@@ -5775,12 +5821,12 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
             {activeTab==='insiders'&&(
               <>
                 <div className="drawer__list-hdr">
-                  <span>{sortedLb.length} insiders</span>
+                  <span>{sortedLb.length} insiders{lbLoading&&sortedLb.length>0&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
                 </div>
-                {lbRows===null
+                {lbRows===null&&!lbSearchRows
                   ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
                   : sortedLb.length===0
-                    ? <div className="drawer__empty">No insiders match</div>
+                    ? <div className="drawer__empty">{lbLoading?'Searching…':'No insiders match'}</div>
                     : sortedLb.map((r,i)=>{
                       const isActive = detail?.type==='trader' && detail?.name===r.insider_name;
                       return (
@@ -6346,12 +6392,15 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
   const [sort, setSort] = useState('proxy_score');
   const [dir, setDir] = useState(-1);
 
+  // Shared cache: request the full 500 so the cache is warm when the user
+  // opens the full Insights tile or InsightsDrawer — the sidebar just
+  // slices to 20 for display but populates the same cache entry.
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) { setError('Not configured'); return; }
-    setRows(null); setError(null);
-    queryNeon(LEADERBOARD_QUERY(20, null, 5, yearsBack, source))
-      .then(r=>setRows(processLeaderboardRows(r)))
-      .catch(e=>setError(e.message||'Failed to load'));
+    setError(null);
+    fetchLeaderboard(500, 5, yearsBack, source)
+      .then(r=>setRows(r))
+      .catch(e=>{setError(e.message||'Failed to load');setRows(prev=>prev||[]);});
   },[yearsBack,source]);
 
   const sorted = useMemo(()=>{
@@ -6359,7 +6408,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
     return [...rows].sort((a,b)=>{
       const av=a[sort]??-Infinity, bv=b[sort]??-Infinity;
       return dir>0?av-bv:bv-av;
-    });
+    }).slice(0, 20); // sidebar preview — only show top 20
   },[rows,sort,dir]);
   function onSortClick(col){ if(sort===col)setDir(d=>-d); else{setSort(col);setDir(-1);} }
   const isMobile = useIsMobile();
@@ -6467,8 +6516,11 @@ const SEC_TO_ETF_LABEL = {
 // the full per-insider trustScore() pipeline for every insider in the DB isn't
 // practical in one query. This is consistent with the same approximation used
 // for "Related Insiders" on the trader profile.
-function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2, sourceFilter=null) {
+function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2, sourceFilter=null, nameFilter=null) {
   const sectorClause = sectorFilter ? `AND f.sector = '${sectorFilter.replace(/'/g,"''")}'` : '';
+  // Server-side name search — highly selective, so the LATERAL JOINs only
+  // run over the handful of matching rows instead of the full table.
+  const nameClause = nameFilter ? `AND f.insider_name ILIKE '%${nameFilter.replace(/'/g,"''")}%'` : '';
   // Date window is now a real parameter rather than hardcoded — yearsBack=null
   // means no date filter at all (true all-time), used by the unsortable
   // preview tiles (Dashboard, Insights side panel) where "all-time" is the
@@ -6623,6 +6675,7 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
         ${dateClause}
         ${sectorClause}
         ${sourceClause}
+        ${nameClause}
       GROUP BY f.insider_name
       HAVING COUNT(*) FILTER (WHERE f.transaction_type IN ('buy','sell') AND f.is_open_market) >= ${minTrades}
     ) agg
@@ -6632,6 +6685,51 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
 }
 
 // (processLeaderboardRows now lives in src/lib/scoring.js — imported above.)
+
+// ─── Shared leaderboard cache ────────────────────────────────────────────────
+// Module-level so every component that needs leaderboard data (sidebar preview,
+// Insights tile, InsightsDrawer) shares a single cache instead of independently
+// firing the same expensive LATERAL JOIN query. Keyed by filter combination.
+// The sidebar's LIMIT 20 can slice from a cached LIMIT 500 if it's warm.
+const _lbCache = new Map();
+function lbCacheKey(yearsBack, source) { return `${yearsBack}|${source||'all'}`; }
+
+// Fetch with shared cache — returns processed rows. Callers get the cached
+// promise if an identical request is already in flight, avoiding duplicate
+// concurrent queries for the same filter set.
+function fetchLeaderboard(limit, minTrades, yearsBack, source, nameFilter=null) {
+  // Name-filtered queries are one-off searches, not cached — the result set
+  // is specific to the search string and usually tiny.
+  if (nameFilter) {
+    return queryNeon(LEADERBOARD_QUERY(limit, null, minTrades, yearsBack, source, nameFilter))
+      .then(r => processLeaderboardRows(r));
+  }
+  const key = lbCacheKey(yearsBack, source);
+  const cached = _lbCache.get(key);
+  // Return cached data if we have it AND the cached limit covers what's asked
+  if (cached && cached.limit >= limit && cached.rows) return Promise.resolve(cached.rows);
+  // If an identical or wider request is already in flight, piggyback on it
+  if (cached && cached.promise && cached.limit >= limit) return cached.promise;
+  const promise = queryNeon(LEADERBOARD_QUERY(limit, null, minTrades, yearsBack, source))
+    .then(r => {
+      const rows = processLeaderboardRows(r);
+      _lbCache.set(key, { rows, limit, promise: null });
+      return rows;
+    })
+    .catch(e => {
+      // Don't cache failures — let the next caller retry
+      const entry = _lbCache.get(key);
+      if (entry && entry.promise === promise) _lbCache.delete(key);
+      throw e;
+    });
+  _lbCache.set(key, { rows: null, limit, promise });
+  return promise;
+}
+// Invalidate when filters change to a set we haven't seen
+function invalidateLbCache(yearsBack, source) {
+  const key = lbCacheKey(yearsBack, source);
+  _lbCache.delete(key);
+}
 
 
 // ─── SECTOR MONEY FLOW environment ─────────────────────────────────────────────
@@ -7182,7 +7280,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
     const ef=dateFrom||(dPreset!=null?(()=>{const d=new Date();d.setDate(d.getDate()-dPreset);return d.toISOString().split('T')[0];})():null);
     const et=dateTo||new Date().toISOString().split('T')[0];
     if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
-    c.push(`COALESCE(transaction_date,filing_date)>='2021-01-01'`);
+    c.push(`COALESCE(transaction_date,filing_date)>='2013-01-01'`); // hard floor — matches earliest backfilled data
     c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
     if (typeF)  c.push(`transaction_type='${typeF}'`);
     if (relF)   c.push(`relationship='${relF}'`);
@@ -7206,9 +7304,12 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
     return `ORDER BY ${sortKey} ${dir} NULLS LAST`;
   }
 
+  // Stale-while-revalidate: keep showing previous rows while new query runs.
+  // Only null out on very first load (rows starts null from useState).
+  const [dataLoading, setDataLoading] = useState(false);
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
-    setRows(null);
+    setDataLoading(true);
     proxySQL(`
       SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
              relationship,transaction_type,transaction_code,is_open_market,
@@ -7216,7 +7317,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
       FROM public.filings ${where()}
       ${orderBy()}
       LIMIT 300
-    `).then(setRows).catch(()=>setRows([]));
+    `).then(r=>{setRows(r);setDataLoading(false);}).catch(()=>{setRows(prev=>prev||[]);setDataLoading(false);});
   },[search,typeF,relF,sectorF,sourceF,openMkt,fromPortfolio,dPreset,dateFrom,dateTo,sortKey,sortDir]);
 
   function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
@@ -7299,12 +7400,12 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
         <div className="drawer__body">
           <div className="drawer__list" ref={listRef}>
             <div className="drawer__list-hdr">
-              <span>{rows==null?'Loading…':`${rows.length}${rows.length===300?'+':''} filing${rows.length===1?'':'s'}`}</span>
+              <span>{rows==null?'Loading…':`${rows.length}${rows.length===300?'+':''} filing${rows.length===1?'':'s'}`}{dataLoading&&rows!=null&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
             </div>
             {rows===null
               ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
               : rows.length===0
-                ? <div className="drawer__empty">No filings match these filters</div>
+                ? <div className="drawer__empty">{dataLoading?'Loading…':'No filings match these filters'}</div>
                 : rows.map((r,i)=>{
                   const tt=r.transaction_type;
                   const trade = {
