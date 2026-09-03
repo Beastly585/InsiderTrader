@@ -5775,22 +5775,24 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* ── Bottom nav (mobile) ───────────────────────────────────────────── */
 .bottomnav { position:fixed; bottom:0; left:0; right:0; z-index:100; background:var(--surface); border-top:0.5px solid var(--border); height:56px; display:flex; align-items:center; }
-.bottomnav__btn { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; height:100%; border:none; background:none; color:var(--text-3); cursor:pointer; transition:color .1s; font-family:var(--font); }
+.bottomnav__btn { position: relative; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; height:100%; border:none; background:none; color:var(--text-3); cursor:pointer; transition:color .1s; font-family:var(--font); }
 .bottomnav__btn:hover { color:var(--text-2); }
-.bottomnav__btn--active { color:var(--accent); }
-.bottomnav__btn--active .bottomnav__label { font-weight: 700; }
-.bottomnav__btn--active svg,
-.bottomnav__btn--active path { stroke: var(--accent); }
-/* Subtle glow behind active icon */
+.bottomnav__btn--active {
+  color: #fff;
+}
 .bottomnav__btn--active::before {
   content: '';
-  position: absolute; top: 4px;
-  width: 36px; height: 24px;
-  border-radius: 12px;
-  background: rgba(124,92,252,0.18);
+  position: absolute;
+  inset: 6px auto 6px auto;
+  width: 48px; border-radius: 8px;
+  background: var(--accent);
+  opacity: 0.22;
   pointer-events: none;
+  z-index: 0;
 }
-.bottomnav__btn { position: relative; }
+.bottomnav__btn--active > * { position: relative; z-index: 1; }
+.bottomnav__btn--active .bottomnav__label { font-weight: 700; color: var(--accent); }
+.bottomnav__btn--active svg { color: var(--accent); }
 .bottomnav__label { font-size:10px; font-weight:500; }
 
 @media(min-width:641px){ .bottomnav{ display:none; } }
@@ -6528,26 +6530,32 @@ td { padding:7px 11px; vertical-align:middle; }
 
 /* ── Mobile: collapse to fewer columns ── */
 @media (max-width: 900px) {
-  /* Mobile signals: ticker+co | insiders | net value | conviction — tighter proportions */
+  /* Mobile signals: ticker+co | insiders | net value | conviction */
   .ws-col-hdrs--data,
-  .ws-row__main--data { grid-template-columns: minmax(0,1fr) 50px 72px 80px; }
-  /* Mobile raw: ticker+insider | date | type | value — compact */
+  .ws-row__main--data { grid-template-columns: minmax(0,1fr) 46px 64px 60px; }
+  /* Mobile raw: ticker+insider | date | type | value */
   .ws-col-hdrs--raw,
-  .ws-row__main--raw  { grid-template-columns: minmax(0,1fr) 68px 40px 64px; }
+  .ws-row__main--raw  { grid-template-columns: minmax(0,1fr) 62px 36px 56px; }
   .ws-col-hdrs--ins,
   .ws-row__main--ins  { grid-template-columns: minmax(0,1fr) 12% 20% 14%; }
   .ws-col-hdrs--wl,
   .ws-row__main--wl   { grid-template-columns: minmax(0,1fr) 26% 20%; }
 }
 @media (max-width: 640px) {
-  .ws-row__cell { padding: 8px 6px; }
+  .ws-row__cell { padding: 7px 5px; }
   .ws-row__main--data,
-  .ws-row__main--raw { min-height: 40px; }
+  .ws-row__main--raw { min-height: 38px; }
   /* Truncate company/insider name to one line on small phones */
   .ws-row__cell .ws-mob-sub {
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    max-width: 100%;
+    max-width: 42vw;
   }
+  /* Shrink conviction bar + hide label text on mobile */
+  .ws-row__cell .conv-bar-wrap { max-width: 52px; }
+  .ws-row__cell .conv-label { display: none; }
+  /* Shrink column header text */
+  .ws-col-hdrs--data .ws-row__cell,
+  .ws-col-hdrs--raw .ws-row__cell { font-size: 9px; padding: 6px 5px; }
 }
 /* Remove old ins-mobile class — handled by media query above */
 .ws-col-hdrs--ins-mobile,

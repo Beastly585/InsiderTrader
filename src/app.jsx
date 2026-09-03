@@ -4506,10 +4506,10 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                 <button className={`ws-col-sort${sigSort==='ticker'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('ticker')}>Ticker{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
                 {!isMobile&&<button className={`ws-col-sort${sigSort==='company'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('company')}>Company{sigSort==='company'&&(sigDir<0?' ↓':' ↑')}</button>}
                 {!isMobile&&<button className={`ws-col-sort${sigSort==='lastTradeDate'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('lastTradeDate')}><InfoTip tip={TIPS.signalDate}>Date</InfoTip>{sigSort==='lastTradeDate'&&(sigDir<0?' ↓':' ↑')}</button>}
-                <button className={`ws-col-sort ws-col-sort--right${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}><InfoTip tip={TIPS.insiders}>Insiders</InfoTip>{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>
+                <button className={`ws-col-sort ws-col-sort--right${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}><InfoTip tip={TIPS.insiders}>{isMobile?'Ins':'Insiders'}</InfoTip>{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>
                 {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sigSort==='buys'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('buys')}><InfoTip tip={TIPS.trades}>Trades</InfoTip>{sigSort==='buys'&&(sigDir<0?' ↓':' ↑')}</button>}
-                <button className={`ws-col-sort ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}><InfoTip tip={TIPS.netValue}>Net value</InfoTip>{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
-                <button className={`ws-col-sort ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}><InfoTip tip={TIPS.conviction}>Conviction</InfoTip>{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
+                <button className={`ws-col-sort ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}><InfoTip tip={TIPS.netValue}>{isMobile?'Value':'Net value'}</InfoTip>{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
+                <button className={`ws-col-sort ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}><InfoTip tip={TIPS.conviction}>{isMobile?'Conv':'Conviction'}</InfoTip>{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
               </div>
               <div>
                 {signals.map(s=>{
@@ -4546,8 +4546,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                         <div className="ws-row__cell ws-row__cell--right">
                           <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</span>
                         </div>
-                        <div className="ws-row__cell" style={{minWidth:90}}>
-                          <ConvictionBar score={s.conviction} max={100} showLabel/>
+                        <div className="ws-row__cell">
+                          <ConvictionBar score={s.conviction} max={100} showLabel={!isMobile}/>
                         </div>
                       </div>
 
