@@ -154,12 +154,19 @@ function UpgradeModal({ feature, pro, onClose }) {
   const [processing, setProcessing] = useState(false); // true for the gap between payment succeeding and the confirmation being ready
   const [progressText, setProgressText] = useState(null); // live row-count updates during a large export
 
-  // Direct checkout: skip the info modal entirely and go straight to Stripe.
-  // Triggered by 'data_export_direct' or 'pro_direct' feature flags from
-  // buttons that are already contextually clear (user knows what they're buying).
+  // Direct checkout: skip the comparison modal and go straight to Stripe.
+  // Explicit: 'data_export_direct' and 'pro_direct' always go direct.
+  // Mobile: ANY Pro-intent feature skips the comparison modal on phones —
+  // there isn't enough screen space for Free vs Pro side-by-side, and the
+  // user already clicked a contextual "Go Pro" / "Upgrade" button so they
+  // know what they're buying. The comparison is still useful on desktop
+  // where it's a side-by-side layout and the trigger might be less specific.
+  const isMobileModal = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
+  const proIntentFeatures = ['default','watchlist','watchlist_ticker','watchlist_insider','notifications','portfolio','full_history'];
   useEffect(()=>{
     if (feature==='data_export_direct') setCheckoutProduct('data_export');
-    if (feature==='pro_direct') setCheckoutProduct('pro');
+    else if (feature==='pro_direct') setCheckoutProduct('pro');
+    else if (isMobileModal && proIntentFeatures.includes(feature)) setCheckoutProduct('pro');
   },[feature]);
 
   // Personalized per the specific action that triggered this modal — a
@@ -202,7 +209,7 @@ function UpgradeModal({ feature, pro, onClose }) {
     return (
       <CheckoutModal
         product={checkoutProduct}
-        onClose={() => { setCheckoutProduct(null); if (feature==='data_export_direct'||feature==='pro_direct') onClose(); }}
+        onClose={() => { setCheckoutProduct(null); if (feature==='data_export_direct'||feature==='pro_direct'||(isMobileModal&&proIntentFeatures.includes(feature))) onClose(); }}
         onSuccess={async ()=>{
           const wasPro = checkoutProduct === 'pro';
           setProcessing(true);

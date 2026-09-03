@@ -4965,9 +4965,29 @@ td { padding:7px 11px; vertical-align:middle; }
 .checkout-modal__pay .StripeElement,
 .checkout-modal__pay form { display: flex; flex-direction: column; justify-content: center; flex: 1; }
 @media (max-width: 640px) {
-  .checkout-modal--landscape { flex-direction: column; min-width: 0; max-height: 90vh; overflow-y: auto; }
-  .checkout-modal__info { flex: none; border-right: none; border-bottom: 0.5px solid var(--border); padding: 24px 20px; }
-  .checkout-modal__pay { padding: 24px 20px; }
+  .checkout-modal--landscape {
+    flex-direction: column; min-width: 0;
+    max-height: none; height: 100%; width: 100%;
+    border-radius: 0; border: none;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .checkout-modal__info {
+    flex: none; border-right: none; border-bottom: 0.5px solid var(--border);
+    padding: 20px 16px;
+  }
+  /* Compact the info section on mobile — less whitespace before the payment form */
+  .checkout-modal__info-price { font-size: 1.25rem; margin-bottom: 4px; }
+  .checkout-modal__info-subtitle { margin-bottom: 10px; }
+  .checkout-modal__features { gap: 5px; }
+  .checkout-modal__trust { margin-top: 10px; padding-top: 10px; }
+  .checkout-modal__pay {
+    padding: 20px 16px 32px; flex: none;
+    justify-content: flex-start; /* don't center — let it flow naturally so button isn't cut off */
+  }
+  /* Override the overlay alignment — full-screen sheet on mobile */
+  .upgrade-overlay:has(.checkout-modal--landscape) {
+    align-items: stretch; padding: 0;
+  }
 }
 
 .checkout-modal--landscape .upgrade-modal__close {

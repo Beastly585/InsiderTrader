@@ -34,24 +34,32 @@
       "@type": "WebApplication",
       "name": "Seli",
       "url": "https://seli.app",
-      "description": "Real-time SEC Form 4 insider trading signals with conviction scoring, sector heatmaps, congressional trade tracking, and portfolio integration.",
+      "description": "Real-time SEC Form 4 insider trading signals with conviction scoring, congressional trade tracking, and portfolio integration.",
       "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web",
       "offers": [
         {
           "@type": "Offer",
           "name": "Free",
           "price": "0",
-          "priceCurrency": "USD"
+          "priceCurrency": "USD",
+          "description": "Live dashboard, 7-day signal window, top insiders leaderboard"
         },
         {
           "@type": "Offer",
           "name": "Pro",
-          "price": "11.99",
+          "price": "6.99",
           "priceCurrency": "USD",
-          "billingIncrement": "P1M"
+          "description": "Full history, instant alerts, portfolio linking, score breakdowns"
+        },
+        {
+          "@type": "Offer",
+          "name": "Data Export",
+          "price": "39.99",
+          "priceCurrency": "USD",
+          "description": "Complete SEC Form 4 dataset as CSV, 2010 to present"
         }
-      ],
-      "operatingSystem": "Web"
+      ]
     }
     </script>
 
@@ -64,9 +72,35 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="canonical" href="https://seli.app" />
+    <meta name="robots" content="index, follow" />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width:800px;margin:0 auto;padding:40px 20px;font-family:system-ui,sans-serif;color:#e8e8ec;">
+        <h1>Seli — See What Insiders Are Buying Before the Market Reacts</h1>
+        <p>CEOs, directors, and members of Congress are legally required to disclose their stock
+        trades. These insider trades outperform the market by 4–5% annually. Seli watches every
+        SEC Form 4 filing and STOCK Act disclosure within minutes of publication, scores
+        each trade by conviction, and alerts you to the ones that matter.</p>
+        <h2>Insider Trading Signals</h2>
+        <p>Every trade gets a conviction score based on peer-reviewed research — who traded, whether
+        multiple insiders are buying the same stock, how much of their holdings the trade represents,
+        and the dollar value. Higher conviction = more markers of a historically meaningful insider trade.</p>
+        <h2>Congressional Stock Trading Tracker</h2>
+        <p>Track what senators and representatives are buying and selling. STOCK Act disclosures from
+        every member of Congress, searchable and scored alongside corporate insider trades.</p>
+        <h2>Portfolio Integration &amp; Insider Alerts</h2>
+        <p>Connect your brokerage account and see insider buying and selling on stocks in your portfolio.
+        Get instant alerts when executives trade something you hold.</p>
+        <h2>SEC Form 4 Data — Every Filing Since 2010</h2>
+        <p>Every corporate insider trade, director purchase, and congressional stock disclosure.
+        Searchable, filterable, and linked to the original SEC EDGAR filing.
+        <a href="https://seli.app/data-download">Download the complete dataset as CSV</a> for $39.99.</p>
+        <p><a href="https://seli.app">Sign up free at seli.app</a> — no credit card required.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
