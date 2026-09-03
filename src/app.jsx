@@ -4351,9 +4351,18 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
   return (
     <div className="ws-page">
-      <div style={{marginBottom:20}}>
-        <h1 className="ws-page-title">Market Data</h1>
-        <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
+      <div className="ws-page-hdr">
+        <div style={{flex:1}}>
+          <h1 className="ws-page-title">Market Data</h1>
+          <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
+        </div>
+        <div className="data-export-tile" onClick={()=>onUpgrade('data_export_direct')}>
+          <div className="data-export-tile__text">
+            <div className="data-export-tile__title">Download the whole database</div>
+            <div className="data-export-tile__sub">Every SEC Form 4 filing, 2010 → present. One CSV, one price.</div>
+          </div>
+          <button className="data-export-tile__cta">Buy Export — $39.99</button>
+        </div>
       </div>
 
       {/* Stat strip */}

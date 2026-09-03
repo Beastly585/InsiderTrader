@@ -3357,6 +3357,28 @@ async function handleCreateSubscription(request, env, origin) {
       await neonFetch(env,
         `UPDATE public.subscriptions SET stripe_customer_id = ${sqlVal(customerId)}, updated_at = now() WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
       ).catch(e => console.error('[Worker] Failed to persist stripe_customer_id early (non-fatal — webhook still sets it on subscription success):', e.message));
+    } else {
+      // Verify the stored customer still exists in Stripe — a stale ID
+      // (deleted from dashboard, test→live mismatch) causes "No such
+      // customer" on subscription creation. Recreate and persist if gone.
+      try {
+        const cust = await stripe.customers.retrieve(customerId);
+        if (cust.deleted) throw { statusCode: 404 };
+      } catch (e) {
+        if (e.statusCode === 404 || (e.message && e.message.includes('No such customer'))) {
+          console.warn(`[Worker] Stale stripe_customer_id ${customerId} for ${clerkUserId} — recreating`);
+          const customer = await stripe.customers.create({
+            email,
+            metadata: { clerk_user_id: clerkUserId },
+          });
+          customerId = customer.id;
+          await neonFetch(env,
+            `UPDATE public.subscriptions SET stripe_customer_id = ${sqlVal(customerId)}, updated_at = now() WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+          ).catch(e => console.error('[Worker] Failed to persist recreated stripe_customer_id:', e.message));
+        } else {
+          throw e;
+        }
+      }
     }
 
     const subscription = await stripe.subscriptions.create({
@@ -3407,12 +3429,36 @@ async function handleCreateDataPurchase(request, env, origin) {
     let body = {};
     try { body = await request.json(); } catch {}
 
+    // Verify the stored customer still exists in Stripe — a stale ID
+    // (deleted from Stripe dashboard, or left over from test→live switch)
+    // causes "No such customer" on every subsequent API call. Recreate
+    // if missing rather than surfacing a raw Stripe error.
+    if (customerId) {
+      try {
+        const cust = await stripe.customers.retrieve(customerId);
+        if (cust.deleted) customerId = null;
+      } catch (e) {
+        if (e.statusCode === 404 || (e.message && e.message.includes('No such customer'))) {
+          console.warn(`[Worker] Stale stripe_customer_id ${customerId} for ${clerkUserId} — will recreate`);
+          customerId = null;
+        } else {
+          throw e; // real Stripe error, not a stale ID
+        }
+      }
+    }
+
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: body.email,
         metadata: { clerk_user_id: clerkUserId },
       });
       customerId = customer.id;
+      // Persist the new customer ID so future calls don't recreate
+      await neonFetch(env,
+        `INSERT INTO public.subscriptions (clerk_user_id, stripe_customer_id, updated_at)
+         VALUES (${sqlVal(clerkUserId)}, ${sqlVal(customerId)}, now())
+         ON CONFLICT (clerk_user_id) DO UPDATE SET stripe_customer_id = ${sqlVal(customerId)}, updated_at = now()`
+      ).catch(e => console.error('[Worker] Failed to persist stripe_customer_id for data purchase (non-fatal):', e.message));
     }
 
     const paymentIntent = await stripe.paymentIntents.create({
