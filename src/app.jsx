@@ -149,10 +149,17 @@ function UpgradeModal({ feature, pro, onClose }) {
   },[onClose]);
 
   const [checkoutProduct, setCheckoutProduct] = useState(null); // null | 'pro' | 'data_export'
-  const [plan, setPlan] = useState(feature==='data_export' ? 'data_export' : 'pro'); // which card is selected in the picker
+  const [plan, setPlan] = useState(feature==='data_export'||feature==='data_export_direct' ? 'data_export' : 'pro'); // which card is selected in the picker
   const [statusModal, setStatusModal] = useState(null);
   const [processing, setProcessing] = useState(false); // true for the gap between payment succeeding and the confirmation being ready
   const [progressText, setProgressText] = useState(null); // live row-count updates during a large export
+
+  // Direct checkout: skip the info modal entirely and go straight to Stripe.
+  // Triggered by 'data_export_direct' feature flag from buttons that are
+  // already contextually clear (user knows what they're buying).
+  useEffect(()=>{
+    if (feature==='data_export_direct') setCheckoutProduct('data_export');
+  },[feature]);
 
   // Personalized per the specific action that triggered this modal — a
   // generic "Upgrade to Pro" doesn't tell someone what they were actually
@@ -194,7 +201,7 @@ function UpgradeModal({ feature, pro, onClose }) {
     return (
       <CheckoutModal
         product={checkoutProduct}
-        onClose={() => setCheckoutProduct(null)}
+        onClose={() => { setCheckoutProduct(null); if (feature==='data_export_direct') onClose(); }}
         onSuccess={async ()=>{
           const wasPro = checkoutProduct === 'pro';
           setProcessing(true);
@@ -508,7 +515,11 @@ function CheckoutModal({ product, onClose, onSuccess }) {
 
         {/* Right — payment form */}
         <div className="checkout-modal__pay">
-          {error && <div className="checkout-error">{error} — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
+          {error && <div className="checkout-error">{
+            error.includes('No such customer') || error.includes('customer')
+              ? 'Your account needs a quick reset before checkout. Please sign out, sign back in, and try again.'
+              : error
+          } — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
 
           {!error && !reactivating && !clientSecret && (
             <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
@@ -4227,6 +4238,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [txType, setTxType]     = useState('all');
   const [rawRoleF, setRawRoleF] = useState('');
   const [search, setSearch]     = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo]     = useState('');
   const [sigSort, setSigSort]   = useState('conviction');
   const [sigDir, setSigDir]     = useState(-1);
   const [rawSort, setRawSort]   = useState('date');
@@ -4250,9 +4263,14 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   }, [days]);
 
   const rawCutoff = useMemo(() => {
+    if (dateFrom) return dateFrom; // custom date range overrides preset
     if (days == null) return null;
     const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split('T')[0];
-  }, [days]);
+  }, [days, dateFrom]);
+
+  const rawDateTo = useMemo(() => {
+    return dateTo || null; // null = no upper bound (today)
+  }, [dateTo]);
 
   const sectors = useMemo(() =>
     [...new Set(filings.map(f=>f.sector).filter(s=>s&&s!=='Other'))].sort(),
@@ -4284,10 +4302,11 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
       if (txType!=='all' && f.transactionType!==txType) return false;
       if (rawRoleF && f.relationship!==rawRoleF) return false;
       if (rawCutoff && (f.transactionDate||f.date||'')<rawCutoff) return false;
+      if (rawDateTo && (f.transactionDate||f.date||'')>rawDateTo) return false;
       if (q && !f.ticker?.toLowerCase().includes(q) && !(f.company||'').toLowerCase().includes(q) && !(f.insiderName||'').toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [filings, sectorF, txType, rawRoleF, rawCutoff, search]);
+  }, [filings, sectorF, txType, rawRoleF, rawCutoff, rawDateTo, search]);
 
   const rawFilings = useMemo(() =>
     [...allRaw].sort((a,b)=>{
@@ -4299,8 +4318,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
   function onSigSort(col) { if(sigSort===col)setSigDir(d=>-d);else{setSigSort(col);setSigDir(-1);} }
   function onRawSort(col) { if(rawSort===col)setRawDir(d=>-d);else{setRawSort(col);setRawDir(-1);} }
-  const hasFilters = search||sectorF||sourceF||minStr>1||days!==7||(tab==='raw'&&(txType!=='all'||rawRoleF!==''));
-  function resetFilters(){ setSearch('');setSectorF('');setSourceF('');setMinStr(1);setDays(7);setTxType('all');setRawRoleF(''); }
+  const hasFilters = search||sectorF||sourceF||minStr>1||days!==7||dateFrom||dateTo||(tab==='raw'&&(txType!=='all'||rawRoleF!==''));
+  function resetFilters(){ setSearch('');setSectorF('');setSourceF('');setMinStr(1);setDays(7);setTxType('all');setRawRoleF('');setDateFrom('');setDateTo(''); }
 
   function toggleSig(ticker) {
     setExpandedSigs(prev => { const n=new Set(prev); n.has(ticker)?n.delete(ticker):n.add(ticker); return n; });
@@ -4359,6 +4378,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             </button>
           </div>
           <div className="ws-toolbar-right">
+            {tab==='raw'&&<button className="btn btn--primary btn--sm" style={{flexShrink:0}} onClick={()=>onUpgrade('data_export_direct')}>Export CSV</button>}
             {/* Opens the correct full drawer for whichever tab is active */}
             <button className="ws-toolbar-explore-btn"
               onClick={()=> tab==='signals' ? openSignalsDrawer(null) : openRawDrawer(null,null)}>
@@ -4405,8 +4425,18 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                 <span className="ws-filter-label">Date</span>
                 <div className="ws-pills">
                   {[{v:1,l:'1d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:null,l:'All'}].map(o=>(
-                    <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`} onClick={()=>setDays(o.v)}>{o.l}</button>
+                    <button key={o.l} className={`ws-pill${days===o.v&&!dateFrom?' ws-pill--active':''}`} onClick={()=>{setDays(o.v);setDateFrom('');setDateTo('');}}>{o.l}</button>
                   ))}
+                </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Range</span>
+                <div className="drawer__date-range">
+                  <input type="date" className="drawer__date-input" value={dateFrom}
+                    onChange={e=>{setDateFrom(e.target.value);if(e.target.value)setDays(null);}}/>
+                  <span className="drawer__date-sep">→</span>
+                  <input type="date" className="drawer__date-input" value={dateTo}
+                    onChange={e=>{setDateTo(e.target.value);if(e.target.value)setDays(null);}}/>
                 </div>
               </div>
               <div className="ws-filter-group">
@@ -7380,7 +7410,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                 onClick={()=>{ if(k!=='data' && onSwitchTab) onSwitchTab(k); }}>{l}</button>
             ))}
           </div>
-          <button className="drawer__topbar-cta" onClick={()=>onUpgrade&&onUpgrade('data_export')}>Export CSV</button>
+          <button className="drawer__topbar-cta" onClick={()=>onUpgrade&&onUpgrade('data_export_direct')}>Export CSV</button>
           <button className="btn btn--ghost btn--icon" onClick={onClose} style={{marginLeft:0}}><IconClose style={{width:12,height:12}}/></button>
         </div>
 
@@ -7696,8 +7726,8 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
           ) : null}
           <TileInfoButton section="data-source" title="All filings" tileId="data-filings"/>
           <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
-            onClick={()=>onUpgrade('data_export')}>
-            Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>
+            onClick={()=>onUpgrade('data_export_direct')}>
+            Export CSV
           </button>
         </div>
 
@@ -7856,6 +7886,16 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Sticky export CTA — always visible at the bottom of the data page */}
+      <div className="data-export-banner">
+        <div className="data-export-banner__text">
+          <strong>Want the full dataset?</strong> Every filing on record, delivered as CSV.
+        </div>
+        <button className="data-export-banner__cta" onClick={()=>onUpgrade('data_export_direct')}>
+          Buy Export — $39.99
+        </button>
       </div>
     </div>
   );

@@ -1389,6 +1389,32 @@ td { padding:7px 11px; vertical-align:middle; }
 .data-main .table-wrap { flex: 1; overflow-y: auto; }
 .data-main .data-mobile-list { flex: 1; overflow-y: auto; }
 
+/* Sticky export banner — always visible at the bottom of the data page */
+.data-export-banner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 12px 20px;
+  background: var(--surface-2); border-top: 0.5px solid var(--border-md);
+  flex-shrink: 0;
+}
+.data-export-banner__text {
+  font-size: 0.8125rem; color: var(--text-2);
+}
+.data-export-banner__text strong {
+  color: var(--text); font-weight: 600;
+}
+.data-export-banner__cta {
+  flex-shrink: 0; padding: 8px 20px;
+  background: var(--accent); color: var(--bg);
+  border: none; border-radius: var(--radius-md);
+  font-size: 0.8125rem; font-weight: 700; font-family: var(--font);
+  cursor: pointer; white-space: nowrap;
+  transition: opacity 0.12s;
+}
+.data-export-banner__cta:hover { opacity: 0.85; }
+@media (max-width: 600px) {
+  .data-export-banner { flex-direction: column; gap: 10px; text-align: center; }
+}
+
 .fp-toggle {
   display: flex; align-items: center; gap: 6px;
   padding: 8px 14px; font-size: 0.8125rem; font-family: var(--font);
