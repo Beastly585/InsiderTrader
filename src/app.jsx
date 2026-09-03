@@ -4533,7 +4533,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                               <StarBtn ticker={s.ticker} watchlist={watchlist}/>
                             </div>
                           </div>
-                          {isMobile&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:2,paddingLeft:18}}>{s.company}</div>}
+                          {isMobile&&<div className="ws-mob-sub" style={{fontSize:10,color:'var(--text-3)',marginTop:1,paddingLeft:18}}>{s.company}</div>}
                         </div>
                         {!isMobile&&<div className="ws-row__cell ws-row__cell--overflow">{s.company}</div>}
                         {!isMobile&&<div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>{fmt.dateShort(s.lastTradeDate)}</div>}
@@ -4639,7 +4639,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                             <span className="ws-row__chevron ws-row__chevron--lg">{isExp?'▾':'▸'}</span>
                             <span className="ticker">{f.ticker}</span>
                           </div>
-                          {isMobile&&<div style={{fontSize:10,color:'var(--text-3)',marginTop:2,paddingLeft:18}}>{f.insiderName}</div>}
+                          {isMobile&&<div className="ws-mob-sub" style={{fontSize:10,color:'var(--text-3)',marginTop:1,paddingLeft:18}}>{f.insiderName}</div>}
                         </div>
                         {!isMobile&&<div className="ws-row__cell ws-row__cell--overflow" style={{fontSize:12}}>{f.insiderName}</div>}
                         <div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>
