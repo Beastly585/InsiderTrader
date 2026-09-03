@@ -4358,10 +4358,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <h1 className="ws-page-title">Market Data</h1>
           <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
         </div>
-        <div className="data-export-tile" onClick={()=>onUpgrade('data_export_direct')}>
-          <div className="data-export-tile__title">Download the whole database</div>
-          <button className="data-export-tile__cta">Buy Export — $39.99</button>
-        </div>
+        <button className="data-export-tile" onClick={()=>onUpgrade('data_export_direct')}>Download the Dataset</button>
       </div>
 
       {/* Stat strip */}
@@ -4557,7 +4554,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                             <div><span className="ws-data-label">Exec transactions</span><div className="ws-row__detail-val">{s.cSuiteBuys>0?`${s.cSuiteBuys} trade${s.cSuiteBuys!==1?'s':''}`:'—'}</div></div>
                             <div><span className="ws-data-label">Insiders</span><div className="ws-row__detail-val">{s.insiderCount}</div></div>
                             <div><span className="ws-data-label">Sector</span><div className="ws-row__detail-val">{s.sector||'—'}</div></div>
-                            <div><span className="ws-data-label">Conviction</span><div className="ws-row__detail-val">{s.conviction.toFixed(1)} / 15</div></div>
+                            <div><span className="ws-data-label">Conviction</span><div className="ws-row__detail-val">{Math.round(s.conviction)}</div></div>
                             {s.avgReturn!=null&&<div><span className="ws-data-label">Since trade</span><div className={`ws-row__detail-val${s.avgReturn>=0?' val-buy':' val-sell'}`}>{s.avgReturn>=0?'+':''}{s.avgReturn.toFixed(1)}%</div></div>}
                           </div>
 
@@ -5254,18 +5251,36 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                 metricText = `${r.om_buys||0} buys · ${fmt.money(r.bought_value)}`;
               }
               return (
-                <div key={r.insider_name}
-                  className={`ip-rail-row${isActive?' ip-rail-row--active':''}`}
-                  onClick={()=>{setSelected(r);setTxExpanded(new Set());}}>
-                  <span className="ip-rail-row__rank">{i+1}</span>
-                  <div className="ip-rail-row__info">
-                    <div className="ip-rail-row__name">{r.insider_name}</div>
-                    <div className="ip-rail-row__meta">
-                      <Badge type={role.badge}>{role.label}</Badge>
-                      {metricText&&<span style={{fontSize:10,color:metricColor,fontFamily:'var(--font-mono)',fontWeight:600}}>{metricText}</span>}
+                <div key={r.insider_name}>
+                  <div
+                    className={`ip-rail-row${isActive?' ip-rail-row--active':''}`}
+                    onClick={()=>{setSelected(isActive&&isMobile?null:r);setTxExpanded(new Set());}}>
+                    <span className="ip-rail-row__rank">{i+1}</span>
+                    <div className="ip-rail-row__info">
+                      <div className="ip-rail-row__name">{r.insider_name}</div>
+                      <div className="ip-rail-row__meta">
+                        <Badge type={role.badge}>{role.label}</Badge>
+                        {metricText&&<span style={{fontSize:10,color:metricColor,fontFamily:'var(--font-mono)',fontWeight:600}}>{metricText}</span>}
+                      </div>
                     </div>
+                    <div style={{width:72,flexShrink:0}}><ConvictionBar score={r.proxy_score??0} max={100}/></div>
                   </div>
-                  <div style={{width:72,flexShrink:0}}><ConvictionBar score={r.proxy_score??0} max={100}/></div>
+                  {/* Mobile: expand inline to show profile summary */}
+                  {isMobile&&isActive&&(
+                    <div className="ip-rail-row__expand">
+                      <div className="ip-rail-row__expand-stats">
+                        <div><span className="ws-data-label">Score</span><div className="ws-row__detail-val" style={{color:r.proxy_score>=65?'var(--green-600)':r.proxy_score>=35?'var(--accent)':'var(--text-3)'}}>{r.proxy_score??0}/100</div></div>
+                        {r.hit_rate!=null&&<div><span className="ws-data-label">Hit rate</span><div className="ws-row__detail-val" style={{color:r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-3)'}}>{r.hit_rate}%</div></div>}
+                        {r.avg_return!=null&&<div><span className="ws-data-label">Avg return</span><div className={`ws-row__detail-val${r.avg_return>=0?' val-buy':' val-sell'}`}>{r.avg_return>=0?'+':''}{r.avg_return.toFixed(1)}%</div></div>}
+                        <div><span className="ws-data-label">Buys</span><div className="ws-row__detail-val">{r.om_buys||0} · {fmt.money(r.bought_value)}</div></div>
+                        <div><span className="ws-data-label">Sells</span><div className="ws-row__detail-val">{r.om_sells||0} · {fmt.money(r.sold_value)}</div></div>
+                        <div><span className="ws-data-label">Trades scored</span><div className="ws-row__detail-val">{r.priced||0}</div></div>
+                      </div>
+                      <button className="ip-rail-row__expand-cta" onClick={(e)=>{e.stopPropagation();onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title},{expand:true});}}>
+                        View full profile →
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
