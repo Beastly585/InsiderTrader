@@ -1284,6 +1284,7 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
             <button className="topnav__icon-btn" onClick={()=>setDark(d=>!d)} aria-label="Toggle theme">
               {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
             </button>
+            {!pro&&<button className="topnav__upgrade" onClick={()=>onUpgrade('default')}>Go Pro</button>}
             <SignedIn>
               <UserButton afterSignOutUrl="/" appearance={{elements:{avatarBox:'clerk-avatar',userButtonTrigger:'clerk-avatar-trigger',userButtonAvatarBox:'clerk-avatar-box'}}}/>
             </SignedIn>
@@ -5186,7 +5187,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           <div className="ip-rail__list">
             {lbError?<div className="ws-empty" style={{color:'var(--red-600)',fontSize:11}}>{lbError}</div>
             :rows===null?<SkeletonRows count={15}/>
-            :sorted.length===0?<div className="ws-empty" style={{fontSize:11}}>No results.</div>
+            :lbLoading&&sorted.length===0?<SkeletonRows count={8}/>
+            :sorted.length===0?<div className="ws-empty" style={{fontSize:11}}>No results{search?' for "'+search+'"':''}.</div>
             :sorted.map((r,i)=>{
               const isActive=selected?.insider_name===r.insider_name;
               const role=insiderRoleLabel(r);
@@ -5645,7 +5647,8 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                 onClick={()=>switchTab(k)}>{l}</button>
             ))}
           </div>
-          <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
+          {!pro&&<button className="drawer__topbar-cta" onClick={()=>{ if(window.__seliUpgrade) window.__seliUpgrade('default'); }}>Go Pro</button>}
+          <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:pro?'auto':0}}><IconClose style={{width:12,height:12}}/></button>
         </div>
 
         {/* Filter toolbar — changes per active tab */}
@@ -5843,13 +5846,15 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
             {activeTab==='insiders'&&(
               <>
                 <div className="drawer__list-hdr">
-                  <span>{sortedLb.length} insiders{lbLoading&&sortedLb.length>0&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
+                  <span>{lbRows===null&&!lbSearchRows?'':''+sortedLb.length+' insiders'}{lbLoading&&sortedLb.length>0&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
                 </div>
                 {lbRows===null&&!lbSearchRows
-                  ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
-                  : sortedLb.length===0
-                    ? <div className="drawer__empty">{lbLoading?'Searching…':'No insiders match'}</div>
-                    : sortedLb.map((r,i)=>{
+                  ? <SkeletonRows count={12}/>
+                  : lbLoading&&sortedLb.length===0
+                    ? <SkeletonRows count={8}/>
+                    : sortedLb.length===0
+                      ? <div className="drawer__empty">No insiders match</div>
+                      : sortedLb.map((r,i)=>{
                       const isActive = detail?.type==='trader' && detail?.name===r.insider_name;
                       return (
                         <div key={i}
@@ -7375,7 +7380,8 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                 onClick={()=>{ if(k!=='data' && onSwitchTab) onSwitchTab(k); }}>{l}</button>
             ))}
           </div>
-          <button className="btn btn--ghost btn--icon" onClick={onClose} style={{marginLeft:'auto'}}><IconClose style={{width:12,height:12}}/></button>
+          <button className="drawer__topbar-cta" onClick={()=>onUpgrade&&onUpgrade('data_export')}>Export CSV</button>
+          <button className="btn btn--ghost btn--icon" onClick={onClose} style={{marginLeft:0}}><IconClose style={{width:12,height:12}}/></button>
         </div>
 
         <div className="drawer__toolbar">
@@ -7401,6 +7407,24 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               {!pro&&<button className="dash-tile-pill dash-tile-pill--locked" onClick={()=>onUpgrade&&onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>}
             </div>
           </div>
+          <div className="drawer__toolbar-divider"/>
+          <div className="drawer__filter-group">
+            <span className="drawer__filter-label">Date range</span>
+            <div className="drawer__date-range">
+              <input type="date" className="drawer__date-input" value={dateFrom}
+                min={!pro ? new Date(Date.now()-365*86400000).toISOString().split('T')[0] : undefined}
+                onChange={e=>{
+                  if (!pro) {
+                    const floor = new Date(Date.now()-365*86400000).toISOString().split('T')[0];
+                    if (e.target.value && e.target.value < floor) { onUpgrade&&onUpgrade('full_history'); return; }
+                  }
+                  setDateFrom(e.target.value);setDPreset(null);
+                }}/>
+              <span className="drawer__date-sep">→</span>
+              <input type="date" className="drawer__date-input" value={dateTo}
+                onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
+            </div>
+          </div>
           {(search||typeF||relF||sectorF||sourceF||openMkt||fromPortfolio||dPreset!==7||dateFrom||dateTo) && (
             <>
               <div className="drawer__toolbar-spacer"/>
@@ -7422,13 +7446,15 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
         <div className="drawer__body">
           <div className="drawer__list" ref={listRef}>
             <div className="drawer__list-hdr">
-              <span>{rows==null?'Loading…':`${rows.length}${rows.length===300?'+':''} filing${rows.length===1?'':'s'}`}{dataLoading&&rows!=null&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
+              <span>{rows==null?'':''+rows.length+(rows.length===300?'+':'')+' filing'+(rows.length===1?'':'s')}{dataLoading&&rows!=null&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
             </div>
             {rows===null
-              ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
-              : rows.length===0
-                ? <div className="drawer__empty">{dataLoading?'Loading…':'No filings match these filters'}</div>
-                : rows.map((r,i)=>{
+              ? <SkeletonRows count={12}/>
+              : dataLoading&&rows.length===0
+                ? <SkeletonRows count={8}/>
+                : rows.length===0
+                  ? <div className="drawer__empty">No filings match these filters</div>
+                  : rows.map((r,i)=>{
                   const tt=r.transaction_type;
                   const trade = {
                     ticker:r.ticker,company:r.company_name,company_name:r.company_name,
@@ -10862,6 +10888,14 @@ function AppInner() {
   const [drawerMode, setDrawerMode] = useState('auto');
   const [portfolioTickers, setPortfolioTickers] = useState([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(null); // null | 'default' | 'data_export' | 'portfolio' | 'notifications' | 'risk_management'
+
+  // Expose the upgrade trigger on window so deeply-nested components (like
+  // InsightsDrawer, which doesn't receive onUpgrade as a prop) can open the
+  // modal without prop-drilling through every intermediate layer.
+  useEffect(()=>{
+    window.__seliUpgrade = (f) => setShowUpgradeModal(f || 'default');
+    return ()=>{ window.__seliUpgrade = null; };
+  },[]);
 
   // Auto-open upgrade modal from URL params (e.g. /data-download redirects
   // signed-in users to /?purchase=data_export to land straight in checkout)

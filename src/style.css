@@ -3160,6 +3160,18 @@ td { padding:7px 11px; vertical-align:middle; }
 .drawer__topbar-logo {
   display: flex; align-items: center; gap: 7px; flex-shrink: 0;
 }
+/* CTA button in drawer topbar — sits between tabs and close button.
+   Compact, doesn't fight the tabs for attention. */
+.drawer__topbar-cta {
+  margin-left: auto; flex-shrink: 0;
+  padding: 5px 12px; font-size: 0.6875rem; font-weight: 700;
+  font-family: var(--font); letter-spacing: 0.2px;
+  background: var(--accent); color: var(--bg);
+  border: none; border-radius: var(--radius-md); cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.12s;
+}
+.drawer__topbar-cta:hover { opacity: 0.85; }
 
 /* Drawer header */
 .drawer__hdr--stacked {
@@ -3214,6 +3226,27 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .drawer__search:focus { border-color: var(--accent); }
 .drawer__search-wrap:focus-within .drawer__search-icon { color: var(--accent); }
+
+/* Date range picker — compact inline pair */
+.drawer__date-range {
+  display: flex; align-items: center; gap: 6px;
+}
+.drawer__date-sep {
+  color: var(--text-3); font-size: 0.75rem; flex-shrink: 0;
+}
+.drawer__date-input {
+  padding: 4px 6px; height: 26px; box-sizing: border-box;
+  background: var(--surface); border: 0.5px solid var(--border-md);
+  border-radius: var(--radius-md); font-size: 0.6875rem; font-family: var(--font);
+  color: var(--text); outline: none; color-scheme: dark;
+  max-width: 130px;
+}
+.drawer__date-input:focus { border-color: var(--accent); }
+/* Hide the native calendar icon to keep things compact — the input
+   itself still opens the picker on click/focus. */
+.drawer__date-input::-webkit-calendar-picker-indicator {
+  opacity: 0.4; cursor: pointer; filter: invert(1);
+}
 
 /* Two-pane body */
 .drawer__body {
