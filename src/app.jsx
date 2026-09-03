@@ -4341,10 +4341,12 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [drawerInitTicker, setDrawerInitTicker] = useState(null);
 
   function openSignalsDrawer(signal) {
+    if (isMobile) { onOpenDetail(signal ? {type:'signal',...signal} : null, {expand:true}); return; }
     setDrawerInitSignal(signal ? {type:'signal',...signal} : null);
     setDrawer('signals');
   }
   function openRawDrawer(ticker, company) {
+    if (isMobile) { onOpenDetail(ticker ? {type:'ticker',ticker,company} : null, {expand:true}); return; }
     setDrawerInitTicker(ticker ? {type:'ticker', ticker, company} : null);
     setDrawer('raw');
   }
@@ -4357,10 +4359,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
         </div>
         <div className="data-export-tile" onClick={()=>onUpgrade('data_export_direct')}>
-          <div className="data-export-tile__text">
-            <div className="data-export-tile__title">Download the whole database</div>
-            <div className="data-export-tile__sub">Every SEC Form 4 filing, 2010 → present. One CSV, one price.</div>
-          </div>
+          <div className="data-export-tile__title">Download the whole database</div>
           <button className="data-export-tile__cta">Buy Export — $39.99</button>
         </div>
       </div>
@@ -4388,12 +4387,15 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           </div>
           <div className="ws-toolbar-right">
             {tab==='raw'&&<button className="btn btn--primary btn--sm" style={{flexShrink:0}} onClick={()=>onUpgrade('data_export_direct')}>Export CSV</button>}
-            {/* Opens the correct full drawer for whichever tab is active */}
-            <button className="ws-toolbar-explore-btn"
+            {/* Opens the correct full drawer for whichever tab is active.
+                Hidden on mobile — the drawer's two-pane layout doesn't work
+                on phone-sized viewports; the inline expand + page navigation
+                already handles mobile well. */}
+            {!isMobile&&<button className="ws-toolbar-explore-btn"
               onClick={()=> tab==='signals' ? openSignalsDrawer(null) : openRawDrawer(null,null)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
               Explore full view
-            </button>
+            </button>}
           </div>
         </div>
 
@@ -4705,8 +4707,10 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
         )}
       </div>
 
-      {/* Full-screen explore drawer — signals/insiders use InsightsDrawer, raw uses DataDrawer */}
-      {(drawer==='signals'||drawer==='insiders')&&(
+      {/* Full-screen explore drawer — desktop only. On mobile, openSignalsDrawer
+          and openRawDrawer redirect to onOpenDetail instead of setting drawer state,
+          but this guard ensures the drawer never renders on small viewports. */}
+      {!isMobile&&(drawer==='signals'||drawer==='insiders')&&(
         <InsightsDrawer
           type={drawer}
           filings={filings}
@@ -4720,7 +4724,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           pro={pro}
         />
       )}
-      {drawer==='raw'&&(
+      {!isMobile&&drawer==='raw'&&(
         <DataDrawer
           initialDetail={drawerInitTicker || {type:'data',dataFilters:{days,sectorF,txType,rawRoleF}}}
           initialDetailStack={[]}
@@ -10879,6 +10883,7 @@ function AppInner() {
   const [helpMode, setHelpMode] = useState(false);
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
+  const isMobile = useIsMobile();
 
   // Register Clerk token getter globally so edgar.js can use it without
   // needing to import Clerk directly (edgar.js is a plain ES module)
@@ -11256,7 +11261,13 @@ function AppInner() {
           <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
         </>
       )}
-      {panelOpen && detailFull && (
+      {panelOpen && detailFull && isMobile && (
+        <>
+          <div className="panel-overlay" onClick={closeDetail}/>
+          <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
+        </>
+      )}
+      {panelOpen && detailFull && !isMobile && (
         drawerMode==='data' || (drawerMode==='auto' && detail?.dataFilters)
           ? <DataDrawer
               initialDetail={detail}
