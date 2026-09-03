@@ -155,10 +155,11 @@ function UpgradeModal({ feature, pro, onClose }) {
   const [progressText, setProgressText] = useState(null); // live row-count updates during a large export
 
   // Direct checkout: skip the info modal entirely and go straight to Stripe.
-  // Triggered by 'data_export_direct' feature flag from buttons that are
-  // already contextually clear (user knows what they're buying).
+  // Triggered by 'data_export_direct' or 'pro_direct' feature flags from
+  // buttons that are already contextually clear (user knows what they're buying).
   useEffect(()=>{
     if (feature==='data_export_direct') setCheckoutProduct('data_export');
+    if (feature==='pro_direct') setCheckoutProduct('pro');
   },[feature]);
 
   // Personalized per the specific action that triggered this modal — a
@@ -201,7 +202,7 @@ function UpgradeModal({ feature, pro, onClose }) {
     return (
       <CheckoutModal
         product={checkoutProduct}
-        onClose={() => { setCheckoutProduct(null); if (feature==='data_export_direct') onClose(); }}
+        onClose={() => { setCheckoutProduct(null); if (feature==='data_export_direct'||feature==='pro_direct') onClose(); }}
         onSuccess={async ()=>{
           const wasPro = checkoutProduct === 'pro';
           setProcessing(true);
@@ -1295,7 +1296,7 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
             <button className="topnav__icon-btn" onClick={()=>setDark(d=>!d)} aria-label="Toggle theme">
               {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
             </button>
-            {!pro&&<button className="topnav__upgrade" onClick={()=>onUpgrade('default')}>Go Pro</button>}
+            {!pro&&<button className="topnav__upgrade" onClick={()=>onUpgrade('pro_direct')}>Go Pro</button>}
             <SignedIn>
               <UserButton afterSignOutUrl="/" appearance={{elements:{avatarBox:'clerk-avatar',userButtonTrigger:'clerk-avatar-trigger',userButtonAvatarBox:'clerk-avatar-box'}}}/>
             </SignedIn>
@@ -5741,7 +5742,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                 onClick={()=>switchTab(k)}>{l}</button>
             ))}
           </div>
-          {!pro&&<button className="drawer__topbar-cta" onClick={()=>{ if(window.__seliUpgrade) window.__seliUpgrade('default'); }}>Go Pro</button>}
+          {!pro&&<button className="drawer__topbar-cta" onClick={()=>{ if(window.__seliUpgrade) window.__seliUpgrade('pro_direct'); }}>Go Pro</button>}
           <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:pro?'auto':0}}><IconClose style={{width:12,height:12}}/></button>
         </div>
 
@@ -11410,38 +11411,80 @@ const SEO_TITLES = {
   '/privacy':       'Privacy Policy — Seli',
   '/cookies':       'Cookie Policy — Seli',
   '/help':          'Help Center — Seli',
+  '/data':          'Insider Trading Signals & Raw SEC Filings | Market Data — Seli',
+  '/insiders':      'Top Insider Traders Ranked by Performance | Leaderboard — Seli',
 };
 const SEO_DESCRIPTIONS = {
   '/':              'Track SEC Form 4 insider trades and congressional stock disclosures in real time. Scored by conviction, with instant alerts and portfolio integration. Free to start.',
   '/about':         'The peer-reviewed research behind insider trading signals. How corporate insider buying outperforms the market by 4-5% annually, and how Seli scores each trade using findings from Seyhun, Lakonishok & Lee, and Cohen et al.',
   '/data-download': 'Download the complete SEC Form 4 insider trading dataset. 10+ years of corporate executive trades as structured CSV. One-time purchase, $39.99. Works with Excel, Python, R.',
+  '/data':          'Live feed of SEC Form 4 insider trades scored by conviction. Filter by sector, type, role, and date. Export to CSV.',
+  '/insiders':      'See which corporate insiders have the best track records. Ranked by hit rate, average return, and proxy score across 10+ years of open-market trades.',
 };
 
 function useSEO() {
   React.useEffect(() => {
     const path = window.location.pathname.replace(/\/$/, '') || '/';
+    const origin = 'https://seli.app';
+    const url = `${origin}${path === '/' ? '' : path}`;
+    const title = SEO_TITLES[path] || 'Seli — Insider Trading Intelligence';
+    const desc = SEO_DESCRIPTIONS[path] || SEO_DESCRIPTIONS['/'];
+
     // Canonical
     let link = document.querySelector('link[rel="canonical"]');
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'canonical';
-      document.head.appendChild(link);
-    }
-    link.href = `https://seli.app${path === '/' ? '' : path}`;
+    if (!link) { link = document.createElement('link'); link.rel = 'canonical'; document.head.appendChild(link); }
+    link.href = url;
+
     // Title
-    document.title = SEO_TITLES[path] || 'Seli — Insider Trading Intelligence';
+    document.title = title;
+
     // Meta description
-    const desc = SEO_DESCRIPTIONS[path];
-    if (desc) {
-      let meta = document.querySelector('meta[name="description"]');
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.name = 'description';
-        document.head.appendChild(meta);
-      }
-      meta.content = desc;
+    setMeta('description', desc);
+
+    // Open Graph
+    setMeta('og:title', title, 'property');
+    setMeta('og:description', desc, 'property');
+    setMeta('og:url', url, 'property');
+    setMeta('og:type', 'website', 'property');
+    setMeta('og:site_name', 'Seli', 'property');
+    setMeta('og:image', `${origin}/og-image.png`, 'property');
+
+    // Twitter Card
+    setMeta('twitter:card', 'summary_large_image');
+    setMeta('twitter:title', title);
+    setMeta('twitter:description', desc);
+    setMeta('twitter:image', `${origin}/og-image.png`);
+
+    // JSON-LD structured data — WebApplication + Organization
+    let script = document.querySelector('script[data-seli-jsonld]');
+    if (!script) {
+      script = document.createElement('script');
+      script.type = 'application/ld+json';
+      script.setAttribute('data-seli-jsonld', '');
+      document.head.appendChild(script);
     }
+    script.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Seli',
+      url: origin,
+      description: SEO_DESCRIPTIONS['/'],
+      applicationCategory: 'FinanceApplication',
+      operatingSystem: 'Web',
+      offers: [
+        { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free', description: 'Live dashboard, signals, 7-day window' },
+        { '@type': 'Offer', price: '6.99', priceCurrency: 'USD', name: 'Pro', description: 'Full history, alerts, portfolio linking', priceSpecification: { '@type': 'UnitPriceSpecification', billingDuration: 'P1M' } },
+        { '@type': 'Offer', price: '39.99', priceCurrency: 'USD', name: 'Data Export', description: 'Complete SEC Form 4 dataset as CSV' },
+      ],
+      creator: { '@type': 'Organization', name: 'Seli', url: origin },
+    });
   }, []);
+}
+
+function setMeta(nameOrProp, content, attr='name') {
+  let el = document.querySelector(`meta[${attr}="${nameOrProp}"]`);
+  if (!el) { el = document.createElement('meta'); el.setAttribute(attr, nameOrProp); document.head.appendChild(el); }
+  el.content = content;
 }
 
 export default function App() {

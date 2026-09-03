@@ -5783,8 +5783,8 @@ td { padding:7px 11px; vertical-align:middle; }
 .bottomnav__btn--active::before {
   content: '';
   position: absolute;
-  inset: 6px auto 6px auto;
-  width: 48px; border-radius: 8px;
+  inset: 4px auto 4px auto;
+  width: 52px; border-radius: 10px;
   background: var(--accent);
   opacity: 0.22;
   pointer-events: none;
