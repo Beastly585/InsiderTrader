@@ -5918,6 +5918,29 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-clear-btn { padding:4px 9px; font-size:11px; color:var(--text-3); background:none; border:0.5px solid var(--border); border-radius:var(--radius-md); cursor:pointer; font-family:var(--font); white-space:nowrap; transition:color .1s; }
 .ws-clear-btn:hover { color:var(--text); }
 
+/* Mobile filter toggle */
+.ws-filter-toggle {
+  flex-shrink: 0; padding: 5px 10px;
+  font-size: 11px; font-weight: 600; font-family: var(--font);
+  color: var(--text-2); background: var(--surface-2);
+  border: 0.5px solid var(--border); border-radius: var(--radius-md);
+  cursor: pointer; white-space: nowrap;
+}
+.ws-filter-bar__row--search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+}
+
+/* Insider expand — companies + recent trades */
+.ip-rail-row__expand-companies { margin-top: 8px; }
+.ip-rail-row__expand-trades { margin-top: 8px; }
+.ip-rail-row__expand-trade {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 0; border-bottom: 0.5px solid var(--border);
+}
+.ip-rail-row__expand-trade:last-child { border-bottom: none; }
+.ws-type-badge--sm { font-size: 9px; padding: 1px 4px; }
+
 /* ── Column header base ────────────────────────────────────────────── */
 /* Specific column templates defined in the DATA PAGE section below.   */
 .ws-col-hdrs { display:grid; border-bottom:0.5px solid var(--border-md); background:var(--surface); }

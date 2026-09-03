@@ -4240,6 +4240,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [search, setSearch]     = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo]     = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [sigSort, setSigSort]   = useState('conviction');
   const [sigDir, setSigDir]     = useState(-1);
   const [rawSort, setRawSort]   = useState('date');
@@ -4396,14 +4397,20 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           </div>
         </div>
 
-        {/* Filter bar */}
+        {/* Filter bar — collapses on mobile behind a toggle */}
         <div className="ws-filter-bar">
-          <div className="ws-filter-bar__row">
+          <div className="ws-filter-bar__row ws-filter-bar__row--search">
             <div className="ws-search-wrap">
               <span className="ws-search-icon">⌕</span>
               <input className="ws-search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder={tab==='signals'?'Ticker or company…':'Ticker, company, or insider…'}/>
               {search&&<button className="ws-search-clear" onClick={()=>setSearch('')}>×</button>}
             </div>
+            {isMobile&&<button className="ws-filter-toggle" onClick={()=>setFiltersOpen(f=>!f)}>
+              Filters{hasFilters?' ●':''} {filtersOpen?'▴':'▾'}
+            </button>}
+          </div>
+          {(!isMobile||filtersOpen)&&<>
+          <div className="ws-filter-bar__row">
 
             {tab==='signals'&&<>
               <div className="ws-filter-group">
@@ -4486,6 +4493,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             </div>
             {hasFilters&&<button className="ws-clear-btn" onClick={resetFilters}>Clear</button>}
           </div>
+          </>}
         </div>
 
         {/* ── SIGNALS TABLE ─────────────────────────────────────────────── */}
@@ -5265,7 +5273,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     </div>
                     <div style={{width:72,flexShrink:0}}><ConvictionBar score={r.proxy_score??0} max={100}/></div>
                   </div>
-                  {/* Mobile: expand inline to show profile summary */}
+                  {/* Mobile: inline profile with stats + recent trades */}
                   {isMobile&&isActive&&(
                     <div className="ip-rail-row__expand">
                       <div className="ip-rail-row__expand-stats">
@@ -5276,9 +5284,37 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                         <div><span className="ws-data-label">Sells</span><div className="ws-row__detail-val">{r.om_sells||0} · {fmt.money(r.sold_value)}</div></div>
                         <div><span className="ws-data-label">Trades scored</span><div className="ws-row__detail-val">{r.priced||0}</div></div>
                       </div>
-                      <button className="ip-rail-row__expand-cta" onClick={(e)=>{e.stopPropagation();onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title},{expand:true});}}>
-                        View full profile →
-                      </button>
+                      {profileCompanies.length>0&&(
+                        <div className="ip-rail-row__expand-companies">
+                          <span className="ws-data-label" style={{marginBottom:4,display:'block'}}>Companies</span>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                            {profileCompanies.slice(0,6).map(c=>(
+                              <span key={c.ticker} className="ip-aff-badge" style={{fontSize:10,padding:'2px 6px'}}>
+                                <span className="ticker" style={{fontSize:10}}>{c.ticker}</span>
+                                {c.buys>0&&<span className="val-buy" style={{fontSize:9,fontWeight:700}}>+{c.buys}</span>}
+                                {c.sells>0&&<span className="val-sell" style={{fontSize:9,fontWeight:700}}>−{c.sells}</span>}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {profileLoading?<SkeletonRows count={3}/>
+                      :profileTrades.length>0&&(
+                        <div className="ip-rail-row__expand-trades">
+                          <span className="ws-data-label" style={{marginBottom:4,display:'block'}}>Recent trades</span>
+                          {profileTrades.slice(0,4).map((f,ti)=>{
+                            const isBuy=f.transactionType==='buy';
+                            return (
+                              <div key={ti} className="ip-rail-row__expand-trade">
+                                <span style={{fontSize:10,color:'var(--text-3)',minWidth:56}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                                <span className="ticker" style={{fontSize:10,minWidth:36}}>{f.ticker}</span>
+                                <span className={`ws-type-badge ws-type-badge--sm${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span>
+                                <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`} style={{marginLeft:'auto',fontSize:11}}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -8216,10 +8252,10 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
         </div>
         <div className="wl-upsell__features">
           {[
-            {icon:'📈', title:'Track your portfolio', body:'Follow any ticker and see every insider trade on stocks you own or are watching.'},
-            {icon:'🔔', title:'Instant alerts', body:'Email alerts when a C-suite executive makes an open-market buy or sell on a stock you follow.'},
-            {icon:'🔗', title:'Link your brokerage', body:'Connect Fidelity, Alpaca, or 400+ brokers to automatically populate your watchlist from your real holdings.'},
-            {icon:'📊', title:'Insider history', body:'Deep-dive into any followed insider\'s full trade history, hit rate, and average return.'},
+            {icon:'◎', title:'Track your portfolio', body:'Follow any ticker and see every insider trade on stocks you own or are watching.'},
+            {icon:'◉', title:'Instant alerts', body:'Email alerts when a C-suite executive makes an open-market buy or sell on a stock you follow.'},
+            {icon:'⊘', title:'Link your brokerage', body:'Connect Fidelity, Alpaca, or 400+ brokers to automatically populate your watchlist from your real holdings.'},
+            {icon:'◈', title:'Insider history', body:'Deep-dive into any followed insider\'s full trade history, hit rate, and average return.'},
           ].map(f=>(
             <div key={f.title} className="wl-upsell__feature">
               <span className="wl-upsell__feature-icon">{f.icon}</span>
