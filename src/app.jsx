@@ -10887,8 +10887,8 @@ function LandingPage({ onEnter, dark, setDark }) {
 // External paths are deliberately friendlier than internal page ids
 // (page id 'signals' -> path 'insights') so shared/indexed URLs read well
 // without renaming the internal id everywhere it's already used.
-const PAGE_TO_PATH = { home:'home', dashboard:'', signals:'insights', data:'data', watchlist:'watchlist', settings:'settings' };
-const PATH_TO_PAGE = { '':'dashboard', home:'home', insights:'signals', data:'data', watchlist:'watchlist', settings:'settings' };
+const PAGE_TO_PATH = { home:'', dashboard:'data', signals:'insights', data:'data', watchlist:'watchlist', settings:'settings' };
+const PATH_TO_PAGE = { '':'home', home:'home', data:'dashboard', insights:'signals', watchlist:'watchlist', settings:'settings' };
 
 function pathFromAppState(page, detail) {
   // Detail deep-link takes priority — the panel overlays whatever page is
@@ -10911,12 +10911,7 @@ function appStateFromPath(pathname) {
   if (parts[0] === 'insider' && parts[1]) {
     return { page: 'dashboard', detail: { type: 'trader', name: decodeURIComponent(parts[1]), title: '' } };
   }
-  // Root path ('') has no explicit page name to look up — on mobile this
-  // should land on the new consolidated Home rather than the desktop
-  // Dashboard, since Home is what "quick check on my phone" now means.
-  // A URL that explicitly said /insights, /data, etc. is respected as-is
-  // on any device; this default only applies to a bare '/'.
-  if (!parts[0] && isMobileViewport()) return { page: 'home', detail: null };
+  if (!parts[0]) return { page: 'home', detail: null };
   const page = PATH_TO_PAGE[parts[0] || ''];
   return { page: page || 'dashboard', detail: null };
 }
@@ -11422,7 +11417,8 @@ const SEO_TITLES = {
   '/cookies':       'Cookie Policy — Seli',
   '/help':          'Help Center — Seli',
   '/data':          'Insider Trading Signals & Raw SEC Filings | Market Data — Seli',
-  '/insiders':      'Top Insider Traders Ranked by Performance | Leaderboard — Seli',
+  '/insights':      'Top Insider Traders Ranked by Performance | Leaderboard — Seli',
+  '/home':          'Seli — Know When Insiders Move | SEC Form 4 & Congressional Stock Trades',
 };
 const SEO_DESCRIPTIONS = {
   '/':              'Track SEC Form 4 insider trades and congressional stock disclosures in real time. Scored by conviction, with instant alerts and portfolio integration. Free to start.',
