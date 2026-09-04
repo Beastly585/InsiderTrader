@@ -168,42 +168,82 @@ def fetch_portfolio_tickers_by_user() -> dict[str, set[str]]:
         return {}
 
 
-def build_ticker_card(t: dict) -> str:
-    """Single-column stacked card per ticker — renders identically on any
-    viewport width. No multi-column table rows that squeeze on mobile."""
+def ticker_context_blurb(t: dict) -> str:
+    """Factual one-liner about WHY this ticker is notable this period.
+    Purely descriptive — what happened, not what might happen."""
+    parts = []
+    tier = t.get("tier", "low")
+    insider_count = t.get("insider_count", 0)
+    net = t.get("net_value", 0)
+    exec_count = t.get("exec_count", 0)
+
+    if exec_count >= 3:
+        parts.append(f"{exec_count} C-suite executives traded")
+    elif exec_count >= 2:
+        parts.append(f"{exec_count} executives among {insider_count} insiders")
+    elif insider_count >= 3:
+        parts.append(f"{insider_count} insiders filed trades")
+
+    if tier == "high":
+        parts.append("includes executive trade over $1M")
+
+    if abs(net) >= 10_000_000:
+        parts.append(f"{'net buying' if net > 0 else 'net selling'} over $10M")
+
+    return " · ".join(parts) if parts else ""
+
+
+def build_ticker_card(t: dict, is_portfolio: bool = False) -> str:
+    """Wider card with context blurb and optional portfolio highlight."""
     color = C_GREEN if t["net_value"] >= 0 else C_RED
     tier_label = TIER_LABELS.get(t["tier"], "Open-market")
+    context = ticker_context_blurb(t)
+    card_border = f"border-left:4px solid {C_ACCENT};" if is_portfolio else ""
+
+    portfolio_tag = f'''
+            <span style="display:inline-block;background:{C_SECTION_BG};color:{C_ACCENT_STR};font-size:10px;font-weight:700;padding:3px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;margin-left:8px;">You hold this</span>''' if is_portfolio else ""
+
     return f"""
-    <tr><td style="padding:0 0 8px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid {C_BORDER};border-radius:8px;overflow:hidden;">
-        <tr><td style="padding:14px 16px;">
-          <!--[if mso]><table width="100%"><tr><td width="70%"><![endif]-->
-          <div style="display:inline-block;vertical-align:top;width:65%;">
-            <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:700;text-decoration:none;font-size:15px;line-height:1.3;">{t['ticker']}</a>
-            <div style="color:{C_TEXT_MUTED};font-size:12px;line-height:1.4;margin-top:2px;">{t['company']}</div>
+    <tr><td style="padding:0 0 10px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid {C_BORDER};border-radius:10px;overflow:hidden;{card_border}">
+        <tr><td style="padding:16px 18px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="vertical-align:top;width:60%;">
+              <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:800;text-decoration:none;font-size:16px;line-height:1.3;letter-spacing:-0.3px;">{t['ticker']}</a>{portfolio_tag}
+              <div style="color:{C_TEXT_MUTED};font-size:12px;line-height:1.4;margin-top:3px;">{t['company']}</div>
+            </td>
+            <td style="vertical-align:top;text-align:right;width:40%;">
+              <div style="background:{color};color:#fff;font-weight:700;font-size:13px;padding:5px 12px;border-radius:6px;display:inline-block;">{fmt_money(t['net_value'])}</div>
+            </td>
+          </tr></table>
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid {C_BORDER};">
+            <div style="font-size:12px;color:{C_TEXT_MUTED};line-height:1.4;">
+              {tier_label} · {t['insider_count']} insider{'s' if t['insider_count'] != 1 else ''}
+            </div>
           </div>
-          <!--[if mso]></td><td width="30%" align="right"><![endif]-->
-          <div style="display:inline-block;vertical-align:top;width:30%;text-align:right;">
-            <div style="color:{color};font-weight:700;font-size:15px;line-height:1.3;">{fmt_money(t['net_value'])}</div>
-          </div>
-          <!--[if mso]></td></tr></table><![endif]-->
-          <div style="margin-top:8px;font-size:12px;color:{C_TEXT_MUTED};line-height:1.4;">
-            {tier_label} &middot; {t['insider_count']} insider{'s' if t['insider_count'] != 1 else ''}
-          </div>
+          {f'<div style="margin-top:8px;padding:7px 10px;background:#F9FAFB;border-radius:6px;font-size:11px;color:{C_TEXT_MUTED};line-height:1.4;">{context}</div>' if context else ''}
         </td></tr>
       </table>
     </td></tr>"""
 
 
-def build_section(title: str, subtitle: str, tickers: list[dict]) -> str:
+# Section icons — simple Unicode glyphs that render in every email client.
+SECTION_ICONS = {
+    "signals":   "◉",
+    "portfolio": "◈",
+    "watchlist": "☆",
+}
+
+def build_section(key: str, title: str, subtitle: str, tickers: list[dict], is_portfolio: bool = False) -> str:
     if not tickers:
         return ""
-    cards = "".join(build_ticker_card(t) for t in tickers)
+    icon = SECTION_ICONS.get(key, "·")
+    cards = "".join(build_ticker_card(t, is_portfolio=is_portfolio) for t in tickers)
     return f"""
-    <tr><td style="padding:20px 0 8px;">
-      <div style="background:{C_SECTION_BG};border-radius:8px;padding:12px 16px;margin-bottom:8px;">
-        <div style="font-size:13px;font-weight:700;color:{C_ACCENT_STR};text-transform:uppercase;letter-spacing:0.04em;">{title}</div>
-        <div style="font-size:12px;color:{C_TEXT_MUTED};margin-top:2px;">{subtitle}</div>
+    <tr><td style="padding:24px 0 10px;">
+      <div style="background:{C_SECTION_BG};border-radius:10px;padding:14px 18px;margin-bottom:10px;">
+        <div style="font-size:14px;font-weight:700;color:{C_ACCENT_STR};letter-spacing:-0.2px;">{icon} {title} <span style="color:{C_TEXT_MUTED};font-weight:400;font-size:12px;">({len(tickers)})</span></div>
+        <div style="font-size:12px;color:{C_TEXT_MUTED};margin-top:3px;">{subtitle}</div>
       </div>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         {cards}
@@ -215,18 +255,19 @@ def build_digest_html(period_label: str, insights: list[dict], portfolio_movers:
     total = len(insights) + len(portfolio_movers) + len(watchlist_movers)
     day_or_week = period_label.replace('daily','day').replace('weekly','week')
     sections = ""
-    if not watchlist_only:
-        sections += build_section("Insider activity", f"Open-market trades filed in the past {day_or_week}", insights)
-        sections += build_section("In your portfolio", "Insider trades on tickers you hold", portfolio_movers)
-    sections += build_section("On your watchlist", "Insider trades on tickers you follow", watchlist_movers)
 
-    # Preheader — hidden text that appears in the inbox preview line (Gmail,
-    # Apple Mail, Outlook) before the user opens the email. Without this,
-    # clients fall back to the first visible body text, which is usually the
-    # section header ("INSIDER ACTIVITY") — not useful as a preview.
+    # Summary stats for the header
+    all_tickers = insights + portfolio_movers + watchlist_movers
+    total_buying = sum(1 for t in all_tickers if t["net_value"] > 0)
+    total_selling = sum(1 for t in all_tickers if t["net_value"] <= 0)
+    total_net = sum(t["net_value"] for t in all_tickers)
+
+    if not watchlist_only:
+        sections += build_section("signals", "Strong signals", f"Most notable open-market activity this {day_or_week}", insights)
+        sections += build_section("portfolio", "In your portfolio", "Insider trades on tickers you hold", portfolio_movers, is_portfolio=True)
+    sections += build_section("watchlist", "On your watchlist", "Insider trades on tickers you follow", watchlist_movers)
+
     preheader = f"{total} ticker{'s' if total!=1 else ''} with insider activity this {day_or_week}."
-    # Pad with invisible whitespace so clients don't pull in body text after
-    # the preheader to fill the preview line.
     preheader_pad = "&nbsp;&zwnj;" * 80
 
     return f"""<!DOCTYPE html>
@@ -241,30 +282,45 @@ def build_digest_html(period_label: str, insights: list[dict], portfolio_movers:
 <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{preheader}{preheader_pad}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
 <tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:{C_BG};border-radius:12px;overflow:hidden;">
-  <tr><td style="background:linear-gradient(135deg,{C_ACCENT} 0%,{C_ACCENT_STR} 60%,{C_AQUA} 100%);padding:20px 24px;">
-    <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-0.02em;">Seli</span>
-    <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">{period_label.capitalize()} digest</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:{C_BG};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+  <tr><td style="background:linear-gradient(135deg,{C_ACCENT} 0%,{C_ACCENT_STR} 60%,{C_AQUA} 100%);padding:22px 24px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td><span style="color:#ffffff;font-size:20px;font-weight:800;letter-spacing:-0.3px;">Seli</span></td>
+      <td style="text-align:right;"><span style="color:rgba(255,255,255,0.9);font-size:13px;font-weight:600;">{period_label.capitalize()} digest</span></td>
+    </tr></table>
   </td></tr>
-  <tr><td style="padding:20px 20px 4px;">
-    <p style="font-size:14px;color:{C_TEXT};margin:0;">{total} ticker{'s' if total!=1 else ''} with insider activity this {day_or_week}:</p>
+  <!-- Summary strip -->
+  <tr><td style="padding:18px 22px;background:#FAFBFC;border-bottom:1px solid {C_BORDER};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td style="text-align:center;width:33%;">
+        <div style="font-size:22px;font-weight:800;color:{C_TEXT};letter-spacing:-0.5px;">{total}</div>
+        <div style="font-size:11px;color:{C_TEXT_MUTED};margin-top:2px;">tickers</div>
+      </td>
+      <td style="text-align:center;width:33%;">
+        <div style="font-size:22px;font-weight:800;color:{C_GREEN};letter-spacing:-0.5px;">{total_buying}</div>
+        <div style="font-size:11px;color:{C_TEXT_MUTED};margin-top:2px;">net buying</div>
+      </td>
+      <td style="text-align:center;width:34%;">
+        <div style="font-size:22px;font-weight:800;color:{C_RED};letter-spacing:-0.5px;">{total_selling}</div>
+        <div style="font-size:11px;color:{C_TEXT_MUTED};margin-top:2px;">net selling</div>
+      </td>
+    </tr></table>
   </td></tr>
-  <tr><td style="padding:0 20px;">
+  <tr><td style="padding:0 22px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       {sections}
     </table>
   </td></tr>
-  <tr><td style="padding:20px;">
-    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none;">Open Seli →</a>
+  <tr><td style="padding:22px;text-align:center;">
+    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:14px;padding:13px 32px;border-radius:8px;text-decoration:none;">Open Seli →</a>
   </td></tr>
-  <tr><td style="padding:0 20px 20px;">
+  <tr><td style="padding:0 22px 22px;">
     <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0 0 6px;">
       You're getting this because you enabled the {period_label} digest in Settings.
       This is a factual summary of publicly filed insider trading disclosures, not financial advice or a recommendation to buy or sell any security.
     </p>
     <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0;">
       <a href="{APP_URL}/settings?section=notifications" style="color:{C_TEXT_MUTED};">Manage email preferences</a>
-      — turn off just this digest, or turn off every Seli email (digests and instant alerts) from the same page.
     </p>
   </td></tr>
 </table>
@@ -336,6 +392,7 @@ def main():
             tickers.append({
                 "ticker": ticker, "company": trs[0]["company_name"],
                 "tier": tier, "insider_count": len({t["insider_name"] for t in trs}),
+                "exec_count": sum(1 for t in trs if t["insider_title"] and CSUITE_TITLE_RE.search(t["insider_title"])),
                 "net_value": net,
             })
         tickers.sort(key=lambda t: t["net_value"], reverse=True)

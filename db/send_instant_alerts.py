@@ -165,26 +165,85 @@ def fetch_portfolio_tickers() -> dict[str, set[str]]:
         return {}
 
 
-def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
+def get_insider_context(conn, insider_name: str, ticker: str, trade_date) -> str:
+    """Generate a one-line factual context about this trade.
+    No predictions, no recommendations — just what's observable in the filing history."""
+    cur = conn.cursor()
+    try:
+        # How many trades has this insider made on this ticker?
+        cur.execute("""
+            SELECT COUNT(*),
+                   MIN(COALESCE(transaction_date, filing_date)),
+                   MAX(COALESCE(transaction_date, filing_date))
+            FROM public.filings
+            WHERE insider_name = %s AND ticker = %s AND is_open_market = true
+        """, (insider_name, ticker))
+        total, first_date, last_date = cur.fetchone()
+
+        # Last trade before this one
+        cur.execute("""
+            SELECT transaction_type, COALESCE(transaction_date, filing_date)
+            FROM public.filings
+            WHERE insider_name = %s AND ticker = %s AND is_open_market = true
+              AND COALESCE(transaction_date, filing_date) < %s
+            ORDER BY COALESCE(transaction_date, filing_date) DESC LIMIT 1
+        """, (insider_name, ticker, trade_date))
+        prev = cur.fetchone()
+
+        # How many OTHER insiders traded this ticker in the last 7 days?
+        cur.execute("""
+            SELECT COUNT(DISTINCT insider_name)
+            FROM public.filings
+            WHERE ticker = %s AND is_open_market = true
+              AND COALESCE(transaction_date, filing_date) >= %s - INTERVAL '7 days'
+              AND insider_name != %s
+        """, (ticker, trade_date, insider_name))
+        cluster_count = cur.fetchone()[0]
+
+        # Build context line
+        parts = []
+        if prev:
+            prev_type, prev_date = prev
+            months_gap = max(1, (trade_date - prev_date).days // 30) if trade_date and prev_date else None
+            if months_gap and months_gap >= 6:
+                parts.append(f"First open-market trade in {months_gap} months")
+        elif total <= 1:
+            parts.append("First recorded open-market trade on this ticker")
+
+        if cluster_count >= 2:
+            parts.append(f"{cluster_count + 1} insiders trading this week")
+
+        if total and total >= 5:
+            parts.append(f"{total} total trades on record")
+
+        return " · ".join(parts) if parts else ""
+    except Exception:
+        return ""
+
+
+def build_email(conn, user_email: str, matches: list[dict]) -> tuple[str, str]:
     n = len(matches)
     if n == 1:
         m0 = matches[0]
         action0 = "buy" if m0["transaction_type"] == "buy" else "sale"
         subject = f"{m0['ticker']} — insider {action0} filed ({m0['insider_name']})"
     else:
-        tickers = list(dict.fromkeys(m["ticker"] for m in matches))  # unique, order-preserving
+        tickers = list(dict.fromkeys(m["ticker"] for m in matches))
         ticker_preview = ", ".join(tickers[:3]) + (f" +{len(tickers)-3}" if len(tickers) > 3 else "")
         subject = f"{n} insider filings — {ticker_preview}"
 
     cards = ""
     for m in matches:
+        reason = m["reason"]
         reason_label = {
             "watchlist_ticker":   "Watched ticker",
             "followed_insider":   "Followed insider",
             "high_conviction":    "Large executive buy",
             "reversal":           "Direction change",
             "portfolio_holding":  "In your portfolio",
-        }[m["reason"]]
+        }[reason]
+
+        is_portfolio = reason == "portfolio_holding"
         color = C_GREEN if m["transaction_type"] == "buy" else C_RED
         action = "Buy" if m["transaction_type"] == "buy" else "Sell"
         date_label = m["trade_date"].strftime("%b %d, %Y") if m["trade_date"] else "—"
@@ -192,27 +251,42 @@ def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
         price_label = f"@ ${m['price_per_share']:,.2f}" if m["price_per_share"] else None
         detail_bits = " · ".join(b for b in (shares_label, price_label) if b)
 
+        # Context line from trade history
+        context = get_insider_context(conn, m["insider_name"], m["ticker"], m["trade_date"])
+
+        # Portfolio trades get a highlighted left border
+        card_border = f"border-left:4px solid {C_ACCENT};" if is_portfolio else ""
+        portfolio_banner = f'''
+            <div style="background:{C_SECTION_BG};color:{C_ACCENT_STR};font-size:11px;font-weight:700;padding:5px 10px;border-radius:4px;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">
+              You hold {m['ticker']}
+            </div>''' if is_portfolio else ""
+
         cards += f"""
-    <tr><td style="padding:0 0 8px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid {C_BORDER};border-radius:8px;overflow:hidden;">
-        <tr><td style="padding:14px 16px;">
+    <tr><td style="padding:0 0 10px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid {C_BORDER};border-radius:10px;overflow:hidden;{card_border}">
+        <tr><td style="padding:16px 18px;">
+          {portfolio_banner}
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="vertical-align:top;">
-              <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:700;text-decoration:none;font-size:15px;line-height:1.3;">{m['ticker']}</a>
-              <div style="color:{C_TEXT_MUTED};font-size:12px;line-height:1.4;margin-top:2px;">{m['company_name']}</div>
+            <td style="vertical-align:top;width:60%;">
+              <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:800;text-decoration:none;font-size:17px;line-height:1.3;letter-spacing:-0.3px;">{m['ticker']}</a>
+              <div style="color:{C_TEXT_MUTED};font-size:12px;line-height:1.4;margin-top:3px;">{m['company_name']}</div>
             </td>
-            <td style="vertical-align:top;text-align:right;">
-              <div style="color:{color};font-weight:700;font-size:15px;line-height:1.3;">{action} · {fmt_money(m['value'])}</div>
+            <td style="vertical-align:top;text-align:right;width:40%;">
+              <div style="background:{color};color:#fff;font-weight:700;font-size:13px;padding:5px 12px;border-radius:6px;display:inline-block;">{action} · {fmt_money(m['value'])}</div>
             </td>
           </tr></table>
-          <div style="margin-top:10px;padding-top:10px;border-top:1px solid {C_BORDER};">
-            <div style="font-size:13px;color:{C_TEXT};line-height:1.4;">{m['insider_name']}{f' · <span style="color:{C_TEXT_MUTED};">{m["insider_title"]}</span>' if m.get('insider_title') else ''}</div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid {C_BORDER};">
+            <div style="font-size:13px;color:{C_TEXT};line-height:1.4;font-weight:600;">{m['insider_name']}</div>
+            {f'<div style="font-size:12px;color:{C_TEXT_MUTED};margin-top:1px;">{m["insider_title"]}</div>' if m.get('insider_title') else ''}
             <div style="font-size:12px;color:{C_TEXT_MUTED};line-height:1.4;margin-top:4px;">
               {date_label}{f' · {detail_bits}' if detail_bits else ''}
             </div>
           </div>
-          <div style="margin-top:8px;">
-            <span style="display:inline-block;background:{C_SECTION_BG};color:{C_ACCENT_STR};font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;line-height:1.3;">{reason_label}</span>
+          {f'''<div style="margin-top:10px;padding:8px 10px;background:#F9FAFB;border-radius:6px;font-size:12px;color:{C_TEXT_MUTED};line-height:1.4;">
+            {context}
+          </div>''' if context else ''}
+          <div style="margin-top:10px;">
+            <span style="display:inline-block;background:{C_SECTION_BG};color:{C_ACCENT_STR};font-size:11px;font-weight:600;padding:4px 10px;border-radius:5px;line-height:1.3;">{reason_label}</span>
           </div>
         </td></tr>
       </table>
@@ -233,30 +307,31 @@ def build_email(user_email: str, matches: list[dict]) -> tuple[str, str]:
 <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{preheader}{preheader_pad}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
 <tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:{C_BG};border-radius:12px;overflow:hidden;">
-  <tr><td style="background:linear-gradient(135deg,{C_ACCENT} 0%,{C_ACCENT_STR} 60%,{C_AQUA} 100%);padding:20px 24px;">
-    <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-0.02em;">Seli</span>
-    <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">Alert</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:{C_BG};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+  <tr><td style="background:linear-gradient(135deg,{C_ACCENT} 0%,{C_ACCENT_STR} 60%,{C_AQUA} 100%);padding:22px 24px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td><span style="color:#ffffff;font-size:20px;font-weight:800;letter-spacing:-0.3px;">Seli</span></td>
+      <td style="text-align:right;"><span style="color:rgba(255,255,255,0.9);font-size:13px;font-weight:600;">Alert</span></td>
+    </tr></table>
   </td></tr>
-  <tr><td style="padding:20px 20px 8px;">
-    <p style="font-size:14px;color:{C_TEXT};margin:0;">{n} insider filing{'s' if n!=1 else ''} matched your alert settings:</p>
+  <tr><td style="padding:22px 22px 10px;">
+    <p style="font-size:15px;color:{C_TEXT};margin:0;font-weight:600;">{n} insider filing{'s' if n!=1 else ''} matched your alert settings</p>
   </td></tr>
-  <tr><td style="padding:0 20px;">
+  <tr><td style="padding:0 22px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       {cards}
     </table>
   </td></tr>
-  <tr><td style="padding:20px;">
-    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none;">Open Seli →</a>
+  <tr><td style="padding:22px;text-align:center;">
+    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:14px;padding:13px 32px;border-radius:8px;text-decoration:none;">Open Seli →</a>
   </td></tr>
-  <tr><td style="padding:0 20px 20px;">
+  <tr><td style="padding:0 22px 22px;">
     <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0 0 6px;">
       You're getting this because you enabled instant alerts in Settings.
       This is a factual notification of publicly filed insider trading disclosures, not financial advice or a recommendation to buy or sell any security.
     </p>
     <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0;">
       <a href="{APP_URL}/settings?section=notifications" style="color:{C_TEXT_MUTED};">Manage email preferences</a>
-      — turn off just instant alerts, or turn off every Seli email (digests and instant alerts) from the same page.
     </p>
   </td></tr>
 </table>
@@ -397,7 +472,7 @@ def main():
     expected_notifications = len(per_user_matches)  # one email owed per matching user
     sent = 0
     for uid, matches in per_user_matches.items():
-        subject, html = build_email(email_by_id[uid], matches)
+        subject, html = build_email(conn, email_by_id[uid], matches)
         if send_email(email_by_id[uid], subject, html):
             sent += 1
         else:
