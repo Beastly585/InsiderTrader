@@ -1216,7 +1216,7 @@ function ConvictionBar({ score, max=100, showLabel=false }) {
   const tier = pct>=85?'very-high':pct>=60?'high':pct>=40?'medium':pct>=20?'low':'very-low';
   const label = tier==='very-high'?'Very High':tier==='high'?'High':tier==='medium'?'Medium':tier==='low'?'Low':'Very Low';
   const color = tier==='very-high'?'var(--green-600)':tier==='high'?'#5EC26A':tier==='medium'?'var(--amber-600)':tier==='low'?'var(--text-3)':'var(--text-3)';
-  const showText = showLabel && tier!=='very-high' && tier!=='high';
+  const showText = showLabel;
   return (
     <div className="conv-bar-wrap" title={`${Math.round(score)}/${max} — ${label}`}>
       <div className="conv-bar-track">
@@ -8399,14 +8399,14 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                   <div key={r.name} className="ws-data-row ws-data-row--clickable"
                     onClick={()=>onOpenDetail({type:'trader',name:r.name,title:r.title,expand:true})}>
                     <div className="ws-data-row__main ws-row__main--wl">
-                      {/* Insider name + title */}
+                      {/* Insider name + follow button */}
                       <div className="ws-data-row__cell" style={{display:'flex',alignItems:'center',gap:8}}>
-                        <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
-                          <FollowBtn name={r.name} watchlist={watchlist} compact/>
-                        </div>
-                        <div style={{minWidth:0}}>
+                        <div style={{minWidth:0,flex:1}}>
                           <div style={{fontWeight:600,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
                           {r.title&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</div>}
+                        </div>
+                        <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
+                          <FollowBtn name={r.name} watchlist={watchlist}/>
                         </div>
                       </div>
                       {/* Last activity */}
