@@ -106,19 +106,17 @@ jobs:
           cd db
           python send_instant_alerts.py
 
-      - name: Post top signals to Twitter
-        # Runs on Tier B/C/D (update_prices=true) — up to 2 tweets per day.
-        # tweet_log table prevents double-posting across runs.
-        # TEST_PREVIEW mode shows candidates without posting (manual dispatch).
+      - name: Generate signal cards for Twitter
+        # Runs on Tier B/C/D — generates branded signal cards + tweet text
+        # and emails them to you. Save the card image, copy the text, post.
         if: success() && steps.vars.outputs.update_prices == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
-          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
-          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
-          TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTS_FROM_EMAIL: ${{ secrets.ALERTS_FROM_EMAIL }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
           APP_URL: ${{ secrets.APP_URL }}
-          MAX_TWEETS: '2'
+          MAX_CARDS: '2'
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           TEST_PREVIEW: ${{ github.event.inputs.test_tweets || 'false' }}
         run: |
