@@ -510,6 +510,37 @@ def run() -> None:
     log.info(f"          {len(meta_list)} filings")
     if not meta_list: log.info("Nothing to do."); return
 
+    # ── Dedup: skip filings already in Neon ──────────────────────────────
+    # SEC Form 4 XML is immutable once published — re-fetching a filing we
+    # already ingested produces the same transactions and the UPSERT is a
+    # no-op. Skipping them saves an HTTP request + 0.5s rate-limit budget
+    # per filing, which is the difference between finishing in 3 minutes
+    # vs timing out at 15 on GitHub Actions when a previous run partially
+    # succeeded. Filings whose XML fetch failed or whose parse returned
+    # zero transactions have NO rows in the DB, so they get retried.
+    if not DRY_RUN and DATABASE_URL:
+        try:
+            conn = get_connection()
+            cur = conn.cursor()
+            # Batch the lookup to avoid oversized IN clauses
+            all_accessions = [m["accession"] for m in meta_list]
+            existing = set()
+            for i in range(0, len(all_accessions), 500):
+                batch = all_accessions[i:i+500]
+                placeholders = ",".join(["%s"] * len(batch))
+                cur.execute(f"SELECT DISTINCT accession_number FROM public.filings WHERE accession_number IN ({placeholders})", batch)
+                existing.update(row[0] for row in cur.fetchall())
+            conn.close()
+            before = len(meta_list)
+            meta_list = [m for m in meta_list if m["accession"] not in existing]
+            skipped = before - len(meta_list)
+            if skipped:
+                log.info(f"          {skipped} already in DB, {len(meta_list)} new to fetch")
+        except Exception as e:
+            log.warning(f"  Dedup check failed ({e}) — fetching all {len(meta_list)}")
+
+    if not meta_list: log.info("All filings already ingested."); return
+
     log.info(f"Step 2/3  Parsing XML ({MAX_WORKERS} workers)…")
     all_txns: list[Transaction] = []
     failed = 0
