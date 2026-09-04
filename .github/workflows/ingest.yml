@@ -3,37 +3,17 @@ name: Ingest Form 4 Filings
 on:
   schedule:
     # ── TIER A: Market-hours polling ──────────────────────────────────────
-    # Every 15 minutes, 9:30am-4:00pm ET (EDT/UTC-4), Mon-Fri.
-    # DAYS_BACK=1 keeps each run fast — it's just catching whatever's new
-    # since the last poll. Upsert is idempotent (ON CONFLICT on
-    # accession_number + transaction_date + shares + transaction_code) so
-    # overlapping windows never create duplicates.
-    # NOTE: these times are EDT (UTC-4). In EST (UTC-5, roughly Nov-Mar),
-    # actual market hours will run ~1hr later than these UTC times —
-    # shift everything below by +1 hour in winter if you want to be precise.
     - cron: '30,45 13 * * 1-5'
     - cron: '0,15,30,45 14-19 * * 1-5'
     - cron: '0 20 * * 1-5'
 
     # ── TIER B: Pre-market ────────────────────────────────────────────────
-    # 8:00am ET (12:00 UTC) — 90min buffer before the 9:30 open.
-    # DAYS_BACK=2 to sweep up anything filed overnight before Tier A starts.
     - cron: '0 12 * * 1-5'
 
     # ── TIER C: Post-market ───────────────────────────────────────────────
-    # 5:00pm ET (21:00 UTC) — 1hr after close, giving EDGAR time to process
-    # same-day filings submitted right at the bell. Also refreshes prices.
     - cron: '0 21 * * 1-5'
 
     # ── TIER D: Daily wide safety net ─────────────────────────────────────
-    # Runs every single day (including weekends) at 4:00am ET (08:00 UTC).
-    # DAYS_BACK=4 re-scans the past few days — this is what catches late
-    # filers, Form 4/A amendments, and anything EDGAR processed on an odd
-    # schedule (weekend backlog, holiday delays, etc). Safe to re-scan
-    # because the upsert is idempotent — nothing gets duplicated, only
-    # genuinely new or corrected rows get written. (Trimmed from 7→4 days
-    # after testing showed 7 days' volume at the safer 2-worker rate would
-    # run ~36min, past even the extended timeout below.)
     - cron: '0 8 * * *'
 
   workflow_dispatch:
@@ -44,6 +24,10 @@ on:
         default: '3'
       dry_run:
         description: 'Dry run only — parse but do not write to DB'
+        required: false
+        default: 'false'
+      test_tweets:
+        description: 'Preview tweet candidates without posting'
         required: false
         default: 'false'
 
@@ -74,29 +58,24 @@ jobs:
       - name: Determine DAYS_BACK for this run
         id: vars
         run: |
-          # workflow_dispatch always wins if manually triggered.
           if [ -n "${{ github.event.inputs.days_back }}" ]; then
             echo "days_back=${{ github.event.inputs.days_back }}" >> "$GITHUB_OUTPUT"
             echo "update_prices=true" >> "$GITHUB_OUTPUT"
           else
             HOUR_UTC=$(date -u +%H)
             MIN_UTC=$(date -u +%M)
-            DOW=$(date -u +%u)   # 1=Mon .. 7=Sun
+            DOW=$(date -u +%u)
 
             if [ "$HOUR_UTC" = "08" ]; then
-              # Tier D — daily wide safety net
               echo "days_back=4" >> "$GITHUB_OUTPUT"
               echo "update_prices=true" >> "$GITHUB_OUTPUT"
             elif [ "$HOUR_UTC" = "12" ]; then
-              # Tier B — pre-market
               echo "days_back=2" >> "$GITHUB_OUTPUT"
               echo "update_prices=true" >> "$GITHUB_OUTPUT"
             elif [ "$HOUR_UTC" = "21" ]; then
-              # Tier C — post-market
               echo "days_back=1" >> "$GITHUB_OUTPUT"
               echo "update_prices=true" >> "$GITHUB_OUTPUT"
             else
-              # Tier A — intraday polling, skip the price refresh
               echo "days_back=1" >> "$GITHUB_OUTPUT"
               echo "update_prices=false" >> "$GITHUB_OUTPUT"
             fi
@@ -127,9 +106,30 @@ jobs:
           cd db
           python send_instant_alerts.py
 
+      - name: Post top signals to Twitter
+        # Runs on Tier B/C/D (update_prices=true) — up to 2 tweets per day.
+        # tweet_log table prevents double-posting across runs.
+        # TEST_PREVIEW mode shows candidates without posting (manual dispatch).
+        if: success() && steps.vars.outputs.update_prices == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
+          APP_URL: ${{ secrets.APP_URL }}
+          MAX_TWEETS: '2'
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          TEST_PREVIEW: ${{ github.event.inputs.test_tweets || 'false' }}
+        run: |
+          cd db
+          if [ -f post_signal_tweet.py ]; then
+            python post_signal_tweet.py
+          else
+            echo "post_signal_tweet.py not found, skipping"
+          fi
+
       - name: Update price history
-        # Only bother refreshing prices around the open/close/safety-net —
-        # no need to hit Polygon every 15 minutes intraday.
         if: success() && steps.vars.outputs.update_prices == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
