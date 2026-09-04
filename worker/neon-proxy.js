@@ -973,6 +973,13 @@ async function handleGuestCSVDownload(request, env, origin) {
           if (!obj) continue;
 
           const entry = new ZipPassThrough(`seli_insider_trades_${y.year}.csv`);
+          // Set size upfront for non-cutoff years so fflate writes sizes in
+          // the local file header instead of using data descriptors. macOS
+          // Archive Utility chokes on data descriptors (Error 79). For the
+          // cutoff year we filter rows so the final size is unknown.
+          if (Number(y.year) !== cutoffYear && obj.size) {
+            entry.size = obj.size;
+          }
           zip.add(entry);
 
           if (Number(y.year) === cutoffYear) {
@@ -1026,6 +1033,7 @@ async function handleGuestCSVDownload(request, env, origin) {
           const undatedObj = await env.EXPORT_BUCKET.get(`${CSV_EXPORT_PREFIX}unknown.csv`);
           if (undatedObj) {
             const entry = new ZipPassThrough('seli_insider_trades_undated.csv');
+            if (undatedObj.size) entry.size = undatedObj.size;
             zip.add(entry);
             const reader = undatedObj.body.getReader();
             while (true) {
@@ -1170,6 +1178,9 @@ async function handleCSVDownload(request, env, origin) {
         if (!obj) continue;
 
         const entry = new ZipPassThrough(`seli_insider_trades_${y.year}.csv`);
+        if (Number(y.year) !== cutoffYear && obj.size) {
+          entry.size = obj.size;
+        }
         zip.add(entry);
 
         if (Number(y.year) === cutoffYear) {
@@ -1229,6 +1240,7 @@ async function handleCSVDownload(request, env, origin) {
         const undatedObj = await env.EXPORT_SNAPSHOTS.get(`${CSV_EXPORT_PREFIX}unknown.csv`);
         if (undatedObj) {
           const entry = new ZipPassThrough('seli_insider_trades_undated.csv');
+          if (undatedObj.size) entry.size = undatedObj.size;
           zip.add(entry);
           const reader = undatedObj.body.getReader();
           while (true) {

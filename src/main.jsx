@@ -15,6 +15,13 @@ if (!PUBLISHABLE_KEY) {
 const posthogOptions = {
   api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
   defaults: '2026-05-30',
+  // Suppress console errors when ad blockers prevent PostHog from loading.
+  // The SDK retries and spams ERR_BLOCKED_BY_CLIENT — this doesn't affect
+  // the app, but it clutters the console and looks alarming in dev tools.
+  disable_external_dependency_loading: false,
+  on_xhr_error: () => {},
+  // Reduce retry noise — if the first request is blocked, retries will be too.
+  request_batching: { max_batch_size: 1 },
 }
 
 

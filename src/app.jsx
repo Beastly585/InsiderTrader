@@ -854,7 +854,7 @@ function BillingSection({ user }) {
 
         {status.hasDataExport && (
           <div className="settings-row" style={{paddingTop:8}}>
-            <a href="/redownload" style={{fontSize:'0.8125rem',color:'var(--accent-strong)',textDecoration:'none',fontWeight:500}}>
+            <a href="/redownload" target="_blank" rel="noopener" style={{fontSize:'0.8125rem',color:'var(--accent-strong)',textDecoration:'none',fontWeight:500}}>
               Already purchased? Re-download or look up an order →
             </a>
           </div>
@@ -9317,9 +9317,12 @@ function RedownloadPage() {
         if (done) break;
         chunks.push(value);
         received += value.length;
+        const recMB = (received / 1_048_576).toFixed(1);
         const pct = total > 0 ? Math.round((received / total) * 100) : null;
         setDownloadProgress({
-          label: total > 0 ? `Downloading... ${Math.round(received / 1024)}KB / ${Math.round(total / 1024)}KB` : `Downloading... ${Math.round(received / 1024)}KB`,
+          label: total > 0
+            ? `Downloading… ${recMB}MB / ${(total / 1_048_576).toFixed(1)}MB`
+            : `Downloading… ${recMB}MB`,
           pct,
         });
       }

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1200px; height: 630px;
+    background: #0d0d1a;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    overflow: hidden;
+    position: relative;
+  }
+  /* Subtle gradient wash */
+  .bg-glow {
+    position: absolute;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.15;
+  }
+  .bg-glow--purple { background: #7c5cfc; top: -200px; right: 100px; }
+  .bg-glow--cyan { background: #4dd4e6; bottom: -250px; left: 200px; opacity: 0.08; }
+
+  .layout {
+    display: flex; align-items: center;
+    height: 100%; padding: 0 72px;
+    position: relative; z-index: 1;
+    gap: 56px;
+  }
+
+  /* Left side — text */
+  .text-side { flex: 1; }
+  .logo-row {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 28px;
+  }
+  .logo-img {
+    width: 52px; height: 52px; border-radius: 12px;
+    background: linear-gradient(135deg, #7c5cfc31 0%, #4dd4e636 100%);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    font-size: 28px; font-weight: 800; color: #fff;
+  }
+
+  .logo-img img {
+    width: 100%; height: 100%; object-fit: cover; border-radius: 12px;
+  }
+  .logo-name {
+    font-size: 36px; font-weight: 800; color: #e8e8ec;
+    letter-spacing: -0.5px;
+  }
+  h1 {
+    font-size: 44px; font-weight: 800; color: #e8e8ec;
+    line-height: 1.15; letter-spacing: -1px;
+    margin-bottom: 16px;
+  }
+  h1 span { color: #7c5cfc; }
+  .tagline {
+    font-size: 18px; color: #8888a0; line-height: 1.5;
+    max-width: 440px;
+  }
+  .pills {
+    display: flex; gap: 8px; margin-top: 24px; flex-wrap: wrap;
+  }
+  .pill {
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 12px; font-weight: 600;
+    border: 1px solid rgba(124,92,252,0.3);
+    color: #b8b8cc;
+    background: rgba(124,92,252,0.08);
+  }
+
+  /* Right side — mock dashboard */
+  .mock {
+    width: 480px; flex-shrink: 0;
+    background: #13132a;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.4);
+  }
+  .mock-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 16px; padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .mock-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .mock-dot--r { background: #ef4444; }
+  .mock-dot--y { background: #eab308; }
+  .mock-dot--g { background: #22c55e; }
+  .mock-tab {
+    margin-left: 16px; font-size: 11px; font-weight: 600;
+    color: #7c5cfc; padding-bottom: 2px;
+    border-bottom: 2px solid #7c5cfc;
+  }
+  .mock-tab--dim { color: #555; border-color: transparent; margin-left: 12px; }
+
+  .mock-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 12px;
+  }
+  .mock-row:last-child { border-bottom: none; }
+  .mock-ticker { font-weight: 700; color: #7c5cfc; width: 50px; font-size: 13px; }
+  .mock-company { color: #8888a0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .mock-val { font-family: 'SF Mono', monospace; font-weight: 600; width: 64px; text-align: right; font-size: 11px; }
+  .mock-val--red { color: #ef4444; }
+  .mock-val--green { color: #22c55e; }
+  .mock-bar-wrap { width: 60px; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+  .mock-bar { height: 100%; border-radius: 4px; }
+  .mock-bar--high { width: 85%; background: linear-gradient(90deg, #22c55e, #4ade80); }
+  .mock-bar--med { width: 65%; background: linear-gradient(90deg, #22c55e, #eab308); }
+  .mock-bar--low { width: 40%; background: linear-gradient(90deg, #eab308, #ef4444); }
+
+  .url-badge {
+    position: absolute; bottom: 28px; right: 72px;
+    font-size: 16px; font-weight: 600; color: #555;
+    letter-spacing: 0.5px; z-index: 1;
+  }
+</style>
+</head>
+<body>
+  <div class="bg-glow bg-glow--purple"></div>
+  <div class="bg-glow bg-glow--cyan"></div>
+
+  <div class="layout">
+    <div class="text-side">
+      <div class="logo-row">
+        <div class="logo-img"><img src="./og-image.png" alt=""></div>
+        <span class="logo-name">Seli</span>
+      </div>
+      <h1>Know when <span>insiders</span> move</h1>
+      <p class="tagline">SEC Form 4 trades and congressional stock disclosures, scored by conviction. See what executives are buying before the market reacts.</p>
+      <div class="pills">
+        <span class="pill">SEC Form 4</span>
+        <span class="pill">Congressional trades</span>
+        <span class="pill">Conviction scoring</span>
+        <span class="pill">Instant alerts</span>
+      </div>
+    </div>
+
+    <div class="mock">
+      <div class="mock-header">
+        <span class="mock-dot mock-dot--r"></span>
+        <span class="mock-dot mock-dot--y"></span>
+        <span class="mock-dot mock-dot--g"></span>
+        <span class="mock-tab">Signals</span>
+        <span class="mock-tab mock-tab--dim">Raw filings</span>
+      </div>
+      <div class="mock-row">
+        <span class="mock-ticker">NVDA</span>
+        <span class="mock-company">NVIDIA Corp</span>
+        <span class="mock-val mock-val--red">-$217M</span>
+        <span class="mock-bar-wrap"><span class="mock-bar mock-bar--high"></span></span>
+      </div>
+      <div class="mock-row">
+        <span class="mock-ticker">BAND</span>
+        <span class="mock-company">Bandwidth Inc.</span>
+        <span class="mock-val mock-val--red">-$1.3M</span>
+        <span class="mock-bar-wrap"><span class="mock-bar mock-bar--high"></span></span>
+      </div>
+      <div class="mock-row">
+        <span class="mock-ticker">CRWD</span>
+        <span class="mock-company">CrowdStrike Holdings</span>
+        <span class="mock-val mock-val--red">-$13M</span>
+        <span class="mock-bar-wrap"><span class="mock-bar mock-bar--high"></span></span>
+      </div>
+      <div class="mock-row">
+        <span class="mock-ticker">FSLY</span>
+        <span class="mock-company">Fastly, Inc.</span>
+        <span class="mock-val mock-val--red">-$2.2M</span>
+        <span class="mock-bar-wrap"><span class="mock-bar mock-bar--med"></span></span>
+      </div>
+      <div class="mock-row">
+        <span class="mock-ticker">DKS</span>
+        <span class="mock-company">Dick's Sporting Goods</span>
+        <span class="mock-val mock-val--green">+$2.4M</span>
+        <span class="mock-bar-wrap"><span class="mock-bar mock-bar--med"></span></span>
+      </div>
+      <div class="mock-row">
+        <span class="mock-ticker">OKLO</span>
+        <span class="mock-company">Oklo Inc.</span>
+        <span class="mock-val mock-val--red">-$6.2M</span>
+        <span class="mock-bar-wrap"><span class="mock-bar mock-bar--med"></span></span>
+      </div>
+      <div class="mock-row">
+        <span class="mock-ticker">CNO</span>
+        <span class="mock-company">CNO Financial Group</span>
+        <span class="mock-val mock-val--red">-$2.2M</span>
+        <span class="mock-bar-wrap"><span class="mock-bar mock-bar--low"></span></span>
+      </div>
+    </div>
+  </div>
+
+  <span class="url-badge">seli.app</span>
+</body>
+</html>
