@@ -198,115 +198,110 @@ def format_tweet(s):
 
 # ── Signal card (SVG) ─────────────────────────────────────────────────────────
 
-def generate_card_svg(s):
-    """Generate a branded dark-theme signal card as SVG (1200×628 for Twitter)."""
+def generate_card_html(s):
+    """Generate a branded signal card as an HTML table for email embedding.
+    Uses only table-based layout and inline styles — renders in Gmail,
+    Apple Mail, Outlook, and every mobile client."""
     ticker = s['ticker']
     company = (s['company'] or '')[:40]
     insiders = s['insider_count']
     trades = s['trade_count']
     net = s['net_value']
     execs = s['exec_count']
-    has_buys = s['has_buys']
     buy_val = fmt_money(s['buy_value'])
     sell_val = fmt_money(s['sell_value'])
 
     direction = "Buying" if net > 0 else "Selling"
     net_str = fmt_money(abs(net))
     net_color = "#4ade80" if net > 0 else "#ef4444"
+    dir_bg = "rgba(74,222,128,0.15)" if net > 0 else "rgba(239,68,68,0.15)"
     dir_color = "#4ade80" if net > 0 else "#ef4444"
 
-    # Conviction-style bar
-    score = min(s['attention_score'] / 3, 100)  # normalize to 0-100ish
-    bar_pct = max(min(score, 100), 5)
+    score = min(s.get('attention_score', 0) / 3, 100)
+    bar_pct = max(min(int(score), 100), 5)
     bar_color = "#4ade80" if bar_pct >= 60 else "#eab308" if bar_pct >= 30 else "#ef4444"
 
     today_str = date.today().strftime("%b %d, %Y")
 
-    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 628" width="1200" height="628">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0d0d1a"/>
-      <stop offset="100%" stop-color="#151530"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#7c5cfc"/>
-      <stop offset="100%" stop-color="#4dd4e6"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Background -->
-  <rect width="1200" height="628" fill="url(#bg)" rx="0"/>
-
-  <!-- Subtle glow -->
-  <circle cx="200" cy="100" r="300" fill="#7c5cfc" opacity="0.06"/>
-
-  <!-- Top accent line -->
-  <rect x="0" y="0" width="1200" height="3" fill="url(#accent)"/>
-
-  <!-- Seli branding -->
-  <text x="60" y="60" font-family="system-ui,-apple-system,sans-serif" font-size="18" font-weight="700" fill="#8888a0">seli.app</text>
-  <text x="1140" y="60" font-family="system-ui,-apple-system,sans-serif" font-size="16" fill="#555" text-anchor="end">{today_str}</text>
-
-  <!-- Ticker -->
-  <text x="60" y="160" font-family="system-ui,-apple-system,sans-serif" font-size="72" font-weight="800" fill="#e8e8ec" letter-spacing="-2">${ticker}</text>
-
-  <!-- Company -->
-  <text x="60" y="200" font-family="system-ui,-apple-system,sans-serif" font-size="22" fill="#8888a0">{company}</text>
-
-  <!-- Direction badge -->
-  <rect x="60" y="230" width="{len(direction)*16+32}" height="36" rx="18" fill="{dir_color}" opacity="0.15"/>
-  <text x="{60+len(direction)*8+16}" y="254" font-family="system-ui,-apple-system,sans-serif" font-size="16" font-weight="700" fill="{dir_color}" text-anchor="middle">{direction}</text>
-
+    return f'''<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0d0d1a;border-radius:12px;overflow:hidden;border:1px solid #222240;">
+  <!-- Accent bar -->
+  <tr><td style="height:3px;background:linear-gradient(90deg,#7c5cfc,#4dd4e6);font-size:1px;">&nbsp;</td></tr>
+  <!-- Header -->
+  <tr><td style="padding:16px 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td style="font-size:13px;color:#8888a0;font-family:system-ui,-apple-system,sans-serif;">seli.app</td>
+      <td style="text-align:right;font-size:12px;color:#555;font-family:system-ui,-apple-system,sans-serif;">{today_str}</td>
+    </tr></table>
+  </td></tr>
+  <!-- Ticker + Direction -->
+  <tr><td style="padding:14px 20px 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+      <td style="font-size:36px;font-weight:800;color:#e8e8ec;font-family:system-ui,-apple-system,sans-serif;letter-spacing:-1px;padding-right:14px;">${ticker}</td>
+      <td style="vertical-align:middle;">
+        <span style="display:inline-block;background:{dir_bg};color:{dir_color};font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;">{direction}</span>
+      </td>
+    </tr></table>
+    <div style="font-size:13px;color:#8888a0;margin-top:4px;font-family:system-ui,-apple-system,sans-serif;">{company}</div>
+  </td></tr>
   <!-- Stats grid -->
-  <text x="60" y="320" font-family="system-ui,-apple-system,sans-serif" font-size="13" font-weight="600" fill="#555" letter-spacing="1">INSIDERS</text>
-  <text x="60" y="355" font-family="system-ui,-apple-system,sans-serif" font-size="36" font-weight="800" fill="#e8e8ec">{insiders}</text>
-
-  <text x="240" y="320" font-family="system-ui,-apple-system,sans-serif" font-size="13" font-weight="600" fill="#555" letter-spacing="1">C-SUITE</text>
-  <text x="240" y="355" font-family="system-ui,-apple-system,sans-serif" font-size="36" font-weight="800" fill="#e8e8ec">{execs}</text>
-
-  <text x="420" y="320" font-family="system-ui,-apple-system,sans-serif" font-size="13" font-weight="600" fill="#555" letter-spacing="1">TRADES</text>
-  <text x="420" y="355" font-family="system-ui,-apple-system,sans-serif" font-size="36" font-weight="800" fill="#e8e8ec">{trades}</text>
-
-  <text x="600" y="320" font-family="system-ui,-apple-system,sans-serif" font-size="13" font-weight="600" fill="#555" letter-spacing="1">NET VALUE</text>
-  <text x="600" y="355" font-family="system-ui,-apple-system,sans-serif" font-size="36" font-weight="800" fill="{net_color}">{'+' if net > 0 else '-'}{net_str}</text>
-
+  <tr><td style="padding:16px 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td style="width:25%;vertical-align:top;">
+        <div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;font-family:system-ui,-apple-system,sans-serif;margin-bottom:4px;">Insiders</div>
+        <div style="font-size:24px;font-weight:800;color:#e8e8ec;font-family:system-ui,-apple-system,sans-serif;">{insiders}</div>
+      </td>
+      <td style="width:25%;vertical-align:top;">
+        <div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;font-family:system-ui,-apple-system,sans-serif;margin-bottom:4px;">C-Suite</div>
+        <div style="font-size:24px;font-weight:800;color:#e8e8ec;font-family:system-ui,-apple-system,sans-serif;">{execs}</div>
+      </td>
+      <td style="width:25%;vertical-align:top;">
+        <div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;font-family:system-ui,-apple-system,sans-serif;margin-bottom:4px;">Trades</div>
+        <div style="font-size:24px;font-weight:800;color:#e8e8ec;font-family:system-ui,-apple-system,sans-serif;">{trades}</div>
+      </td>
+      <td style="width:25%;vertical-align:top;">
+        <div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;font-family:system-ui,-apple-system,sans-serif;margin-bottom:4px;">Net Value</div>
+        <div style="font-size:24px;font-weight:800;color:{net_color};font-family:system-ui,-apple-system,sans-serif;">{'+'if net>0 else'-'}{net_str}</div>
+      </td>
+    </tr></table>
+  </td></tr>
   <!-- Buy/Sell breakdown -->
-  <text x="60" y="420" font-family="system-ui,-apple-system,sans-serif" font-size="15" fill="#8888a0">Buys: <tspan fill="#4ade80" font-weight="600">{buy_val}</tspan>  ·  Sells: <tspan fill="#ef4444" font-weight="600">{sell_val}</tspan></text>
-
-  <!-- Signal strength bar -->
-  <text x="60" y="480" font-family="system-ui,-apple-system,sans-serif" font-size="13" font-weight="600" fill="#555" letter-spacing="1">SIGNAL STRENGTH</text>
-  <rect x="60" y="496" width="500" height="10" rx="5" fill="#1a1a2e"/>
-  <rect x="60" y="496" width="{bar_pct * 5}" height="10" rx="5" fill="{bar_color}"/>
-
-  <!-- Divider -->
-  <line x1="60" y1="545" x2="1140" y2="545" stroke="#222240" stroke-width="0.5"/>
-
+  <tr><td style="padding:12px 20px 0;">
+    <div style="font-size:13px;color:#8888a0;font-family:system-ui,-apple-system,sans-serif;">
+      Buys: <span style="color:#4ade80;font-weight:600;">{buy_val}</span> &nbsp;·&nbsp; Sells: <span style="color:#ef4444;font-weight:600;">{sell_val}</span>
+    </div>
+  </td></tr>
+  <!-- Signal bar -->
+  <tr><td style="padding:14px 20px 0;">
+    <div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:1px;font-family:system-ui,-apple-system,sans-serif;margin-bottom:6px;">Signal Strength</div>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:400px;"><tr>
+      <td style="width:{bar_pct}%;height:8px;background:{bar_color};border-radius:4px 0 0 4px;font-size:1px;">&nbsp;</td>
+      <td style="width:{100-bar_pct}%;height:8px;background:#1a1a2e;border-radius:0 4px 4px 0;font-size:1px;">&nbsp;</td>
+    </tr></table>
+  </td></tr>
   <!-- Footer -->
-  <text x="60" y="585" font-family="system-ui,-apple-system,sans-serif" font-size="14" fill="#555">Open-market trades · SEC Form 4 filings · Last 48 hours</text>
-  <text x="1140" y="585" font-family="system-ui,-apple-system,sans-serif" font-size="16" font-weight="700" fill="#7c5cfc" text-anchor="end">seli.app</text>
-</svg>'''
-    return svg
+  <tr><td style="padding:14px 20px 16px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #222240;padding-top:12px;"><tr>
+      <td style="font-size:11px;color:#555;font-family:system-ui,-apple-system,sans-serif;">Open-market trades · SEC Form 4 · Last 48h</td>
+      <td style="text-align:right;font-size:13px;font-weight:700;color:#7c5cfc;font-family:system-ui,-apple-system,sans-serif;">seli.app</td>
+    </tr></table>
+  </td></tr>
+</table>'''
 
-
-# ── Email via Resend ──────────────────────────────────────────────────────────
 
 def send_card_email(signals_with_cards):
-    """Email signal cards to Kevin via Resend."""
     import requests
 
     cards_html = ""
-    for s, tweet, svg in signals_with_cards:
-        # Convert SVG to a data URI for inline rendering
-        import base64
-        svg_b64 = base64.b64encode(svg.encode()).decode()
-
+    for s, tweet, card_html in signals_with_cards:
         cards_html += f'''
-        <div style="margin-bottom:32px;background:#0d0d1a;border-radius:12px;padding:24px;border:1px solid #222240;">
-          <div style="margin-bottom:16px;">
-            <img src="data:image/svg+xml;base64,{svg_b64}" width="600" style="width:100%;max-width:600px;border-radius:8px;" alt="{s['ticker']} signal card"/>
+        <div style="margin-bottom:28px;">
+          <!-- Signal card — renders as HTML table, works in all email clients -->
+          <div style="margin-bottom:14px;">
+            {card_html}
           </div>
-          <div style="background:#1a1a2e;border-radius:8px;padding:16px;margin-bottom:12px;">
-            <div style="font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Copy-paste tweet text</div>
+          <!-- Copy-paste tweet text -->
+          <div style="background:#1a1a2e;border-radius:8px;padding:14px 16px;margin-bottom:8px;">
+            <div style="font-size:10px;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Copy-paste tweet text</div>
             <pre style="font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#e8e8ec;white-space:pre-wrap;margin:0;line-height:1.5;">{tweet}</pre>
           </div>
           <div style="font-size:11px;color:#555;">
@@ -322,7 +317,7 @@ def send_card_email(signals_with_cards):
         <div style="font-size:13px;color:#888;">{date.today().strftime("%B %d, %Y")} · {len(signals_with_cards)} signal{'s' if len(signals_with_cards) != 1 else ''} to post</div>
       </div>
       <div style="font-size:13px;color:#888;margin-bottom:20px;padding:12px;background:#1a1a2e;border-radius:8px;">
-        Save/screenshot each card image → copy the tweet text → paste into Twitter/X
+        Copy the tweet text below each card → paste into Twitter/X → post
       </div>
       {cards_html}
       <div style="text-align:center;padding:16px;font-size:12px;color:#444;">
