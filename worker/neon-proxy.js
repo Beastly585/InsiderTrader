@@ -73,6 +73,55 @@ function crc32final(c) { return (c ^ 0xFFFFFFFF) >>> 0; }
 // Fetching just-in-time is critical: R2 object body streams expire after
 // a few seconds of inactivity, so fetching 17 objects upfront and streaming
 // them sequentially causes the later objects to ERR_CONNECTION_CLOSED.
+// Build a ZIP from entries and upload to R2 using multipart upload.
+// R2 rejects streams with unknown length, so we buffer into 10MB parts
+// and upload them individually. Last part can be smaller than 5MB.
+const ZIP_PART_SIZE = 10 * 1024 * 1024;
+
+async function buildZipToR2(env, r2Key, zipEntries) {
+  const upload = await env.EXPORT_SNAPSHOTS.createMultipartUpload(r2Key, {
+    httpMetadata: { contentType: 'application/zip' },
+  });
+
+  let buffer = [];
+  let bufLen = 0;
+  let partNum = 1;
+  const parts = [];
+
+  const multipartWriter = {
+    async write(chunk) {
+      buffer.push(chunk);
+      bufLen += chunk.length;
+      if (bufLen >= ZIP_PART_SIZE) {
+        const merged = concatBuffers(buffer, bufLen);
+        const part = await upload.uploadPart(partNum, merged);
+        parts.push(part);
+        partNum++;
+        buffer = [];
+        bufLen = 0;
+      }
+    },
+    async close() {
+      if (bufLen > 0) {
+        const merged = concatBuffers(buffer, bufLen);
+        const part = await upload.uploadPart(partNum, merged);
+        parts.push(part);
+      }
+      await upload.complete(parts);
+    }
+  };
+
+  await writeStreamingZip(zipEntries, multipartWriter);
+}
+
+function concatBuffers(chunks, totalLen) {
+  if (chunks.length === 1) return chunks[0];
+  const out = new Uint8Array(totalLen);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
 async function writeStreamingZip(entries, writerStream) {
   const enc = new TextEncoder();
   const centralDir = [];
@@ -81,63 +130,53 @@ async function writeStreamingZip(entries, writerStream) {
   for (const entry of entries) {
     const nameBytes = enc.encode(entry.name);
 
-    // Local file header — bit 3 set (data descriptor follows)
+    // Read the entire file into memory (one at a time, ~50MB max)
+    let data;
+    if (entry.r2Key) {
+      const obj = await entry.env.EXPORT_SNAPSHOTS.get(entry.r2Key);
+      if (!obj) continue;
+      data = new Uint8Array(await obj.arrayBuffer());
+    } else if (entry.chunks) {
+      let total = 0;
+      for (const c of entry.chunks) total += c.length;
+      data = new Uint8Array(total);
+      let off = 0;
+      for (const c of entry.chunks) { data.set(c, off); off += c.length; }
+    } else {
+      continue;
+    }
+
+    const size = data.length;
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < data.length; i++) {
+      c = CRC_TABLE[(c ^ data[i]) & 0xFF] ^ (c >>> 8);
+    }
+    const crc = (c ^ 0xFFFFFFFF) >>> 0;
+
+    // Local file header — NO bit 3, CRC and sizes filled in
     const lfh = new Uint8Array(30 + nameBytes.length);
     const lv = new DataView(lfh.buffer);
     lv.setUint32(0, 0x04034b50, true);
     lv.setUint16(4, 20, true);
-    lv.setUint16(6, 0x0008, true);
-    lv.setUint16(8, 0, true);
+    lv.setUint16(6, 0, true);        // NO data descriptor flag
+    lv.setUint16(8, 0, true);        // STORED
     lv.setUint16(10, 0, true);
     lv.setUint16(12, 0, true);
-    lv.setUint32(14, 0, true);
-    lv.setUint32(18, 0, true);
-    lv.setUint32(22, 0, true);
+    lv.setUint32(14, crc, true);     // CRC in header
+    lv.setUint32(18, size, true);    // compressed size
+    lv.setUint32(22, size, true);    // uncompressed size
     lv.setUint16(26, nameBytes.length, true);
     lv.setUint16(28, 0, true);
     lfh.set(nameBytes, 30);
+
     await writerStream.write(lfh);
-
-    let crc = 0xFFFFFFFF;
-    let size = 0;
-
-    if (entry.r2Key) {
-      // Just-in-time R2 fetch — stream directly, no buffering
-      const obj = await entry.env.EXPORT_SNAPSHOTS.get(entry.r2Key);
-      if (obj) {
-        const reader = obj.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          crc = crc32update(value, crc);
-          size += value.length;
-          await writerStream.write(value);
-        }
-      }
-    } else if (entry.chunks) {
-      for (const chunk of entry.chunks) {
-        crc = crc32update(chunk, crc);
-        size += chunk.length;
-        await writerStream.write(chunk);
-      }
-    }
-
-    crc = crc32final(crc);
-
-    // Data descriptor WITH signature — required by macOS Archive Utility
-    const dd = new Uint8Array(16);
-    const dv = new DataView(dd.buffer);
-    dv.setUint32(0, 0x08074b50, true);
-    dv.setUint32(4, crc, true);
-    dv.setUint32(8, size, true);
-    dv.setUint32(12, size, true);
-    await writerStream.write(dd);
+    await writerStream.write(data);
 
     centralDir.push({ nameBytes, crc, size, offset });
-    offset += lfh.length + size + dd.length;
+    offset += lfh.length + size;
+    data = null; // free before loading next file
   }
 
-  // Central directory
   const cdOffset = offset;
   let cdSize = 0;
   for (const e of centralDir) {
@@ -146,7 +185,7 @@ async function writeStreamingZip(entries, writerStream) {
     cv.setUint32(0, 0x02014b50, true);
     cv.setUint16(4, 20, true);
     cv.setUint16(6, 20, true);
-    cv.setUint16(8, 0x0008, true);
+    cv.setUint16(8, 0, true);
     cv.setUint16(10, 0, true);
     cv.setUint16(12, 0, true);
     cv.setUint16(14, 0, true);
@@ -219,6 +258,37 @@ const workerHandler = {
       console.log('[Scheduled] csv:', JSON.stringify(csvResult).slice(0, 300));
     } catch (e) {
       console.error('[Scheduled] csv threw:', String(e), e?.stack?.slice(0, 500));
+    }
+
+    // Ensure the pre-built ZIP exists — if CSVs are current but the ZIP
+    // was never built (first deploy, or the build step was added after
+    // the CSVs were already written), build it now from existing CSVs.
+    try {
+      const zipExists = await env.EXPORT_SNAPSHOTS.head('csv-export/full-export.zip');
+      if (!zipExists) {
+        const manifestObj = await env.EXPORT_SNAPSHOTS.get(CSV_MANIFEST_KEY);
+        if (manifestObj) {
+          const manifest = JSON.parse(await manifestObj.text());
+          const years = (manifest.years || []).sort((a, b) => Number(a.year) - Number(b.year));
+          if (years.length > 0) {
+            console.log(`[Scheduled] ZIP missing but ${years.length} CSVs exist — building ZIP now`);
+            const zipEntries = years.map(y => ({
+              name: `seli_insider_trades_${y.year}.csv`,
+              r2Key: `${CSV_EXPORT_PREFIX}${y.year}.csv`,
+              env,
+            }));
+            if (manifest.undatedRows > 0) {
+              zipEntries.push({ name: 'seli_insider_trades_undated.csv', r2Key: `${CSV_EXPORT_PREFIX}unknown.csv`, env });
+            }
+            await buildZipToR2(env, 'csv-export/full-export.zip', zipEntries);
+            console.log('[Scheduled] ZIP built successfully from existing CSVs');
+          }
+        }
+      } else {
+        console.log('[Scheduled] ZIP already exists, skipping rebuild');
+      }
+    } catch (e) {
+      console.error('[Scheduled] ZIP check/build threw:', String(e), e?.stack?.slice(0, 500));
     }
     // Dead-man's-switch: alert if no new filings have landed in 48 hours
     // on a weekday. Prevents silent ingestion gaps from going unnoticed.
@@ -499,6 +569,40 @@ async function handleFetchInner(request, env, origin) {
       if (diff !== 0) return corsResponse({ error: 'Unauthorized' }, 401, origin, env);
       const result = await buildExportCSV(env);
       return corsResponse(result, result.ok ? 200 : 500, origin, env);
+    }
+
+    if (url.pathname === '/internal/build-zip-now') {
+      const apiKey = request.headers.get('X-API-Key') || '';
+      const expected = env.WORKER_API_KEY || '';
+      let diff = (!expected || apiKey.length !== expected.length) ? 1 : 0;
+      for (let i = 0; i < Math.max(apiKey.length, expected.length); i++) {
+        diff |= (apiKey.charCodeAt(i) || 0) ^ (expected.charCodeAt(i) || 0);
+      }
+      if (diff !== 0) return corsResponse({ error: 'Unauthorized' }, 401, origin, env);
+
+      const manifestObj = await env.EXPORT_SNAPSHOTS.get(CSV_MANIFEST_KEY);
+      if (!manifestObj) return corsResponse({ error: 'No manifest — run CSV build first' }, 404, origin, env);
+      const manifest = JSON.parse(await manifestObj.text());
+      const years = (manifest.years || []).sort((a, b) => Number(a.year) - Number(b.year));
+      if (!years.length) return corsResponse({ error: 'Manifest has no years' }, 404, origin, env);
+
+      const zipEntries = years.map(y => ({
+        name: `seli_insider_trades_${y.year}.csv`,
+        r2Key: `${CSV_EXPORT_PREFIX}${y.year}.csv`,
+        env,
+      }));
+      if (manifest.undatedRows > 0) {
+        zipEntries.push({ name: 'seli_insider_trades_undated.csv', r2Key: `${CSV_EXPORT_PREFIX}unknown.csv`, env });
+      }
+
+      await buildZipToR2(env, 'csv-export/full-export.zip', zipEntries);
+
+      const head = await env.EXPORT_SNAPSHOTS.head('csv-export/full-export.zip');
+      return corsResponse({
+        ok: true,
+        years: years.length,
+        zipSize: head?.size || 'unknown',
+      }, 200, origin, env);
     }
 
     return handleQuery(request, env, origin);
@@ -870,33 +974,22 @@ async function buildExportCSV(env) {
     console.log('[Worker] Building pre-built ZIP from year CSVs...');
     try {
       const allYears = finishedYears.sort((a, b) => Number(a.year) - Number(b.year));
-      const { readable: zipReadable, writable: zipWritable } = new TransformStream();
-      const zipWriter = zipWritable.getWriter();
-
-      const zipBuildPromise = (async () => {
-        const zipEntries = [];
-        for (const y of allYears) {
-          zipEntries.push({
-            name: `seli_insider_trades_${y.year}.csv`,
-            r2Key: `${CSV_EXPORT_PREFIX}${y.year}.csv`,
-            env,
-          });
-        }
-        if (undatedRows > 0) {
-          zipEntries.push({
-            name: 'seli_insider_trades_undated.csv',
-            r2Key: `${CSV_EXPORT_PREFIX}unknown.csv`,
-            env,
-          });
-        }
-        await writeStreamingZip(zipEntries, zipWriter);
-      })();
-
-      // Stream the ZIP into R2 as it's built
-      await env.EXPORT_SNAPSHOTS.put('csv-export/full-export.zip', zipReadable, {
-        httpMetadata: { contentType: 'application/zip' },
-      });
-      await zipBuildPromise;
+      const zipEntries = [];
+      for (const y of allYears) {
+        zipEntries.push({
+          name: `seli_insider_trades_${y.year}.csv`,
+          r2Key: `${CSV_EXPORT_PREFIX}${y.year}.csv`,
+          env,
+        });
+      }
+      if (undatedRows > 0) {
+        zipEntries.push({
+          name: 'seli_insider_trades_undated.csv',
+          r2Key: `${CSV_EXPORT_PREFIX}unknown.csv`,
+          env,
+        });
+      }
+      await buildZipToR2(env, 'csv-export/full-export.zip', zipEntries);
       console.log('[Worker] Pre-built ZIP uploaded to csv-export/full-export.zip');
     } catch (e) {
       console.error('[Worker] Pre-built ZIP failed (non-fatal — downloads will retry):', e.message);
@@ -1202,21 +1295,115 @@ async function handleCSVDownload(request, env, origin) {
     ).catch(e => console.error('[Worker] Failed to mark export consumed:', e.message));
   }
 
-  // ── Serve the pre-built ZIP directly from R2 ──
-  const zipObj = await env.EXPORT_SNAPSHOTS.get('csv-export/full-export.zip');
-  if (!zipObj) {
-    return corsResponse({
-      error: 'Export is being prepared — try again in a few minutes.'
-    }, 202, origin, env);
+  const cutoffDate = String(purchasedAt).slice(0, 10);   // 'YYYY-MM-DD'
+  const cutoffYear = Number(cutoffDate.slice(0, 4));
+  const today = new Date().toISOString().slice(0, 10);
+
+  // New purchase (today) or cutoff is recent enough that the pre-built ZIP
+  // is correct — serve it directly from R2 for maximum speed.
+  if (cutoffDate >= today) {
+    const zipObj = await env.EXPORT_SNAPSHOTS.get('csv-export/full-export.zip');
+    if (!zipObj) {
+      return corsResponse({ error: 'Export is being prepared — try again in a few minutes.' }, 202, origin, env);
+    }
+    return new Response(zipObj.body, {
+      status: 200,
+      headers: {
+        ...corsHeaders(origin, env),
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="seli_insider_trades_through_${cutoffDate}.zip"`,
+        'Content-Length': String(zipObj.size),
+      },
+    });
   }
 
-  return new Response(zipObj.body, {
+  // Old redownload — stream a filtered ZIP capped at the purchase date.
+  // Years before cutoff year: serve in full. Cutoff year: filter rows.
+  // Years after cutoff year: skip entirely.
+  const manifestObj = await env.EXPORT_SNAPSHOTS.get(CSV_MANIFEST_KEY);
+  if (!manifestObj) {
+    return corsResponse({ error: 'Export is being prepared — try again in a few minutes.' }, 202, origin, env);
+  }
+  const manifest = JSON.parse(await manifestObj.text());
+  const yearsToInclude = (manifest.years || [])
+    .filter(y => Number(y.year) <= cutoffYear)
+    .sort((a, b) => Number(a.year) - Number(b.year));
+
+  if (yearsToInclude.length === 0) {
+    return corsResponse({ error: 'No data available for this purchase date.' }, 404, origin, env);
+  }
+
+  // Build filtered ZIP entries — just-in-time R2 fetch for each year
+  const encoder = new TextEncoder();
+  const zipEntries = [];
+  for (const y of yearsToInclude) {
+    const key = `${CSV_EXPORT_PREFIX}${y.year}.csv`;
+    if (Number(y.year) === cutoffYear) {
+      // Cutoff year — fetch and filter rows by date
+      const obj = await env.EXPORT_SNAPSHOTS.get(key);
+      if (!obj) continue;
+      const chunks = [];
+      const reader = obj.body.getReader();
+      const decoder = new TextDecoder();
+      let leftover = '';
+      let headerSent = false;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = leftover + decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        leftover = lines.pop();
+        const kept = [];
+        for (const line of lines) {
+          if (!headerSent) { kept.push(line); headerSent = true; continue; }
+          if (!line) continue;
+          const comma1 = line.indexOf(',');
+          const comma2 = line.indexOf(',', comma1 + 1);
+          const txDate = line.slice(0, comma1);
+          const filingDate = line.slice(comma1 + 1, comma2);
+          const effectiveDate = txDate || filingDate;
+          if (!effectiveDate || effectiveDate <= cutoffDate) kept.push(line);
+        }
+        if (kept.length > 0) chunks.push(encoder.encode(kept.join('\n') + '\n'));
+      }
+      if (leftover) {
+        const comma1 = leftover.indexOf(',');
+        const comma2 = leftover.indexOf(',', comma1 + 1);
+        const txDate = leftover.slice(0, comma1);
+        const filingDate = leftover.slice(comma1 + 1, comma2);
+        const effectiveDate = txDate || filingDate;
+        if (!effectiveDate || effectiveDate <= cutoffDate) chunks.push(encoder.encode(leftover));
+      }
+      zipEntries.push({ name: `seli_insider_trades_${y.year}.csv`, chunks });
+    } else {
+      // Full year — just-in-time R2 fetch during ZIP streaming
+      zipEntries.push({ name: `seli_insider_trades_${y.year}.csv`, r2Key: key, env });
+    }
+  }
+
+  // Stream the filtered ZIP directly to the browser response.
+  // This works because Response streaming has no length requirement
+  // (unlike R2.put). Each R2 object is fetched just-in-time inside
+  // writeStreamingZip to avoid body stream expiry.
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  // Fire-and-forget — the response streams as data is written
+  (async () => {
+    try {
+      await writeStreamingZip(zipEntries, writer);
+    } catch (e) {
+      console.error('[Worker] Filtered CSV download failed:', e.message);
+      try { await writer.abort(e); } catch {}
+    }
+  })();
+
+  return new Response(readable, {
     status: 200,
     headers: {
       ...corsHeaders(origin, env),
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="seli_insider_trades.zip"`,
-      'Content-Length': String(zipObj.size),
+      'Content-Disposition': `attachment; filename="seli_insider_trades_through_${cutoffDate}.zip"`,
     },
   });
 }
