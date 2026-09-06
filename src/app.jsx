@@ -9476,7 +9476,7 @@ function RedownloadPage() {
               )}
               {isSignedIn && history && history.length > 0 && (
                 <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:12}}>
-                  Each re-download delivers the data as it stood on that purchase's date.
+                  Each re-download delivers the latest available data.
                 </p>
               )}
             </section>
