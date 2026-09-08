@@ -42,3 +42,9 @@ bucket_name = "database"
 # Every-4-min keep-alive prevents Neon serverless compute from hibernating,
 # which otherwise adds 500ms–2s of cold-start latency to the first real query.
 crons = ["0 6 * * *", "*/4 * * * *"]
+
+  [[unsafe.bindings]]
+  name = "RATE_LIMITER"
+  type = "ratelimit"
+  namespace_id = "1001"
+  simple = { limit = 600, period = 60 }

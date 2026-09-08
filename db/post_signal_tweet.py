@@ -23,6 +23,10 @@ Optional:
 
 import os, sys, json, logging
 from datetime import date, timedelta
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 log = logging.getLogger("tweet")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s %(message)s",
@@ -392,16 +396,16 @@ def run():
     to_send = []
     for s in candidates[:slots]:
         tweet = format_tweet(s)
-        svg = generate_card_svg(s)
-        to_send.append((s, tweet, svg))
+        card_html = generate_card_html(s)
+        to_send.append((s, tweet, card_html))
         log.info(f"  Card: ${s['ticker']} — {s['insider_count']} insiders, "
                  f"net {fmt_money(s['net_value'])}, score {s['attention_score']:.0f}")
 
     if DRY_RUN:
         log.info(f"\n  DRY RUN — {len(to_send)} cards generated, not emailing")
-        for s, tweet, svg in to_send:
+        for s, tweet, card_html in to_send:
             log.info(f"\n  Tweet text:\n{tweet}\n")
-            log.info(f"  SVG card: {len(svg)} bytes")
+            log.info(f"  Card HTML: {len(card_html)} bytes")
     else:
         log.info(f"\n  Sending {len(to_send)} cards via email…")
         if send_card_email(to_send):

@@ -379,7 +379,9 @@ const workerHandler = {
       return await handleFetchInner(request, env, origin);
     } catch (e) {
       console.error('[Worker] UNCAUGHT top-level exception:', e.message, e.stack?.slice(0, 800));
-      return corsResponse({ error: 'Internal error: ' + e.message }, 500, origin, env);
+      // Never leak internal error details to the client — log the real
+      // message above (visible in wrangler tail / Sentry), return generic.
+      return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
     }
   },
 };
@@ -668,7 +670,125 @@ async function handleFetchInner(request, env, origin) {
       }, 200, origin, env);
     }
 
+    // ── Finnhub proxy — keeps the API key server-side ─────────────────────
+    // The client used to call Finnhub directly with the key baked into the
+    // JS bundle (via VITE_FINNHUB_API_KEY), meaning anyone could grab it
+    // from dev tools and burn through the rate limit. These routes proxy
+    // the two endpoints the app actually uses, so the key never leaves the
+    // Worker. Requires FINNHUB_API_KEY as a Wrangler secret.
+    if (url.pathname === '/finnhub/profile' && request.method === 'GET') {
+      return handleFinnhubProfile(request, env, origin, url);
+    }
+    if (url.pathname === '/finnhub/metrics' && request.method === 'GET') {
+      return handleFinnhubMetrics(request, env, origin, url);
+    }
+    if (url.pathname === '/finnhub/quote' && request.method === 'GET') {
+      return handleFinnhubQuote(request, env, origin, url);
+    }
+    if (url.pathname === '/finnhub/company-news' && request.method === 'GET') {
+      return handleFinnhubCompanyNews(request, env, origin, url);
+    }
+    if (url.pathname === '/finnhub/news' && request.method === 'GET') {
+      return handleFinnhubGeneralNews(request, env, origin, url);
+    }
+
     return handleQuery(request, env, origin);
+}
+
+// ── Finnhub proxy handlers ────────────────────────────────────────────────
+async function handleFinnhubProfile(request, env, origin, url) {
+  const ticker = url.searchParams.get('symbol');
+  if (!ticker || !/^[A-Z0-9.]{1,10}$/i.test(ticker)) {
+    return corsResponse({ error: 'Invalid symbol' }, 400, origin, env);
+  }
+  if (!env.FINNHUB_API_KEY) {
+    return corsResponse(null, 200, origin, env);
+  }
+  try {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker.toUpperCase())}&token=${env.FINNHUB_API_KEY}`
+    );
+    const data = await r.json();
+    return corsResponse(data, r.status, origin, env);
+  } catch (e) {
+    console.error('[Worker] Finnhub profile failed:', e.message);
+    return corsResponse({ error: 'Finnhub request failed' }, 502, origin, env);
+  }
+}
+
+async function handleFinnhubQuote(request, env, origin, url) {
+  const ticker = url.searchParams.get('symbol');
+  if (!ticker || !/^[A-Z0-9.^]{1,15}$/i.test(ticker)) {
+    return corsResponse({ error: 'Invalid symbol' }, 400, origin, env);
+  }
+  if (!env.FINNHUB_API_KEY) return corsResponse(null, 200, origin, env);
+  try {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(ticker)}&token=${env.FINNHUB_API_KEY}`
+    );
+    const data = await r.json();
+    return corsResponse(data, r.status, origin, env);
+  } catch (e) {
+    console.error('[Worker] Finnhub quote failed:', e.message);
+    return corsResponse({ error: 'Finnhub request failed' }, 502, origin, env);
+  }
+}
+
+async function handleFinnhubCompanyNews(request, env, origin, url) {
+  const ticker = url.searchParams.get('symbol');
+  const from = url.searchParams.get('from');
+  const to = url.searchParams.get('to');
+  if (!ticker || !/^[A-Z0-9.]{1,10}$/i.test(ticker)) {
+    return corsResponse({ error: 'Invalid symbol' }, 400, origin, env);
+  }
+  if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return corsResponse({ error: 'Invalid date range' }, 400, origin, env);
+  }
+  if (!env.FINNHUB_API_KEY) return corsResponse([], 200, origin, env);
+  try {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(ticker)}&from=${from}&to=${to}&token=${env.FINNHUB_API_KEY}`
+    );
+    const data = await r.json();
+    return corsResponse(data, r.status, origin, env);
+  } catch (e) {
+    console.error('[Worker] Finnhub company-news failed:', e.message);
+    return corsResponse([], 502, origin, env);
+  }
+}
+
+async function handleFinnhubGeneralNews(request, env, origin, url) {
+  if (!env.FINNHUB_API_KEY) return corsResponse([], 200, origin, env);
+  try {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/news?category=general&token=${env.FINNHUB_API_KEY}`
+    );
+    const data = await r.json();
+    return corsResponse(data, r.status, origin, env);
+  } catch (e) {
+    console.error('[Worker] Finnhub general news failed:', e.message);
+    return corsResponse([], 502, origin, env);
+  }
+}
+
+async function handleFinnhubMetrics(request, env, origin, url) {
+  const ticker = url.searchParams.get('symbol');
+  if (!ticker || !/^[A-Z0-9.]{1,10}$/i.test(ticker)) {
+    return corsResponse({ error: 'Invalid symbol' }, 400, origin, env);
+  }
+  if (!env.FINNHUB_API_KEY) {
+    return corsResponse(null, 200, origin, env);
+  }
+  try {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(ticker.toUpperCase())}&metric=all&token=${env.FINNHUB_API_KEY}`
+    );
+    const data = await r.json();
+    return corsResponse(data, r.status, origin, env);
+  } catch (e) {
+    console.error('[Worker] Finnhub metrics failed:', e.message);
+    return corsResponse({ error: 'Finnhub request failed' }, 502, origin, env);
+  }
 }
 
 // The actual export — wraps workerHandler with Sentry's current Cloudflare
@@ -1422,31 +1542,71 @@ async function handleQuery(request, env, origin) {
   if (request.method === 'POST') {
     let bodyText = '';
     try { bodyText = await request.text(); } catch (e) {
-      return corsResponse({ error: 'Body read failed', detail: e.message }, 400, origin, env);
+      return corsResponse({ error: 'Failed to read request' }, 400, origin, env);
     }
 
-    console.log('[Worker] bodyText length:', bodyText.length);
-
     if (!bodyText || bodyText.trim() === '') {
-      return corsResponse({ error: 'Empty body', received_length: bodyText.length }, 400, origin, env);
+      return corsResponse({ error: 'Empty request body' }, 400, origin, env);
     }
 
     let body;
     try { body = JSON.parse(bodyText); }
     catch (e) {
-      return corsResponse({ error: 'Invalid JSON', received_length: bodyText.length, preview: bodyText.slice(0,100), parseError: e.message }, 400, origin, env);
+      return corsResponse({ error: 'Invalid request format' }, 400, origin, env);
     }
 
     query = body.query || '';
   }
 
   if (!query || typeof query !== 'string') {
-    return corsResponse({ error: 'Missing query', queryType: typeof query, queryLength: query.length }, 400, origin, env);
+    return corsResponse({ error: 'Missing query' }, 400, origin, env);
   }
 
-  // SELECT only guard
-  if (!query.trim().toUpperCase().startsWith('SELECT')) {
+  // ── SQL safety ─────────────────────────────────────────────────────────
+  // The client builds SQL strings and sends them here. This is a generic
+  // passthrough, so it MUST be locked down hard:
+  //
+  //   1. Must start with SELECT (no INSERT/UPDATE/DELETE/DROP/etc.)
+  //   2. No semicolons — prevents multi-statement injection
+  //   3. Only allowed tables — prevents reading subscriptions, data_purchases, etc.
+  //   4. No dangerous keywords anywhere in the query
+  //
+  // Long-term: replace this passthrough with named endpoints entirely.
+  // This is the pragmatic hardening for the existing architecture.
+
+  const normalized = query.replace(/\s+/g, ' ').trim();
+  const upper = normalized.toUpperCase();
+
+  // Must start with SELECT
+  if (!upper.startsWith('SELECT')) {
     return corsResponse({ error: 'Only SELECT queries allowed' }, 403, origin, env);
+  }
+
+  // Block semicolons — prevents "SELECT 1; DROP TABLE filings; --"
+  if (normalized.includes(';')) {
+    console.error('[Worker] Query rejected: contains semicolon');
+    return corsResponse({ error: 'Query rejected' }, 403, origin, env);
+  }
+
+  // Block dangerous SQL keywords that have no place in a read-only query.
+  // Checked against the normalized uppercase version. Word-boundary checks
+  // (\b) prevent false positives on column names like "updated_at".
+  const BLOCKED_KEYWORDS = /\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|EXECUTE|EXEC|COPY|LOAD|IMPORT|INTO)\b/;
+  if (BLOCKED_KEYWORDS.test(upper)) {
+    console.error('[Worker] Query rejected: contains blocked keyword');
+    return corsResponse({ error: 'Query rejected' }, 403, origin, env);
+  }
+
+  // Table allowlist — only the two tables the client legitimately queries.
+  // Any reference to another table (subscriptions, data_purchases,
+  // cancellation_feedback, etc.) is either a mistake or an attack.
+  const ALLOWED_TABLES = ['public.filings', 'public.prices_history'];
+  const tableRefs = normalized.match(/public\.\w+/gi) || [];
+  for (const ref of tableRefs) {
+    if (!ALLOWED_TABLES.includes(ref.toLowerCase())) {
+      console.error(`[Worker] Query rejected: disallowed table ${ref}`);
+      return corsResponse({ error: 'Query rejected' }, 403, origin, env);
+    }
   }
 
   // ── Free-tier date floor enforcement ────────────────────────────────────
@@ -1513,13 +1673,17 @@ async function handleQuery(request, env, origin) {
       body: JSON.stringify({ query }),
     });
   } catch (e) {
-    return corsResponse({ error: `Neon fetch failed: ${e.message}` }, 502, origin, env);
+    console.error('[Worker] Neon fetch failed:', e.message);
+    return corsResponse({ error: 'Database temporarily unavailable' }, 502, origin, env);
   }
 
   const text = await resp.text();
   let result;
   try { result = JSON.parse(text); }
-  catch { return corsResponse({ error: 'Invalid Neon response', raw: text.slice(0,200) }, 502, origin, env); }
+  catch {
+    console.error('[Worker] Invalid Neon response:', text.slice(0,200));
+    return corsResponse({ error: 'Database returned an unexpected response' }, 502, origin, env);
+  }
 
   // Leaderboard queries are heavy aggregations that only change when new
   // filings are ingested (~daily). Cache them at the edge for 30 minutes
@@ -1678,7 +1842,7 @@ async function handleExport(request, env, origin) {
 
     return corsResponse({ rows: allRows, nextCursor: done ? null : cursor, done }, 200, origin, env);
   } catch (e) {
-    return corsResponse({ error: e.message }, 502, origin, env);
+    return corsResponse({ error: 'Service temporarily unavailable' }, 502, origin, env);
   }
 }
 
@@ -2028,7 +2192,7 @@ async function handlePrefs(request, env, origin) {
       `);
       return corsResponse({ prefs: result.rows?.[0] || null }, 200, origin, env);
     } catch (e) {
-      return corsResponse({ error: e.message }, 500, origin, env);
+      return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
     }
   }
 
@@ -2106,7 +2270,7 @@ async function handlePrefs(request, env, origin) {
       `);
       return corsResponse({ ok: true }, 200, origin, env);
     } catch (e) {
-      return corsResponse({ error: e.message }, 500, origin, env);
+      return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
     }
   }
 
@@ -2201,7 +2365,7 @@ async function handleTestEmail(request, env, origin) {
     return corsResponse({ ok: true, sentTo: email }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] test-email failed:', e.message);
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
@@ -2220,7 +2384,7 @@ async function handleWatchlist(request, env, origin) {
       return corsResponse({ items: result.rows || [] }, 200, origin, env);
     } catch (e) {
       console.error('[Worker] watchlist GET failed:', e.message);
-      return corsResponse({ error: e.message }, 500, origin, env);
+      return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
     }
   }
 
@@ -2258,7 +2422,7 @@ async function handleWatchlist(request, env, origin) {
       return corsResponse({ ok: true }, 200, origin, env);
     } catch (e) {
       console.error('[Worker] watchlist POST failed:', e.message);
-      return corsResponse({ error: e.message }, 500, origin, env);
+      return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
     }
   }
 
@@ -2513,7 +2677,7 @@ async function handleSnapTradeConnect(request, env, origin) {
     return corsResponse({ redirectURI: portalResp.redirectURI }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] SnapTrade connect failed:', e.message); // never log userSecret itself
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
@@ -2533,7 +2697,7 @@ async function handleSnapTradeStatus(request, env, origin) {
     `);
     return corsResponse({ connection: result.rows?.[0] || null }, 200, origin, env);
   } catch (e) {
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
@@ -2581,7 +2745,7 @@ async function handleSnapTradeConfirm(request, env, origin) {
     }
   } catch (e) {
     console.error('[Worker] SnapTrade confirm failed:', e.message);
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
@@ -2613,7 +2777,7 @@ async function handleSnapTradeDisconnect(request, env, origin) {
     `);
     return corsResponse({ ok: true }, 200, origin, env);
   } catch (e) {
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
@@ -2675,7 +2839,7 @@ async function handleSnapTradePositions(request, env, origin) {
     // never stored, logged, or returned beyond this function.
   } catch (e) {
     console.error('[Worker] SnapTrade positions fetch failed:', e.message); // never logs conn.userSecret
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
@@ -2771,7 +2935,7 @@ async function handlePortfolioTickersBatch(request, env, origin) {
     return corsResponse({ tickers_by_user: result }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] portfolio-tickers-batch failed:', e.message);
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 // ── Genuinely public, no auth path at all — deliberately not built on the
@@ -3262,7 +3426,7 @@ async function handleStripeWebhook(request, env) {
     console.error('[Worker] Webhook handler error:', e.message);
     // Return 500 so Stripe retries — we want it to keep trying on our bugs,
     // not silently drop the event.
-    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: 'Webhook processing failed' }), { status: 500 });
   }
 
   return new Response(JSON.stringify({ received: true }), { status: 200 });
@@ -3343,7 +3507,7 @@ async function handleClerkWebhook(request, env) {
     console.error('[Worker] Clerk webhook cascade delete failed:', e.message);
     // 500, not 200 — a real failure here should make Clerk retry the
     // webhook rather than silently treat an incomplete deletion as done.
-    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: 'Webhook processing failed' }), { status: 500 });
   }
 }
 
@@ -3356,9 +3520,9 @@ async function handleCreateSubscription(request, env, origin) {
 
   // Beta period: every public signup through this endpoint gets the $6.99
   // beta price, not the standard $11.99 PRO price — matches the landing
-  // page's "first 25 BETA users get half-off forever" pricing. No
-  // automatic counter to flip this back to STRIPE_PRICE_PRO once 25
-  // signups are hit — that's still a manual swap for later.
+  // page's "Beta pricing — locked in forever" offer. Beta is indefinite;
+  // when you're ready to end it, swap STRIPE_PRICE_PRO to the $13.99
+  // Price ID and flip BETA_ACTIVE in app.jsx.
   // Founder/family comped access doesn't go through this endpoint at all —
   // it's a manually-inserted public.subscriptions row with plan:'pro',
   // status:'active', and no stripe_subscription_id, set up directly rather
@@ -3546,7 +3710,7 @@ async function handleCreateSubscription(request, env, origin) {
     return corsResponse({ clientSecret, subscriptionId: subscription.id }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] create-subscription failed:', e.message);
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   } finally {
     // Always release, win or lose — a real completion doesn't need to wait
     // out the full 2-minute expiry, and an error shouldn't lock someone out
@@ -3621,7 +3785,7 @@ async function handleCreateDataPurchase(request, env, origin) {
     return corsResponse({ clientSecret: paymentIntent.client_secret }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] create-data-purchase failed:', e.message);
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
@@ -3663,7 +3827,7 @@ async function handleCancelSubscription(request, env, origin) {
     return corsResponse({ ok: true }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] cancel-subscription failed:', e.message);
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
@@ -3690,7 +3854,7 @@ async function handleReactivateSubscription(request, env, origin) {
     return corsResponse({ ok: true }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] reactivate-subscription failed:', e.message);
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
@@ -3722,7 +3886,7 @@ async function handleBillingStatus(request, env, origin) {
     return corsResponse({ plan, status, current_period_end, cancel_at_period_end, hasDataExport, dataExports }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] billing-status failed:', e.message);
-    return corsResponse({ error: e.message }, 500, origin, env);
+    return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
   }
 }
 
