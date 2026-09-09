@@ -5331,7 +5331,18 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             ))}
           </div>
           <div className="ip-rail__list">
-            {lbError?<div className="ws-empty" style={{color:'var(--red-600)',fontSize:11}}>{lbError}</div>
+            {lbError?(
+              lbError.includes('access') ? (
+                <div style={{padding:'32px 20px',textAlign:'center'}}>
+                  <div style={{fontSize:24,marginBottom:8}}>◈</div>
+                  <div style={{fontSize:13,fontWeight:600,color:'var(--text)',marginBottom:6}}>Insider profiles are a Pro feature</div>
+                  <p style={{fontSize:12,color:'var(--text-3)',lineHeight:1.5,marginBottom:14,maxWidth:280,margin:'0 auto 14px'}}>Ranked scorecards for every tracked insider — hit rates, returns, trade history, and composite scores.</p>
+                  <button className="wl-upsell__cta" style={{fontSize:12,padding:'8px 20px'}} onClick={()=>onUpgrade('pro_direct')}>
+                    Upgrade to Pro — $6.99/mo →
+                  </button>
+                </div>
+              ) : <div className="ws-empty" style={{color:'var(--red-600)',fontSize:11}}>{lbError}</div>
+            )
             :rows===null?<SkeletonRows count={15}/>
             :lbLoading&&sorted.length===0?<SkeletonRows count={8}/>
             :sorted.length===0?<div className="ws-empty" style={{fontSize:11}}>No results{search?' for "'+search+'"':''}.</div>
@@ -6655,7 +6666,16 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
         <button className={`ins-lb-col-hdr__sort${sort==='om_buys'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('om_buys')}>Buys{sort==='om_buys'&&(dir<0?' ↓':' ↑')}</button>
         <button className={`ins-lb-col-hdr__sort${sort==='proxy_score'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('proxy_score')}>Score{sort==='proxy_score'&&(dir<0?' ↓':' ↑')}</button>
       </div>
-      {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
+      {error?(
+        error.includes('access') ? (
+          <div className="ins-empty" style={{flexDirection:'column',gap:8,padding:'20px 12px',textAlign:'center'}}>
+            <div style={{fontSize:12,color:'var(--text-2)'}}>Insider rankings are a Pro feature</div>
+            <button className="wl-upsell__cta" style={{fontSize:11,padding:'6px 16px'}} onClick={()=>{ if(window.__seliUpgrade) window.__seliUpgrade('pro_direct'); }}>
+              Upgrade to Pro →
+            </button>
+          </div>
+        ) : <div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
+      )
       :rows===null?<SkeletonRows count={8}/>
       :rows.length===0?<div className="ins-empty">Not enough data yet</div>
       :<div className="ins-lb-list">
