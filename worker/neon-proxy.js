@@ -1595,7 +1595,12 @@ async function handleQuery(request, env, origin) {
   // This is the pragmatic hardening for the existing architecture.
 
   const normalized = query.replace(/\s+/g, ' ').trim();
-  const upper = normalized.toUpperCase();
+  // Strip SQL comments before keyword checks — the leaderboard query has
+  // inline comments (-- splitting into multiple rows) that contain words
+  // like INTO which are legitimate in prose but trigger the blocked-keyword
+  // regex. Remove -- comments and /* */ blocks before checking.
+  const noComments = normalized.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+  const upper = noComments.toUpperCase();
 
   // Must start with SELECT
   if (!upper.startsWith('SELECT')) {
