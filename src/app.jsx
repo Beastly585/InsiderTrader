@@ -120,11 +120,63 @@ function useCompanyProfile(ticker, cik) {
 // Stored in localStorage as a JSON array of ticker strings.
 // No auth needed — entirely client-side.
 // ─── Pro plan check ───────────────────────────────────────────────────────────
-// plan and hasDataExport are written into Clerk publicMetadata by the Stripe
-// webhook in neon-proxy.js — Neon is the real source of truth, this is just
-// a fast client-side read of what the webhook already confirmed server-side.
-// (isPro / hasDataExport now live in src/lib/scoring.js — imported above —
-// so the same logic under test is the same logic actually running.)
+// Clerk publicMetadata is a fast first-render hint, but NOT the source of
+// truth — syncClerkMetadata() in the webhook is fire-and-forget and can
+// silently fail, leaving a paying Pro user gated as Free everywhere in the
+// UI. Manually comped users (Neon row set by hand) also need to work even
+// if Clerk metadata drifts.
+//
+// BillingContext fetches /billing/status from the Worker (which reads Neon)
+// on mount and provides the authoritative `pro` boolean. Every component
+// that used to call isPro(user) now reads from this context instead.
+// Clerk metadata is still used as the instant pre-fetch value so the UI
+// doesn't flash "Free" for 200ms on every page load.
+
+const BillingContext = createContext({ pro: false, hasDataExport: false, billingStatus: null, refreshBilling: () => {} });
+
+function BillingProvider({ children }) {
+  const { user } = useUser();
+  const { isSignedIn } = useAuth();
+
+  // Instant value from Clerk metadata — covers normal checkouts where
+  // the webhook succeeded, and manually comped users where you set both
+  // Neon + Clerk by hand.
+  const clerkPro = user?.publicMetadata?.plan === 'pro';
+  const clerkExport = !!user?.publicMetadata?.hasDataExport;
+
+  const [billingStatus, setBillingStatus] = useState(null);
+  const [fetchedPro, setFetchedPro] = useState(null); // null = not yet fetched
+  const [fetchedExport, setFetchedExport] = useState(null);
+
+  const fetchBilling = useCallback(async () => {
+    if (!cfg.NEON_PROXY_URL || !isSignedIn) return;
+    try {
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/status`, { headers });
+      if (!res.ok) return;
+      const data = await res.json();
+      setBillingStatus(data);
+      const neonPro = data.plan === 'pro' && (data.status === 'active' || data.status === 'trialing');
+      setFetchedPro(neonPro);
+      setFetchedExport(!!data.hasDataExport);
+    } catch {}
+  }, [isSignedIn]);
+
+  useEffect(() => { fetchBilling(); }, [fetchBilling]);
+
+  // Before the fetch resolves, use Clerk metadata. After, Neon wins.
+  const pro = fetchedPro !== null ? fetchedPro : clerkPro;
+  const hasDataExport = fetchedExport !== null ? fetchedExport : clerkExport;
+
+  return (
+    <BillingContext.Provider value={{ pro, hasDataExport, billingStatus, refreshBilling: fetchBilling }}>
+      {children}
+    </BillingContext.Provider>
+  );
+}
+
+function useBilling() { return useContext(BillingContext); }
+
 
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
 // Beta pricing flag — flip to false when you hit 25 founding members, then
@@ -142,6 +194,7 @@ const PRO_PRICE_FULL    = '$13.99';
 // fabricating one would be dishonest. That visual slot is an honest
 // trust line instead.
 function UpgradeModal({ feature, pro, onClose }) {
+  const { refreshBilling } = useBilling();
   useEffect(()=>{
     const h = e => { if (e.key==='Escape') onClose(); };
     window.addEventListener('keydown', h);
@@ -211,6 +264,7 @@ function UpgradeModal({ feature, pro, onClose }) {
         product={checkoutProduct}
         onClose={() => { setCheckoutProduct(null); if (feature==='data_export_direct'||feature==='pro_direct'||(isMobileModal&&proIntentFeatures.includes(feature))) onClose(); }}
         onSuccess={async ()=>{
+          refreshBilling(); // Update the billing context from Neon
           const wasPro = checkoutProduct === 'pro';
           setProcessing(true);
           if (wasPro) {
@@ -449,49 +503,56 @@ function CheckoutModal({ product, onClose, onSuccess }) {
   const { user } = useUser();
   const [clientSecret, setClientSecret] = useState(null);
   const [error, setError] = useState(null);
-  const [promoCode, setPromoCode] = useState('');
-  const [promoApplied, setPromoApplied] = useState('');
-  const [promoError, setPromoError] = useState('');
   // True only for the reactivation path below — there's no payment step,
   // just a wait for Stripe's webhook to land.
   const [reactivating, setReactivating] = useState(false);
   const copy = PRODUCT_COPY[product];
 
-  // Fire (or re-fire) checkout creation, optionally with a promo code
-  const createCheckout = useCallback(async (promo) => {
-    setClientSecret(null);
-    setError(null);
-    try {
-      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-      const bodyObj = { email: user?.primaryEmailAddress?.emailAddress };
-      if (promo) bodyObj.promotionCode = promo;
-      const res = await fetch(`${cfg.NEON_PROXY_URL}${copy.endpoint}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(bodyObj),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || 'Could not start checkout');
-      if (data.reactivated) {
-        setReactivating(true);
-        for (let attempt = 0; attempt < 6; attempt++) {
-          await new Promise(r => setTimeout(r, 1500));
-          const fresh = await user?.reload().catch(() => null);
-          if (fresh?.publicMetadata?.plan === 'pro') break;
-        }
-        setReactivating(false);
-        onSuccess && onSuccess();
-        return;
-      }
-      setClientSecret(data.clientSecret);
-      if (promo) { setPromoApplied(promo); setPromoError(''); }
-    } catch (e) {
-      setError(e.message);
-    }
-  }, [product, user]);
-
   useEffect(() => {
-    createCheckout(null);
+    let cancelled = false;
+    (async () => {
+      try {
+        const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+        const res = await fetch(`${cfg.NEON_PROXY_URL}${copy.endpoint}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ email: user?.primaryEmailAddress?.emailAddress }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || data.error || 'Could not start checkout');
+        if (data.reactivated) {
+          // An existing subscription was resumed server-side instead of a
+          // new one being created (see handleCreateSubscription's
+          // reactivation path) — there's no payment to confirm, so this
+          // skips the Elements/card form entirely. But it still has to wait
+          // out the same webhook race CheckoutForm.handleConfirm() below
+          // already handles for a normal payment: Stripe's API call
+          // returning doesn't mean Clerk's publicMetadata (what the rest of
+          // the app reads to know someone's Pro) is updated yet — only the
+          // async customer.subscription.updated webhook does that. Calling
+          // onSuccess() immediately here, as an earlier version of this fix
+          // did, meant "You're a Pro member!" could show before the backend
+          // had actually caught up — leaving Settings > Billing still
+          // showing Free/Upgrade right after, and a second click correctly
+          // (but confusingly) hitting the "already have one" guard.
+          if (cancelled) return;
+          setReactivating(true);
+          for (let attempt = 0; attempt < 6; attempt++) {
+            await new Promise(r => setTimeout(r, 1500));
+            const fresh = await user?.reload().catch(() => null);
+            if (fresh?.publicMetadata?.plan === 'pro') break;
+          }
+          if (cancelled) return;
+          setReactivating(false);
+          onSuccess && onSuccess();
+          return;
+        }
+        if (!cancelled) setClientSecret(data.clientSecret);
+      } catch (e) {
+        if (!cancelled) setError(e.message);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [product]);
 
   return (
@@ -511,32 +572,6 @@ function CheckoutModal({ product, onClose, onSuccess }) {
           </ul>
           <div className="checkout-modal__trust">
             <IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe
-          </div>
-          <div className="checkout-modal__promo">
-            {promoApplied ? (
-              <div className="checkout-modal__promo-applied">
-                <IconCheck style={{width:11,height:11}}/>
-                <span>Code <strong>{promoApplied}</strong> applied</span>
-              </div>
-            ) : (
-              <div className="checkout-modal__promo-input">
-                <input
-                  type="text"
-                  placeholder="Promo code"
-                  value={promoCode}
-                  onChange={e=>setPromoCode(e.target.value.toUpperCase())}
-                  onKeyDown={e=>{if(e.key==='Enter'&&promoCode.trim())createCheckout(promoCode.trim());}}
-                  style={{flex:1,height:28,fontSize:'0.75rem',padding:'0 8px',borderRadius:'var(--radius-sm)',background:'var(--surface)',color:'var(--text)',border:'0.5px solid var(--border-md)',fontFamily:'var(--font)'}}
-                />
-                <button
-                  className="btn btn--sm"
-                  disabled={!promoCode.trim()}
-                  onClick={()=>createCheckout(promoCode.trim())}
-                  style={{height:28}}
-                >Apply</button>
-              </div>
-            )}
-            {promoError && <div style={{fontSize:'0.6875rem',color:'var(--red-600)',marginTop:4}}>{promoError}</div>}
           </div>
         </div>
 
@@ -992,7 +1027,7 @@ async function neonWatchlistLoad() {
 }
 
 function useWatchlist(user) {
-  const pro = isPro(user);
+  const { pro } = useBilling();
   const [tickers,  setTickers]  = useState(()=> pro ? wlGet(WL_KEY)        : []);
   const [insiders, setInsiders] = useState(()=> pro ? wlGet(WL_INSIDER_KEY) : []);
   const [showUpgrade, setShowUpgrade] = useState(null); // null | 'watchlist_ticker' | 'watchlist_insider'
@@ -1295,7 +1330,7 @@ const NAV = [
 ];
 // ─── Top Nav ──────────────────────────────────────────────────────────────────
 function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate, isDataStale, loading, helpMode, setHelpMode }) {
-  const pro = isPro(user);
+  const { pro } = useBilling();
   const isMobile = useIsMobile();
   const NAV_LINKS = [
     { id: 'home',      label: 'Home',      Icon: IconHome },
@@ -4018,7 +4053,7 @@ function HomeTile({ title, onSeeAll, children, className }) {
 }
 
 function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll }) {
-  const pro = isPro(user);
+  const { pro } = useBilling();
   const isMobile = useIsMobile();
   const [myNews, setMyNews] = useState(false);
   const [sigDays, setSigDays] = useState(14);
@@ -4253,7 +4288,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
 
 
 function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist, user, onUpgrade }) {
-  const pro = isPro(user);
+  const { pro } = useBilling();
   const isMobile = useIsMobile();
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -4991,7 +5026,7 @@ function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpa
 }
 
 function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow, watchlist, onUpgrade }) {
-  const pro = isPro(user);
+  const { pro } = useBilling();
   const isMobile = useIsMobile();
 
   const [rows, setRows]           = useState(null);
@@ -7639,7 +7674,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
 }
 
 function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
-  const pro = isPro(user);
+  const { pro } = useBilling();
   // CSV export is its own $39.99 one-time product, deliberately separate
   // from the Pro subscription — Pro's job is to earn recurring revenue, and
   // giving away the one-time product's entire value for free the moment
@@ -8114,7 +8149,7 @@ function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
 }
 
 function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow, user }) {
-  const pro = isPro(user);
+  const { pro } = useBilling();
   const [days, setDays]       = useState(null); // null = All time
   const [tab, setTab]         = useState('tickers');
   const [sortKey, setSortKey] = useState('lastTradeDate');
@@ -9783,7 +9818,7 @@ function useSnapTrade(pro) {
 }
 
 function SettingsPage({ user, onUpgrade }) {
-  const pro   = isPro(user);
+  const { pro } = useBilling();
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
   const snaptrade = useSnapTrade(pro);
   const portfolio = usePortfolio(pro);
@@ -10960,6 +10995,7 @@ function AppInner() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
   const isMobile = useIsMobile();
+  const { pro: billingPro, refreshBilling } = useBilling();
 
   // Register Clerk token getter globally so edgar.js can use it without
   // needing to import Clerk directly (edgar.js is a plain ES module)
@@ -11329,8 +11365,8 @@ function AppInner() {
         <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
         <a href="/help" target="_blank" rel="noreferrer">Help</a>
       </footer>
-      {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={isPro(user)} onClose={()=>watchlist.setShowUpgrade(null)}/>}
-      {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={isPro(user)} onClose={()=>setShowUpgradeModal(null)}/>}
+      {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={billingPro} onClose={()=>watchlist.setShowUpgrade(null)}/>}
+      {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={billingPro} onClose={()=>setShowUpgradeModal(null)}/>}
       {panelOpen && !detailFull && (
         <>
           <div className="panel-overlay" onClick={closeDetail}/>
@@ -11353,7 +11389,7 @@ function AppInner() {
               onSwitchTab={(tab)=>setDrawerMode(tab)}
               watchlist={watchlist}
               portfolioTickers={portfolioTickers}
-              pro={isPro(user)}
+              pro={billingPro}
               onUpgrade={(f)=>setShowUpgradeModal(f||'default')}
             />
           : <InsightsDrawer
@@ -11367,7 +11403,7 @@ function AppInner() {
               ensureFilingsWindow={ensureFilingsWindow}
               filingsLoading={loading}
               watchlist={watchlist}
-              pro={isPro(user)}
+              pro={billingPro}
             />
       )}
     </div>
@@ -11516,7 +11552,9 @@ export default function App() {
   useSEO();
   return (
     <Sentry.ErrorBoundary fallback={AppErrorFallback}>
-      <AppInner/>
+      <BillingProvider>
+        <AppInner/>
+      </BillingProvider>
     </Sentry.ErrorBoundary>
   );
 }
