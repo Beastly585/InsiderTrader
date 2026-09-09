@@ -1272,6 +1272,7 @@ async function handleGuestCSVCheckout(request, env, origin) {
     const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: "2024-06-20" });
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      allow_promotion_codes: true,
       line_items: [{
         price_data: {
           currency: 'usd',
@@ -3554,6 +3555,23 @@ async function handleCreateSubscription(request, env, origin) {
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
 
+  // Optional promotion code from the client — resolved server-side to a
+  // coupon ID so the client never sees or controls the discount directly.
+  let promoCodeId = null;
+  try {
+    const body = await request.clone().json();
+    if (body.promotionCode && typeof body.promotionCode === 'string') {
+      const codes = await stripe.promotionCodes.list({
+        code: body.promotionCode.trim(),
+        active: true,
+        limit: 1,
+      });
+      if (codes.data.length) {
+        promoCodeId = codes.data[0].id;
+      }
+    }
+  } catch {}
+
   // Atomically claim a short-lived lock on this user's row before doing
   // anything else below. The old check-then-create pattern — SELECT the
   // existing row, decide, then separately INSERT/create — has a real gap
@@ -3700,10 +3718,12 @@ async function handleCreateSubscription(request, env, origin) {
       payment_behavior: 'default_incomplete',
       payment_settings: {
         save_default_payment_method: 'on_subscription',
-        payment_method_types: ['card'], // keeps the checkout form to just the card fields
+        payment_method_types: ['card'],
       },
       expand: ['latest_invoice.payment_intent'],
       metadata: { clerk_user_id: clerkUserId },
+      // Apply promotion code if the client sent a valid one
+      ...(promoCodeId ? { promotion_code: promoCodeId } : {}),
     });
 
     const clientSecret = subscription.latest_invoice.payment_intent.client_secret;
@@ -3774,8 +3794,30 @@ async function handleCreateDataPurchase(request, env, origin) {
       ).catch(e => console.error('[Worker] Failed to persist stripe_customer_id for data purchase (non-fatal):', e.message));
     }
 
+    // Resolve optional promotion code to a discount amount
+    let finalAmount = 3999; // $39.99 in cents
+    if (body.promotionCode && typeof body.promotionCode === 'string') {
+      try {
+        const codes = await stripe.promotionCodes.list({
+          code: body.promotionCode.trim(),
+          active: true,
+          limit: 1,
+        });
+        if (codes.data.length) {
+          const coupon = codes.data[0].coupon;
+          if (coupon.percent_off) {
+            finalAmount = Math.round(finalAmount * (1 - coupon.percent_off / 100));
+          } else if (coupon.amount_off) {
+            finalAmount = Math.max(0, finalAmount - coupon.amount_off);
+          }
+        }
+      } catch (e) {
+        console.warn('[Worker] Promo code lookup failed (non-fatal):', e.message);
+      }
+    }
+
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: 3999, // $39.99, in cents
+      amount: finalAmount,
       currency: 'usd',
       customer: customerId,
       payment_method_types: ['card'],

@@ -54,11 +54,9 @@ const _descCache    = {};
 
 async function fetchCompanyProfile(ticker) {
   if (_profileCache[ticker]) return _profileCache[ticker];
-  if (!cfg.NEON_PROXY_URL) return null;
+  if (!cfg.FINNHUB_API_KEY) return null;
   try {
-    const r = await fetch(`${cfg.NEON_PROXY_URL}/finnhub/profile?symbol=${encodeURIComponent(ticker)}`, {
-      headers: await getAuthHeaders(),
-    });
+    const r = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${ticker}&token=${cfg.FINNHUB_API_KEY}`);
     const d = await r.json();
     _profileCache[ticker] = (d && d.name) ? d : null;
     return _profileCache[ticker];
@@ -66,11 +64,9 @@ async function fetchCompanyProfile(ticker) {
 }
 
 async function fetchCompanyMetrics(ticker) {
-  if (!cfg.NEON_PROXY_URL) return null;
+  if (!cfg.FINNHUB_API_KEY) return null;
   try {
-    const r = await fetch(`${cfg.NEON_PROXY_URL}/finnhub/metrics?symbol=${encodeURIComponent(ticker)}`, {
-      headers: await getAuthHeaders(),
-    });
+    const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${cfg.FINNHUB_API_KEY}`);
     const d = await r.json();
     return d?.metric || null;
   } catch { return null; }
@@ -131,9 +127,8 @@ function useCompanyProfile(ticker, cik) {
 // so the same logic under test is the same logic actually running.)
 
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
-// Beta pricing flag — flip to false when you're ready to end the founding
-// member rate, then update STRIPE_PRICE_PRO in your worker secrets to
-// the $13.99 Price ID. Beta is indefinite — no user cap.
+// Beta pricing flag — flip to false when you hit 25 founding members, then
+// update STRIPE_PRICE_PRO in your worker secrets to the $13.99 Price ID.
 const BETA_ACTIVE = true;
 const PRO_PRICE_DISPLAY = BETA_ACTIVE ? '$6.99' : '$13.99';
 const PRO_PRICE_LABEL   = BETA_ACTIVE ? '$6.99/mo' : '$13.99/mo';
@@ -1797,7 +1792,7 @@ const GUIDE_SECTIONS = [
         <div className="guide-callout guide-callout--accent" style={{margin:'12px 0'}}>
           <p className="guide-callout__title" style={{color:'var(--accent-strong)'}}>Founding member pricing</p>
           <p className="guide-callout__text">
-            While Seli is in beta, you can lock in Pro at <strong>$6.99/mo — half off, forever</strong>. That rate stays as long as your subscription is active.
+            As a beta user, you can lock in Pro at <strong>$6.99/mo — half off, forever</strong>. That rate stays as long as your subscription is active.
           </p>
         </div>
         <p><strong>One-time data export</strong> — purchase the entire database as a CSV download for a one-time fee.</p>
@@ -1939,7 +1934,7 @@ function EnvPreview({ type }) {
 // since the two sections don't necessarily want identical icon sets long
 // term even though they overlap today.
 const LP_FEATURE_ICON_MAP = {
-  IconData, IconInsights, IconLink, IconZap,
+  IconData, IconInsights, IconLink, IconZap, IconFavorites,
 };
 
 // Shared context so all TileInfoButtons can see the nudge state
@@ -3527,13 +3522,11 @@ function useMktData() {
     return ()=>{ _mktListeners.delete(cb); };
   },[]);
 
-  // Finnhub fallback for indices — proxied through Worker to keep key server-side
+  // Finnhub fallback for indices
   useEffect(()=>{
-    if (!data || Object.keys(data.indices).length || !cfg.NEON_PROXY_URL) return;
-    (async () => {
-    const headers = await getAuthHeaders();
+    if (!data || Object.keys(data.indices).length || !cfg.FINNHUB_API_KEY) return;
     Promise.all(INDEX_SYMS.map(sym=>
-      fetch(`${cfg.NEON_PROXY_URL}/finnhub/quote?symbol=${encodeURIComponent(sym)}`, { headers })
+      fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${cfg.FINNHUB_API_KEY}`)
         .then(r=>r.json()).then(d=>({sym,price:d.c,chg:d.c&&d.pc?(((d.c-d.pc)/d.pc)*100):null}))
         .catch(()=>null)
     )).then(res=>{
@@ -3545,7 +3538,6 @@ function useMktData() {
         setData(updated);
       }
     });
-    })();
   },[data?.indices && Object.keys(data.indices).length]);
 
   return data;
@@ -3779,28 +3771,25 @@ function usePortfolio(pro) {
 function PortfolioTickerNews({ tickers }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
-  const hasProxy = !!cfg.NEON_PROXY_URL;
+  const hasKey = !!cfg.FINNHUB_API_KEY;
   const tickerKey = tickers.join(',');
   useEffect(()=>{
-    if (!hasProxy || !tickers.length) return;
+    if (!hasKey || !tickers.length) return;
     setLoading(true);
     const today=new Date().toISOString().split('T')[0];
     const from=new Date(); from.setDate(from.getDate()-5);
     const fromStr=from.toISOString().split('T')[0];
-    (async () => {
-    const headers = await getAuthHeaders();
     Promise.all(tickers.slice(0,5).map(tk=>
-      fetch(`${cfg.NEON_PROXY_URL}/finnhub/company-news?symbol=${encodeURIComponent(tk)}&from=${fromStr}&to=${today}`, { headers })
+      fetch(`https://finnhub.io/api/v1/company-news?symbol=${tk}&from=${fromStr}&to=${today}&token=${cfg.FINNHUB_API_KEY}`)
         .then(r=>r.json()).then(a=>(a||[]).slice(0,2).map(n=>({...n,_ticker:tk}))).catch(()=>[])
     )).then(res=>{
       setNews(res.flat().filter(n=>n.headline&&n.url).sort((a,b)=>b.datetime-a.datetime).slice(0,6));
       setLoading(false);
     });
-    })();
-  },[tickerKey,hasProxy]);
+  },[tickerKey,hasKey]);
 
   if (!tickers.length) return null;
-  if (!hasProxy) return <div className="port-block__empty">News unavailable right now.</div>;
+  if (!hasKey) return <div className="port-block__empty">News unavailable right now.</div>;
   if (loading) return <div style={{padding:'8px 0',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>;
   if (!news.length) return <div className="port-block__empty">No recent news for your holdings</div>;
   return (
@@ -3864,22 +3853,20 @@ function useMyNewsTickers(watchlist, filings) {
 function useMarketNews({ myTickers, myNewsOn, limit }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
-  const hasProxy = !!cfg.NEON_PROXY_URL;
+  const hasKey = !!cfg.FINNHUB_API_KEY;
   const tickerKey = myTickers.map(t=>t.ticker).join(',');
 
   useEffect(() => {
-    if (!hasProxy) return;
+    if (!hasKey) return;
     let cancelled = false;
     setLoading(true);
 
-    (async () => {
-    const headers = await getAuthHeaders();
     if (myNewsOn) {
       if (!myTickers.length) { setNews([]); setLoading(false); return; }
       const to = new Date().toISOString().split('T')[0];
       const from = (()=>{const d=new Date();d.setDate(d.getDate()-14);return d.toISOString().split('T')[0];})();
       Promise.all(myTickers.map(({ticker,reason}) =>
-        fetch(`${cfg.NEON_PROXY_URL}/finnhub/company-news?symbol=${encodeURIComponent(ticker)}&from=${from}&to=${to}`, { headers })
+        fetch(`https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${from}&to=${to}&token=${cfg.FINNHUB_API_KEY}`)
           .then(r=>r.json()).then(a=>Array.isArray(a)?a.map(n=>({...n,_ticker:ticker,_reason:reason})):[]).catch(()=>[])
       )).then(results => {
         if (cancelled) return;
@@ -3890,7 +3877,7 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
         setNews(merged); setLoading(false);
       });
     } else {
-      fetch(`${cfg.NEON_PROXY_URL}/finnhub/news`, { headers })
+      fetch(`https://finnhub.io/api/v1/news?category=general&token=${cfg.FINNHUB_API_KEY}`)
         .then(r=>r.json())
         .then(a=>{
           if (cancelled) return;
@@ -3899,11 +3886,10 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
         })
         .catch(()=>{ if(!cancelled) setLoading(false); });
     }
-    })();
     return ()=>{ cancelled=true; };
-  }, [hasProxy, myNewsOn, limit, tickerKey]);
+  }, [hasKey, myNewsOn, limit, tickerKey]);
 
-  return { news, loading, hasProxy };
+  return { news, loading, hasKey };
 }
 
 // Small tag showing exactly why an article surfaced under My News — the
@@ -3947,10 +3933,10 @@ function NewsList({ news, loading, hasKey, emptyHint }) {
 function MarketNews({ watchlist, filings, limit=12, myNewsOn=false }) {
   const pro = !!watchlist?.pro;
   const myTickers = useMyNewsTickers(watchlist, filings);
-  const { news, loading, hasProxy } = useMarketNews({ myTickers, myNewsOn: myNewsOn&&pro, limit });
+  const { news, loading, hasKey } = useMarketNews({ myTickers, myNewsOn: myNewsOn&&pro, limit });
 
   return (
-    <NewsList news={news} loading={loading} hasKey={hasProxy}
+    <NewsList news={news} loading={loading} hasKey={hasKey}
       emptyHint={myNewsOn&&pro?'No recent news for your starred tickers or followed insiders\' trades.':undefined}/>
   );
 }
@@ -3959,7 +3945,7 @@ function NewsDrawer({ watchlist, filings, onClose }) {
   const [myNewsOn, setMyNewsOn] = useState(false);
   const pro = !!watchlist?.pro;
   const myTickers = useMyNewsTickers(watchlist, filings);
-  const { news, loading, hasProxy } = useMarketNews({ myTickers, myNewsOn: myNewsOn&&pro, limit: 60 });
+  const { news, loading, hasKey } = useMarketNews({ myTickers, myNewsOn: myNewsOn&&pro, limit: 60 });
 
   return (
     <div className="drawer-overlay" onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
@@ -3979,7 +3965,7 @@ function NewsDrawer({ watchlist, filings, onClose }) {
           </div>
         </div>
         <div className="drawer__body drawer__body--single">
-          <NewsList news={news} loading={loading} hasKey={hasProxy}
+          <NewsList news={news} loading={loading} hasKey={hasKey}
             emptyHint={myNewsOn&&pro?'No recent news for your starred tickers or followed insiders\' trades.':undefined}/>
         </div>
       </div>
@@ -10777,7 +10763,7 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-price-card__price">
               <span className="lp-price-card__price-strike">$13.99</span> $6.99<span>/mo</span>
             </div>
-            <div className="lp-price-card__beta-note">Beta pricing — locked in forever once you subscribe</div>
+            <div className="lp-price-card__beta-note">Half off, forever — for the first 25 Beta users</div>
             <div className="lp-price-card__desc">Full history, every alert, every score — for serious research.</div>
             <ul className="lp-price-card__features">
               {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Customizable email alerts, instant or digest','Full score breakdown on every trade','Connect your brokerage (SnapTrade)','Full insiders deep-dive'].map(f=>(
