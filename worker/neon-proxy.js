@@ -2306,9 +2306,15 @@ async function handlePrefs(request, env, origin) {
 // gating has to happen here too, not only in app.jsx.
 async function isProServerSide(env, clerkUserId) {
   const subResult = await neonFetch(env,
-    `SELECT status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+    `SELECT plan, status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
   );
-  return isLiveStatus(subResult.rows?.[0]?.status);
+  const row = subResult.rows?.[0];
+  if (!row) return false;
+  // plan = 'pro' is the source of truth. For Stripe-managed subscriptions,
+  // status must also be live (active/trialing). Comped users (manual Neon
+  // row, no stripe_subscription_id) may have status = NULL or 'active' —
+  // if plan is 'pro', they're in.
+  return row.plan === 'pro' && (isLiveStatus(row.status) || !row.status);
 }
 
 async function handleTestEmail(request, env, origin) {

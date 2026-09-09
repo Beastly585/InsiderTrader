@@ -5027,6 +5027,44 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   const { pro } = useBilling();
   const isMobile = useIsMobile();
 
+  // FREE USER — show conversion page instead of fetching leaderboard
+  // (which would 403 and show a confusing error)
+  if (!pro) return (
+    <div className="ws-page">
+      <div style={{marginBottom:24}}>
+        <h1 className="ws-page-title">Insider Profiles</h1>
+        <p className="ws-page-sub">Ranked by composite score — hit rate, returns, volume &amp; role.</p>
+      </div>
+      <div className="wl-upsell">
+        <div className="wl-upsell__content">
+          <div className="wl-upsell__icon">◈</div>
+          <h2 className="wl-upsell__title">See who's beating the market</h2>
+          <p className="wl-upsell__sub">Every corporate insider and member of Congress, ranked by their actual trading performance. Hit rates, average returns, conviction scores — backed by every SEC Form 4 since 2010.</p>
+          <button className="wl-upsell__cta" onClick={()=>onUpgrade('pro_direct')}>
+            Upgrade to Pro — $6.99/mo →
+          </button>
+          <p className="wl-upsell__fine">Cancel any time. Includes watchlists, alert digests &amp; portfolio linking.</p>
+        </div>
+        <div className="wl-upsell__features">
+          {[
+            {icon:'◎', title:'Insider scorecards', body:'Hit rate, avg return, trade count, and a composite score for every tracked insider.'},
+            {icon:'◉', title:'Full trade history', body:'Every open-market buy and sell an insider has made, linked to the original SEC filing.'},
+            {icon:'⊘', title:'Filter & rank', body:'Sort by score, hit rate, returns, or volume. Filter by role, source (corporate or congressional), and time window.'},
+            {icon:'◈', title:'Congressional trades', body:'See what senators and representatives are buying alongside corporate C-suite executives.'},
+          ].map(f=>(
+            <div key={f.title} className="wl-upsell__feature">
+              <span className="wl-upsell__feature-icon">{f.icon}</span>
+              <div>
+                <div className="wl-upsell__feature-title">{f.title}</div>
+                <div className="wl-upsell__feature-body">{f.body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   const [rows, setRows]           = useState(null);
   const [lbError, setLbError]     = useState(null);
   const [lbLoading, setLbLoading] = useState(false);
