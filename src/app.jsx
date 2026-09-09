@@ -54,9 +54,11 @@ const _descCache    = {};
 
 async function fetchCompanyProfile(ticker) {
   if (_profileCache[ticker]) return _profileCache[ticker];
-  if (!cfg.FINNHUB_API_KEY) return null;
+  if (!cfg.NEON_PROXY_URL) return null;
   try {
-    const r = await fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${ticker}&token=${cfg.FINNHUB_API_KEY}`);
+    const r = await fetch(`${cfg.NEON_PROXY_URL}/finnhub/profile?symbol=${encodeURIComponent(ticker)}`, {
+      headers: await getAuthHeaders(),
+    });
     const d = await r.json();
     _profileCache[ticker] = (d && d.name) ? d : null;
     return _profileCache[ticker];
@@ -64,9 +66,11 @@ async function fetchCompanyProfile(ticker) {
 }
 
 async function fetchCompanyMetrics(ticker) {
-  if (!cfg.FINNHUB_API_KEY) return null;
+  if (!cfg.NEON_PROXY_URL) return null;
   try {
-    const r = await fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${cfg.FINNHUB_API_KEY}`);
+    const r = await fetch(`${cfg.NEON_PROXY_URL}/finnhub/metrics?symbol=${encodeURIComponent(ticker)}`, {
+      headers: await getAuthHeaders(),
+    });
     const d = await r.json();
     return d?.metric || null;
   } catch { return null; }
@@ -121,31 +125,19 @@ function useCompanyProfile(ticker, cik) {
 // No auth needed — entirely client-side.
 // ─── Pro plan check ───────────────────────────────────────────────────────────
 // Clerk publicMetadata is a fast first-render hint, but NOT the source of
-// truth — syncClerkMetadata() in the webhook is fire-and-forget and can
-// silently fail, leaving a paying Pro user gated as Free everywhere in the
-// UI. Manually comped users (Neon row set by hand) also need to work even
-// if Clerk metadata drifts.
-//
-// BillingContext fetches /billing/status from the Worker (which reads Neon)
-// on mount and provides the authoritative `pro` boolean. Every component
-// that used to call isPro(user) now reads from this context instead.
-// Clerk metadata is still used as the instant pre-fetch value so the UI
-// doesn't flash "Free" for 200ms on every page load.
+// truth. BillingContext fetches /billing/status from the Worker (Neon) on
+// mount and uses that as the authoritative answer. Covers both regular
+// Stripe checkouts and manually comped users (Neon row set by hand).
 
 const BillingContext = createContext({ pro: false, hasDataExport: false, billingStatus: null, refreshBilling: () => {} });
 
 function BillingProvider({ children }) {
   const { user } = useUser();
   const { isSignedIn } = useAuth();
-
-  // Instant value from Clerk metadata — covers normal checkouts where
-  // the webhook succeeded, and manually comped users where you set both
-  // Neon + Clerk by hand.
   const clerkPro = user?.publicMetadata?.plan === 'pro';
   const clerkExport = !!user?.publicMetadata?.hasDataExport;
-
   const [billingStatus, setBillingStatus] = useState(null);
-  const [fetchedPro, setFetchedPro] = useState(null); // null = not yet fetched
+  const [fetchedPro, setFetchedPro] = useState(null);
   const [fetchedExport, setFetchedExport] = useState(null);
 
   const fetchBilling = useCallback(async () => {
@@ -156,15 +148,13 @@ function BillingProvider({ children }) {
       if (!res.ok) return;
       const data = await res.json();
       setBillingStatus(data);
-      const neonPro = data.plan === 'pro' && (data.status === 'active' || data.status === 'trialing');
-      setFetchedPro(neonPro);
+      setFetchedPro(data.plan === 'pro' && (data.status === 'active' || data.status === 'trialing'));
       setFetchedExport(!!data.hasDataExport);
     } catch {}
   }, [isSignedIn]);
 
   useEffect(() => { fetchBilling(); }, [fetchBilling]);
 
-  // Before the fetch resolves, use Clerk metadata. After, Neon wins.
   const pro = fetchedPro !== null ? fetchedPro : clerkPro;
   const hasDataExport = fetchedExport !== null ? fetchedExport : clerkExport;
 
@@ -176,7 +166,6 @@ function BillingProvider({ children }) {
 }
 
 function useBilling() { return useContext(BillingContext); }
-
 
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
 // Beta pricing flag — flip to false when you hit 25 founding members, then
@@ -264,7 +253,7 @@ function UpgradeModal({ feature, pro, onClose }) {
         product={checkoutProduct}
         onClose={() => { setCheckoutProduct(null); if (feature==='data_export_direct'||feature==='pro_direct'||(isMobileModal&&proIntentFeatures.includes(feature))) onClose(); }}
         onSuccess={async ()=>{
-          refreshBilling(); // Update the billing context from Neon
+          refreshBilling();
           const wasPro = checkoutProduct === 'pro';
           setProcessing(true);
           if (wasPro) {
@@ -1988,7 +1977,7 @@ function EnvPreview({ type }) {
 // since the two sections don't necessarily want identical icon sets long
 // term even though they overlap today.
 const LP_FEATURE_ICON_MAP = {
-  IconData, IconInsights, IconLink, IconZap,
+  IconData, IconInsights, IconLink, IconZap, IconFavorites,
 };
 
 // Shared context so all TileInfoButtons can see the nudge state
@@ -3576,11 +3565,13 @@ function useMktData() {
     return ()=>{ _mktListeners.delete(cb); };
   },[]);
 
-  // Finnhub fallback for indices
+  // Finnhub fallback for indices — proxied through Worker
   useEffect(()=>{
-    if (!data || Object.keys(data.indices).length || !cfg.FINNHUB_API_KEY) return;
+    if (!data || Object.keys(data.indices).length || !cfg.NEON_PROXY_URL) return;
+    (async () => {
+    const headers = await getAuthHeaders();
     Promise.all(INDEX_SYMS.map(sym=>
-      fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${cfg.FINNHUB_API_KEY}`)
+      fetch(`${cfg.NEON_PROXY_URL}/finnhub/quote?symbol=${encodeURIComponent(sym)}`, { headers })
         .then(r=>r.json()).then(d=>({sym,price:d.c,chg:d.c&&d.pc?(((d.c-d.pc)/d.pc)*100):null}))
         .catch(()=>null)
     )).then(res=>{
@@ -3592,6 +3583,7 @@ function useMktData() {
         setData(updated);
       }
     });
+    })();
   },[data?.indices && Object.keys(data.indices).length]);
 
   return data;
@@ -3825,25 +3817,28 @@ function usePortfolio(pro) {
 function PortfolioTickerNews({ tickers }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
-  const hasKey = !!cfg.FINNHUB_API_KEY;
+  const hasProxy = !!cfg.NEON_PROXY_URL;
   const tickerKey = tickers.join(',');
   useEffect(()=>{
-    if (!hasKey || !tickers.length) return;
+    if (!hasProxy || !tickers.length) return;
     setLoading(true);
     const today=new Date().toISOString().split('T')[0];
     const from=new Date(); from.setDate(from.getDate()-5);
     const fromStr=from.toISOString().split('T')[0];
+    (async () => {
+    const headers = await getAuthHeaders();
     Promise.all(tickers.slice(0,5).map(tk=>
-      fetch(`https://finnhub.io/api/v1/company-news?symbol=${tk}&from=${fromStr}&to=${today}&token=${cfg.FINNHUB_API_KEY}`)
+      fetch(`${cfg.NEON_PROXY_URL}/finnhub/company-news?symbol=${encodeURIComponent(tk)}&from=${fromStr}&to=${today}`, { headers })
         .then(r=>r.json()).then(a=>(a||[]).slice(0,2).map(n=>({...n,_ticker:tk}))).catch(()=>[])
     )).then(res=>{
       setNews(res.flat().filter(n=>n.headline&&n.url).sort((a,b)=>b.datetime-a.datetime).slice(0,6));
       setLoading(false);
     });
-  },[tickerKey,hasKey]);
+    })();
+  },[tickerKey,hasProxy]);
 
   if (!tickers.length) return null;
-  if (!hasKey) return <div className="port-block__empty">News unavailable right now.</div>;
+  if (!hasProxy) return <div className="port-block__empty">News unavailable right now.</div>;
   if (loading) return <div style={{padding:'8px 0',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>;
   if (!news.length) return <div className="port-block__empty">No recent news for your holdings</div>;
   return (
@@ -3907,20 +3902,22 @@ function useMyNewsTickers(watchlist, filings) {
 function useMarketNews({ myTickers, myNewsOn, limit }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
-  const hasKey = !!cfg.FINNHUB_API_KEY;
+  const hasProxy = !!cfg.NEON_PROXY_URL;
   const tickerKey = myTickers.map(t=>t.ticker).join(',');
 
   useEffect(() => {
-    if (!hasKey) return;
+    if (!hasProxy) return;
     let cancelled = false;
     setLoading(true);
 
+    (async () => {
+    const headers = await getAuthHeaders();
     if (myNewsOn) {
       if (!myTickers.length) { setNews([]); setLoading(false); return; }
       const to = new Date().toISOString().split('T')[0];
       const from = (()=>{const d=new Date();d.setDate(d.getDate()-14);return d.toISOString().split('T')[0];})();
       Promise.all(myTickers.map(({ticker,reason}) =>
-        fetch(`https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${from}&to=${to}&token=${cfg.FINNHUB_API_KEY}`)
+        fetch(`${cfg.NEON_PROXY_URL}/finnhub/company-news?symbol=${encodeURIComponent(ticker)}&from=${from}&to=${to}`, { headers })
           .then(r=>r.json()).then(a=>Array.isArray(a)?a.map(n=>({...n,_ticker:ticker,_reason:reason})):[]).catch(()=>[])
       )).then(results => {
         if (cancelled) return;
@@ -3931,7 +3928,7 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
         setNews(merged); setLoading(false);
       });
     } else {
-      fetch(`https://finnhub.io/api/v1/news?category=general&token=${cfg.FINNHUB_API_KEY}`)
+      fetch(`${cfg.NEON_PROXY_URL}/finnhub/news`, { headers })
         .then(r=>r.json())
         .then(a=>{
           if (cancelled) return;
@@ -3940,10 +3937,11 @@ function useMarketNews({ myTickers, myNewsOn, limit }) {
         })
         .catch(()=>{ if(!cancelled) setLoading(false); });
     }
+    })();
     return ()=>{ cancelled=true; };
-  }, [hasKey, myNewsOn, limit, tickerKey]);
+  }, [hasProxy, myNewsOn, limit, tickerKey]);
 
-  return { news, loading, hasKey };
+  return { news, loading, hasKey: hasProxy };
 }
 
 // Small tag showing exactly why an article surfaced under My News — the

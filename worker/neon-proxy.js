@@ -1315,7 +1315,10 @@ async function handleGuestCSVDownload(request, env, origin, ctx) {
       if (session.payment_status !== 'paid') {
         return corsResponse({ error: 'Payment not completed' }, 402, origin, env);
       }
-      paymentIntent = session.payment_intent;
+      // When a 100% promo code makes the total $0, Stripe skips creating a
+      // PaymentIntent entirely — session.payment_intent is null. Fall back
+      // to the session ID as the order identifier in that case.
+      paymentIntent = session.payment_intent || body.session_id;
       customerEmail = session.customer_details?.email;
       purchaseDate = new Date(session.created * 1000).toISOString().split('T')[0];
 
@@ -1364,22 +1367,38 @@ async function handleGuestCSVDownload(request, env, origin, ctx) {
         }, 200, origin, env);
       }
     } else if (body.order_id && body.email) {
-      // Re-download — verify order_id is a real paid PaymentIntent
-      // and email matches the one on file
+      // Re-download — verify order_id is a real paid PaymentIntent,
+      // or a Checkout Session (for $0 promo-code orders where no
+      // PaymentIntent was created).
       try {
-        const pi = await stripe.paymentIntents.retrieve(body.order_id);
-        if (pi.status !== 'succeeded') {
-          return corsResponse({ error: 'Payment not found or not completed' }, 404, origin, env);
+        if (body.order_id.startsWith('cs_')) {
+          // $0 order — order_id is a Checkout Session ID
+          const session = await stripe.checkout.sessions.retrieve(body.order_id);
+          if (session.payment_status !== 'paid') {
+            return corsResponse({ error: 'Payment not found or not completed' }, 404, origin, env);
+          }
+          const sessEmail = session.customer_details?.email;
+          if (!sessEmail || sessEmail.toLowerCase() !== body.email.toLowerCase()) {
+            return corsResponse({ error: 'Email does not match this order' }, 403, origin, env);
+          }
+          paymentIntent = body.order_id;
+          customerEmail = sessEmail;
+          purchaseDate = new Date(session.created * 1000).toISOString().split('T')[0];
+        } else {
+          // Normal order — order_id is a PaymentIntent ID
+          const pi = await stripe.paymentIntents.retrieve(body.order_id);
+          if (pi.status !== 'succeeded') {
+            return corsResponse({ error: 'Payment not found or not completed' }, 404, origin, env);
+          }
+          const charges = await stripe.charges.list({ payment_intent: body.order_id, limit: 1 });
+          const chargeEmail = charges.data[0]?.billing_details?.email || charges.data[0]?.receipt_email;
+          if (!chargeEmail || chargeEmail.toLowerCase() !== body.email.toLowerCase()) {
+            return corsResponse({ error: 'Email does not match this order' }, 403, origin, env);
+          }
+          paymentIntent = body.order_id;
+          customerEmail = chargeEmail;
+          purchaseDate = new Date(pi.created * 1000).toISOString().split('T')[0];
         }
-        // Get the email from the associated charge
-        const charges = await stripe.charges.list({ payment_intent: body.order_id, limit: 1 });
-        const chargeEmail = charges.data[0]?.billing_details?.email || charges.data[0]?.receipt_email;
-        if (!chargeEmail || chargeEmail.toLowerCase() !== body.email.toLowerCase()) {
-          return corsResponse({ error: 'Email does not match this order' }, 403, origin, env);
-        }
-        paymentIntent = body.order_id;
-        customerEmail = chargeEmail;
-        purchaseDate = new Date(pi.created * 1000).toISOString().split('T')[0];
       } catch (e) {
         return corsResponse({ error: 'Order not found' }, 404, origin, env);
       }
