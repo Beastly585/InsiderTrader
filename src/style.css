@@ -5003,6 +5003,12 @@ td { padding:7px 11px; vertical-align:middle; }
   font-size: 0.6875rem; color: var(--text-3); margin-top: 16px; padding-top: 14px;
   border-top: 0.5px solid var(--border);
 }
+.checkout-modal__promo { margin-top: 12px; }
+.checkout-modal__promo-input { display: flex; gap: 6px; align-items: center; }
+.checkout-modal__promo-applied {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.75rem; color: var(--green-600);
+}
 .checkout-modal__pay {
   flex: 1; padding: 44px 32px 28px; min-width: 0;
   max-height: 80vh; overflow-y: auto;

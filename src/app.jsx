@@ -449,56 +449,49 @@ function CheckoutModal({ product, onClose, onSuccess }) {
   const { user } = useUser();
   const [clientSecret, setClientSecret] = useState(null);
   const [error, setError] = useState(null);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoApplied, setPromoApplied] = useState('');
+  const [promoError, setPromoError] = useState('');
   // True only for the reactivation path below — there's no payment step,
   // just a wait for Stripe's webhook to land.
   const [reactivating, setReactivating] = useState(false);
   const copy = PRODUCT_COPY[product];
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-        const res = await fetch(`${cfg.NEON_PROXY_URL}${copy.endpoint}`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ email: user?.primaryEmailAddress?.emailAddress }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || 'Could not start checkout');
-        if (data.reactivated) {
-          // An existing subscription was resumed server-side instead of a
-          // new one being created (see handleCreateSubscription's
-          // reactivation path) — there's no payment to confirm, so this
-          // skips the Elements/card form entirely. But it still has to wait
-          // out the same webhook race CheckoutForm.handleConfirm() below
-          // already handles for a normal payment: Stripe's API call
-          // returning doesn't mean Clerk's publicMetadata (what the rest of
-          // the app reads to know someone's Pro) is updated yet — only the
-          // async customer.subscription.updated webhook does that. Calling
-          // onSuccess() immediately here, as an earlier version of this fix
-          // did, meant "You're a Pro member!" could show before the backend
-          // had actually caught up — leaving Settings > Billing still
-          // showing Free/Upgrade right after, and a second click correctly
-          // (but confusingly) hitting the "already have one" guard.
-          if (cancelled) return;
-          setReactivating(true);
-          for (let attempt = 0; attempt < 6; attempt++) {
-            await new Promise(r => setTimeout(r, 1500));
-            const fresh = await user?.reload().catch(() => null);
-            if (fresh?.publicMetadata?.plan === 'pro') break;
-          }
-          if (cancelled) return;
-          setReactivating(false);
-          onSuccess && onSuccess();
-          return;
+  // Fire (or re-fire) checkout creation, optionally with a promo code
+  const createCheckout = useCallback(async (promo) => {
+    setClientSecret(null);
+    setError(null);
+    try {
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const bodyObj = { email: user?.primaryEmailAddress?.emailAddress };
+      if (promo) bodyObj.promotionCode = promo;
+      const res = await fetch(`${cfg.NEON_PROXY_URL}${copy.endpoint}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(bodyObj),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Could not start checkout');
+      if (data.reactivated) {
+        setReactivating(true);
+        for (let attempt = 0; attempt < 6; attempt++) {
+          await new Promise(r => setTimeout(r, 1500));
+          const fresh = await user?.reload().catch(() => null);
+          if (fresh?.publicMetadata?.plan === 'pro') break;
         }
-        if (!cancelled) setClientSecret(data.clientSecret);
-      } catch (e) {
-        if (!cancelled) setError(e.message);
+        setReactivating(false);
+        onSuccess && onSuccess();
+        return;
       }
-    })();
-    return () => { cancelled = true; };
+      setClientSecret(data.clientSecret);
+      if (promo) { setPromoApplied(promo); setPromoError(''); }
+    } catch (e) {
+      setError(e.message);
+    }
+  }, [product, user]);
+
+  useEffect(() => {
+    createCheckout(null);
   }, [product]);
 
   return (
@@ -518,6 +511,32 @@ function CheckoutModal({ product, onClose, onSuccess }) {
           </ul>
           <div className="checkout-modal__trust">
             <IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe
+          </div>
+          <div className="checkout-modal__promo">
+            {promoApplied ? (
+              <div className="checkout-modal__promo-applied">
+                <IconCheck style={{width:11,height:11}}/>
+                <span>Code <strong>{promoApplied}</strong> applied</span>
+              </div>
+            ) : (
+              <div className="checkout-modal__promo-input">
+                <input
+                  type="text"
+                  placeholder="Promo code"
+                  value={promoCode}
+                  onChange={e=>setPromoCode(e.target.value.toUpperCase())}
+                  onKeyDown={e=>{if(e.key==='Enter'&&promoCode.trim())createCheckout(promoCode.trim());}}
+                  style={{flex:1,height:28,fontSize:'0.75rem',padding:'0 8px',borderRadius:'var(--radius-sm)',background:'var(--surface)',color:'var(--text)',border:'0.5px solid var(--border-md)',fontFamily:'var(--font)'}}
+                />
+                <button
+                  className="btn btn--sm"
+                  disabled={!promoCode.trim()}
+                  onClick={()=>createCheckout(promoCode.trim())}
+                  style={{height:28}}
+                >Apply</button>
+              </div>
+            )}
+            {promoError && <div style={{fontSize:'0.6875rem',color:'var(--red-600)',marginTop:4}}>{promoError}</div>}
           </div>
         </div>
 
@@ -1934,7 +1953,7 @@ function EnvPreview({ type }) {
 // since the two sections don't necessarily want identical icon sets long
 // term even though they overlap today.
 const LP_FEATURE_ICON_MAP = {
-  IconData, IconInsights, IconLink, IconZap, IconFavorites,
+  IconData, IconInsights, IconLink, IconZap,
 };
 
 // Shared context so all TileInfoButtons can see the nudge state
