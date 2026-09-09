@@ -39,9 +39,23 @@ RESEND_API_KEY     = os.environ.get("RESEND_API_KEY", "")
 FROM_EMAIL         = os.environ.get("ALERTS_FROM_EMAIL", "")
 NOTIFY_EMAIL       = os.environ.get("NOTIFY_EMAIL", "")
 APP_URL            = os.environ.get("APP_URL", "https://seli.app")
-MAX_CARDS          = int(os.environ.get("MAX_CARDS", "3"))
 DRY_RUN            = os.environ.get("DRY_RUN", "0") == "1"
 TEST_PREVIEW       = os.environ.get("TEST_PREVIEW", "0") == "1"
+
+# ── Posting limits ─────────────────────────────────────────────────────────
+# The tweet step runs 3x/day (Tiers B/C/D — 8am, 5pm, 4am ET).
+# Spreading 2 per run across 3 runs = up to 6 posts/day on a busy day.
+# Finance Twitter sweet spot is 4-6/day: enough to stay in feeds, not
+# enough to look like a bot. On slow days with weak signals, the score
+# floor means you might post 0-2 — that's fine, quality > volume.
+DAILY_CAP          = int(os.environ.get("DAILY_CAP", "6"))
+PER_INGEST         = int(os.environ.get("PER_INGEST", "2"))
+MIN_SCORE          = int(os.environ.get("MIN_SCORE", "50"))
+
+# Legacy env var — if someone already has MAX_CARDS set, respect it as
+# the daily cap so nothing breaks.
+if os.environ.get("MAX_CARDS"):
+    DAILY_CAP = int(os.environ["MAX_CARDS"])
 
 # Logo hosted on your domain — used in the screenshot card header/footer
 # instead of a text link (the card gets screenshotted so links are useless).
@@ -56,6 +70,15 @@ HIGH_INTEREST_TICKERS = {
     'MDB','DDOG','U','SE','BABA','JD','PDD','TSM','SMCI','ARM',
     'LLY','PFE','MRNA','JNJ','ABBV','UNH','CVS','XOM','CVX','COP',
     'WMT','COST','TGT','HD','LOW','NKE','SBUX','MCD','CMG','LULU',
+}
+
+# Subset of HIGH_INTEREST_TICKERS that are top-tier buzz names — the ones
+# that get engagement on Twitter purely from the ticker alone. Individual
+# trades on these get a lower value threshold and wider role net.
+TOP_BUZZ_TICKERS = {
+    'AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA','AMD',
+    'NFLX','BA','JPM','GS','COIN','PLTR','GME','AMC',
+    'MSTR','SMCI','ARM','LLY','MRNA','XOM','NKE','SBUX',
 }
 
 
@@ -150,12 +173,18 @@ def get_top_signals(conn, limit=5):
     return [dict(zip(cols, r), card_type='cluster') for r in rows]
 
 
-def get_individual_trades(conn, limit=5):
-    """Individual big trades on high-interest tickers by C-suite execs.
-    Single-insider trades noteworthy on their own because the ticker is
-    widely followed and the insider is senior enough."""
+def get_individual_trades(conn, limit=8):
+    """Individual trades on high-interest tickers by senior insiders.
+    Two tiers:
+      - Top-tier buzz names (NVDA, TSLA, AAPL, etc.): $50K+ and any
+        C-suite or officer — even a $50K buy from an NVDA VP gets
+        engagement because the ticker alone draws eyes.
+      - Rest of HIGH_INTEREST_TICKERS: $100K+ and C-suite only — the
+        trade itself needs to be notable enough to carry the post.
+    """
     cur = conn.cursor()
     cutoff = (date.today() - timedelta(days=2)).isoformat()
+    top_tier = ",".join(f"'{t}'" for t in TOP_BUZZ_TICKERS)
     high_tickers = ",".join(f"'{t}'" for t in HIGH_INTEREST_TICKERS)
 
     cur.execute(f"""
@@ -173,13 +202,23 @@ def get_individual_trades(conn, limit=5):
         FROM public.filings f
         WHERE COALESCE(f.transaction_date, f.filing_date) >= %s
           AND f.is_open_market = true
-          AND f.ticker IN ({high_tickers})
-          AND f.relationship = 'strong'
-          AND COALESCE(f.value, 0) >= 100000
           AND f.ticker NOT IN (
               SELECT ticker FROM public.tweet_log WHERE tweeted_date = CURRENT_DATE
           )
-        ORDER BY f.value DESC
+          AND (
+            -- Top-tier buzz: lower floor, C-suite or officer
+            (f.ticker IN ({top_tier})
+             AND f.relationship IN ('strong', 'medium')
+             AND COALESCE(f.value, 0) >= 50000)
+            OR
+            -- Other high-interest: higher floor, C-suite only
+            (f.ticker IN ({high_tickers})
+             AND f.relationship = 'strong'
+             AND COALESCE(f.value, 0) >= 100000)
+          )
+        ORDER BY
+          (f.ticker IN ({top_tier})) DESC,
+          f.value DESC
         LIMIT %s
     """, (cutoff, limit))
 
@@ -193,14 +232,15 @@ def get_individual_trades(conn, limit=5):
         d['card_type'] = 'individual'
         d['insider_count'] = 1
         d['trade_count'] = 1
-        d['exec_count'] = 1
+        d['exec_count'] = 1 if d['relationship'] == 'strong' else 0
         d['has_buys'] = d['transaction_type'] == 'buy'
         d['buy_value'] = d['value'] if d['has_buys'] else 0
         d['sell_value'] = d['value'] if not d['has_buys'] else 0
         d['net_value'] = d['value'] if d['has_buys'] else -d['value']
+        is_top = d['ticker'] in TOP_BUZZ_TICKERS
         d['attention_score'] = (
-            30 +  # high-interest ticker
-            15 +  # C-suite
+            (50 if is_top else 30) +    # ticker weight
+            (15 if d['exec_count'] else 8) +  # role weight
             (20 if d['has_buys'] else 0) +
             min(d['value'] / 100000, 50)
         )
@@ -548,17 +588,20 @@ def run():
     ensure_tweet_log(conn)
 
     already = cards_sent_today(conn)
-    slots = MAX_CARDS - already
-    log.info(f"Cards today: {already}/{MAX_CARDS} \u2014 {slots} slot{'s' if slots != 1 else ''} remaining")
+    daily_remaining = DAILY_CAP - already
+    log.info(f"Cards today: {already}/{DAILY_CAP} \u2014 {daily_remaining} daily slot{'s' if daily_remaining != 1 else ''} remaining, {PER_INGEST} per-ingest limit")
 
-    if slots <= 0 and not TEST_PREVIEW:
-        log.info("Daily limit reached. Done.")
+    if daily_remaining <= 0 and not TEST_PREVIEW:
+        log.info("Daily cap reached. Done.")
         conn.close()
         return
 
+    # How many cards this run can actually produce
+    run_limit = min(daily_remaining, PER_INGEST)
+
     # Gather both types of candidates
-    cluster_candidates = get_top_signals(conn, limit=5)
-    individual_candidates = get_individual_trades(conn, limit=5)
+    cluster_candidates = get_top_signals(conn, limit=8)
+    individual_candidates = get_individual_trades(conn, limit=8)
 
     # Merge, deduplicate by ticker (cluster wins if both exist), sort by score
     seen_tickers = set()
@@ -574,8 +617,12 @@ def run():
 
     all_candidates.sort(key=lambda s: s['attention_score'], reverse=True)
 
+    # Drop anything below the minimum score — don't post weak signals
+    # just to fill slots. Quality > volume.
+    all_candidates = [s for s in all_candidates if s['attention_score'] >= MIN_SCORE]
+
     if not all_candidates:
-        log.info("No untweeted signals or individual trades in the last 48h. Done.")
+        log.info(f"No candidates above score floor ({MIN_SCORE}). Done.")
         conn.close()
         return
 
@@ -599,9 +646,9 @@ def run():
         conn.close()
         return
 
-    # Generate cards
+    # Generate cards — capped at per-ingest limit
     to_send = []
-    for s in all_candidates[:slots]:
+    for s in all_candidates[:run_limit]:
         tweet = generate_tweet(s)
         card_html = generate_card(s)
         to_send.append((s, tweet, card_html))
