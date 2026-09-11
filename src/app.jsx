@@ -3463,7 +3463,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
   // which set the cutoff to today (the narrowest possible window, the exact
   // opposite of "All") rather than an unbounded one.
   const cutoff = useMemo(()=>{
-    if (days==null) return '2021-01-01'; // earliest data in the DB, matches edgar.js's own all-time floor
+    if (days==null) return '2010-01-01'; // full dataset floor — the Worker's own date-floor enforcement handles free-tier clamping server-side
     const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];
   },[days]);
   const [sigSort, setSigSort] = useState('conviction');
@@ -5411,7 +5411,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
     const ef=dateFrom||(dPreset!=null?(()=>{const d=new Date();d.setDate(d.getDate()-dPreset);return d.toISOString().split('T')[0];})():null);
     const et=dateTo||new Date().toISOString().split('T')[0];
     if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
-    c.push(`COALESCE(transaction_date,filing_date)>='2021-01-01'`);
+    c.push(`COALESCE(transaction_date,filing_date)>='${pro ? '2010-01-01' : new Date(Date.now()-365*86400000).toISOString().split('T')[0]}'`);
     c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
     if (typeF)  c.push(`transaction_type='${typeF}'`);
     if (relF)   c.push(`relationship='${relF}'`);
