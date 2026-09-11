@@ -9,12 +9,43 @@ import XLSX from 'xlsx-js-style'; // npm install xlsx-js-style — same API as p
 // src/app.jsx — Seli — insider trading intelligence platform
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
-import { loadFilings, computeSignals, getSector, REL_LABELS } from './edgar.js';
+import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
 // coverage for the exact date-parsing bug class that hit three times this
 // session, rather than living inline and untested here.)
+
+// ── Role abbreviation ─────────────────────────────────────────────────────────
+// Insider titles from SEC filings are verbose ("Chief Executive Officer",
+// "Executive Vice President and Chief Financial Officer"). Abbreviate for
+// compact display in profile headers and affiliation lists.
+function shortRole(title) {
+  if (!title) return '';
+  let t = title;
+  // Full title → abbreviation replacements (order matters — longest first)
+  t = t.replace(/Chief Executive Officer/gi, 'CEO');
+  t = t.replace(/Chief Financial Officer/gi, 'CFO');
+  t = t.replace(/Chief Operating Officer/gi, 'COO');
+  t = t.replace(/Chief Technology Officer/gi, 'CTO');
+  t = t.replace(/Chief Information Officer/gi, 'CIO');
+  t = t.replace(/Chief Marketing Officer/gi, 'CMO');
+  t = t.replace(/Chief Strategy Officer/gi, 'CSO');
+  t = t.replace(/Chief Legal Officer/gi, 'CLO');
+  t = t.replace(/Chief Revenue Officer/gi, 'CRO');
+  t = t.replace(/Chief People Officer/gi, 'CPO');
+  t = t.replace(/Chief Compliance Officer/gi, 'CCO');
+  t = t.replace(/Executive Vice President/gi, 'EVP');
+  t = t.replace(/Senior Vice President/gi, 'SVP');
+  t = t.replace(/Vice President/gi, 'VP');
+  t = t.replace(/General Counsel/gi, 'GC');
+  t = t.replace(/Chairman of the Board/gi, 'Chairman');
+  t = t.replace(/President and CEO/gi, 'President & CEO');
+  t = t.replace(/\band\b/gi, '&');
+  // Clean up double spaces, trailing commas
+  t = t.replace(/\s{2,}/g, ' ').replace(/,\s*$/, '').trim();
+  return t;
+}
 
 // ─── Company profile cache & hooks ───────────────────────────────────────────
 // Module-level cache so the same ticker only hits Finnhub once per page load.
@@ -131,8 +162,15 @@ function BillingProvider({ children }) {
 
 function useBilling() { return useContext(BillingContext); }
 
-
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
+// Beta pricing flag — flip to false when you're ready to end the founding
+// member rate. Beta is indefinite — no user cap.
+// update STRIPE_PRICE_PRO in your worker secrets to the $13.99 Price ID.
+const BETA_ACTIVE = true;
+const PRO_PRICE_DISPLAY = BETA_ACTIVE ? '$6.99' : '$13.99';
+const PRO_PRICE_LABEL   = BETA_ACTIVE ? '$6.99/mo' : '$13.99/mo';
+const PRO_PRICE_FULL    = '$13.99';
+
 // Shown when a free user tries to use a Pro feature.
 // Comparison-table style, matching the reference layout's structure:
 // logo, title, Free/Pro feature comparison, a plan selector, one CTA.
@@ -148,10 +186,25 @@ function UpgradeModal({ feature, pro, onClose }) {
   },[onClose]);
 
   const [checkoutProduct, setCheckoutProduct] = useState(null); // null | 'pro' | 'data_export'
-  const [plan, setPlan] = useState(feature==='data_export' ? 'data_export' : 'pro'); // which card is selected in the picker
+  const [plan, setPlan] = useState(feature==='data_export'||feature==='data_export_direct' ? 'data_export' : 'pro'); // which card is selected in the picker
   const [statusModal, setStatusModal] = useState(null);
   const [processing, setProcessing] = useState(false); // true for the gap between payment succeeding and the confirmation being ready
   const [progressText, setProgressText] = useState(null); // live row-count updates during a large export
+
+  // Direct checkout: skip the comparison modal and go straight to Stripe.
+  // Explicit: 'data_export_direct' and 'pro_direct' always go direct.
+  // Mobile: ANY Pro-intent feature skips the comparison modal on phones —
+  // there isn't enough screen space for Free vs Pro side-by-side, and the
+  // user already clicked a contextual "Go Pro" / "Upgrade" button so they
+  // know what they're buying. The comparison is still useful on desktop
+  // where it's a side-by-side layout and the trigger might be less specific.
+  const isMobileModal = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
+  const proIntentFeatures = ['default','watchlist','watchlist_ticker','watchlist_insider','notifications','portfolio','full_history'];
+  useEffect(()=>{
+    if (feature==='data_export_direct') setCheckoutProduct('data_export');
+    else if (feature==='pro_direct') setCheckoutProduct('pro');
+    else if (isMobileModal && proIntentFeatures.includes(feature)) setCheckoutProduct('pro');
+  },[feature]);
 
   // Personalized per the specific action that triggered this modal — a
   // generic "Upgrade to Pro" doesn't tell someone what they were actually
@@ -193,25 +246,25 @@ function UpgradeModal({ feature, pro, onClose }) {
     return (
       <CheckoutModal
         product={checkoutProduct}
-        onClose={() => setCheckoutProduct(null)}
+        onClose={() => { setCheckoutProduct(null); if (feature==='data_export_direct'||feature==='pro_direct'||(isMobileModal&&proIntentFeatures.includes(feature))) onClose(); }}
         onSuccess={async ()=>{
           const wasPro = checkoutProduct === 'pro';
           setProcessing(true);
           if (wasPro) {
             setCheckoutProduct(null);
             setProcessing(false);
-            setStatusModal({ title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' });
+            setStatusModal({ type: 'pro', title: "You're a Pro member!" });
             return;
           }
           // Data export — the whole point of paying for this is getting the
           // file, not being told where to go click a different button for
           // it. Start the download immediately, then confirm what happened.
           try {
-            const rowCount = await downloadFullExport('', undefined, 'consume', n => setProgressText(`${n.toLocaleString()} rows fetched so far…`));
+            await downloadCSVFromR2('consume', msg => setProgressText(msg));
             setCheckoutProduct(null);
             setProcessing(false);
             setProgressText(null);
-            setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.` });
+            setStatusModal({ title: 'Export started', message: 'Your download should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.' });
           } catch (e) {
             setCheckoutProduct(null);
             setProcessing(false);
@@ -223,20 +276,17 @@ function UpgradeModal({ feature, pro, onClose }) {
     );
   }
 
-  // Already-Pro users hitting the data-export wall don't need (or want) an
-  // "Upgrade to Pro" pitch — they already have Pro, and the export is a
-  // separate one-time purchase specifically because it's NOT part of the
-  // subscription. A dedicated, single-purpose modal here instead of the
-  // dual Free/Pro comparison avoids the confusing experience of being told
-  // to upgrade to something you already have.
-  if (feature==='data_export' && pro) {
+  // Data export is its own $39.99 one-time product, separate from the Pro
+  // subscription — anyone can buy it, free or Pro. Show the focused export
+  // modal instead of the dual Free/Pro comparison.
+  if (feature==='data_export') {
     return (
       <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
         <div className="upgrade-modal upgrade-modal--export">
           <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
           <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
           <div className="upgrade-modal__title">Buy full data export</div>
-          <div className="upgrade-modal__subtitle">A one-time pull of everything currently in the database, delivered as CSV — separate from your Pro subscription.</div>
+          <div className="upgrade-modal__subtitle">A one-time pull of everything currently in the database, delivered as CSV — no subscription required.</div>
           <div className="export-price-card">
             <div className="export-price-card__row">
               <span className="export-price-card__label">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
@@ -259,48 +309,75 @@ function UpgradeModal({ feature, pro, onClose }) {
 
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
-      <div className="upgrade-modal upgrade-modal--large">
+      <div className="upgrade-modal upgrade-modal--hero">
         <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{width:12,height:12}}/></button>
 
-        <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-        <div className="upgrade-modal__title">Upgrade to Pro</div>
-        <div className="upgrade-modal__subtitle">{subtitle}</div>
+        {/* Hero header */}
+        <div className="upgrade-hero__header">
+          <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+          <h2 className="upgrade-hero__title">Unlock the full picture</h2>
+          <p className="upgrade-hero__sub">{subtitle}</p>
+        </div>
 
-        <div className="upgrade-modal__table">
-          <div className="upgrade-modal__table-header">
-            <span/>
-            <span>Free</span>
-            <span className="upgrade-modal__table-header--pro">Pro</span>
-          </div>
-          {COMPARISON.map(row=>(
-            <div className="upgrade-modal__table-row" key={row.label}>
-              <span className="upgrade-modal__table-label">{row.label}</span>
-              <span className={row.free?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.free?<IconCheck style={{width:12,height:12}}/>:'–'}</span>
-              <span className={row.pro?'upgrade-check upgrade-check--yes':'upgrade-check upgrade-check--no'}>{row.pro?<IconCheck style={{width:12,height:12}}/>:'–'}</span>
+        {/* Two-card comparison */}
+        <div className="upgrade-hero__cards">
+          {/* Free card */}
+          <div className="upgrade-hero__card">
+            <div className="upgrade-hero__card-header">
+              <span className="upgrade-hero__card-label">Free</span>
+              <span className="upgrade-hero__card-price">$0</span>
             </div>
-          ))}
+            <ul className="upgrade-hero__features">
+              <li><IconCheck style={{width:12,height:12}}/>Live dashboard & signals</li>
+              <li><IconCheck style={{width:12,height:12}}/>7-day signal window</li>
+              <li><IconCheck style={{width:12,height:12}}/>Top insiders leaderboard</li>
+              <li><IconCheck style={{width:12,height:12}}/>1 year of data history</li>
+            </ul>
+          </div>
+
+          {/* Pro card */}
+          <div className="upgrade-hero__card upgrade-hero__card--pro">
+            {BETA_ACTIVE && <span className="upgrade-hero__badge">Half off — forever</span>}
+            <div className="upgrade-hero__card-header">
+              <span className="upgrade-hero__card-label">Pro</span>
+              <span className="upgrade-hero__card-price">
+                {BETA_ACTIVE && <span className="upgrade-hero__strike">{PRO_PRICE_FULL}</span>}
+                {PRO_PRICE_DISPLAY}<span className="upgrade-hero__per">/mo</span>
+              </span>
+            </div>
+            <ul className="upgrade-hero__features">
+              <li><IconCheck style={{width:12,height:12}}/>Everything in Free</li>
+              <li><IconCheck style={{width:12,height:12}}/>Full historical data (2010→present)</li>
+              <li><IconCheck style={{width:12,height:12}}/>Customizable instant alerts</li>
+              <li><IconCheck style={{width:12,height:12}}/>Connect your brokerage</li>
+              <li><IconCheck style={{width:12,height:12}}/>Full score breakdown</li>
+              <li><IconCheck style={{width:12,height:12}}/>Insiders deep-dive</li>
+            </ul>
+            <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct('pro')}>
+              Upgrade to Pro — {PRO_PRICE_LABEL}
+            </button>
+          </div>
         </div>
 
-        <div className="upgrade-modal__plans">
-          <button className={`upgrade-plan-card${plan==='pro'?' upgrade-plan-card--active':''}`} onClick={()=>setPlan('pro')}>
-            <span className="upgrade-plan-card__radio"/>
-            <span>
-              <span className="upgrade-plan-card__title">Pro</span>
-              <span className="upgrade-plan-card__price">$11.99/month</span>
-            </span>
-          </button>
-          <button className={`upgrade-plan-card${plan==='data_export'?' upgrade-plan-card--active':''}`} onClick={()=>setPlan('data_export')}>
-            <span className="upgrade-plan-card__radio"/>
-            <span>
-              <span className="upgrade-plan-card__title">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
-              <span className="upgrade-plan-card__price">$39.99</span>
-            </span>
-          </button>
+        {/* Data export — horizontal tile */}
+        <div className="upgrade-hero__export-tile" onClick={()=>setCheckoutProduct('data_export')}>
+          <div className="upgrade-hero__export-tile-left">
+            <span className="upgrade-hero__export-tile-label">Data Export</span>
+            <span className="upgrade-hero__export-tile-desc">Just need the dataset? Download and own it — no subscription.</span>
+            <ul className="upgrade-hero__export-tile-features">
+              <li><IconCheck style={{width:11,height:11}}/>Complete Form 4 dataset</li>
+              <li><IconCheck style={{width:11,height:11}}/>2010→present</li>
+              <li><IconCheck style={{width:11,height:11}}/>CSV, instant download</li>
+            </ul>
+          </div>
+          <div className="upgrade-hero__export-tile-right">
+            <span className="upgrade-hero__export-tile-price">$39.99</span>
+            <span className="upgrade-hero__export-tile-per">one-time</span>
+            <button className="upgrade-hero__export-tile-btn" onClick={e=>{e.stopPropagation();setCheckoutProduct('data_export');}}>
+              Download dataset →
+            </button>
+          </div>
         </div>
-
-        <button className="upgrade-modal__cta" onClick={()=>setCheckoutProduct(plan)}>
-          {plan==='pro' ? 'Upgrade Now — $11.99/mo' : 'Buy Export — $39.99'}
-        </button>
 
         <div className="upgrade-modal__trust">
           <span><IconCheck style={{width:11,height:11,marginRight:3,verticalAlign:'-1px'}}/>Secure checkout via Stripe</span>
@@ -324,8 +401,10 @@ function getStripePromise() {
 
 const PRODUCT_COPY = {
   pro: {
-    title: 'Upgrade to Pro', price: '$11.99/month', endpoint: '/billing/create-subscription',
-    subtitle: 'Full insider data, real-time alerts, and your own portfolio — in one view.',
+    title: 'Upgrade to Pro', price: `${PRO_PRICE_DISPLAY}/month`, endpoint: '/billing/create-subscription',
+    subtitle: BETA_ACTIVE
+      ? `Lock in the founding member rate — ${PRO_PRICE_DISPLAY}/mo, half off forever.`
+      : 'Full insider data, real-time alerts, and your own portfolio — in one view.',
     features: ['Full historical data', 'Portfolio linking', 'Instant alerts'],
   },
   data_export: {
@@ -356,14 +435,48 @@ function ProcessingModal({ text='Finishing up…' }) {
 }
 
 // ─── Status modal — reusable success/confirmation pattern ─────────────────────
-function StatusModal({ title, message, onClose }) {
+function StatusModal({ type, title, message, onClose }) {
+  const isPro = type === 'pro';
   return (
     <div className="upgrade-overlay" onClick={e=>{if(e.target.classList.contains('upgrade-overlay'))onClose();}}>
-      <div className="upgrade-modal" style={{maxWidth:340,textAlign:'center'}}>
-        <div className="status-modal__icon"><IconCheck style={{width:20,height:20}}/></div>
-        <div className="upgrade-modal__title" style={{marginTop:14}}>{title}</div>
-        <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 20px'}}>{message}</p>
-        <button className="upgrade-modal__cta" style={{margin:0}} onClick={onClose}>Done</button>
+      <div className="upgrade-modal" style={{maxWidth: isPro ? 480 : 420, textAlign:'center', padding: isPro ? '40px 36px 32px' : undefined}}>
+        {isPro ? (
+          <>
+            <div className="logo-mark" style={{width:44,height:44,margin:'0 auto 16px'}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <div className="status-modal__icon" style={{margin:'0 auto 16px'}}><IconCheck style={{width:22,height:22}}/></div>
+            <div className="upgrade-modal__title" style={{fontSize:'1.25rem',marginBottom:8}}>{title}</div>
+            <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.5,marginBottom:24}}>
+              Your founding member rate is locked in. Here's what's unlocked:
+            </p>
+            <div style={{textAlign:'left',background:'var(--surface-2)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',padding:'16px 20px',marginBottom:24}}>
+              <ul style={{listStyle:'none',padding:0,margin:0,display:'flex',flexDirection:'column',gap:10}}>
+                {[
+                  ['Full historical data', '2010→present, every filed SEC insider trade'],
+                  ['Portfolio linking', 'Connect your brokerage to see insider activity on your holdings'],
+                  ['Instant alerts', 'Get notified the moment insiders trade your watched tickers'],
+                  ['Full score breakdown', 'See conviction scoring on every signal'],
+                  ['Insiders deep-dive', 'Complete leaderboard with filters and hit-rate analysis'],
+                ].map(([feat, desc])=>(
+                  <li key={feat} style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                    <span style={{color:'var(--green-600)',marginTop:2,flexShrink:0}}><IconCheck style={{width:14,height:14}}/></span>
+                    <span>
+                      <span style={{fontSize:'0.8125rem',fontWeight:600,color:'var(--text)',display:'block'}}>{feat}</span>
+                      <span style={{fontSize:'0.6875rem',color:'var(--text-3)'}}>{desc}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button className="upgrade-modal__cta" style={{width:'100%'}} onClick={onClose}>Start exploring</button>
+          </>
+        ) : (
+          <>
+            <div className="status-modal__icon"><IconCheck style={{width:20,height:20}}/></div>
+            <div className="upgrade-modal__title" style={{marginTop:14}}>{title}</div>
+            <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 20px'}}>{message}</p>
+            <button className="upgrade-modal__cta" style={{margin:0}} onClick={onClose}>Done</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -447,7 +560,11 @@ function CheckoutModal({ product, onClose, onSuccess }) {
 
         {/* Right — payment form */}
         <div className="checkout-modal__pay">
-          {error && <div className="checkout-error">{error} — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
+          {error && <div className="checkout-error">{
+            error.includes('No such customer') || error.includes('customer')
+              ? 'Your account needs a quick reset before checkout. Please sign out, sign back in, and try again.'
+              : error
+          } — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
 
           {!error && !reactivating && !clientSecret && (
             <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
@@ -456,12 +573,34 @@ function CheckoutModal({ product, onClose, onSuccess }) {
           {!error && reactivating && (
             <div style={{padding:'2rem',display:'flex',flexDirection:'column',alignItems:'center',gap:10}}>
               <Spinner/>
-              <p style={{fontSize:12,color:'var(--text-2)'}}>Reactivating your subscription…</p>
+              <p style={{fontSize:'0.75rem',color:'var(--text-2)'}}>Reactivating your subscription…</p>
             </div>
           )}
 
           {!error && !reactivating && clientSecret && (
-            <Elements stripe={getStripePromise()} options={{ clientSecret }}>
+            <Elements stripe={getStripePromise()} options={{
+              clientSecret,
+              appearance: {
+                theme: 'night',
+                variables: {
+                  colorPrimary: '#7c5cfc',
+                  colorBackground: 'var(--surface, #1a1a2e)',
+                  colorText: 'var(--text, #e2e2e8)',
+                  colorDanger: '#ef4444',
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  borderRadius: '8px',
+                  spacingUnit: '4px',
+                },
+                rules: {
+                  '.Input': { backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' },
+                  '.Input:focus': { border: '1px solid #7c5cfc', boxShadow: '0 0 0 1px #7c5cfc' },
+                  '.Label': { color: 'rgba(255,255,255,0.6)', fontSize: '0.8125rem', fontWeight: '500' },
+                  '.Tab': { backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' },
+                  '.Tab--selected': { backgroundColor: '#7c5cfc', border: '1px solid #7c5cfc', color: '#fff' },
+                  '.Tab:hover': { border: '1px solid rgba(255,255,255,0.2)' },
+                },
+              },
+            }}>
               <CheckoutForm product={product} onSuccess={onSuccess} onClose={onClose} />
             </Elements>
           )}
@@ -546,7 +685,7 @@ function CancelModal({ busy, onConfirm, onClose }) {
         <p style={{fontSize:13,color:'var(--text-2)',lineHeight:1.5,margin:'8px 0 16px',textAlign:'left'}}>
           You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately.
         </p>
-        <label style={{display:'block',textAlign:'left',fontSize:11.5,fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
+        <label style={{display:'block',textAlign:'left',fontSize:'0.72rem',fontWeight:600,color:'var(--text-3)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.3px'}}>
           Want to leave feedback? (optional)
         </label>
         <textarea
@@ -582,10 +721,10 @@ function BillingSection({ user }) {
   const [redownloadingIdx, setRedownloadingIdx] = useState(null); // index of the export-history row currently downloading, or null
   const [redownloadErr, setRedownloadErr] = useState(null);
 
-  async function handleRedownload(idx) {
+  async function handleRedownload(idx, purchaseId) {
     setRedownloadingIdx(idx); setRedownloadErr(null); setProgressText(null);
     try {
-      await downloadFullExport('', undefined, 'redownload', n => setProgressText(`${n.toLocaleString()} rows…`));
+      await downloadCSVFromR2('redownload', msg => setProgressText(msg), purchaseId);
     } catch (e) {
       setRedownloadErr(e.message);
     }
@@ -698,7 +837,7 @@ function BillingSection({ user }) {
         <div className="settings-group__label">Current plan</div>
         <div className="settings-row settings-row--toggle">
           <div>
-            <div className="settings-row__label">{isProPlan ? 'Pro — $11.99/month' : 'Free'}</div>
+            <div className="settings-row__label">{isProPlan ? `Pro — ${PRO_PRICE_LABEL}` : 'Free'}</div>
           </div>
           {!isProPlan && (
             <button className="btn btn--primary" onClick={()=>setCheckoutProduct('pro')}>Upgrade →</button>
@@ -750,27 +889,11 @@ function BillingSection({ user }) {
           </button>
         </div>
 
-        {/* Full purchase history, per the request — not just a yes/no flag. */}
-        {dataExports.length > 0 && (
-          <div className="settings-group" style={{marginTop:14}}>
-            <div className="settings-group__label">Export history</div>
-            {dataExports.map((p, i) => (
-              <div key={i} className="settings-row settings-row--toggle">
-                <div>
-                  <div className="settings-row__label">
-                    {new Date(p.purchased_at).toLocaleDateString(undefined, {year:'numeric',month:'short',day:'numeric'})}
-                  </div>
-                  <div className="settings-row__sub">${(p.amount_cents/100).toFixed(2)}</div>
-                </div>
-                <button className="btn btn--ghost btn--sm" disabled={redownloadingIdx!=null} onClick={()=>handleRedownload(i)}>
-                  {redownloadingIdx===i ? (progressText || 'Downloading…') : 'Re-download'}
-                </button>
-              </div>
-            ))}
-            {redownloadErr && <div className="checkout-error" style={{margin:'10px 16px'}}>{redownloadErr}</div>}
-            <div className="td-muted" style={{fontSize:11,padding:'10px 16px'}}>
-              Re-download pulls your purchase's data fresh from the database right now — not a frozen copy of exactly what existed on the original purchase date.
-            </div>
+        {status.hasDataExport && (
+          <div className="settings-row" style={{paddingTop:8}}>
+            <a href="/redownload" target="_blank" rel="noopener" style={{fontSize:'0.8125rem',color:'var(--accent-strong)',textDecoration:'none',fontWeight:500}}>
+              Already purchased? Re-download or look up an order →
+            </a>
           </div>
         )}
       </div>
@@ -818,16 +941,16 @@ function BillingSection({ user }) {
               }
               setCheckoutProduct(null);
               setProcessing(false);
-              setStatusModal({ title: "You're a Pro member!", message: 'Full historical data, portfolio linking, and instant alerts are all unlocked now.' });
+              setStatusModal({ type: 'pro', title: "You're a Pro member!" });
               return;
             }
             load();
             try {
-              const rowCount = await downloadFullExport('', undefined, 'consume', n => setProgressText(`${n.toLocaleString()} rows fetched so far…`));
+              await downloadCSVFromR2('consume', msg => setProgressText(msg));
               setCheckoutProduct(null);
               setProcessing(false);
               setProgressText(null);
-              setStatusModal({ title: 'Export started', message: `Your download of ${rowCount.toLocaleString()} filings should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.` });
+              setStatusModal({ title: 'Export started', message: 'Your download should begin automatically. Lost the file later? Re-download it anytime from Settings > Billing — no extra charge.' });
             } catch (e) {
               setCheckoutProduct(null);
               setProcessing(false);
@@ -956,6 +1079,30 @@ function useTheme() {
   return [dark, setDark];
 }
 
+// ── Mobile detection ──────────────────────────────────────────────────────────
+// Matches the same 640px breakpoint style.css already uses for the bottom
+// tab bar — this is the one place the actual set of navigable destinations
+// differs by device (mobile: Home + More; desktop: the full nav), not just
+// layout, so it needs a real JS check alongside the CSS media queries,
+// not instead of them.
+const MOBILE_BREAKPOINT = '(max-width: 640px)';
+function isMobileViewport() {
+  // Raw, synchronous — safe to call from a useState lazy initializer
+  // (before any effect has run) or from route-parsing helpers that live
+  // outside any component at all.
+  return typeof window !== 'undefined' && window.matchMedia(MOBILE_BREAKPOINT).matches;
+}
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(isMobileViewport);
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_BREAKPOINT);
+    const onChange = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isMobile;
+}
+
 // ── Signal tier threshold ─────────────────────────────────────────────────────
 // Used to be a per-user "risk appetite" preference (1-5, adjustable in
 // Settings) controlling how hard it was for a signal to read as "high"/green.
@@ -972,20 +1119,110 @@ function useTheme() {
 // which level applies to them has been removed, not the underlying,
 // already-tested tiering math.)
 const RiskAppetiteContext = React.createContext([3, ()=>{}]);
+const HelpModeContext = React.createContext(false);
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 function Badge({ type, children }) {
   return <span className={`badge badge--${type}`}>{children}</span>;
 }
+// Returns the display label for an insider's role, distinguishing
+// congressional insiders from corporate C-suite.
+function insiderRoleLabel(r) {
+  if (r?.is_congress) return { badge: 'rel-strong', label: 'Congress' };
+  if (r?.relationship === 'strong') return { badge: 'rel-strong', label: 'C-Suite' };
+  if (r?.relationship === 'medium') return { badge: 'rel-medium', label: 'Officer' };
+  return { badge: 'rel-weak', label: 'Dir' };
+}
+
+// Inline info tooltip — hover to see explanation
+function InfoTip({ tip, children }) {
+  return (
+    <span className="info-tip-wrap">
+      {children}
+      <span className="info-tip" title={tip}>ⓘ</span>
+    </span>
+  );
+}
+
+// Stat tile with optional tooltip on label
+function HelpStat({ label, tip, value, sub, color, style }) {
+  return (
+    <div className="ws-stat">
+      <div className="ws-stat__label">{tip ? <InfoTip tip={tip}>{label}</InfoTip> : label}</div>
+      <div className="ws-stat__value" style={{color, ...style}}>{value}</div>
+      {sub && <div className="ws-stat__sub">{sub}</div>}
+    </div>
+  );
+}
+
+// Tooltip definitions — single source of truth for all explanations
+const TIPS = {
+  // Signal columns
+  conviction:     'Composite score (0–100) combining trade type, insider clustering, C-suite involvement, position sizing, dollar value, timing, and recency. Higher = stronger signal.',
+  netValue:       'Total buy value minus total sell value for this ticker. Negative means more insider selling than buying.',
+  insiders:       'Number of distinct insiders who traded this ticker in the selected window.',
+  trades:         'Total number of open-market transactions (buys + sells) for this ticker.',
+  signalDate:     'Date of the most recent transaction for this ticker.',
+  // Raw filing columns
+  pctPosition:    'How much the insider\'s total holdings changed from this trade. +67% means they increased their position by two-thirds.',
+  tradeValue:     'Dollar value of the transaction (shares × price).',
+  role:           'Insider\'s relationship to the company. C-Suite = CEO/CFO/COO/etc. Officer = SVP/VP/GC. Dir = board director or 10% owner.',
+  tradeType:      'Buy = open-market purchase. Sell = open-market sale. Only open-market trades are shown — option exercises and gifts are excluded.',
+  // Insider profile
+  hitRate:        'Percentage of priced trades where the stock moved in the insider\'s favor within 6 months. Requires 5+ priced trades to display.',
+  avgReturn:      'Average percentage return across all priced trades, measured 6 months after the trade date.',
+  omBuys:         'Open-market buys — purchases made with the insider\'s own money on the open market.',
+  omSells:        'Open-market sells — sales executed on the open market (not option exercises or scheduled plans).',
+  pricedTrades:   'Trades where we could measure a 6-month return — the stock had pricing data for both the trade date and 6 months later.',
+  totalBought:    'Total dollar value of all open-market purchases.',
+  insiderScore:   'Composite score (0–100) based on alpha over SPY, hit rate, role, trade volume, and discipline. Low sample sizes and sell-only insiders are penalized.',
+  alpha:          'Return above what SPY delivered over the same period. +10% alpha means this insider beat the market by 10 percentage points.',
+  // Stat tiles
+  highConviction: 'Signals scoring 60 or above out of 100 — the strongest insider activity.',
+  netFlow:        'Total buy value minus total sell value across all signals. Shows whether insiders are net buying or selling.',
+  // Filters
+  windowFilter:   'How far back to look. A 7d window shows only trades from the last 7 days.',
+  strengthFilter: 'Minimum conviction score to show. "High" = 60+, "Med+" = 35+.',
+  sourceFilter:   'Corporate = SEC Form 4 filings. Congress = congressional trading disclosures.',
+};
 function Spinner({ size=22 }) {
   return <div className="spinner" style={{width:size,height:size}}/>;
 }
+// Skeleton loading rows — fills the available space with pulsing placeholder
+// rows instead of a centered spinner. Looks like content is about to appear
+// rather than "something is spinning in a void."
+function SkeletonRows({ count=6, style:extraStyle }) {
+  return (
+    <div className="skel-wrap" style={extraStyle}>
+      {Array.from({length:count},(_,i)=>(
+        <div key={i} className="skel-row" style={{animationDelay:`${i*60}ms`}}>
+          <span className="skel-bar skel-bar--sm"/>
+          <span className="skel-bar skel-bar--lg"/>
+          <span className="skel-bar skel-bar--md"/>
+        </div>
+      ))}
+    </div>
+  );
+}
 const TX_CODE_TOOLTIPS = {
-  P:'Open market purchase',  S:'Open market sale',
-  A:'Grant / award',         M:'Option exercise',
-  J:'Other / transfer',      G:'Gift',
-  F:'Tax withholding',       C:'Conversion of derivative',
-  D:'Sale to issuer',        E:'Expiration of derivative',
+  P:'Open market purchase',
+  S:'Open market sale',
+  A:'New shares granted to the insider as compensation — not purchased with their own money',
+  M:'Insider exercised stock options they already held — not a new open-market purchase',
+  J:'Shares moved between accounts or entities — not a market purchase or sale',
+  G:'Shares given or received as a gift — no cash changed hands',
+  F:'Shares withheld by the company to cover taxes owed when equity vested — not a discretionary sale',
+  C:'A derivative security (option/warrant) converted into common stock',
+  D:'Shares sold back to the company itself, not on the open market',
+  E:'An option or right expired unused — no shares bought or sold',
+  // Congressional PTRs (STOCK Act filings) never had an entry here, so
+  // every one fell through to the raw code (codeLabel = TX_CODE_TOOLTIPS[code]||code)
+  // — that's what was rendering as a bare "CONGRESS_S"/"CONGRESS_P" string
+  // with no label above it in the trade detail rows. These report a dollar
+  // RANGE, not an exact price, which is exactly why there's no price to
+  // show — the label now says that instead of leaving the raw code visible.
+  CONGRESS_P:'Congressional purchase — reported as a dollar range, not an exact price',
+  CONGRESS_S:'Congressional sale — reported as a dollar range, not an exact price',
 };
 
 // Short, self-explanatory labels for the Data table — replaces the bare
@@ -998,6 +1235,7 @@ const TX_CODE_SHORT = {
   J:'Transfer',    G:'Gift',
   F:'Tax w/h',      C:'Conversion',
   D:'To issuer',   E:'Expired',
+  CONGRESS_P:'Buy (range)', CONGRESS_S:'Sell (range)',
 };
 
 function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
@@ -1010,21 +1248,19 @@ function SortTh({ label, colKey, sortCol, sortDir, onSort, right, title:ttl }) {
     </th>
   );
 }
-function ConvictionBar({ score, max=15, showLabel=false }) {
-  const [appetite] = React.useContext(RiskAppetiteContext);
+function ConvictionBar({ score, max=100, showLabel=false }) {
   const pct = Math.min((score/max)*100, 100);
-  const tier = tierFromPct(pct, appetite);
-  const label = tier==='high'?'High':tier==='medium'?'Medium':'Low';
-  const color = tier==='high'?'var(--green-600)':tier==='medium'?'var(--amber-600)':'var(--text-3)';
-  const t = RISK_APPETITE_THRESHOLDS[appetite] || RISK_APPETITE_THRESHOLDS[3];
-  // Only show label text when it's NOT High — color already communicates High,
-  // but Low/Medium are warnings worth surfacing explicitly.
-  const showText = showLabel && label !== 'High';
+  const tier = pct>=85?'very-high':pct>=60?'high':pct>=40?'medium':pct>=20?'low':'very-low';
+  const label = tier==='very-high'?'Very High':tier==='high'?'High':tier==='medium'?'Medium':tier==='low'?'Low':'Very Low';
+  const color = tier==='very-high'?'var(--green-600)':tier==='high'?'#5EC26A':tier==='medium'?'var(--amber-600)':tier==='low'?'var(--text-3)':'var(--text-3)';
+  const showText = showLabel;
   return (
-    <div className="conv-bar-wrap" title={`Conviction: ${label} (${score.toFixed(1)}/${max}) — combines exec participation, position size, and insider clustering`}>
+    <div className="conv-bar-wrap" title={`${Math.round(score)}/${max} — ${label}`}>
       <div className="conv-bar-track">
-        <div className="conv-bar-tick" style={{left:`${t.medium}%`}}/>
-        <div className="conv-bar-tick" style={{left:`${t.high}%`}}/>
+        <div className="conv-bar-tick" style={{left:'20%'}}/>
+        <div className="conv-bar-tick" style={{left:'40%'}}/>
+        <div className="conv-bar-tick" style={{left:'60%'}}/>
+        <div className="conv-bar-tick" style={{left:'85%'}}/>
         <div className="conv-bar" style={{width:`${pct}%`,background:color}}/>
       </div>
       {showText&&<span className="conv-bar-label" style={{color}}>{label}</span>}
@@ -1043,6 +1279,10 @@ function IconInsights(p)  { return <svg {...ICON_PROPS} {...p}><polyline points=
 function IconData(p)      { return <svg {...ICON_PROPS} {...p}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>; }
 function IconFavorites(p) { return <svg {...ICON_PROPS} {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>; }
 function IconSettings(p)  { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>; }
+// "More" — mobile-only nav icon, opens the sheet holding everything that
+// doesn't fit in the 2-icon mobile bar (Dashboard/Insights/Data/Watchlist/
+// Settings). Standard horizontal-ellipsis "more" glyph.
+function IconMore(p) { return <svg {...ICON_PROPS} {...p}><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>; }
 function IconHelp(p)      { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>; }
 function IconSun(p)       { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>; }
 function IconMoon(p)      { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>; }
@@ -1071,54 +1311,95 @@ const NAV = [
   {id:'data',      Icon:IconData,      label:'Data'},
   {id:'watchlist', Icon:IconFavorites, label:'Watchlist'},
 ];
-function Sidebar({ page, setPage, dark, setDark, user, onUpgrade }) {
+// ─── Top Nav ──────────────────────────────────────────────────────────────────
+function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate, isDataStale, loading, helpMode, setHelpMode }) {
   const { pro } = useBilling();
+  const isMobile = useIsMobile();
+  const NAV_LINKS = [
+    { id: 'home',      label: 'Home',      Icon: IconHome },
+    { id: 'dashboard', label: 'Data',      Icon: IconData },
+    { id: 'signals',   label: 'Insiders',  Icon: IconInsights },
+    { id: 'watchlist', label: 'Watchlist', Icon: IconFavorites },
+  ];
+  if (isMobile) {
+    return (
+      <>
+        <header className="topnav">
+          <div className="topnav__logo" onClick={() => setPage('home')}>
+            <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="topnav__wordmark">Seli</span>
+            <span className="topnav__beta">BETA</span>
+          </div>
+          <div className="topnav__right">
+            {lastFilingDate && (
+              <span className={`topnav__freshness${isDataStale?' topnav__freshness--stale':''}`}>
+                <span className="topnav__dot" style={isDataStale?{background:'var(--amber-600)'}:{}}/>
+                {fmt.dateShort(lastFilingDate)}
+              </span>
+            )}
+            <button className="topnav__icon-btn" onClick={()=>setDark(d=>!d)} aria-label="Toggle theme">
+              {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+            </button>
+            {!pro&&<button className="topnav__upgrade" onClick={()=>onUpgrade('pro_direct')}>Go Pro</button>}
+            <SignedIn>
+              <UserButton afterSignOutUrl="/" appearance={{elements:{avatarBox:'clerk-avatar',userButtonTrigger:'clerk-avatar-trigger',userButtonAvatarBox:'clerk-avatar-box'}}}/>
+            </SignedIn>
+          </div>
+        </header>
+        <nav className="bottomnav">
+          {NAV_LINKS.map(n=>(
+            <button key={n.id} className={`bottomnav__btn${page===n.id?' bottomnav__btn--active':''}`} onClick={()=>setPage(n.id)}>
+              <n.Icon style={{width:20,height:20}}/><span className="bottomnav__label">{n.label}</span>
+            </button>
+          ))}
+          <button className={`bottomnav__btn${page==='settings'?' bottomnav__btn--active':''}`} onClick={()=>setPage('settings')}>
+            <IconSettings style={{width:20,height:20}}/><span className="bottomnav__label">Settings</span>
+          </button>
+        </nav>
+      </>
+    );
+  }
   return (
-    <nav className="sidebar sidebar--compact">
-      {/* Logo */}
-      <div className="sidebar__logo" title="Seli — private beta">
-        <div className="logo-mark logo-mark--beta">
-          <img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
-        </div>
+    <header className="topnav">
+      <div className="topnav__logo" onClick={()=>setPage('home')}>
+        <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+        <span className="topnav__wordmark">Seli</span>
+        <span className="topnav__beta">BETA</span>
       </div>
-
-      {/* Primary nav — main pages only */}
-      <div className="sidebar__nav">
-        {NAV.map(n => (
-          <button key={n.id}
-            className={`nav-item nav-item--icon-only${page===n.id?' nav-item--active':''}`}
-            onClick={()=>setPage(n.id)}
-            title={n.label}
-            aria-label={n.label}>
-            <n.Icon className="nav-icon nav-icon--svg"/>
+      <nav className="topnav__links">
+        {NAV_LINKS.map(n=>(
+          <button key={n.id} className={`topnav__link${page===n.id?' topnav__link--active':''}`} onClick={()=>setPage(n.id)}>
+            <n.Icon style={{width:14,height:14}}/>{n.label}
           </button>
         ))}
-      </div>
-
-      {/* Footer — utility items + plan status (visible from every page, not just Settings) */}
-      <div className="sidebar__footer">
-        {!pro && (
-          <button className="nav-item nav-item--icon-only nav-item--sm nav-item--upgrade"
-            onClick={onUpgrade}
-            title="Upgrade to Pro"
-            aria-label="Upgrade to Pro">
-            <span className="nav-icon">$</span>
-          </button>
+      </nav>
+      <div className="topnav__right">
+        {lastFilingDate&&(
+          <span className={`topnav__freshness${isDataStale?' topnav__freshness--stale':''}`} title={`Data through ${lastFilingDate}`}>
+            <span className="topnav__dot" style={isDataStale?{background:'var(--amber-600)'}:{}}/>
+            {isDataStale?`Stale · ${fmt.dateShort(lastFilingDate)}`:`Through ${fmt.dateShort(lastFilingDate)}`}
+          </span>
         )}
-        {/* Settings — gear, separate from primary nav */}
-        <button
-          className={`nav-item nav-item--icon-only nav-item--sm${page==='settings'?' nav-item--active':''}`}
-          onClick={()=>setPage('settings')}
-          title="Settings"
-          aria-label="Settings">
-          <IconSettings className="nav-icon nav-icon--svg"/>
+        {loading&&!lastFilingDate&&<span className="topnav__freshness"><span className="topnav__dot"/>Syncing…</span>}
+        <FeedbackButton page={page}/>
+        <GuideStatusBarButton/>
+        <button className="topnav__icon-btn" onClick={()=>setDark(d=>!d)} title={dark?'Light mode':'Dark mode'}>
+          {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
         </button>
-        {/* Sign out removed — redundant with Clerk's own UserButton dropdown
-            in the status bar, which already handles account/sign-out. */}
+        {!pro&&<button className="topnav__upgrade" onClick={()=>onUpgrade('default')}>Upgrade → $6.99</button>}
+        <SignedIn>
+          <UserButton afterSignOutUrl="/" appearance={{elements:{avatarBox:'clerk-avatar',userButtonTrigger:'clerk-avatar-trigger',userButtonAvatarBox:'clerk-avatar-box'}}}/>
+        </SignedIn>
+        <SignedOut><SignInButton mode="modal"><button className="topnav__upgrade">Sign in</button></SignInButton></SignedOut>
       </div>
-    </nav>
+      <button className={`topnav__settings-fab${page==='settings'?' topnav__settings-fab--active':''}`} onClick={()=>setPage('settings')} title="Settings" aria-label="Settings">
+        <IconSettings style={{width:16,height:16}}/>
+      </button>
+    </header>
   );
 }
+
+
 
 // ─── Signal aggregation ───────────────────────────────────────────────────────
 // (buildSignals now lives in src/lib/scoring.js — imported above — so the
@@ -1140,32 +1421,54 @@ function navigateTo(path) {
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+// ─── Auth token cache ────────────────────────────────────────────────────────
+// On mount, 15-20+ callers across app.jsx AND edgar.js independently call
+// getAuthHeaders(), each one independently polling for window.__clerkGetToken
+// with 50ms sleeps for up to 2 seconds. loadFilings (the critical-path query)
+// lives in edgar.js with its own separate copy of getAuthHeaders — so even
+// caching here didn't help the main data fetch at all.
+//
+// Fix: store the poll promise and token cache on window.__seliAuth so both
+// files share a single polling loop and a single token cache. Whichever
+// file's getAuthHeaders runs first creates the shared state; every other
+// caller across both files piggybacks on it.
+if (!window.__seliAuth) window.__seliAuth = { poll: null, token: null, expiry: 0 };
+
 async function getAuthHeaders() {
-  // On a fresh page load, components can mount and fire their own
-  // data-fetching effects before App's own effect (which registers
-  // window.__clerkGetToken once Clerk finishes loading) has run — a real
-  // race condition, not cosmetic. Without this wait, that fetch gets an
-  // empty/wrong auth header, 401s, and nothing ever retries once the real
-  // token becomes available a moment later — only a full remount
-  // (navigating away and back) would trigger a fresh attempt. Poll briefly
-  // for the token getter to appear rather than give up immediately; Clerk
-  // typically finishes loading well within this window.
-  if (!window.__clerkGetToken) {
-    for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
-      await new Promise(r => setTimeout(r, 50)); // up to ~2s total
-    }
+  const auth = window.__seliAuth;
+
+  // Fast path: reuse a recently-fetched token (Clerk tokens are valid for
+  // 60s; we cache for 10s to stay well within that window while still
+  // avoiding 15+ concurrent getToken() calls on mount).
+  if (auth.token && Date.now() < auth.expiry) {
+    return { 'Authorization': `Bearer ${auth.token}` };
   }
-  // Phase 2: Clerk JWT — registered by App once Clerk loads
+
+  // If the token getter isn't registered yet, wait — but share a single
+  // polling promise across all concurrent callers (in BOTH files) instead
+  // of N independent polling loops.
+  if (!window.__clerkGetToken) {
+    if (!auth.poll) {
+      auth.poll = (async () => {
+        for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+        auth.poll = null;
+      })();
+    }
+    await auth.poll;
+  }
+
   if (window.__clerkGetToken) {
     try {
       const token = await window.__clerkGetToken();
-      if (token) return { 'Authorization': `Bearer ${token}` };
+      if (token) {
+        auth.token = token;
+        auth.expiry = Date.now() + 10_000; // cache 10s
+        return { 'Authorization': `Bearer ${token}` };
+      }
     } catch {}
   }
-  // No static-key fallback — a request without a valid Clerk token should
-  // fail with a real 401, not silently succeed via a key that would
-  // otherwise sit exposed in the public bundle the moment anyone set
-  // VITE_WORKER_API_KEY, used or not.
   return {};
 }
 
@@ -1251,7 +1554,7 @@ function clusterTrades(rows, windowDays = 5) {
 // not just "did the stock go up since they bought." A net seller with bad
 // realized P&L will no longer score well just because their few buys are green.
 function trustScore(st) {
-  if (!st||(st.omBuys+st.omSells)<2) return null;
+  if (!st||st.omBuys<2) return null;
   let s=0;
   // Combined hit rate (buys priced correctly + profitable sells), weighted more
   if (st.combinedHitRate!=null){if(st.combinedHitRate>=70)s+=2;else if(st.combinedHitRate>=50)s+=1;}else s+=0.5;
@@ -1262,7 +1565,7 @@ function trustScore(st) {
 }
 
 function TrustStars({score}) {
-  if (score===null) return <span className="td-muted" style={{fontSize:11}}>Insufficient data</span>;
+  if (score===null) return <span className="td-muted" style={{fontSize:'0.6875rem'}}>Insufficient data</span>;
   // Round to nearest 0.5 for clean half-star rendering (e.g. 2.3->2.5, 2.7->2.5... no: round to nearest half)
   const rounded = Math.round(score*2)/2;
   const stars = [0,1,2,3,4].map(i=>{
@@ -1272,7 +1575,7 @@ function TrustStars({score}) {
   return (
     <span className="trust-stars-wrap">
       <span className="trust-stars__label" title="A weighted composite of hit rate, realized return size, trade volume, and how concentrated their buying is — not the same number as the hit-rate % shown below, which is a raw price outcome with no weighting.">Trust score</span>
-      <span className="trust-stars" title={`${score}/5 — composite score (hit rate + return size + volume + concentration), distinct from the hit-rate % below`}>
+      <span className="trust-stars" title={`${score}/100 — composite score (hit rate + return size + volume + concentration), distinct from the hit-rate % below`}>
         <span className="trust-stars__row">
           {stars.map((fill,i)=>(
             <span key={i} className="trust-star">
@@ -1281,7 +1584,7 @@ function TrustStars({score}) {
             </span>
           ))}
         </span>
-        <span className="trust-stars__num">{score}/5</span>
+        <span className="trust-stars__num">{score}</span>
       </span>
     </span>
   );
@@ -1302,102 +1605,234 @@ const GUIDE_SECTIONS = [
   {
     id: 'welcome',
     label: 'Welcome',
-    icon: 'IconHome',
     render: () => (
       <>
         <div className="guide-hero">
           <div className="guide-hero__mark" aria-hidden="true">
-            {/* Placeholder for the animated/simple logo mark discussed in
-                the icon list below. A static wordmark stands in for now. */}
-            <span className="guide-hero__wordmark">Seli</span>
+            <img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/>
           </div>
+          <span className="guide-hero__wordmark">Seli</span>
+          <span className="guide-hero__beta">Private Beta</span>
         </div>
-        <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as they're published, and organizes them using its own scoring methodology.</p>
-        <p>This is a quick walkthrough of where the <strong>data</strong> comes from, how the <strong>scoring</strong> works, and what's behind each part of the app — all informational, none of it personalized to you or a recommendation to act. Five short stops, or skip straight to the dashboard whenever you want.</p>
-      </>
-    ),
-  },
-  {
-    id: 'data-source',
-    label: 'Where the data comes from',
-    icon: 'IconData',
-    render: () => (
-      <>
-        <p>Every trade in Seli comes from a <strong>public government filing</strong>. Nothing here is estimated, scraped from a rumor, or licensed from a third party.</p>
-        <ul>
-          <li><strong>Corporate insiders.</strong> Form 4, filed with the SEC by executives, directors, and major shareholders within two business days of a trade.</li>
-          <li><strong>Congress.</strong> Periodic transaction reports required under the STOCK Act, filed by senators and representatives.</li>
-        </ul>
-        <p>Seli checks for new filings on a recurring basis throughout the trading day, so a disclosure typically shows up here <strong>within minutes</strong> of becoming public, not the next morning.</p>
-        <EnvPreview type="dashboard"/>
-      </>
-    ),
-  },
-  {
-    id: 'raw-data',
-    label: 'The raw data',
-    icon: 'IconList',
-    render: () => (
-      <>
-        <p>Every filing is also available on its own, unscored and unfiltered, on the <strong>Data page</strong>. Search by ticker or insider name, filter by date range or transaction type, and see exactly what was filed, with a <strong>direct link back to the original SEC document</strong>.</p>
-        <p>If you'd rather draw your own conclusions than trust anyone's scoring, including ours, this is where to work.</p>
-        <EnvPreview type="data"/>
+        <p>Seli watches every <strong>SEC Form 4 filing</strong> and every <strong>congressional stock disclosure</strong> as it's published, scores it, and makes it actionable.</p>
+        <p>This guide walks you through what you're looking at, where the data comes from, and how to get the most out of it.</p>
+        <div className="guide-callout guide-callout--accent">
+          <p className="guide-callout__title" style={{color:'var(--accent-strong)'}}>You're one of the first people here</p>
+          <p className="guide-callout__text">
+            Everything is built on real SEC filings and peer-reviewed methodology, but the product is still early. Use the feedback button <IconMessage style={{width:13,height:13,verticalAlign:'-2px',margin:'0 2px'}}/> in the status bar to report bugs or share thoughts.
+          </p>
+        </div>
       </>
     ),
   },
   {
     id: 'using-seli',
     label: 'Using Seli',
-    icon: 'IconCompass',
-    render: () => HELP_SECTIONS.find(s => s.id === 'using-seli').render(),
-  },
-  {
-    id: 'insights-formula',
-    label: 'How signals are scored',
-    icon: 'IconInsights',
     render: () => (
       <>
-        <p>Every trade isn't scored the same way. Seli calculates a <strong>conviction</strong> score for each one, a number built from a few real factors, not just dollar amount:</p>
-        <ul>
-          <li>A <strong>C-suite executive or member of Congress</strong> buying counts for more than a director or 10%-owner trading the same amount.</li>
-          <li><strong>More buys than sells</strong> on the same ticker adds to the score. More sells than buys works against it.</li>
-          <li>Dollar value matters, but on a <strong>diminishing scale</strong>. A $50M buy isn't fifty times more meaningful than a $1M one.</li>
-          <li>A trade that represents a <strong>large share of someone's existing position</strong> counts for more than a routine top-up.</li>
-        </ul>
-        <p>Only <strong>open-market</strong> trades count toward this. Option exercises, RSU vests, and grants are left out entirely, since they don't reflect someone choosing to put their own money in.</p>
-        <EnvPreview type="insights"/>
-        <p style={{ marginTop: 4 }}>Insiders themselves are ranked separately, by <strong>real track record</strong>, not trade volume:</p>
-        <div className="guide-trust-demo" aria-hidden="true">
-          <TrustStars score={4.5}/>
-          <span className="td-muted" style={{ fontSize: '0.75rem' }}>Built from hit rate on past open-market buys, once there's enough history to mean something (5+ priced trades).</span>
+        <div className="guide-env-row">
+          <div className="guide-env-icon"><IconHome style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Home</p>
+            <p>Your daily briefing — the latest filings, strongest insider signals, top-ranked insiders, and market news, all on one screen.</p>
+          </div>
         </div>
-        <p style={{ marginTop: 12 }}><strong>This scoring is the same for every user.</strong> It's Seli's own methodology, applied identically to everyone and to every trade — not tailored to you, your holdings, or your risk tolerance. It's informational, not a recommendation to buy, sell, or hold anything. See <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
+
+        <div className="guide-env-row">
+          <div className="guide-env-icon"><IconData style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Data</p>
+            <p>Two views: <strong>Signals</strong> shows scored insider activity by ticker — conviction, cluster size, net value. <strong>Raw filings</strong> is every individual trade, searchable and filterable, with SEC filing links.</p>
+          </div>
+        </div>
+
+        <div className="guide-env-row">
+          <div className="guide-env-icon" style={{color:'var(--accent-strong)'}}><IconInsights style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Insiders</p>
+            <p>A screener for finding insiders worth following. Filter by role, hit rate, trade volume, and score. Each profile shows their track record, companies traded, and full transaction history.</p>
+          </div>
+        </div>
+
+        <div className="guide-env-row">
+          <div className="guide-env-icon"><IconFavorites style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Watchlist</p>
+            <p>Tickers and insiders you follow. Activity feed, alert settings, and optional brokerage connection to see insider trades on stocks you actually hold.</p>
+          </div>
+        </div>
+
+        <div className="guide-env-row">
+          <div className="guide-env-icon"><IconSettings style={{width:18,height:18}}/></div>
+          <div className="guide-env-body">
+            <p className="guide-env-label">Settings</p>
+            <p>Your plan, billing, notification preferences, risk appetite, and brokerage connection. Access via the gear icon.</p>
+          </div>
+        </div>
+      </>
+    ),
+  },
+  {
+    id: 'data-source',
+    label: 'Data & Scoring',
+    render: () => (
+      <>
+        <p style={{fontWeight:600,color:'var(--text)',marginBottom:4}}>Where the data comes from</p>
+        <p>Seli ingests trades from two official government sources — both public record.</p>
+
+        <div className="guide-pipeline">
+          <div className="guide-pipeline__row">
+            <div className="guide-pipeline__step guide-pipeline__step--source">
+              <span className="guide-pipeline__label">Corporate insider trade</span>
+            </div>
+            <div className="guide-pipeline__arrow">
+              <span className="guide-pipeline__timing">up to 2 days</span>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <div className="guide-pipeline__step">
+              <span className="guide-pipeline__label">SEC Form 4</span>
+            </div>
+            <div className="guide-pipeline__arrow">
+              <span className="guide-pipeline__timing">minutes</span>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <div className="guide-pipeline__step guide-pipeline__step--seli">
+              <img src={logoSimple} alt="" style={{width:16,height:16,objectFit:'contain'}}/>
+              <span className="guide-pipeline__label">Seli</span>
+            </div>
+          </div>
+          <div className="guide-pipeline__row">
+            <div className="guide-pipeline__step guide-pipeline__step--source">
+              <span className="guide-pipeline__label">Political insider trade</span>
+            </div>
+            <div className="guide-pipeline__arrow">
+              <span className="guide-pipeline__timing">up to 45 days</span>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <div className="guide-pipeline__step">
+              <span className="guide-pipeline__label">STOCK Act</span>
+            </div>
+            <div className="guide-pipeline__arrow">
+              <span className="guide-pipeline__timing">minutes</span>
+              <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <div className="guide-pipeline__step guide-pipeline__step--seli">
+              <img src={logoSimple} alt="" style={{width:16,height:16,objectFit:'contain'}}/>
+              <span className="guide-pipeline__label">Seli</span>
+            </div>
+          </div>
+        </div>
+
+        <p style={{fontSize:'0.75rem',color:'var(--text-3)',margin:'6px 0 16px'}}>Only open-market trades — option exercises, RSU vests, gifts, and plan transactions are filtered out.</p>
+
+        <p style={{fontWeight:600,color:'var(--text)',marginBottom:4}}>How scoring works</p>
+        <p>Every trade runs through the same algorithm. Raw data becomes a <strong>conviction score</strong> — higher means more markers of a historically meaningful trade.</p>
+
+        <div className="guide-scoring-flow">
+          <div className="guide-scoring-flow__stage">
+            <span className="guide-scoring-flow__stage-label">Raw filing</span>
+            <span className="guide-scoring-flow__stage-sub">As reported to SEC</span>
+          </div>
+          <div className="guide-scoring-flow__arrow">
+            <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          <div className="guide-scoring-flow__stage guide-scoring-flow__stage--algo">
+            <span className="guide-scoring-flow__stage-label">Scoring algorithm</span>
+            <ul className="guide-scoring-flow__factors">
+              <li><strong>Opportunistic</strong> — non-routine trades carry more weight</li>
+              <li><strong>Clustering</strong> — multiple insiders, same stock</li>
+              <li><strong>C-suite / Congress</strong> — role and information access</li>
+              <li><strong>Position %</strong> — large share of holdings</li>
+              <li><strong>Value</strong> — dollar magnitude</li>
+              <li><strong>Velocity</strong> — concentrated bursts score higher</li>
+              <li><strong>Recency</strong> — recent trades weighted more</li>
+              <li><strong>Contra-signal</strong> — split buy/sell activity penalized</li>
+            </ul>
+          </div>
+          <div className="guide-scoring-flow__arrow">
+            <svg width="20" height="10" viewBox="0 0 20 10"><path d="M0 5h16M13 1l5 4-5 4" fill="none" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          <div className="guide-scoring-flow__stage">
+            <span className="guide-scoring-flow__stage-label">Signals</span>
+            <div className="guide-signal-examples">
+              <div className="guide-signal-ex">
+                <span className="guide-signal-ex__label" style={{color:'var(--green-600)'}}>Very High</span>
+                <ConvictionBar score={80} max={100}/>
+              </div>
+              <div className="guide-signal-ex">
+                <span className="guide-signal-ex__label" style={{color:'var(--amber-600)'}}>Medium</span>
+                <ConvictionBar score={45} max={100}/>
+              </div>
+              <div className="guide-signal-ex">
+                <span className="guide-signal-ex__label" style={{color:'var(--text-3)'}}>Low</span>
+                <ConvictionBar score={15} max={100}/>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p style={{fontSize:'0.75rem',color:'var(--text-3)',marginTop:8}}>Based on Lakonishok & Lee, Cohen et al. Identical for every user. Not a recommendation. <a href="/terms">Terms</a>.</p>
+      </>
+    ),
+  },
+  {
+    id: 'getting-help',
+    label: 'Getting Help',
+    render: (helpers) => (
+      <>
+        <p>Look for the <span style={{color:'var(--accent)'}}>ⓘ</span> icon next to column headers and stat labels — hover or tap to see what that data point means.</p>
+
+        <div className="guide-help-demo">
+          <div className="guide-help-demo__item">
+            <div className="guide-help-demo__icon-circle">
+              <span style={{fontSize:12,fontWeight:700}}>ⓘ</span>
+            </div>
+            <div className="guide-help-demo__body">
+              <span className="guide-help-demo__label">Inline tooltips</span>
+              <span className="guide-help-demo__desc">Hover any <strong>ⓘ</strong> icon next to a column header or stat for a plain-English explanation of what that number means and how it's calculated.</span>
+            </div>
+          </div>
+          <div className="guide-help-demo__item">
+            <div className="guide-help-demo__icon-circle">
+              <IconMessage style={{width:12,height:12}}/>
+            </div>
+            <div className="guide-help-demo__body">
+              <span className="guide-help-demo__label">Send feedback</span>
+              <span className="guide-help-demo__desc">Report bugs, request features, or share thoughts. Use the feedback button in the top navigation bar.</span>
+            </div>
+          </div>
+          <div className="guide-help-demo__item">
+            <div className="guide-help-demo__icon-circle">
+              <IconHelp style={{width:12,height:12}}/>
+            </div>
+            <div className="guide-help-demo__body">
+              <span className="guide-help-demo__label">This guide</span>
+              <span className="guide-help-demo__desc">Reopen anytime from the help button in the top navigation bar.</span>
+            </div>
+          </div>
+        </div>
       </>
     ),
   },
   {
     id: 'pro-features',
-    label: 'Pro features',
-    icon: 'IconZap',
+    label: 'Free vs Pro',
     render: () => (
       <>
-        <p>Free tracks the last 7 days and covers the dashboard, leaderboard, and full filing data. Pro unlocks more ways to follow it:</p>
+        <p><strong>Free</strong> gives you the top 10 insiders, signals from the last 7 days, and up to a year of raw filing data.</p>
+        <p><strong>Pro</strong> unlocks the full platform:</p>
         <ul>
-          <li><strong>Follow specific insiders or tickers.</strong> Build a watchlist and see their activity surfaced ahead of everything else.</li>
-          <li><strong>Link your portfolio.</strong> Connect a brokerage account (read-only, never able to place trades) and see insider activity on what you actually hold.</li>
-          <li><strong>Get notified.</strong> Instant alerts the moment something you're watching moves, or a daily and weekly digest by email instead.</li>
+          <li><strong>Instant alerts</strong> — get notified the moment a watched ticker or insider files a new trade, plus daily and weekly email digests.</li>
+          <li><strong>Portfolio tracking</strong> — connect a brokerage (read-only) and see insider activity on stocks you actually hold.</li>
+          <li><strong>Full history</strong> — scored signals and raw data going back to 2013.</li>
         </ul>
-      </>
-    ),
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: 'IconSettings',
-    render: () => (
-      <>
-        <p>Everything above is adjustable. Settings is where to change how alerts fire, how often digests arrive, which sources count toward your feed, and the light or dark theme.</p>
-        <p>Nothing here is locked into a default forever. If a notification feels too frequent or a filter too narrow, that's a Settings change, not a support ticket.</p>
+        <div className="guide-callout guide-callout--accent" style={{margin:'12px 0'}}>
+          <p className="guide-callout__title" style={{color:'var(--accent-strong)'}}>Founding member pricing</p>
+          <p className="guide-callout__text">
+            As a beta user, you can lock in Pro at <strong>$6.99/mo — half off, forever</strong>. That rate stays as long as your subscription is active.
+          </p>
+        </div>
+        <p><strong>One-time data export</strong> — purchase the entire database as a CSV download for a one-time fee.</p>
       </>
     ),
   },
@@ -1492,24 +1927,22 @@ function EnvPreview({ type }) {
   );
   if (type === 'watchlist') return (
     <div className="env-preview env-preview--watchlist">
-      <div className="env-preview__wl-head">
-        <span className="env-preview__wl-dot"/>
-        <span className="env-preview__wl-acct">Brokerage linked</span>
+      <div className="env-preview__wl-row">
+        <svg viewBox="0 0 24 24" fill="var(--accent-strong)" stroke="var(--accent-strong)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{flexShrink:0}}>
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        <span className="env-preview__wl-hint">Star a stock to track insider activity</span>
       </div>
-      {[
-        {held:true,  buy:true},
-        {held:true,  buy:false},
-        {held:false, buy:true},
-      ].map((r,i) => (
-        <div key={i} className="env-preview__wl-row">
-          <span className={`env-preview__star${r.held?' env-preview__star--filled':''}`}>★</span>
-          <span className="env-preview__ticker env-preview__ticker--lg"/>
-          <span className="env-preview__wl-name"/>
-          <span className={`env-preview__wl-signal${r.buy?' env-preview__wl-signal--buy':' env-preview__wl-signal--sell'}`}>
-            {r.buy ? '▲ Buying' : '▼ Selling'}
-          </span>
-        </div>
-      ))}
+      <div className="env-preview__wl-row">
+        <svg viewBox="0 0 24 24" fill="var(--accent-strong)" stroke="var(--accent-strong)" strokeWidth={2} width="14" height="14" style={{flexShrink:0}}>
+          <circle cx="12" cy="12" r="9"/>
+        </svg>
+        <span className="env-preview__wl-hint">Follow an insider to track their trades</span>
+      </div>
+      <div className="env-preview__wl-row" style={{opacity:0.45}}>
+        <IconLink style={{width:14,height:14,flexShrink:0}}/>
+        <span className="env-preview__wl-hint">Link a brokerage for portfolio-level alerts</span>
+      </div>
     </div>
   );
   if (type === 'settings') return (
@@ -1541,36 +1974,58 @@ const LP_FEATURE_ICON_MAP = {
   IconData, IconInsights, IconLink, IconZap, IconFavorites,
 };
 
+// Shared context so all TileInfoButtons can see the nudge state
+// Must be defined before GuideProvider which uses it as a JSX element
+const TileNudgeContext = createContext({ nudgeActive: false, dismissNudge: () => {} });
+
 function GuideProvider({ children }) {
   const [openSection, setOpenSection] = useState(null); // null = closed, else a GUIDE_SECTIONS id
 
-  // Auto-open once per browser, on first real visit to the app (not the
-  // marketing/landing page) — localStorage only, same pattern already used
-  // for theme elsewhere in this file. Not tied to a Neon
-  // column: losing this flag on a new device just means seeing the guide
-  // again, which is a low-stakes outcome, not one worth a server round trip.
+  // First visit: open the guide at the welcome panel. One flow, one key.
+  // (Replaces the old two-modal approach where a separate BetaWelcomeModal
+  // opened first, then the guide opened second — now the beta greeting is
+  // baked into the welcome panel of the guide itself.)
   useEffect(() => {
     try {
-      if (!localStorage.getItem('seli_guide_seen')) {
+      if (!localStorage.getItem('seli_onboard_seen')) {
         setOpenSection('welcome');
-        localStorage.setItem('seli_guide_seen', '1');
       }
     } catch (_) {}
   }, []);
 
   const openGuide = useCallback((sectionId) => setOpenSection(sectionId || 'welcome'), []);
-  const closeGuide = useCallback(() => setOpenSection(null), []);
+  const closeGuide = useCallback(() => {
+    setOpenSection(null);
+    // Mark onboarding complete on first close — subsequent opens via the
+    // status bar ? button don't re-trigger the nudge or re-mark.
+    try { localStorage.setItem('seli_onboard_seen', '1'); } catch (_) {}
+  }, []);
+
+  const nudge = useTileNudge();
+  const closeGuideAndNudge = useCallback(() => {
+    const wasFirstTime = !localStorage.getItem('seli_onboard_seen');
+    setOpenSection(null);
+    try { localStorage.setItem('seli_onboard_seen', '1'); } catch (_) {}
+    // Fire the tile-help nudge only after the very first onboard dismissal
+    if (wasFirstTime) {
+      // Small delay so the guide modal fully animates out before pulsing
+      setTimeout(() => nudge.triggerNudge(), 400);
+    }
+  }, [nudge]);
 
   return (
-    <GuideContext.Provider value={{ openSection, openGuide, closeGuide }}>
-      {children}
-      {openSection && <GuideModal initialSection={openSection} onClose={closeGuide}/>}
+    <GuideContext.Provider value={{ openSection, openGuide, closeGuide: closeGuideAndNudge }}>
+      <TileNudgeContext.Provider value={nudge}>
+        {children}
+      </TileNudgeContext.Provider>
+      {openSection && <GuideModal initialSection={openSection} onClose={closeGuideAndNudge}/>}
     </GuideContext.Provider>
   );
 }
 
 function GuideModal({ initialSection, onClose }) {
   const [activeId, setActiveId] = useState(initialSection || 'welcome');
+  const [hidden, setHidden] = useState(false); // temporarily hide for flash
   const idx = GUIDE_SECTIONS.findIndex(s => s.id === activeId);
   const section = GUIDE_SECTIONS[idx] ?? GUIDE_SECTIONS[0];
 
@@ -1579,6 +2034,32 @@ function GuideModal({ initialSection, onClose }) {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
+
+  // "Show me" flash: briefly hide modal, pulse the status bar icons, return
+  const flashHelpIcons = useCallback(() => {
+    setHidden(true);
+    // Add flash class to status bar help icons
+    document.querySelectorAll('.status-bar__icon-btn').forEach(btn => {
+      btn.classList.add('status-bar__icon-btn--flash');
+    });
+    // Also flash any visible tile-info-btn
+    document.querySelectorAll('.tile-info-btn').forEach(btn => {
+      btn.classList.add('tile-info-btn--flash');
+    });
+    setTimeout(() => {
+      document.querySelectorAll('.status-bar__icon-btn--flash').forEach(btn => {
+        btn.classList.remove('status-bar__icon-btn--flash');
+      });
+      document.querySelectorAll('.tile-info-btn--flash').forEach(btn => {
+        btn.classList.remove('tile-info-btn--flash');
+      });
+      setHidden(false);
+    }, 2800);
+  }, []);
+
+  const helpers = { flashHelpIcons };
+
+  if (hidden) return null;
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -1592,7 +2073,6 @@ function GuideModal({ initialSection, onClose }) {
         <div className="guide-modal__body">
           <nav className="guide-modal__nav" aria-label="Guide sections">
             {GUIDE_SECTIONS.map((s, i) => {
-              const Icon = GUIDE_ICON_MAP[s.icon];
               return (
                 <button
                   key={s.id}
@@ -1601,7 +2081,6 @@ function GuideModal({ initialSection, onClose }) {
                   title={s.label}
                   aria-label={s.label}
                 >
-                  <span className="guide-modal__nav-icon">{Icon && <Icon style={{ width: 14, height: 14 }} />}</span>
                   <span className="guide-modal__nav-num">{i + 1}</span>
                   {s.label}
                 </button>
@@ -1610,7 +2089,7 @@ function GuideModal({ initialSection, onClose }) {
           </nav>
           <div className="guide-modal__content">
             <div className="guide-modal__content-inner">
-              {section.render()}
+              {section.render(helpers)}
             </div>
             <div className="guide-modal__footer">
               <button
@@ -1648,17 +2127,211 @@ function GuideModal({ initialSection, onClose }) {
 // rendering its own separate modal. Keeps one real explanation per topic
 // instead of the guide and seven tile tooltips slowly saying slightly
 // different things about the same feature.
-function TileInfoButton({ section, title }) {
-  const guide = useContext(GuideContext);
+// ── Per-tile contextual help ──────────────────────────────────────────────────
+// Each ? button opens a slide-in panel with column definitions, methodology,
+// and data source info specific to that tile. Mobile falls through to the
+// existing guide modal to avoid layout disruption.
+
+const TILE_HELP = {
+  'sentiment': {
+    title: 'Market Overview',
+    what: 'Aggregate insider sentiment and real-time benchmark prices at a glance.',
+    methodology: 'The sentiment score is the ratio of net insider buying to total transaction volume across all open-market SEC filings in the last 30 days, scaled 0–100. Above 50 means more dollars flowing into insider purchases than sales. The label (Fear → Extreme Greed) maps to fixed score ranges.',
+    columns: [
+      { term: 'Score (0–100)', def: 'Net insider buy ratio. 0 = all selling, 100 = all buying.' },
+      { term: 'Label', def: '0–25 Fear, 25–45 Caution, 45–55 Neutral, 55–75 Greed, 75–100 Extreme Greed.' },
+      { term: 'SPY', def: 'SPDR S&P 500 ETF — tracks the 500 largest U.S. companies by market cap. The most widely followed U.S. equity benchmark.' },
+      { term: 'QQQ', def: 'Invesco Nasdaq-100 ETF — tracks the 100 largest non-financial Nasdaq-listed companies. Heavily tech-weighted.' },
+      { term: 'IWM', def: 'iShares Russell 2000 ETF — tracks 2,000 small-cap U.S. stocks. Indicator of broader market health beyond mega-caps.' },
+      { term: 'Return %', def: 'Intraday percentage change from previous close.' },
+    ],
+    source: 'Sentiment calculated from all open-market Form 4 filings in the last 30 days. Market data via financial data APIs, updating throughout the trading day.',
+  },
+  'data-filings': {
+    title: 'All Filings',
+    what: 'Every SEC Form 4 insider filing and congressional STOCK Act disclosure in the database, with full transaction details.',
+    methodology: 'Filings are ingested directly from SEC EDGAR within minutes of publication. Congressional disclosures are added from periodic STOCK Act releases. Each row is one transaction — a single insider buying or selling shares in one filing.',
+    columns: [
+      { term: 'Trade date', def: 'The date the transaction was executed (not the filing date, which can be 1–2 days later).' },
+      { term: 'Ticker', def: 'Stock trading symbol. Click to drill into the ticker\'s full insider history.' },
+      { term: 'Company', def: 'Full company name as reported on the SEC filing.' },
+      { term: 'Insider', def: 'Name of the insider who traded. Click to see their full trading profile and track record.' },
+      { term: 'Type', def: 'Buy or Sell. Color-coded green (buy) or red (sell). Sub-label shows the SEC transaction code (P = open-market purchase, S = open-market sale, etc.).' },
+      { term: 'Shares', def: 'Number of shares bought or sold in this transaction.' },
+      { term: 'Price', def: 'Price per share at which the transaction was executed.' },
+      { term: 'Value', def: 'Total dollar value of the transaction (shares × price).' },
+      { term: 'Pos%', def: 'Percentage change in the insider\'s total position. Large positive = significantly increasing their stake.' },
+      { term: 'Role', def: 'Insider\'s relationship classification: Exec (C-suite/VP), Officer, or Dir (director/10% owner).' },
+    ],
+    source: 'SEC EDGAR Form 4 filings and congressional STOCK Act disclosures. Free users see the last 12 months; Pro unlocks full history back to 2010.',
+  },
+  'sector-heatmap': {
+    title: 'S&P 500 Sector Heatmap',
+    what: 'Day return for each GICS sector, weighted by market cap using sector ETF proxies.',
+    columns: [
+      { term: 'Sector name', def: 'GICS sector classification (Technology, Financials, Healthcare, etc.).' },
+      { term: 'Return %', def: 'Intraday return of the sector\'s representative ETF. Green = positive, red = negative.' },
+      { term: 'Width', def: 'Proportional to the sector\'s S&P 500 weight. Technology is widest because it\'s the largest sector.' },
+    ],
+    source: 'Sector ETF proxies (XLK, XLF, XLV, etc.) via market data. Updates throughout the trading day.',
+  },
+  'dashboard-signals': {
+    title: 'Insider Signals',
+    what: 'Tickers with recent open-market insider trades, scored by conviction strength.',
+    columns: [
+      { term: 'Ticker', def: 'The stock\'s trading symbol and company name.' },
+      { term: 'Moves', def: 'Total number of buy + sell transactions in the selected window.' },
+      { term: 'Signal bar', def: 'Visual representation of the conviction score (0–20). Longer and greener = stronger conviction.' },
+      { term: 'Net flow', def: 'Dollar value of buys minus dollar value of sells.' },
+    ],
+    methodology: 'Conviction scoring weights executive participation, buy clustering, trade size relative to position, and whether trades are opportunistic (not routine). Based on Lakonishok & Lee (2001) and Cohen et al. (2012).',
+    source: 'SEC EDGAR Form 4 filings. Open-market transactions only — exercises, gifts, and 10b5-1 plan sales are excluded.',
+  },
+  'insights-signals': {
+    title: 'Insider Signals',
+    what: 'Every ticker with open-market insider activity in the selected window, scored and ranked by conviction.',
+    columns: [
+      { term: 'Ticker · Company', def: 'Stock symbol, company name, and sector (if available).' },
+      { term: 'Type', def: 'Corporate (SEC Form 4) or Congressional (STOCK Act disclosure).' },
+      { term: 'Moves', def: 'Total buy + sell transactions from all insiders at this ticker.' },
+      { term: 'Date', def: 'How recently the most recent transaction occurred.' },
+      { term: 'Signal', def: 'Conviction score (0–100) with diminishing returns. Weighted dimensions: opportunistic trades (non-routine), insider cluster size, C-suite involvement, position swing, dollar value, trade velocity (concentration in time), political origin, recency, and insider track record. Split buy/sell activity applies a contra-signal penalty.' },
+      { term: 'Net flow', def: 'Total dollar value of buys minus sells across all insiders.' },
+    ],
+    methodology: 'The score is buy-side only — insider selling is excluded from conviction because the academic literature shows it\'s much less predictive (insiders sell for diversification, taxes, and liquidity reasons unrelated to company outlook).',
+    source: 'SEC EDGAR Form 4 filings, updated within minutes of new filings. Congressional trades from periodic STOCK Act disclosures (up to 45-day reporting lag).',
+  },
+  'top-insiders': {
+    title: 'Top Insiders',
+    what: 'Ranked leaderboard of individual insiders by their historical trading accuracy.',
+    columns: [
+      { term: 'Insider', def: 'Name and title of the insider. C-Suite badge indicates executive-level officers.' },
+      { term: 'Buys · $Value', def: 'Total number of open-market purchases and their combined dollar value over the selected window.' },
+      { term: 'Hit rate', def: 'Percentage of priced buy trades where the stock price is currently above the purchase price. 100% = every buy is currently profitable.' },
+      { term: 'Bar', def: 'Visual hit rate indicator. Full green = 100% hit rate.' },
+    ],
+    methodology: 'Hit rate compares the insider\'s purchase price against the latest available close in the prices database. Only open-market buys with valid price data are included. Minimum trade threshold applies to filter noise.',
+    source: 'SEC EDGAR Form 4 filings cross-referenced with daily closing prices. Leaderboard recalculates on each page load.',
+  },
+  'market-news': {
+    title: 'Market News',
+    what: 'Latest financial news headlines from major wire services.',
+    columns: [
+      { term: 'Source', def: 'News outlet (Reuters, CNBC, Bloomberg, etc.).' },
+      { term: 'Headline', def: 'Article title — click to open the full article.' },
+      { term: 'My news (Pro)', def: 'Toggle to filter headlines to only show news about your watched tickers and followed insiders\' companies.' },
+    ],
+    source: 'Aggregated from public RSS feeds of major financial news outlets. Updates every few minutes.',
+  },
+};
+
+function TileHelpPanel({ tileId, onClose }) {
+  const help = TILE_HELP[tileId];
+  if (!help) return null;
   return (
-    <button
-      className="tile-info-btn"
-      onClick={(e) => { e.stopPropagation(); guide?.openGuide(section); }}
-      title={`About: ${title}`}
-      aria-label={`About ${title}`}
-    >
-      <IconHelp style={{ width: 12, height: 12 }} />
-    </button>
+    <div className="tile-help-overlay" onClick={onClose}>
+      <div className="tile-help-panel" onClick={e=>e.stopPropagation()}>
+        <div className="tile-help-panel__header">
+          <h3 className="tile-help-panel__title">{help.title}</h3>
+          <button className="upgrade-modal__close" style={{position:'static'}} onClick={onClose} aria-label="Close"><IconClose style={{width:10,height:10}}/></button>
+        </div>
+        <div className="tile-help-panel__body">
+          <p className="tile-help-panel__what">{help.what}</p>
+          {help.methodology && (
+            <div className="tile-help-panel__card">
+              <h4 className="tile-help-panel__section-title">Methodology</h4>
+              <p className="tile-help-panel__text">{help.methodology}</p>
+            </div>
+          )}
+          <div className="tile-help-panel__card">
+            <h4 className="tile-help-panel__section-title">Data source</h4>
+            <p className="tile-help-panel__text">{help.source}</p>
+          </div>
+          {help.columns && (
+            <div className="tile-help-panel__card">
+              <h4 className="tile-help-panel__section-title">Columns</h4>
+              <dl className="tile-help-panel__dl">
+                {help.columns.map(c=>(
+                  <div key={c.term} className="tile-help-panel__dl-row">
+                    <dt>{c.term}</dt>
+                    <dd>{c.def}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Tile help nudge ────────────────────────────────────────────────────────────
+// After the onboard guide is dismissed for the first time, a subtle pulse
+// rings the ? buttons on a couple of key tiles (sentiment, dashboard-signals)
+// to teach the user the help system exists. Shown once, separate localStorage
+// key so re-opening the guide later doesn't re-trigger.
+const NUDGE_TILES = new Set(['sentiment', 'dashboard-signals']);
+
+// triggerNudge is called by GuideProvider when the guide closes for the
+// first time — this avoids a timing issue where the effect would run on
+// mount before seli_onboard_seen exists in localStorage.
+function useTileNudge() {
+  const [active, setActive] = useState(false);
+  const timerRef = useRef(null);
+  const trigger = useCallback(() => {
+    try {
+      if (localStorage.getItem('seli_tile_nudge_seen')) return;
+    } catch (_) {}
+    setActive(true);
+    timerRef.current = setTimeout(() => {
+      setActive(false);
+      try { localStorage.setItem('seli_tile_nudge_seen', '1'); } catch (_) {}
+    }, 6000);
+  }, []);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  const dismiss = useCallback(() => {
+    setActive(false);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    try { localStorage.setItem('seli_tile_nudge_seen', '1'); } catch (_) {}
+  }, []);
+  return { nudgeActive: active, dismissNudge: dismiss, triggerNudge: trigger };
+}
+
+// TileNudgeContext defined below after its creation point (moved to avoid TDZ)
+
+function TileInfoButton({ section, title, tileId }) {
+  const guide = useContext(GuideContext);
+  const { nudgeActive, dismissNudge } = useContext(TileNudgeContext);
+  const isMobile = useIsMobile();
+  const [showHelp, setShowHelp] = useState(false);
+  const shouldNudge = nudgeActive && NUDGE_TILES.has(tileId);
+  // Mobile: open the global guide modal (unchanged behavior)
+  // Desktop: open the contextual per-tile help panel if tileId is provided
+  function handleClick(e) {
+    e.stopPropagation();
+    if (nudgeActive) dismissNudge();
+    if (isMobile || !tileId || !TILE_HELP[tileId]) {
+      guide?.openGuide(section);
+    } else {
+      setShowHelp(true);
+    }
+  }
+  return (
+    <span style={{position:'relative',display:'inline-flex',alignItems:'center'}}>
+      <button
+        className={`tile-info-btn${shouldNudge ? ' tile-info-btn--nudge' : ''}`}
+        onClick={handleClick}
+        title={`About: ${title}`}
+        aria-label={`About ${title}`}
+      >
+        <IconHelp style={{ width: 12, height: 12 }} />
+      </button>
+      {shouldNudge && (
+        <span className="tile-nudge-tooltip">Tap for details on this tile</span>
+      )}
+      {showHelp && <TileHelpPanel tileId={tileId} onClose={()=>setShowHelp(false)}/>}
+    </span>
   );
 }
 
@@ -1817,7 +2490,7 @@ function FeedbackModal({ page, onClose }) {
           >
             Attach screenshot
           </button>
-          <span className="td-muted" style={{fontSize:11}}>or paste one into the text box</span>
+          <span className="td-muted" style={{fontSize:'0.6875rem'}}>or paste one into the text box</span>
           <input
             ref={fileInputRef}
             type="file"
@@ -1868,7 +2541,7 @@ function CompanyProfileCard({ ticker, cik, company }) {
   const pe    = metrics?.['peNormalizedAnnual'] ? Number(metrics['peNormalizedAnnual']).toFixed(1) : null;
   const beta  = metrics?.['beta']        ? Number(metrics['beta']).toFixed(2) : null;
 
-  if (loading) return <div style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:8,borderBottom:'0.5px solid var(--border)'}}><Spinner size={14}/><span className="td-muted" style={{fontSize:12}}>Loading profile…</span></div>;
+  if (loading) return <div style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:8,borderBottom:'0.5px solid var(--border)'}}><Spinner size={14}/><span className="td-muted" style={{fontSize:'0.75rem'}}>Loading profile…</span></div>;
   if (!profile && !desc) return null;
 
   return (
@@ -1934,9 +2607,22 @@ function StarBtn({ ticker, watchlist }) {
 }
 
 // Follow button for insiders — same pattern as StarBtn
-function FollowBtn({ name, watchlist }) {
+function FollowBtn({ name, watchlist, compact=false }) {
   const isFollowing = watchlist.hasInsider(name);
   const isPro       = watchlist.pro;
+  if (compact) {
+    // Icon-only variant for use inside table rows
+    return (
+      <button
+        className={`star-btn${isFollowing?' star-btn--active':''}${!isPro?' star-btn--locked':''}`}
+        title={isPro ? (isFollowing?'Unfollow':'Follow insider') : 'Pro feature'}
+        onClick={e=>{e.stopPropagation();watchlist.toggleInsider(name);}}>
+        <svg viewBox="0 0 24 24" fill={isFollowing?'currentColor':'none'} stroke="currentColor" strokeWidth={2} width="12" height="12">
+          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+      </button>
+    );
+  }
   return (
     <button
       className={`follow-btn${isFollowing?' follow-btn--active':''}${!isPro?' follow-btn--locked':''}`}
@@ -1948,6 +2634,41 @@ function FollowBtn({ name, watchlist }) {
   );
 }
 
+
+// DetailPanelHeader extracted from DetailPanel to avoid TDZ
+function DetailPanelHeader({ d, traderStats, traderRows, inline, watchlist, nav }) {
+    if(d.type==='trader'){
+      const affs = traderStats?.affiliations || [];
+      const maxChips = inline ? affs.length : 3; // inline = explore, show all
+      const visibleAffs = affs.slice(0, maxChips);
+      const hiddenCount = affs.length - visibleAffs.length;
+      return <div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{affs.length>0&&<div className="trader-aff-list">{visibleAffs.map((a)=><span key={a.ticker} className="trader-aff-chip" title={`${a.title||REL_LABELS[a.relationship]||'Director'} at ${a.ticker}`}><span className="trader-aff-chip__role">{shortRole(a.title)||REL_LABELS[a.relationship]||'Director'}</span> at <span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:a.ticker,company:a.company})}>{a.ticker}</span></span>)}{hiddenCount>0&&<span className="trader-aff-chip trader-aff-chip--more">+{hiddenCount} more</span>}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
+    }
+    if(d.type==='ticker')return(
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
+        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
+        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
+      </div>
+    );
+    if(d.type==='signal')return(
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span className="ticker dp-clickable" style={{fontSize:17,cursor:'pointer'}}
+          onClick={()=>nav('ticker',{ticker:d.ticker,company:d.company})}>{d.ticker}</span>
+        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
+        <button className="dp-explore-btn" onClick={()=>nav('ticker',{ticker:d.ticker,company:d.company})}>
+          View all activity →
+        </button>
+        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
+      </div>
+    );
+    if(d.type==='transaction')return<div><div style={{display:'flex',alignItems:'baseline',gap:8}}><span className="ticker" style={{fontSize:15}}>{d.trade?.ticker}</span><span style={{fontSize:'0.75rem',color:'var(--text-2)'}}>{d.trade?.company_name||d.trade?.company}</span></div><div className="td-muted" style={{fontSize:'0.6875rem'}}>Transaction</div></div>;
+}
+
+// RelBadge and TRow extracted to module level to prevent TDZ
+const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{rel==='strong'?'Exec':rel==='medium'?'Officer':'Director'}</Badge>;
+
+
 function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, watchlist, inline=false, onExpand, hideProfileCard=false }) {
   // Note: this component is only ever mounted by the caller when `detail` is
   // truthy (see App's panelOpen guard), so `d` is always defined here. No
@@ -1958,16 +2679,230 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
   const [traderRows, setTraderRows] = useState(null);
   const [tickerRows, setTickerRows] = useState(null);
+  const [signalPrice, setSignalPrice] = useState(null); // current price for signal-type details
   const [busy,       setBusy]       = useState(false);
   const [bundleOn,   setBundleOn]   = useState(true);
   const [omOnly,     setOmOnly]     = useState(true);
-  const nav = (type,data) => onNavigate&&onNavigate({type,...data});
+
+  // Fetch current price for signal-type details so the NOW column shows data.
+  // Signal trades come from the client-side filings array (no price join),
+  // unlike ticker/trader details which use server queries with LATERAL JOIN.
+  useEffect(()=>{
+    if (d.type!=='signal' || !d.ticker) return;
+    setSignalPrice(null);
+    queryNeon(`SELECT close::float AS current_price FROM public.prices_history WHERE ticker='${(d.ticker||'').replace(/'/g,"''")}' ORDER BY date DESC LIMIT 1`)
+      .then(r => setSignalPrice(r?.[0]?.current_price ?? null))
+      .catch(() => setSignalPrice(null));
+  },[d.type, d.ticker]);
+  // When the current detail originated from the Data page (it has
+  // dataFilters), carry those filters forward to any sub-navigation so
+  // that expanding always opens the DataDrawer (filings explore), not the
+  // InsightsDrawer (signals explore). Without this, clicking "All SYBT
+  // trades →" from a Data-originated transaction would lose the dataFilters
+  // on the new detail, causing expand to fall through to InsightsDrawer.
+  const nav = (type,data,opts) => {
+    if (!onNavigate) return;
+    const forwarded = d.dataFilters ? { dataFilters: d.dataFilters, ...data } : data;
+    onNavigate({type,...forwarded}, opts);
+  };
+
+  const TRow=({r,showTicker,showInsider})=>{
+    const tt=r.transaction_type||r.transactionType;
+    const code=r.transaction_code||r.transactionCode;
+    const isOM=r.is_open_market||r.isOpenMarket;
+    const pr=r.price||r.price_per_share;
+    const cur=r.current_price||r.currentPrice;
+    // Only P/S codes carry a real market price. A/M/J/etc often show $0 or a
+    // strike price that isn't comparable — don't compute a misleading return.
+    const hasRealPrice = isOM && pr>0;
+    const isForeign=r.is_foreign_price||r.isForeignPrice||(hasRealPrice&&cur&&Math.abs((cur-pr)/pr)>=3);
+    // For a BUY, price rising afterward is a good outcome. For a SELL, it's
+    // the opposite — price rising after you sold means you left money on
+    // the table. The percentage shown stays true to the actual price move
+    // (so it never contradicts the prices displayed next to it — a sale
+    // shown at $6.94 → $7.69 should never read as a negative number, that
+    // would look like a math error), but the color now reflects whether
+    // this was actually a good outcome for THIS trade's direction, which
+    // previously used the same green-if-positive logic for both buys and
+    // sells — backwards for every sell.
+    const ret=(hasRealPrice&&cur&&!isForeign)?((cur-pr)/pr*100):null;
+    const isGoodOutcome = ret!=null ? (tt==='sell' ? ret<0 : ret>=0) : null;
+    const dt=r.transaction_date||r.transactionDate||r.date;
+    const codeLabel = TX_CODE_TOOLTIPS[code]||code;
+    const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
+    const secUrl = secFilingUrl(r.accessionNumber || r.accession_number, r.cikIssuer || r.cik_issuer);
+    const secIcon = secUrl ? (
+      <a href={secUrl} target="_blank" rel="noopener noreferrer"
+         className="dp-trade-sec-link"
+         title="View original SEC filing"
+         onClick={e => e.stopPropagation()}>
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V11"/>
+          <path d="M9 2h5v5"/>
+          <path d="M14 2 7 9"/>
+        </svg>
+        <span className="dp-trade-sec-tooltip">View SEC filing</span>
+      </a>
+    ) : null;
+    // Scopes the eventual "expand to full Explore view" to whatever this
+    // panel itself represents — DataDrawer already restores every filter
+    // from this object and scrolls to/highlights the exact row that opened
+    // it (see its own scrolledOnOpenRef effect), it just needed a caller
+    // that actually attaches a dataFilters payload. Ticker/trader panels
+    // are the two contexts this row list is used in with a real single
+    // subject to scope to; anywhere else (a compact signals widget with no
+    // one fixed subject) this stays null and expand falls back to the
+    // existing general Insights drawer, unchanged.
+    const rowDataFilters = d.type==='ticker' && d.ticker ? { search: d.ticker }
+                          : d.type==='trader' && d.name ? { search: d.name }
+                          : null;
+    const openTransaction = () => nav('transaction', { trade: r, dataFilters: rowDataFilters });
+    return (
+      <div className={`dp-trade dp-trade--${tt} dp-clickable`}
+           role="button" tabIndex={0}
+           onClick={openTransaction}
+           onKeyDown={(e)=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); openTransaction(); } }}>
+        <div className={`dp-trade-split${inline?'':' dp-trade-split--stacked'}`}>
+          {/* LEFT — context: what kind of trade, when, who/what ticker.
+  
+              The wide inline drawer (Filings Explore) keeps this to just
+              name+date — Buy/Sell + code become their OWN column in the
+              grid below, aligned with Shares/Price/etc., instead of a
+              separate badge cluster floating next to the name that didn't
+              line up with anything. The narrow docked panel has room to
+              keep badges attached to the row's top line instead. */}
+          {inline ? (
+            <div className="dp-trade-left">
+              <div className="dp-trade-left__top">
+                {showInsider && r.insider_name
+                  ? <span className="dp-clickable dp-trade-row2__name dp-trade-row2__name--lg" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
+                  : <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
+                {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+                {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+              </div>
+              <div className="dp-trade-left__bottom">
+                {showInsider && r.insider_name && <><span className="dp-trade-date">{dateLabel}</span>{secIcon}</>}
+                {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
+              </div>
+            </div>
+          ) : showInsider && r.insider_name ? (
+            <div className="dp-trade-toprow">
+              <div className="dp-trade-toprow__left">
+                <span className="dp-clickable dp-trade-row2__name" onClick={(e)=>{e.stopPropagation();nav('trader',{name:r.insider_name,title:r.title});}}>{r.insider_name}</span>
+                <div className="dp-trade-toprow__meta">
+                  <span className="dp-trade-date">{dateLabel}</span>
+                  {secIcon}
+                  {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+                  {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+                </div>
+              </div>
+              <div className="dp-trade-toprow__badges">
+                <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+                <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+                {isOM&&<span className="dp-trade-om-label">Open market</span>}
+              </div>
+            </div>
+          ) : (
+            <div className="dp-trade-left">
+              <div className="dp-trade-left__top">
+                <span className="dp-trade-date">{dateLabel}</span>
+                {secIcon}
+                {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
+              </div>
+              <div className="dp-trade-left__bottom">
+                <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+                <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+                {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={(e)=>{e.stopPropagation();nav('ticker',{ticker:r.ticker,company:r.company_name});}}>{r.ticker}</span>}
+                {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
+              </div>
+            </div>
+          )}
+          {/* RIGHT — every number that describes the purchase itself, all
+              grouped together and explicitly labeled: shares, price then,
+              price now, position change, and the total dollar amount.
+  
+              In the wide inline drawer (`inline`), this is a fixed 5-column
+              grid where EVERY column slot always renders — showing "—" when
+              a value doesn't apply — so the columns line up vertically across
+              every transaction row regardless of which fields each row has.
+              In the narrow docked side panel there isn't room for a rigid
+              5-column table, so it keeps the original content-width flex
+              layout that only shows the cells that apply. */}
+          {inline ? (
+            <div className="dp-trade-right dp-trade-right--grid">
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Type</span>
+                <span className="dp-trade-detail__val dp-trade-detail__val--type">
+                  <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
+                  <span className="code-pill" title={codeLabel}>{(code==='P'||code==='S') ? code : (TX_CODE_SHORT[code]||code)}</span>
+                </span>
+              </div>
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Shares</span>
+                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+              </div>
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Price</span>
+                <span className="dp-trade-detail__val">{hasRealPrice?fmt.price(pr):'—'}</span>
+              </div>
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Now</span>
+                {hasRealPrice&&ret!=null
+                  ? <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span>
+                  : <span className="dp-trade-detail__val td-muted">—</span>}
+              </div>
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">% of position</span>
+                <span className="dp-trade-detail__val val-buy">{(r.pct_owned_change||r.pctOwnedChange)!=null?`+${(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%`:'—'}</span>
+              </div>
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Total</span>
+                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="dp-trade-right">
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Shares</span>
+                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
+              </div>
+              {hasRealPrice ? (<>
+                <div className="dp-trade-detail">
+                  <span className="dp-trade-detail__label">Price</span>
+                  <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
+                </div>
+                {ret!=null && (
+                  <div className="dp-trade-detail">
+                    <span className="dp-trade-detail__label">Now</span>
+                    <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
+                      {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
+                    </span>
+                  </div>
+                )}
+              </>) : null}
+              {(r.pct_owned_change||r.pctOwnedChange)!=null && (
+                <div className="dp-trade-detail">
+                  <span className="dp-trade-detail__label">% of position</span>
+                  <span className="dp-trade-detail__val val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%</span>
+                </div>
+              )}
+              <div className="dp-trade-detail">
+                <span className="dp-trade-detail__label">Total</span>
+                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   useEffect(()=>{
     if (d.type!=='trader') return;
     setTraderRows(null); setBusy(true);
     queryNeon(`
-      SELECT f.transaction_date,f.filing_date,f.ticker,f.company_name,
+      SELECT f.accession_number,f.cik_issuer,
+             f.transaction_date,f.filing_date,f.ticker,f.company_name,
              f.transaction_type,f.transaction_code,f.is_open_market,f.is_derivative,
              f.shares::float,f.price_per_share::float AS price,
              f.value::float,f.pct_owned_change::float,
@@ -1982,14 +2917,14 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       WHERE f.insider_name='${d.name.replace(/'/g,"''")}'
         AND f.transaction_type IN ('buy','sell')
       ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r=>{setTraderRows(r);setBusy(false);}).catch(()=>setBusy(false));
+    `).then(r=>{setTraderRows(r);setBusy(false);}).catch(()=>{setTraderRows([]);setBusy(false);});
   },[d.type,d.name]);
 
   useEffect(()=>{
     if (d.type!=='ticker') return;
     setTickerRows(null); setBusy(true);
     queryNeon(`
-      SELECT f.transaction_date,f.filing_date,f.insider_name,
+      SELECT f.accession_number,f.transaction_date,f.filing_date,f.insider_name,
              f.insider_title AS title,f.relationship,
              f.transaction_type,f.transaction_code,f.is_open_market,
              f.shares::float,f.price_per_share::float AS price,
@@ -2007,51 +2942,8 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       WHERE f.ticker='${(d.ticker||'').replace(/'/g,"''")}'
         AND f.transaction_type IN ('buy','sell')
       ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r=>{setTickerRows(r);setBusy(false);}).catch(()=>setBusy(false));
+    `).then(r=>{setTickerRows(r);setBusy(false);}).catch(()=>{setTickerRows([]);setBusy(false);});
   },[d.type,d.ticker]);
-
-  const [relatedInsiders, setRelatedInsiders] = useState(null);
-
-  useEffect(()=>{
-    if (d.type!=='trader' || !traderRows?.length) { setRelatedInsiders(null); return; }
-    const sectors = [...new Set(traderRows.map(r=>r.sector).filter(Boolean))];
-    if (!sectors.length) { setRelatedInsiders([]); return; }
-    const sectorList = sectors.map(s=>`'${s.replace(/'/g,"''")}'`).join(',');
-    const selfName = d.name.replace(/'/g,"''");
-
-    // Pull other insiders active in the same sector(s). Simplified query —
-    // no LATERAL join (kept timing out / erroring on Neon's HTTP SQL endpoint
-    // at this table size) and bounded to the last 2 years to keep it fast.
-    // Hit-rate here is a rough proxy (buy volume + OM discipline), not the
-    // full trustScore calculation — good enough for ranking "related" people.
-    queryNeon(`
-      SELECT f.insider_name, f.insider_title, f.relationship,
-             COUNT(*) FILTER (WHERE f.transaction_type='buy' AND f.is_open_market) AS om_buys,
-             COUNT(*) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market) AS om_sells,
-             ARRAY_AGG(DISTINCT f.ticker) FILTER (WHERE f.ticker IS NOT NULL) AS tickers
-      FROM public.filings f
-      WHERE f.sector IN (${sectorList})
-        AND f.insider_name IS NOT NULL
-        AND f.insider_name != '${selfName}'
-        AND COALESCE(f.transaction_date, f.filing_date) >= (CURRENT_DATE - INTERVAL '2 years')
-      GROUP BY f.insider_name, f.insider_title, f.relationship
-      HAVING COUNT(*) FILTER (WHERE f.transaction_type='buy' AND f.is_open_market) >= 2
-      ORDER BY om_buys DESC
-      LIMIT 8
-    `).then(rows=>{
-      const withRate = rows.map(r=>({
-        ...r,
-        // Rough proxy: OM discipline ratio (buys+sells via real cash vs total activity)
-        hitRate: (r.om_buys+r.om_sells)>0 ? Math.round((r.om_buys/(r.om_buys+r.om_sells))*100) : null,
-        sharedTickers: (r.tickers||[]).filter(t=>traderRows.some(tr=>tr.ticker===t)),
-      })).sort((a,b)=>{
-        // Prioritize insiders who share an actual ticker, then by OM buy count
-        if (a.sharedTickers.length!==b.sharedTickers.length) return b.sharedTickers.length-a.sharedTickers.length;
-        return (b.om_buys||0)-(a.om_buys||0);
-      });
-      setRelatedInsiders(withRate.slice(0,5));
-    }).catch(()=>setRelatedInsiders([]));
-  },[d.type,d.name,traderRows]);
 
   const traderStats = useMemo(()=>{
     if (!traderRows?.length) return null;
@@ -2120,6 +3012,28 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     const holdings = Object.entries(holdingByTicker).map(([ticker,h])=>({ticker,...h,stillHolding:h.netShares>0}));
 
     const dates=traderRows.map(r=>r.transaction_date||r.filing_date).filter(Boolean).sort();
+
+    // Build affiliations: for each company this insider has filed at, capture
+    // their title, relationship, company name, and most recent activity date.
+    // An insider CAN be affiliated with multiple companies (e.g. director on
+    // multiple boards). Sort by most recent first — the top entry is their
+    // "primary" affiliation.
+    const affMap = {};
+    for (const r of traderRows) {
+      if (!r.ticker) continue;
+      const dt = r.transaction_date || r.filing_date || '';
+      if (!affMap[r.ticker] || dt > affMap[r.ticker].lastDate) {
+        affMap[r.ticker] = {
+          ticker: r.ticker,
+          company: r.company_name || r.ticker,
+          title: r.title || '',
+          relationship: r.relationship || 'weak',
+          lastDate: dt,
+        };
+      }
+    }
+    const affiliations = Object.values(affMap).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+
     return {
       totalBuys:buys.length, sells:sells.length, omBuys:omBuys.length, omSells:omSells.length,
       avgReturn:avgUnrealizedReturn, avgRealizedReturn, hitRate:combinedHitRate, combinedHitRate,
@@ -2128,7 +3042,9 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       totalSellVal:omSells.reduce((s,r)=>s+(r.value||0),0),
       companies:[...new Set(traderRows.map(r=>r.ticker).filter(Boolean))],
       sectors:[...new Set(traderRows.map(r=>r.sector).filter(Boolean))],
-      role:traderRows[0]?.relationship||'weak', title:traderRows[0]?.title||'',
+      role: affiliations[0]?.relationship || 'weak',
+      title: affiliations[0]?.title || '',
+      affiliations,
       bestTickers, holdings,
       firstTrade:dates[dates.length-1], lastTrade:dates[0],
     };
@@ -2292,166 +3208,37 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   },[d]);
 
   const score=traderStats?trustScore(traderStats):null;
-  const RelBadge=({rel})=><Badge type={`rel-${rel}`}>{rel==='strong'?'C-Suite':rel==='medium'?'Officer':'Director'}</Badge>;
-
-  const TRow=({r,showTicker,showInsider})=>{
-    const tt=r.transaction_type||r.transactionType;
-    const code=r.transaction_code||r.transactionCode;
-    const isOM=r.is_open_market||r.isOpenMarket;
-    const pr=r.price||r.price_per_share;
-    const cur=r.current_price||r.currentPrice;
-    // Only P/S codes carry a real market price. A/M/J/etc often show $0 or a
-    // strike price that isn't comparable — don't compute a misleading return.
-    const hasRealPrice = isOM && pr>0;
-    const isForeign=r.is_foreign_price||r.isForeignPrice||(hasRealPrice&&cur&&Math.abs((cur-pr)/pr)>=3);
-    // For a BUY, price rising afterward is a good outcome. For a SELL, it's
-    // the opposite — price rising after you sold means you left money on
-    // the table. The percentage shown stays true to the actual price move
-    // (so it never contradicts the prices displayed next to it — a sale
-    // shown at $6.94 → $7.69 should never read as a negative number, that
-    // would look like a math error), but the color now reflects whether
-    // this was actually a good outcome for THIS trade's direction, which
-    // previously used the same green-if-positive logic for both buys and
-    // sells — backwards for every sell.
-    const ret=(hasRealPrice&&cur&&!isForeign)?((cur-pr)/pr*100):null;
-    const isGoodOutcome = ret!=null ? (tt==='sell' ? ret<0 : ret>=0) : null;
-    const dt=r.transaction_date||r.transactionDate||r.date;
-    const codeLabel = TX_CODE_TOOLTIPS[code]||code;
-    const dateLabel = r._isCluster ? `${fmt.dateShort(r.transaction_date)}–${fmt.dateShort(r._lastDate)}` : fmt.dateShort(dt);
-    return (
-      <div className={`dp-trade dp-trade--${tt}`}>
-        <div className={`dp-trade-split${inline?'':' dp-trade-split--stacked'}`}>
-          {/* LEFT — context: what kind of trade, when, who/what ticker, and
-              the transaction code / market type metadata */}
-          <div className="dp-trade-left">
-            <div className="dp-trade-left__top">
-              <span className="dp-trade-date">{dateLabel}</span>
-              {r._isCluster&&<span className="cluster-badge" title={`${r._count} trades bundled`}>{r._count}×</span>}
-            </div>
-            <div className="dp-trade-left__bottom">
-              <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge>
-              <span className="code-pill" title={codeLabel}>{code}</span>
-              {isOM&&<span className="dp-trade-om-label">Open market</span>}
-              {showTicker&&r.ticker&&<span className="ticker dp-clickable" onClick={()=>nav('ticker',{ticker:r.ticker,company:r.company_name})}>{r.ticker}</span>}
-              {showInsider&&r.insider_name&&<span className="dp-clickable dp-trade-row2__name" onClick={()=>nav('trader',{name:r.insider_name,title:r.title})}>{r.insider_name}</span>}
-              {isForeign&&<span style={{color:'var(--amber-600)'}} title="Price move too large to be reliable — verify manually"><IconWarning style={{width:10,height:10,display:'inline',verticalAlign:'-1px'}}/></span>}
-            </div>
-          </div>
-          {/* RIGHT — every number that describes the purchase itself, all
-              grouped together and explicitly labeled: shares, price then,
-              price now, position change, and the total dollar amount.
-
-              In the wide inline drawer (`inline`), this is a fixed 5-column
-              grid where EVERY column slot always renders — showing "—" when
-              a value doesn't apply — so the columns line up vertically across
-              every transaction row regardless of which fields each row has.
-              In the narrow docked side panel there isn't room for a rigid
-              5-column table, so it keeps the original content-width flex
-              layout that only shows the cells that apply. */}
-          {inline ? (
-            <div className="dp-trade-right dp-trade-right--grid">
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Shares</span>
-                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
-              </div>
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Price</span>
-                <span className="dp-trade-detail__val">{hasRealPrice?fmt.price(pr):'—'}</span>
-              </div>
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Now</span>
-                {hasRealPrice&&ret!=null
-                  ? <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span>
-                  : <span className="dp-trade-detail__val td-muted">{hasRealPrice?'—':codeLabel}</span>}
-              </div>
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">% of position</span>
-                <span className="dp-trade-detail__val val-buy">{(r.pct_owned_change||r.pctOwnedChange)!=null?`+${(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%`:'—'}</span>
-              </div>
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Total</span>
-                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
-              </div>
-            </div>
-          ) : (
-            <div className="dp-trade-right">
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Shares</span>
-                <span className="dp-trade-detail__val">{r.shares?fmt.number(r.shares):'—'}</span>
-              </div>
-              {hasRealPrice ? (<>
-                <div className="dp-trade-detail">
-                  <span className="dp-trade-detail__label">Price</span>
-                  <span className="dp-trade-detail__val">{fmt.price(pr)}</span>
-                </div>
-                {ret!=null && (
-                  <div className="dp-trade-detail">
-                    <span className="dp-trade-detail__label">Now</span>
-                    <span className={`dp-trade-detail__val ${isGoodOutcome?'val-buy':'val-sell'}`}>
-                      {fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)
-                    </span>
-                  </div>
-                )}
-              </>) : (
-                <div className="dp-trade-detail">
-                  <span className="dp-trade-detail__val dp-trade-row2__noprice">{codeLabel}</span>
-                </div>
-              )}
-              {(r.pct_owned_change||r.pctOwnedChange)!=null && (
-                <div className="dp-trade-detail">
-                  <span className="dp-trade-detail__label">% of position</span>
-                  <span className="dp-trade-detail__val val-buy">+{(r.pct_owned_change||r.pctOwnedChange).toFixed(0)}%</span>
-                </div>
-              )}
-              <div className="dp-trade-detail">
-                <span className="dp-trade-detail__label">Total</span>
-                <span className="dp-trade-detail__val dp-trade-detail__val--total">{r.value?fmt.money(r.value):'—'}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const header=()=>{
-    if(d.type==='trader')return<div style={{display:'flex',alignItems:'center',gap:8,flex:1}}><div style={{flex:1}}><div style={{fontWeight:600,fontSize:15,display:'flex',alignItems:'center',gap:6}}>{d.name}{traderRows?.[0]?.is_entity_owner&&<span className="entity-badge" title="This may be an entity (Trust/LLC) rather than an individual"><IconWarning style={{width:9,height:9,marginRight:2,verticalAlign:"-1px"}}/>entity</span>}</div>{traderStats?.title&&<div className="td-muted" style={{fontSize:11}}>{traderStats.title}</div>}</div>{watchlist&&<FollowBtn name={d.name} watchlist={watchlist}/>}</div>;
-    if(d.type==='ticker')return(
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
-        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
-        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
-      </div>
-    );
-    if(d.type==='signal')return(
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span className="ticker" style={{fontSize:17}}>{d.ticker}</span>
-        <span style={{fontSize:13,color:'var(--text-2)',flex:1}}>{d.company}</span>
-        {watchlist&&<StarBtn ticker={d.ticker} watchlist={watchlist}/>}
-      </div>
-    );
-    if(d.type==='transaction')return<div><div style={{display:'flex',alignItems:'baseline',gap:8}}><span className="ticker" style={{fontSize:15}}>{d.trade?.ticker}</span><span style={{fontSize:12,color:'var(--text-2)'}}>{d.trade?.company_name||d.trade?.company}</span></div><div className="td-muted" style={{fontSize:11}}>Transaction</div></div>;
-  };
 
   return (
     <div className={inline?'detail-panel detail-panel--inline':'detail-panel'}>
       <div className="detail-panel__header">
-        {canGoBack&&<button className="btn btn--ghost btn--icon" onClick={onBack} title="Back">←</button>}
-        <div style={{minWidth:0,flex:1}}>{header()}</div>
+        {canGoBack&&<button className="btn btn--ghost btn--icon" onClick={onBack} title="Back"></button>}
+        <div style={{minWidth:0,flex:1}}>{<DetailPanelHeader d={d} traderStats={traderStats} traderRows={traderRows} inline={inline} watchlist={watchlist} nav={nav}/>}</div>
         {!inline&&onExpand&&<button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
         {!inline&&<button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>}
-        {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:11}} onClick={onClose} title="Clear"><IconClose style={{width:12,height:12}}/></button>}
+        {inline&&canGoBack&&<button className="btn btn--ghost btn--icon" style={{fontSize:'0.6875rem'}} onClick={onClose} title="Clear"><IconClose style={{width:12,height:12}}/></button>}
       </div>
       <div className="detail-panel__body">
 
-        {d.type==='trader'&&(busy?<div className="state-box" style={{padding:'2rem'}}><Spinner/><p>Loading…</p></div>:!traderStats?<div className="state-box" style={{padding:'2rem'}}><p>No trades found.</p></div>:(<>
+        {d.type==='trader'&&(busy?<SkeletonRows count={6}/>:!traderStats?<div className="state-box" style={{padding:'2rem'}}><p>No trades found.</p></div>:(<>
 
-          {/* HERO: previously showed only one of Realized P&L or Est.
-              Position Value, with whichever wasn't primary buried in a
-              small chip below. No real reason to force a choice — show
-              both prominently when both apply, and gracefully fall back to
-              whichever one actually exists otherwise (e.g. a fully open
-              position with nothing realized yet has no P&L to show at all). */}
+          {/* ── Sparse profile gate — need OM buys for meaningful stats ── */}
+          {traderStats.omBuys < 2 ? (
+            <div className="trader-sparse">
+              <div className="trader-sparse__notice">
+                <span style={{fontWeight:600}}>Limited data</span>
+                <span className="td-muted">This insider has {traderStats.omBuys === 0 ? 'no' : 'only ' + traderStats.omBuys} open-market buy{traderStats.omBuys === 1 ? '' : 's'} on record — not enough to compute performance stats.{traderStats.omSells > 0 ? ` (${traderStats.omSells} sell${traderStats.omSells !== 1 ? 's' : ''} recorded)` : ''}</span>
+              </div>
+              {traderStats.totalBuys + traderStats.sells > 0 && (
+                <div className="td-muted" style={{fontSize:'0.6875rem',marginTop:4}}>
+                  {traderStats.totalBuys + traderStats.sells} total filing{traderStats.totalBuys + traderStats.sells !== 1 ? 's' : ''} (including grants, exercises, and other non-market transactions)
+                </div>
+              )}
+              {traderStats.firstTrade&&<div className="td-muted" style={{fontSize:'0.625rem',marginTop:6}}>Active {fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</div>}
+            </div>
+          ) : (<>
+
+          {/* ── Account overview card — hero metrics + stats in one container ── */}
           {heroStats&&(
             <div className="trader-hero">
               <div className="trader-hero__top">
@@ -2473,7 +3260,11 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                     </div>
                   )}
                 </div>
-                <TrustStars score={score}/>
+                {score!=null&&<div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,minWidth:80}}>
+                  <span style={{fontSize:'0.625rem',color:'var(--text-3)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.04em'}}>Score</span>
+                  <span className="td-mono" style={{fontSize:'0.875rem',fontWeight:700}}>{score.toFixed(1)}</span>
+                  <ConvictionBar score={score} max={100}/>
+                </div>}
               </div>
               <div className="trader-hero__chips">
                 <span className="hero-chip">{heroStats.holdingCount} holding{heroStats.holdingCount!==1?'s':''}</span>
@@ -2482,39 +3273,36 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                   <span className={`hero-chip ${traderStats.combinedHitRate>=60?'hero-chip--good':traderStats.combinedHitRate<40?'hero-chip--bad':''}`}>
                     {traderStats.combinedHitRate}% hit rate
                   </span>}
+                {traderStats.firstTrade&&<span className="hero-chip">{fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span>}
               </div>
+              {/* Stats breakdown — inside the hero card. Collapsed in sidebar, open in explore. */}
+              <details className="trader-stats-toggle" open={inline}>
+                <summary>Stats breakdown</summary>
+                <div className="dp-summary" style={{marginTop:8}}>
+                  <div className="dp-sum-item"><span className="dp-sum-label">OM Buys</span><span className="val-buy dp-sum-val">{traderStats.omBuys}</span></div>
+                  <div className="dp-sum-item"><span className="dp-sum-label">OM Sells</span><span className="val-sell dp-sum-val">{traderStats.omSells}</span></div>
+                  <div className="dp-sum-item"><span className="dp-sum-label">Bought $</span><span className="dp-sum-val">{fmt.money(traderStats.totalBuyVal)}</span></div>
+                  <div className="dp-sum-item"><span className="dp-sum-label">Sold $</span><span className="dp-sum-val">{fmt.money(traderStats.totalSellVal)}</span></div>
+                  {traderStats.combinedHitRate!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate>=60?'val-buy':traderStats.combinedHitRate<40?'val-sell':''}`}>{traderStats.combinedHitRate}% <span style={{fontSize:'0.6875rem',opacity:.7}}>({traderStats.withReturn} events)</span></span></div>}
+                  {traderStats.avgRealizedReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgRealizedReturn>=0?'+':''}{traderStats.avgRealizedReturn}%</span></div>}
+                  {traderStats.avgReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgReturn>=0?'+':''}{traderStats.avgReturn}%</span></div>}
+                </div>
+              </details>
             </div>
           )}
 
-          <div className="trader-quickfacts">
-            <span><RelBadge rel={traderStats.role}/></span>
-            <span className="td-muted">{traderStats.title}</span>
-            {traderStats.firstTrade&&<span className="td-muted">Active {fmt.dateShort(traderStats.firstTrade)} – {fmt.dateShort(traderStats.lastTrade)}</span>}
-          </div>
-
-          <details className="trader-details-toggle">
-            <summary>Full stats breakdown</summary>
-            <div className="dp-summary" style={{marginTop:8}}>
-              <div className="dp-sum-item"><span className="dp-sum-label">OM Buys</span><span className="val-buy dp-sum-val">{traderStats.omBuys}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">OM Sells</span><span className="val-sell dp-sum-val">{traderStats.omSells}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">Bought $</span><span className="dp-sum-val">{fmt.money(traderStats.totalBuyVal)}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">Sold $</span><span className="dp-sum-val">{fmt.money(traderStats.totalSellVal)}</span></div>
-              {traderStats.combinedHitRate!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Hit Rate <span className="trust-explain" title="% of priced buy+sell events that were profitable. Buys: stock up since purchase. Sells: sold above their own avg cost basis.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.combinedHitRate>=60?'val-buy':traderStats.combinedHitRate<40?'val-sell':''}`}>{traderStats.combinedHitRate}% <span style={{fontSize:11,opacity:.7}}>({traderStats.withReturn} events)</span></span></div>}
-              {traderStats.avgRealizedReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Realized Avg <span className="trust-explain" title="Average % gain/loss on actual sells, vs their own historical average buy price on that ticker.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgRealizedReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgRealizedReturn>=0?'+':''}{traderStats.avgRealizedReturn}%</span></div>}
-              {traderStats.avgReturn!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Unrealized Avg <span className="trust-explain" title="Average % the stock has moved since their open-market buys, vs current price.">ⓘ</span></span><span className={`dp-sum-val ${traderStats.avgReturn>=0?'val-buy':'val-sell'}`}>{traderStats.avgReturn>=0?'+':''}{traderStats.avgReturn}%</span></div>}
-            </div>
-            {traderStats.companies.length>0&&<div className="trader-meta-row"><span>Companies</span><span style={{textAlign:'right'}}>{traderStats.companies.slice(0,6).map((tk,i)=><span key={tk} className="ticker dp-clickable" style={{fontSize:11,marginLeft:i>0?4:0}} onClick={()=>nav('ticker',{ticker:tk,company:''})}>{tk}</span>)}{traderStats.companies.length>6&&<span className="td-muted"> +{traderStats.companies.length-6}</span>}</span></div>}
-            {traderStats.sectors.length>0&&<div className="trader-meta-row"><span>Sectors</span><span style={{fontSize:11,textAlign:'right'}}>{traderStats.sectors.slice(0,3).join(' · ')}</span></div>}
-          </details>
+          </>)}
 
           {perStockBreakdown.length>0&&(<>
             <div className="dp-section-label" style={{marginTop:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <span>Positions</span>
               <div style={{display:'flex',gap:10}}>
-                <label className="bundle-toggle" title="Bundle consecutive same-direction trades by this insider within a few days into one row.">
-                  <input type="checkbox" checked={bundleOn} onChange={e=>setBundleOn(e.target.checked)}/>
-                  Bundle nearby
-                </label>
+                {inline && (
+                  <label className="bundle-toggle" title="Bundle consecutive same-direction trades by this insider within a few days into one row.">
+                    <input type="checkbox" checked={bundleOn} onChange={e=>setBundleOn(e.target.checked)}/>
+                    Bundle nearby
+                  </label>
+                )}
                 <label className="bundle-toggle" title="When on, every number on this page — position, hold-time, P&L, and the transactions listed below — uses ONLY open-market (real cash) buys and sells. Grants, exercises, and gifts are excluded entirely. When off, current position uses the insider's own SEC-reported total holdings, but hold-time/P&L still only ever use priced trades.">
                   <input type="checkbox" checked={omOnly} onChange={e=>setOmOnly(e.target.checked)}/>
                   Own-money purchases only
@@ -2522,7 +3310,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               </div>
             </div>
             {perStockBreakdown.map((s,i)=>{
-              const displayRows = bundleOn ? clusterTrades(s.rows) : s.rows;
+              const displayRows = (inline ? bundleOn : true) ? clusterTrades(s.rows) : s.rows;
               return (
               <div key={i} className="position-card">
                 <div className="position-card__top">
@@ -2533,7 +3321,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                       {s.stillHolding?'Holding':'Closed'}
                     </span>
                   </div>
-                  <span className="td-muted" style={{fontSize:11}}>{s.tradeCount} txn{s.tradeCount!==1?'s':''}</span>
+                  <span className="td-muted" style={{fontSize:'0.6875rem'}}>{s.tradeCount} txn{s.tradeCount!==1?'s':''}</span>
                 </div>
 
                 <div className="position-card__value-row">
@@ -2577,22 +3365,22 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                     <summary>{s.roundTrips.length} closed round-trip{s.roundTrips.length!==1?'s':''} (FIFO, open-market)</summary>
                     {s.roundTrips.slice(0,8).map((rt,j)=>(
                       <div key={j} className="roundtrip-row">
-                        <span className="td-muted" style={{fontSize:11}}>{fmt.dateShort(rt.buyDate)} → {fmt.dateShort(rt.sellDate)}</span>
-                        <span className="td-muted" style={{fontSize:11}}>{rt.holdDays}d held</span>
-                        <span style={{fontSize:11,fontFamily:'var(--font-mono)'}}>@{fmt.price(rt.buyPrice)}→{fmt.price(rt.sellPrice)}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>{fmt.dateShort(rt.buyDate)} → {fmt.dateShort(rt.sellDate)}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>{rt.holdDays}d held</span>
+                        <span style={{fontSize:'0.6875rem',fontFamily:'var(--font-mono)'}}>@{fmt.price(rt.buyPrice)}→{fmt.price(rt.sellPrice)}</span>
                         <span className={`roundtrip-pnl ${rt.pnl>=0?'val-buy':'val-sell'}`}>
                           {rt.pnl>=0?'+':''}{fmt.money(rt.pnl)} ({rt.pnlPct>=0?'+':''}{rt.pnlPct.toFixed(1)}%)
                         </span>
                       </div>
                     ))}
-                    {s.roundTrips.length>8&&<div className="td-muted" style={{fontSize:11,padding:'4px 0'}}>+{s.roundTrips.length-8} more</div>}
+                    {s.roundTrips.length>8&&<div className="td-muted" style={{fontSize:'0.6875rem',padding:'4px 0'}}>+{s.roundTrips.length-8} more</div>}
                   </details>
                 )}
 
                 <details className="position-card__txns" open={perStockBreakdown.length===1}>
                   <summary>{displayRows.length} transaction{displayRows.length!==1?'s':''} for {s.ticker}{omOnly?' (open market only)':''}</summary>
                   <div className="position-card__txn-list">
-                    {(inline?displayRows:displayRows.slice(0,5)).map((r,j)=><TRow key={j} r={r} showTicker={false} showInsider={false}/>)}
+                    {(inline?displayRows:displayRows.slice(0,5)).map((r,j)=><TRow key={j} r={r} showTicker={true} showInsider={false}/>)}
                   </div>
                   {!inline&&displayRows.length>5&&(
                     <button className="btn btn--ghost btn--sm position-card__view-full" onClick={()=>onExpand&&onExpand()}>
@@ -2604,27 +3392,16 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             );})}
           </>)}
 
-          {relatedInsiders!==null&&relatedInsiders.length>0&&(<>
-            <div className="dp-section-label" style={{marginTop:14}}>Related Insiders <span className="trust-explain" title="Other insiders active in the same sector(s), ranked by shared tickers and approximate hit rate.">ⓘ</span></div>
-            {relatedInsiders.map((ri,i)=>(
-              <div key={i} className="related-insider-row" onClick={()=>nav('trader',{name:ri.insider_name,title:ri.insider_title})}>
-                <span className="dp-clickable" style={{fontWeight:500,fontSize:12}}>{ri.insider_name}</span>
-                <span className="td-muted" style={{fontSize:11,flex:1}}>{ri.insider_title}</span>
-                {ri.sharedTickers?.length>0&&<span className="shared-ticker-badge">{ri.sharedTickers.length} shared</span>}
-                {ri.hitRate!=null&&<span className={`td-mono ${ri.hitRate>=60?'val-buy':ri.hitRate<40?'val-sell':''}`} style={{fontSize:11}}>{ri.hitRate}%</span>}
-              </div>
-            ))}
-          </>)}
         </>))}
 
 
-        {d.type==='ticker'&&(busy?<div className="state-box" style={{padding:'2rem'}}><Spinner/><p>Loading…</p></div>:!tickerStats?<div className="state-box" style={{padding:'2rem'}}><p>No data.</p></div>:(<>
+        {d.type==='ticker'&&(busy?<SkeletonRows count={6}/>:!tickerStats?<div className="state-box" style={{padding:'2rem'}}><p>No data.</p></div>:(<>
           {!hideProfileCard && <CompanyProfileCard ticker={d.ticker} cik={tickerRows?.[0]?.cik_issuer} company={d.company}/>}
           <div className="dp-summary">
             <div className="dp-sum-item"><span className="dp-sum-label">Buys</span><span className="val-buy dp-sum-val">{tickerStats.buys}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Sells</span><span className="val-sell dp-sum-val">{tickerStats.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Net $</span><span className={`dp-sum-val ${tickerStats.net>=0?'val-buy':'val-sell'}`}>{tickerStats.net>=0?'+':''}{fmt.money(tickerStats.net)}</span></div>
-            <div className="dp-sum-item"><span className="dp-sum-label">Exec</span><span className="dp-sum-val">{tickerStats.cSuite}</span></div>
+            <div className="dp-sum-item"><span className="dp-sum-label">Moves</span><span className="dp-sum-val">{tickerStats.buys + tickerStats.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Insiders</span><span className="dp-sum-val">{tickerStats.insiders}</span></div>
           </div>
           <div className="dp-section-label" style={{marginTop:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -2642,7 +3419,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             <div className="dp-sum-item"><span className="dp-sum-label">Buys</span><span className="val-buy dp-sum-val">{d.buys}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Sells</span><span className="val-sell dp-sum-val">{d.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Net $</span><span className={`dp-sum-val ${d.netValue>=0?'val-buy':'val-sell'}`}>{d.netValue>=0?'+':''}{fmt.money(d.netValue)}</span></div>
-            <div className="dp-sum-item"><span className="dp-sum-label">Exec</span><span className="dp-sum-val">{d.cSuiteBuys}</span></div>
+            <div className="dp-sum-item"><span className="dp-sum-label">Moves</span><span className="dp-sum-val">{d.buys + d.sells}</span></div>
             <div className="dp-sum-item"><span className="dp-sum-label">Insiders</span><span className="dp-sum-val">{d.insiderCount}</span></div>
           </div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,marginTop:14}}>
@@ -2654,9 +3431,9 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-insider-header">
                 <RelBadge rel={ins.rel}/>
                 <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:ins.name,title:ins.title})}>{ins.name}</span>
-                <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{ins.title}</span>
+                <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{ins.title}</span>
               </div>
-              {ins.trades.map((t,j)=><TRow key={j} r={{...t,transaction_type:t.transactionType,transaction_code:t.transactionCode,is_open_market:t.isOpenMarket,price:t.price,current_price:t.currentPrice,pct_owned_change:t.pctOwnedChange,transaction_date:t.transactionDate,is_foreign_price:t.isForeignPrice}} showTicker={false} showInsider={false}/>)}
+              {ins.trades.map((t,j)=><TRow key={j} r={{...t,insider_name:t.insiderName||ins.name,title:t.title||ins.title,transaction_type:t.transactionType,transaction_code:t.transactionCode,is_open_market:t.isOpenMarket,price:t.price,current_price:signalPrice,pct_owned_change:t.pctOwnedChange,transaction_date:t.transactionDate,is_foreign_price:t.isForeignPrice}} showTicker={false} showInsider={true}/>)}
             </div>
           ))}
         </>)}
@@ -2674,7 +3451,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-sum-item"><span className="dp-sum-label">Type</span><Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆'}</Badge></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Value</span><span className="dp-sum-val">{fmt.money(t.value)}</span></div>
               <div className="dp-sum-item"><span className="dp-sum-label">Shares</span><span className="dp-sum-val">{fmt.number(t.shares)}</span></div>
-              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:11}}> <IconWarning style={{width:9,height:9,display:'inline',verticalAlign:'-1px'}}/> verify (3x+ move)</span>}</span></div>
+              <div className="dp-sum-item"><span className="dp-sum-label">@ Price</span><span className="dp-sum-val">{fmt.price(pr)}{isForeign&&<span style={{color:'var(--amber-600)',fontSize:'0.6875rem'}}> <IconWarning style={{width:9,height:9,display:'inline',verticalAlign:'-1px'}}/> verify (3x+ move)</span>}</span></div>
               {ret!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Now</span><span className={`dp-sum-val ${isGoodOutcome?'val-buy':'val-sell'}`}>{fmt.price(cur)} ({ret>=0?'+':''}{ret.toFixed(1)}%)</span></div>}
               {(t.pctOwnedChange||t.pct_owned_change)!=null&&<div className="dp-sum-item"><span className="dp-sum-label">Pos Δ</span><span className="dp-sum-val val-buy">+{(t.pctOwnedChange||t.pct_owned_change).toFixed(1)}%</span></div>}
             </div>
@@ -2683,7 +3460,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               <div className="dp-insider-header">
                 <RelBadge rel={t.relationship||'weak'}/>
                 <span className="dp-clickable" style={{fontWeight:500,fontSize:12.5}} onClick={()=>nav('trader',{name:t.insiderName||t.insider_name,title:t.title||t.insider_title})}>{t.insiderName||t.insider_name}</span>
-                <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{t.title||t.insider_title}</span>
+                <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{t.title||t.insider_title}</span>
               </div>
             </div>
             <div className="dp-section-label" style={{marginTop:12}}>Details</div>
@@ -2691,8 +3468,8 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               {[['Trade date',fmt.date(t.transactionDate||t.transaction_date)],['Filed',fmt.date(t.date||t.filing_date)],['Code',t.transactionCode||t.transaction_code],['Open market',(t.isOpenMarket||t.is_open_market)?'✓ Yes':'No'],['Sector',t.sector]].filter(([,v])=>v&&v!=='—').map(([k,v],i)=>(<div key={i} className="dp-detail-row"><span>{k}</span><span>{v}</span></div>))}
             </div>
             <div style={{marginTop:12,display:'flex',gap:12}}>
-              <button className="dp-nav-link" onClick={()=>nav('trader',{name:t.insiderName||t.insider_name,title:t.title})}>Trader profile →</button>
-              <button className="dp-nav-link" onClick={()=>nav('ticker',{ticker:t.ticker,company:t.company_name||t.company})}>All {t.ticker} trades →</button>
+              <button className="dp-nav-link" onClick={()=>nav('trader',{name:t.insiderName||t.insider_name,title:t.title},{expand:true})}>Trader profile →</button>
+              <button className="dp-nav-link" onClick={()=>nav('ticker',{ticker:t.ticker,company:t.company_name||t.company},{expand:true})}>All {t.ticker} trades →</button>
             </div>
           </>);
         })()}
@@ -2706,7 +3483,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 const DASH_SORT_OPTS = [
   {key:'conviction',    label:'Conviction'},
   {key:'netValue',      label:'Net $'},
-  {key:'cSuiteBuys',    label:'Exec'},
+  {key:'buys',           label:'Moves'},
   {key:'lastTradeDate', label:'Recent'},
 ];
 // ── SentimentBar ─────────────────────────────────────────────────────────────
@@ -2829,7 +3606,7 @@ function SentimentStrip({ filings }) {
     <div className="mkt-tile mkt-tile--strip-only">
       <div className="mkt-tile__strip">
         <div className="mkt-stat mkt-stat--fg">
-          <span className="mkt-stat__label">Sentiment</span>
+          <span className="mkt-stat__label">Sentiment <TileInfoButton section="data-source" title="Market overview" tileId="sentiment"/></span>
           {fgScore!=null?<>
             <div className="mkt-fg-row">
               <span className="mkt-stat__val" style={{color:fgColor}}>{fgScore}</span>
@@ -2885,9 +3662,9 @@ function HeatmapOnly() {
       <div className="mkt-heatmap-label">
         S&amp;P 500 sectors
         <span className="td-muted" style={{fontWeight:400,marginLeft:6}}>day return · by weight · ETF proxy</span>
-        <TileInfoButton section="insights-formula" title="S&P 500 sector heatmap"/>
+        <TileInfoButton section="data-source" title="S&P 500 sector heatmap" tileId="sector-heatmap"/>
         {Object.keys(sectors).length===0&&(
-          <span className="td-muted" style={{marginLeft:'auto',fontSize:11}}>
+          <span className="td-muted" style={{marginLeft:'auto',fontSize:'0.6875rem'}}>
             {mkt?.err?'unavailable':'loading…'}
           </span>
         )}
@@ -3063,8 +3840,8 @@ function PortfolioTickerNews({ tickers }) {
       {news.map((n,i)=>(
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
-            <span className="ticker" style={{fontSize:11}}>{n._ticker}</span>
-            <span className="td-muted" style={{fontSize:11}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            <span className="ticker" style={{fontSize:'0.6875rem'}}>{n._ticker}</span>
+            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
@@ -3177,16 +3954,16 @@ function NewsMatchBadge({ ticker, reason }) {
 // would show a broken/blank frame for the majority of sources rather than
 // the article. New tab is the reliable option, not a placeholder choice.
 function NewsList({ news, loading, hasKey, emptyHint }) {
-  if (!hasKey) return <div className="dp-placeholder" style={{padding:'1rem'}}><p style={{fontSize:11}}>No headlines available right now.</p></div>;
+  if (!hasKey) return <div className="dp-placeholder" style={{padding:'1rem'}}><p style={{fontSize:'0.6875rem'}}>No headlines available right now.</p></div>;
   if (loading) return <div style={{padding:'1.5rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>;
-  if (!news.length) return <div style={{padding:'1rem',fontSize:12,color:'var(--text-3)'}}>{emptyHint||'No headlines available right now'}</div>;
+  if (!news.length) return <div style={{padding:'1rem',fontSize:'0.75rem',color:'var(--text-3)'}}>{emptyHint||'No headlines available right now'}</div>;
   return (
     <div className="dash-news-list">
       {news.map((n,i)=>(
         <a key={i} className="dash-news-item" href={n.url} target="_blank" rel="noreferrer">
           <div className="dash-news-item__meta">
             {n._ticker&&<NewsMatchBadge ticker={n._ticker} reason={n._reason}/>}
-            <span className="td-muted" style={{fontSize:11}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
+            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{n.source} · {fmt.ago(new Date(n.datetime*1000).toISOString().split('T')[0])}</span>
           </div>
           <div className="dash-news-item__headline">{n.headline}</div>
         </a>
@@ -3242,151 +4019,785 @@ function NewsDrawer({ watchlist, filings, onClose }) {
 // Each tab gets full tile width so rows are actually readable, unlike
 // the three-column cramped layout. Tabs: Corporate | Congressional | Movers.
 
-function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist }) {
-  const [days, setDays] = useState(7);
-  const [newsExpanded, setNewsExpanded] = useState(false);
-  const [newsMyNewsOn, setNewsMyNewsOn] = useState(false);
-  const [insidersExpanded, setInsidersExpanded] = useState(false);
-  const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
+// ─── Home (mobile-only consolidated view) ─────────────────────────────────────
+// Four fixed-height peek tiles — Portfolio, Recent Signals, Watchlist, Raw
+// Data — each showing a handful of rows with sensible defaults, not the
+// full filter controls those pages expose. "See all" hands off to the real
+// page via seeAllFromHome, which is what powers the Home › Section
+// breadcrumb back in AppInner. Reuses the exact same hooks/pipeline every
+// other page already uses (usePortfolio, filterAndScoreSignals) rather
+// than a parallel, simplified data path that could quietly drift from
+// what the full pages actually show.
+function HomeTile({ title, onSeeAll, children, className }) {
+  return (
+    <div className={`home-tile${className ? ' ' + className : ''}`}>
+      <div className="home-tile__hdr">
+        <span className="home-tile__title">{title}</span>
+        {onSeeAll && <button className="home-tile__see-all" onClick={onSeeAll}>See all →</button>}
+      </div>
+      <div className="home-tile__body">{children}</div>
+    </div>
+  );
+}
 
-  const signals = useMemo(()=>{
-    const base = filings.filter(f=>
-      f.isOpenMarket && f.transactionType==='buy' &&
-      (f.transactionDate||f.date||'')>=cutoff
+function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll }) {
+  const { pro } = useBilling();
+  const isMobile = useIsMobile();
+  const [myNews, setMyNews] = useState(false);
+  const [sigDays, setSigDays] = useState(14);
+  const [sigSort, setSigSort] = useState('conviction');
+  const [sigDir,  setSigDir]  = useState(-1);
+  const [filSort, setFilSort] = useState('date');
+  const [filDir,  setFilDir]  = useState(-1);
+
+  const cutoff = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() - sigDays);
+    return d.toISOString().split('T')[0];
+  }, [sigDays]);
+
+  const ydCutoff = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  const allSignals = useMemo(() => {
+    const base = filings.filter(f =>
+      f.isOpenMarket && f.transactionType === 'buy' &&
+      (f.transactionDate || f.date || '') >= cutoff
     );
     return buildSignals(base)
-      .filter(s=>s.netValue>=100_000||s.cSuiteBuys>=1||s.isPolitical)
-      .sort((a,b)=>b.conviction-a.conviction)
-      .slice(0,30);
-  },[filings,cutoff]);
+      .filter(s => s.netValue >= 100_000 || s.cSuiteBuys >= 1 || s.isPolitical);
+  }, [filings, cutoff]);
+
+  const signals = useMemo(() => {
+    return [...allSignals].sort((a, b) => {
+      const av = a[sigSort] ?? -Infinity, bv = b[sigSort] ?? -Infinity;
+      const r = typeof av === 'number' ? (av < bv ? -1 : av > bv ? 1 : 0)
+              : String(av).localeCompare(String(bv));
+      return sigDir > 0 ? r : -r;
+    });
+  }, [allSignals, sigSort, sigDir]);
+
+  function onSigSort(col) {
+    if (sigSort === col) setSigDir(d => -d);
+    else { setSigSort(col); setSigDir(-1); }
+  }
+
+  const recentFilings = useMemo(() => {
+    return [...filings].filter(f => f.isOpenMarket).sort((a, b) => {
+      if (filSort === 'date') {
+        const av = a.transactionDate||a.date||'', bv = b.transactionDate||b.date||'';
+        return filDir > 0 ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      if (filSort === 'value') return filDir > 0 ? (a.value||0)-(b.value||0) : (b.value||0)-(a.value||0);
+      return 0;
+    }).slice(0, 12);
+  }, [filings, filSort, filDir]);
+
+  function onFilSort(col) {
+    if (filSort === col) setFilDir(d => -d);
+    else { setFilSort(col); setFilDir(-1); }
+  }
+
+  const stats = useMemo(() => {
+    const yd = filings.filter(f => f.isOpenMarket && (f.transactionDate||f.date||'') >= ydCutoff);
+    const w3 = filings.filter(f => f.isOpenMarket && (f.transactionDate||f.date||'') >= cutoff);
+    return {
+      buyValYd:  yd.filter(f => f.transactionType==='buy').reduce((s,f) => s+(f.value||0), 0),
+      buyCntYd:  yd.filter(f => f.transactionType==='buy').length,
+      highConv3: allSignals.filter(s => s.conviction >= 10).length,
+      tickers3:  new Set(w3.map(f => f.ticker)).size,
+    };
+  }, [filings, allSignals, ydCutoff, cutoff]);
 
   return (
-    <div className="page-content">
-      <SentimentStrip filings={filings}/>
+    <div className="ws-page">
+      {/* Stat strip */}
+      <div className="ws-stat-strip">
+        <div className="ws-stat"><div className="ws-stat__label">Buy value · 24h</div><div className="ws-stat__value" style={{color:'var(--green-600)'}}>{loading?'—':fmt.money(stats.buyValYd)}</div><div className="ws-stat__sub">{stats.buyCntYd} transactions</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">High-conviction · 3d</div><div className="ws-stat__value">{loading?'—':stats.highConv3}</div><div className="ws-stat__sub">Score ≥60</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Tickers active · 3d</div><div className="ws-stat__value">{loading?'—':stats.tickers3}</div><div className="ws-stat__sub">With open-market trades</div></div>
+        <div className="ws-stat"><div className="ws-stat__label">Data freshness</div><div className="ws-stat__value" style={{fontSize:15}}>{loading?'Syncing…':'Live'}</div><div className="ws-stat__sub">SEC Form 4 · STOCK Act</div></div>
+      </div>
 
-      <div className="dash-bento">
+      {/* Sentiment strip */}
+      <div style={{marginBottom:16}}><SentimentStrip filings={filings}/></div>
 
-        {/* LEFT: Heatmap (top) + Signals (below, scrollable) */}
-        <div className="dash-col-left">
-          <div className="dash-tile dash-tile--heatmap">
-            <HeatmapOnly/>
+      {/* ── Centered narrow column: Recent filings ABOVE signals, then market news fills right ── */}
+      <div className="ws-home-centered">
+
+        {/* LEFT CENTER — narrow column (60%) */}
+        <div className="ws-home-main">
+
+          {/* 1. Recent filings tile — ABOVE signals */}
+          <div className="ws-tile">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Recent filings</span>
+                <span className="ws-tile__sub">Open-market trades</span>
+              </div>
+              <button className="ws-tile__action" onClick={()=>onSeeAll('dashboard')}>See all →</button>
+            </div>
+            {/* Sortable column headers */}
+            <div className="ws-home-fil-hdrs">
+              <span className="ws-col-sort ws-col-sort--sm">Ticker</span>
+              <span className="ws-col-sort ws-col-sort--sm">Insider</span>
+              <button className={`ws-col-sort ws-col-sort--sm${filSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onFilSort('date')}>Date{filSort==='date'&&(filDir<0?' ↓':' ↑')}</button>
+              <span className="ws-col-sort ws-col-sort--sm">Type</span>
+              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${filSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onFilSort('value')}>Value{filSort==='value'&&(filDir<0?' ↓':' ↑')}</button>
+            </div>
+            <div style={{maxHeight:240,overflowY:'auto',overflowX:'hidden'}}>
+              {loading?<SkeletonRows count={5}/>:recentFilings.map((f,i)=>{
+                const isBuy=f.transactionType==='buy';
+                return (
+                  <div key={i} className="ws-fil-compact-row" onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company})}
+                    style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                    <div className="ws-fil-compact-row__ticker">
+                      <span className="ticker">{f.ticker}</span>
+                    </div>
+                    <div className="ws-fil-compact-row__insider">{f.insiderName?.split(' ').slice(0,2).join(' ')}</div>
+                    <div className="ws-fil-compact-row__date">{fmt.dateShort(f.transactionDate||f.date)}</div>
+                    <div className="ws-fil-compact-row__type"><span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span></div>
+                    <div className="ws-fil-compact-row__val"><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="dash-tile dash-tile--signals">
-            <div className="dash-tile__hdr">
-              <span className="dash-tile__title">Insider signals</span>
-              <TileInfoButton section="insights-formula" title="Insider signals"/>
-              <div className="dash-tile__hdr-controls">
-                <div className="dash-tile-pills">
-                  {DASH_DATE_OPTS.map(o=>(
-                    <button key={o.label} className={`dash-tile-pill${days===o.days?' dash-tile-pill--active':''}`} onClick={()=>setDays(o.days)}>{o.label}</button>
-                  ))}
-                </div>
-                <span className="dash-tile__sub">{signals.length} signals</span>
+
+          {/* 2. Insider signals tile — below recent filings, scrollable */}
+          <div className="ws-tile">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Insider signals</span>
+                {!loading&&<span className="ws-tile__count">{signals.length}</span>}
+                <span className="ws-tile__sub">Scored by conviction</span>
+              </div>
+              <button className="ws-tile__action" onClick={()=>onSeeAll('dashboard')}>See all →</button>
+            </div>
+            {/* Capped at 7d — keep it fresh, daily-return habit */}
+            <div className="ws-tile__filters">
+              <div className="ws-pills">
+                {[{l:'1d',v:1},{l:'3d',v:3},{l:'7d',v:7}].map(o=>(
+                  <button key={o.v} className={`ws-pill${sigDays===o.v?' ws-pill--active':''}`}
+                    onClick={()=>setSigDays(o.v)}>{o.l}</button>
+                ))}
               </div>
             </div>
-            <div className="dash-tile__body">
-              {loading?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
-              :signals.length===0?<div className="dash-inner-empty">
-                <div style={{fontWeight:500,marginBottom:4}}>No signals in this window</div>
-                <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>Form 4s are filed 1–2 days after transactions. Try the 7d or 30d window.</div>
+            {/* Sortable column headers */}
+            <div className="ws-home-sig-hdrs">
+              <button className={`ws-col-sort ws-col-sort--sm${sigSort==='ticker'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('ticker')}>Ticker{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
+              {!isMobile&&<button className={`ws-col-sort ws-col-sort--sm${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}>Moves{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>}
+              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}>Net value{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
+              <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}>Conviction{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
+            </div>
+            {/* Scrollable body — max height so it doesn't dominate page */}
+            <div style={{maxHeight:400,overflowY:'auto',overflowX:'hidden'}}>
+              {loading?<SkeletonRows count={6}/>:signals.length===0?(
+                <div className="ws-empty" style={{padding:'20px 16px'}}>No signals in this window — Form 4s are filed 1–2 days after trades.</div>
+              ):(
+                <div>
+                  {signals.map(s=>{
+                    const isBuy = s.direction!=='sell';
+                    const hasRev = detectReversalForTicker(s.ticker, filings);
+                    const totalMoves = (s.buys||0) + (s.sells||0);
+                    return (
+                      <div key={s.ticker} className="ws-sig-compact-row" onClick={()=>onOpenDetail({type:'signal',...s})}
+                        style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                        <div className="ws-sig-compact-row__left">
+                          <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',marginBottom:2}}>
+                            <span className="ticker">{s.ticker}</span>
+                            {hasRev&&<span className="reversal-badge" style={{fontSize:9}}><IconReversal className="reversal-badge__icon"/>rev</span>}
+                            <StarBtn ticker={s.ticker} watchlist={watchlist}/>
+                          </div>
+                          <div style={{fontSize:11,color:'var(--text-2)',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.company}</div>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            {!isMobile&&<span style={{fontSize:11,color:'var(--text-3)'}}>{totalMoves} move{totalMoves!==1?'s':''} · {s.insiderCount} insider{s.insiderCount!==1?'s':''}</span>}
+                            <ConvictionBar score={s.conviction} max={100} showLabel/>
+                          </div>
+                        </div>
+                        <div className="ws-sig-compact-row__right">
+                          <div className={`ws-sig-row__val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</div>
+                          <div style={{fontSize:10,color:'var(--text-3)',marginTop:2}}>{fmt.ago(s.lastTradeDate)}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="ws-tile__footer">
+              <button className="ws-tile__see-all-btn" onClick={()=>onSeeAll('dashboard')}>View all signals with full filters →</button>
+            </div>
+          </div>
+
+          {/* 3. Top insiders tile — below signals, same column width */}
+          <div className="ws-tile">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Top insiders</span>
+                <span className="ws-tile__sub">By composite score</span>
               </div>
-              :<div className="dash-sig-list">
+              <button className="ws-tile__action" onClick={()=>onSeeAll('signals')}>Full leaderboard →</button>
+            </div>
+            <div className="ws-tile__body">
+              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist} pro={pro}/>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT — market news fills the full column height */}
+        <div className="ws-home-side">
+          <div className="ws-tile ws-tile--news">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Market news</span>
+              </div>
+              {/* My news filter — pro only */}
+              <div className="ws-pills">
+                <button className={`ws-pill ws-pill--sm${!myNews?' ws-pill--active':''}`}
+                  onClick={()=>setMyNews(false)}>All</button>
+                <button className={`ws-pill ws-pill--sm${myNews?' ws-pill--active':''}`}
+                  onClick={()=>pro?setMyNews(true):null}
+                  title={pro?'News for your watchlist tickers and followed insiders':'Pro feature'}>
+                  {pro?'My news':'My news ✦'}
+                </button>
+              </div>
+            </div>
+            <div className="home-news-body">
+              <MarketNews watchlist={watchlist} filings={filings} limit={30} myNewsOn={myNews}/>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist, user, onUpgrade }) {
+  const { pro } = useBilling();
+  const isMobile = useIsMobile();
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [tab, setTab]           = useState('signals');
+  const [days, setDays]         = useState(7);
+  const [sourceF, setSourceF]   = useState('');
+  const [sectorF, setSectorF]   = useState('');
+  const [minStr, setMinStr]     = useState(1);
+  const [txType, setTxType]     = useState('all');
+  const [rawRoleF, setRawRoleF] = useState('');
+  const [search, setSearch]     = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo]     = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sigSort, setSigSort]   = useState('conviction');
+  const [sigDir, setSigDir]     = useState(-1);
+  const [rawSort, setRawSort]   = useState('date');
+  const [rawDir, setRawDir]     = useState(-1);
+  // Expanded rows — multiple can be open simultaneously
+  const [expandedSigs, setExpandedSigs] = useState(new Set()); // Set of tickers
+  const [expandedRaws, setExpandedRaws] = useState(new Set()); // Set of indices
+  // Full-screen explore drawer (top-right button)
+  const [drawer, setDrawer]     = useState(null); // null | 'signals' | 'insiders' | 'raw'
+
+  // Lock body scroll when a local drawer is open
+  useEffect(()=>{
+    if (drawer) document.body.classList.add('drawer-open');
+    else document.body.classList.remove('drawer-open');
+    return ()=>document.body.classList.remove('drawer-open');
+  },[drawer]);
+
+  const cutoff = useMemo(() => {
+    if (days == null) return '2013-01-01'; // matches earliest backfilled data
+    const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split('T')[0];
+  }, [days]);
+
+  const rawCutoff = useMemo(() => {
+    if (dateFrom) return dateFrom; // custom date range overrides preset
+    if (days == null) return null;
+    const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split('T')[0];
+  }, [days, dateFrom]);
+
+  const rawDateTo = useMemo(() => {
+    return dateTo || null; // null = no upper bound (today)
+  }, [dateTo]);
+
+  const sectors = useMemo(() =>
+    [...new Set(filings.map(f=>f.sector).filter(s=>s&&s!=='Other'))].sort(),
+  [filings]);
+
+  const strengthThreshold = minStr===3?60:minStr===2?35:0;
+
+  // ── Signals ───────────────────────────────────────────────────────────────
+  const allSignals = useMemo(() => {
+    const result = filterAndScoreSignals(filings, { cutoff, sourceF, sectorF, strengthThreshold });
+    const q = search.toLowerCase();
+    return result.filter(s => !q || s.ticker.toLowerCase().includes(q) || (s.company||'').toLowerCase().includes(q));
+  }, [filings, cutoff, sourceF, sectorF, strengthThreshold, search]);
+
+  const signals = useMemo(() =>
+    [...allSignals].sort((a,b)=>{
+      const av=a[sigSort]??-Infinity, bv=b[sigSort]??-Infinity;
+      const r=typeof av==='number'?(av<bv?-1:av>bv?1:0):String(av).localeCompare(String(bv));
+      return sigDir>0?r:-r;
+    }),
+  [allSignals, sigSort, sigDir]);
+
+  // ── Raw filings ───────────────────────────────────────────────────────────
+  const allRaw = useMemo(() => {
+    const q = search.toLowerCase();
+    return filings.filter(f => {
+      if (!f.isOpenMarket) return false;
+      if (sectorF && f.sector!==sectorF) return false;
+      if (txType!=='all' && f.transactionType!==txType) return false;
+      if (rawRoleF && f.relationship!==rawRoleF) return false;
+      if (rawCutoff && (f.transactionDate||f.date||'')<rawCutoff) return false;
+      if (rawDateTo && (f.transactionDate||f.date||'')>rawDateTo) return false;
+      if (q && !f.ticker?.toLowerCase().includes(q) && !(f.company||'').toLowerCase().includes(q) && !(f.insiderName||'').toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [filings, sectorF, txType, rawRoleF, rawCutoff, rawDateTo, search]);
+
+  const rawFilings = useMemo(() =>
+    [...allRaw].sort((a,b)=>{
+      const aV = rawSort==='date'?(a.transactionDate||a.date||''):rawSort==='value'?(a.value||0):rawSort==='pctChange'?(a.pctOwnedChange||0):(a.shares||0);
+      const bV = rawSort==='date'?(b.transactionDate||b.date||''):rawSort==='value'?(b.value||0):rawSort==='pctChange'?(b.pctOwnedChange||0):(b.shares||0);
+      return rawDir>0?(aV>bV?1:-1):(bV>aV?1:-1);
+    }).slice(0,300),
+  [allRaw, rawSort, rawDir]);
+
+  function onSigSort(col) { if(sigSort===col)setSigDir(d=>-d);else{setSigSort(col);setSigDir(-1);} }
+  function onRawSort(col) { if(rawSort===col)setRawDir(d=>-d);else{setRawSort(col);setRawDir(-1);} }
+  const hasFilters = search||sectorF||sourceF||minStr>1||days!==7||dateFrom||dateTo||(tab==='raw'&&(txType!=='all'||rawRoleF!==''));
+  function resetFilters(){ setSearch('');setSectorF('');setSourceF('');setMinStr(1);setDays(7);setTxType('all');setRawRoleF('');setDateFrom('');setDateTo(''); }
+
+  function toggleSig(ticker) {
+    setExpandedSigs(prev => { const n=new Set(prev); n.has(ticker)?n.delete(ticker):n.add(ticker); return n; });
+  }
+  function toggleRaw(idx) {
+    setExpandedRaws(prev => { const n=new Set(prev); n.has(idx)?n.delete(idx):n.add(idx); return n; });
+  }
+
+  // Get individual trades for an expanded signal row
+  function getSignalTrades(s) {
+    return filings.filter(f =>
+      f.isOpenMarket && f.ticker===s.ticker &&
+      (f.transactionDate||f.date||'') >= (s.lastTradeDate ? new Date(new Date(s.lastTradeDate).getTime()-90*86400000).toISOString().split('T')[0] : cutoff)
+    ).sort((a,b) => (b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||'')).slice(0,8);
+  }
+
+  // State for seamless drawer handoff — passes selected signal/ticker into the drawer
+  const [drawerInitSignal, setDrawerInitSignal] = useState(null);
+  const [drawerInitTicker, setDrawerInitTicker] = useState(null);
+
+  function openSignalsDrawer(signal) {
+    if (isMobile) { onOpenDetail(signal ? {type:'signal',...signal} : null, {expand:true}); return; }
+    setDrawerInitSignal(signal ? {type:'signal',...signal} : null);
+    setDrawer('signals');
+  }
+  function openRawDrawer(ticker, company) {
+    if (isMobile) { onOpenDetail(ticker ? {type:'ticker',ticker,company} : null, {expand:true}); return; }
+    setDrawerInitTicker(ticker ? {type:'ticker', ticker, company} : null);
+    setDrawer('raw');
+  }
+
+  return (
+    <div className="ws-page">
+      <div className="ws-page-hdr">
+        <div style={{flex:1}}>
+          <h1 className="ws-page-title">Market Data</h1>
+          <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
+        </div>
+        <button className="data-export-tile" onClick={()=>onUpgrade('data_export_direct')}>Download the Dataset</button>
+      </div>
+
+      {/* Stat strip */}
+      <div className="ws-stat-strip">
+        <HelpStat label="Showing" value={tab==='signals'?signals.length:rawFilings.length} sub={`${tab==='signals'?'signals':'filings'} after filters`} tip="Number of results after all filters are applied."/>
+        <HelpStat label="High conviction" value={loading?'—':signals.filter(s=>s.conviction>=60).length} sub="Score ≥60" tip={TIPS.highConviction}/>
+        <HelpStat label="Unique tickers" value={loading?'—':tab==='signals'?new Set(signals.map(s=>s.ticker)).size:new Set(rawFilings.map(f=>f.ticker)).size} sub="In current view" tip="Number of distinct stocks with insider activity in the current filtered view."/>
+        <HelpStat label="Net flow" value={loading?'—':fmt.money(signals.reduce((s,x)=>s+x.netValue,0))} sub="Buys − sells" color={signals.reduce((s,x)=>s+x.netValue,0)>=0?'var(--green-600)':'var(--red-600)'} tip={TIPS.netFlow}/>
+      </div>
+
+      <div className="ws-tile">
+        {/* Tab bar + Explore full view */}
+        <div className="ws-toolbar-hdr">
+          <div className="ws-toolbar-tabs">
+            <button className={`ws-toolbar-tab${tab==='signals'?' ws-toolbar-tab--active':''}`}
+              onClick={()=>{setTab('signals');setExpandedRaws(new Set());}}>
+              Signals <span className="ws-tile__count">{loading?'…':allSignals.length}</span>
+            </button>
+            <button className={`ws-toolbar-tab${tab==='raw'?' ws-toolbar-tab--active':''}`}
+              onClick={()=>{setTab('raw');setExpandedSigs(new Set());}}>
+              Raw filings <span className="ws-tile__count">{loading?'…':allRaw.length}</span>
+            </button>
+          </div>
+          <div className="ws-toolbar-right">
+            {tab==='raw'&&<button className="btn btn--primary btn--sm" style={{flexShrink:0}} onClick={()=>onUpgrade('data_export_direct')}>Export CSV</button>}
+            {/* Opens the correct full drawer for whichever tab is active.
+                Hidden on mobile — the drawer's two-pane layout doesn't work
+                on phone-sized viewports; the inline expand + page navigation
+                already handles mobile well. */}
+            {!isMobile&&<button className="ws-toolbar-explore-btn"
+              onClick={()=> tab==='signals' ? openSignalsDrawer(null) : openRawDrawer(null,null)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+              Explore full view
+            </button>}
+          </div>
+        </div>
+
+        {/* Filter bar — collapses on mobile behind a toggle */}
+        <div className="ws-filter-bar">
+          <div className="ws-filter-bar__row ws-filter-bar__row--search">
+            <div className="ws-search-wrap">
+              <span className="ws-search-icon">⌕</span>
+              <input className="ws-search-input" value={search} onChange={e=>setSearch(e.target.value)} placeholder={tab==='signals'?'Ticker or company…':'Ticker, company, or insider…'}/>
+              {search&&<button className="ws-search-clear" onClick={()=>setSearch('')}>×</button>}
+            </div>
+            {isMobile&&<button className="ws-filter-toggle" onClick={()=>setFiltersOpen(f=>!f)}>
+              Filters{hasFilters?' ●':''} {filtersOpen?'▴':'▾'}
+            </button>}
+          </div>
+          {(!isMobile||filtersOpen)&&<>
+          <div className="ws-filter-bar__row">
+
+            {tab==='signals'&&<>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Window</span>
+                <div className="ws-pills">
+                  {[{v:1,l:'1d'},{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>{
+                    if (!pro&&(o.v===null||o.v>7)) return null;
+                    return <button key={o.l} className={`ws-pill${days===o.v?' ws-pill--active':''}`} onClick={()=>setDays(o.v)}>{o.l}</button>;
+                  })}
+                  {!pro&&<button className="ws-pill ws-pill--locked" onClick={()=>onUpgrade('full_history')}>More ↑</button>}
+                </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Strength</span>
+                <div className="ws-pills">
+                  {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
+                    <button key={o.v} className={`ws-pill${minStr===o.v?' ws-pill--active':''}`}
+                      style={o.v===3&&minStr===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:o.v===2&&minStr===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
+                      onClick={()=>setMinStr(o.v)}>{o.l}</button>
+                  ))}
+                </div>
+              </div>
+            </>}
+
+            {tab==='raw'&&<>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Date</span>
+                <div className="ws-pills">
+                  {[{v:1,l:'1d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:null,l:'All'}].map(o=>(
+                    <button key={o.l} className={`ws-pill${days===o.v&&!dateFrom?' ws-pill--active':''}`} onClick={()=>{setDays(o.v);setDateFrom('');setDateTo('');}}>{o.l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Range</span>
+                <div className="drawer__date-range">
+                  <input type="date" className="drawer__date-input" value={dateFrom}
+                    onChange={e=>{setDateFrom(e.target.value);if(e.target.value)setDays(null);}}/>
+                  <span className="drawer__date-sep">→</span>
+                  <input type="date" className="drawer__date-input" value={dateTo}
+                    onChange={e=>{setDateTo(e.target.value);if(e.target.value)setDays(null);}}/>
+                </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Type</span>
+                <div className="ws-pills">
+                  {[['all','All'],['buy','Buys'],['sell','Sells']].map(([v,l])=>(
+                    <button key={v} className={`ws-pill${txType===v?' ws-pill--active':''}`} onClick={()=>setTxType(v)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Role</span>
+                <div className="ws-pills">
+                  {[['','All'],['strong','C-Suite'],['medium','Officer']].map(([v,l])=>(
+                    <button key={v} className={`ws-pill${rawRoleF===v?' ws-pill--active':''}`} onClick={()=>setRawRoleF(v)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            </>}
+          </div>
+
+          <div className="ws-filter-bar__row">
+            {tab==='signals'&&<>
+              <div className="ws-filter-group" style={{borderLeft:'none',paddingLeft:0}}>
+                <span className="ws-filter-label">Type</span>
+                <div className="ws-pills">
+                  {[['','All'],['corporate','Corp'],['political','Congress']].map(([v,l])=>(
+                    <button key={v} className={`ws-pill${sourceF===v?' ws-pill--active':''}`} onClick={()=>setSourceF(v)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            </>}
+            <div className="ws-filter-group" style={{borderLeft:tab==='raw'?'none':'',paddingLeft:tab==='raw'?0:''}}>
+              <span className="ws-filter-label">Sector</span>
+              <select className="ws-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
+                <option value="">All sectors</option>
+                {sectors.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            {hasFilters&&<button className="ws-clear-btn" onClick={resetFilters}>Clear</button>}
+          </div>
+          </>}
+        </div>
+
+        {/* ── SIGNALS TABLE ─────────────────────────────────────────────── */}
+        {tab==='signals'&&(
+          loading?<SkeletonRows count={10}/>:signals.length===0?(
+            <div className="ws-empty">No signals match these filters. Try widening the window or clearing filters.</div>
+          ):(
+            <>
+              <div className="ws-col-hdrs ws-col-hdrs--data">
+                <button className={`ws-col-sort${sigSort==='ticker'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('ticker')}>Ticker{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
+                {!isMobile&&<button className={`ws-col-sort${sigSort==='company'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('company')}>Company{sigSort==='company'&&(sigDir<0?' ↓':' ↑')}</button>}
+                {!isMobile&&<button className={`ws-col-sort${sigSort==='lastTradeDate'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('lastTradeDate')}><InfoTip tip={TIPS.signalDate}>Date</InfoTip>{sigSort==='lastTradeDate'&&(sigDir<0?' ↓':' ↑')}</button>}
+                <button className={`ws-col-sort ws-col-sort--right${sigSort==='insiderCount'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('insiderCount')}><InfoTip tip={TIPS.insiders}>{isMobile?'Ins':'Insiders'}</InfoTip>{sigSort==='insiderCount'&&(sigDir<0?' ↓':' ↑')}</button>
+                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${sigSort==='buys'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('buys')}><InfoTip tip={TIPS.trades}>Trades</InfoTip>{sigSort==='buys'&&(sigDir<0?' ↓':' ↑')}</button>}
+                <button className={`ws-col-sort ws-col-sort--right${sigSort==='netValue'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('netValue')}><InfoTip tip={TIPS.netValue}>{isMobile?'Value':'Net value'}</InfoTip>{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
+                <button className={`ws-col-sort ws-col-sort--right${sigSort==='conviction'?' ws-col-sort--active':''}`} onClick={()=>onSigSort('conviction')}><InfoTip tip={TIPS.conviction}>{isMobile?'Conv':'Conviction'}</InfoTip>{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
+              </div>
+              <div>
                 {signals.map(s=>{
-                  const spent=s.avgReturn!=null&&s.avgReturn>20;
-                  const big=s.avgReturn!=null&&s.avgReturn>50;
-                  const hasReversal=detectReversalForTicker(s.ticker,filings);
+                  const isBuy=s.direction!=='sell';
+                  const isExp=expandedSigs.has(s.ticker);
+                  const hasRev=detectReversalForTicker(s.ticker,filings);
+                  const trades=isExp?getSignalTrades(s):[];
                   return (
-                    <div key={s.ticker} className="dash-sig-item" onClick={()=>onOpenDetail&&onOpenDetail({type:'signal',...s})}>
-                      <div className="dash-sig-item__left">
-                        <div className="dash-sig-item__row1">
-                          <span className="ticker" style={{fontSize:13,fontWeight:700}}>{s.ticker}</span>
-                          {hasReversal&&<span className="reversal-badge" title="An insider on this ticker recently traded in the opposite direction of their prior trade — previously buying, now selling (or vice versa)."><IconReversal className="reversal-badge__icon"/>reversal</span>}
-                          <StarBtn ticker={s.ticker} watchlist={watchlist}/>
+                    <div key={s.ticker} className={`ws-row${isExp?' ws-row--open':''}`}
+                      style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+
+                      {/* ── Main row — click anywhere to expand ── */}
+                      <div className="ws-row__main ws-row__main--data" style={{cursor:'pointer'}}
+                        onClick={()=>toggleSig(s.ticker)}>
+                        <div className="ws-row__cell">
+                          <div style={{display:'flex',alignItems:'center',gap:5}}>
+                            <span className="ws-row__chevron ws-row__chevron--lg">{isExp?'▾':'▸'}</span>
+                            <span className="ticker">{s.ticker}</span>
+                            {hasRev&&<span className="reversal-badge" style={{fontSize:9,padding:'0 3px'}}><IconReversal className="reversal-badge__icon"/>rev</span>}
+                            <div onClick={e=>e.stopPropagation()}>
+                              <StarBtn ticker={s.ticker} watchlist={watchlist}/>
+                            </div>
+                          </div>
+                          {isMobile&&<div className="ws-mob-sub" style={{fontSize:10,color:'var(--text-3)',marginTop:1,paddingLeft:18}}>{s.company}</div>}
                         </div>
-                        <div className="dash-sig-item__row2">
-                          <span style={{fontSize:11,color:'var(--text-2)'}}>{s.company}</span>
+                        {!isMobile&&<div className="ws-row__cell ws-row__cell--overflow">{s.company}</div>}
+                        {!isMobile&&<div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>{fmt.dateShort(s.lastTradeDate)}</div>}
+                        <div className="ws-row__cell ws-row__cell--right">
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{s.insiderCount}</span>
                         </div>
-                        <div className="dash-sig-item__row3">
-                          <span className="td-muted" style={{fontSize:11}}>
-                            {s.insiderCount} insider{s.insiderCount!==1?'s':''}
-                            {s.cSuiteBuys>0?` · ${s.cSuiteBuys} exec buy${s.cSuiteBuys!==1?'s':''}`:''}
-                          </span>
-                          <span className="td-muted" style={{fontSize:11}}>{fmt.ago(s.lastTradeDate)}</span>
+                        {!isMobile&&<div className="ws-row__cell ws-row__cell--right">
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{s.buys+s.sells}</span>
+                        </div>}
+                        <div className="ws-row__cell ws-row__cell--right">
+                          <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</span>
+                        </div>
+                        <div className="ws-row__cell">
+                          <ConvictionBar score={s.conviction} max={100} showLabel={!isMobile}/>
                         </div>
                       </div>
-                      <div className="dash-sig-item__right">
-                        <span className="dash-sig-item__net-label">Net flow</span>
-                        <div className={`dash-sig-item__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</div>
-                        {s.avgReturn!=null&&(
-                          <span className={`ins-spent-badge ${big?'ins-spent-badge--big':spent?'ins-spent-badge--spent':'ins-spent-badge--fresh'}`}>
-                            {s.avgReturn>=0?'+':''}{s.avgReturn.toFixed(0)}% {big||spent?'spent':'fresh'}
-                          </span>
-                        )}
-                        <ConvictionBar score={s.conviction} showLabel={true}/>
-                      </div>
+
+                      {/* ── Expanded detail ── */}
+                      {isExp&&(
+                        <div className="ws-row__detail" onClick={e=>e.stopPropagation()}>
+
+                          {/* Signal summary row */}
+                          <div className="ws-row__detail-summary">
+                            <div><span className="ws-data-label">Last trade</span><div className="ws-row__detail-val">{fmt.dateShort(s.lastTradeDate)}</div></div>
+                            <div><span className="ws-data-label">Net flow</span><div className={`ws-row__detail-val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':''}{fmt.money(s.netValue)}</div></div>
+                            <div><span className="ws-data-label">Exec transactions</span><div className="ws-row__detail-val">{s.cSuiteBuys>0?`${s.cSuiteBuys} trade${s.cSuiteBuys!==1?'s':''}`:'—'}</div></div>
+                            <div><span className="ws-data-label">Insiders</span><div className="ws-row__detail-val">{s.insiderCount}</div></div>
+                            <div><span className="ws-data-label">Sector</span><div className="ws-row__detail-val">{s.sector||'—'}</div></div>
+                            <div><span className="ws-data-label">Conviction</span><div className="ws-row__detail-val">{Math.round(s.conviction)}</div></div>
+                            {s.avgReturn!=null&&<div><span className="ws-data-label">Since trade</span><div className={`ws-row__detail-val${s.avgReturn>=0?' val-buy':' val-sell'}`}>{s.avgReturn>=0?'+':''}{s.avgReturn.toFixed(1)}%</div></div>}
+                          </div>
+
+                          {/* Individual trade history */}
+                          {trades.length>0&&(
+                            <div className="ws-row__detail-trades">
+                              <div className="ws-row__detail-trades-hdr">
+                                <span className="ws-data-label">Individual trades · {s.company}</span>
+                              </div>
+                              {trades.map((f,ti)=>{
+                                const fb=f.transactionType==='buy';
+                                const su=secFilingUrl(f.accessionNumber,f.cikIssuer);
+                                return (
+                                  <div key={ti} className="ws-row__trade-line">
+                                    <span className="ws-row__trade-date ws-data-label">{fmt.dateShort(f.transactionDate||f.date)}</span>
+                                    <span className="ws-row__trade-who">{f.insiderName} <span style={{color:'var(--text-3)',fontSize:10}}>{f.title?'· '+f.title.split(' ').slice(0,3).join(' '):''}</span></span>
+                                    <span className={`ws-type-badge${fb?' ws-type-badge--buy':' ws-type-badge--sell'}`} style={{flexShrink:0}}>{fb?'Buy':'Sell'}</span>
+                                    {f.shares&&<span className="ws-row__trade-shares" style={{color:'var(--text-3)',fontSize:11}}>{fmt.number(f.shares)} sh</span>}
+                                    <span className={`ws-data-mono${fb?' val-buy':' val-sell'}`} style={{marginLeft:'auto',flexShrink:0}}>{fb?'+':'−'}{fmt.money(f.value)}</span>
+                                    {su&&<a href={su} target="_blank" rel="noopener noreferrer" className="ws-sec-link" onClick={e=>e.stopPropagation()}>↗</a>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <div className="ws-row__detail-footer">
+                            <button className="ws-row__detail-cta" onClick={()=>openSignalsDrawer(s)}>
+                              Open full ↗
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
-              </div>}
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT: Top insiders (top, fixed) + News (bottom, scrollable) */}
-        <div className="dash-col-right">
-          <div className="dash-tile dash-tile--top-insiders">
-            <div className="dash-tile__hdr">
-              <span className="dash-tile__title">Top insiders</span>
-              <TileInfoButton section="insights-formula" title="Top insiders"/>
-              <div className="dash-tile__hdr-controls">
-                <button className="btn btn--ghost btn--icon" onClick={()=>setInsidersExpanded(true)} title="Open full insiders view">⤢</button>
               </div>
-            </div>
-            <div className="dash-tile__body">
-              <InsiderLeaderboardSidebar onOpenDetail={onOpenDetail} watchlist={watchlist}/>
-            </div>
-          </div>
-          <div className="dash-tile dash-tile--news">
-            <div className="dash-tile__hdr">
-              <span className="dash-tile__title">Market news</span>
-              <TileInfoButton section="welcome" title="Market news"/>
-              <div className="dash-tile__hdr-controls">
-                {watchlist&&(
-                  <label
-                    className={`bundle-toggle${newsMyNewsOn&&watchlist.pro?' bundle-toggle--active':''}`}
-                    title={watchlist.pro?'Only news for your starred tickers and followed insiders\' recent trades':'Pro feature — filters news to your starred tickers and followed insiders'}
-                  >
-                    <input type="checkbox" checked={newsMyNewsOn&&watchlist.pro}
-                      onChange={()=>watchlist.pro?setNewsMyNewsOn(v=>!v):watchlist.setShowUpgrade?.('watchlist_ticker')}/>
-                    My news{!watchlist.pro&&<span className="settings-pro-badge" style={{marginLeft:5}}>Pro</span>}
-                  </label>
-                )}
-                <button className="btn btn--ghost btn--icon" onClick={()=>setNewsExpanded(true)} title="Open full news view">⤢</button>
-              </div>
-            </div>
-            <div className="dash-tile__body">
-              <MarketNews watchlist={watchlist} filings={filings} limit={12} myNewsOn={newsMyNewsOn}/>
-            </div>
-          </div>
-        </div>
+              <div className="ws-tbl-footer"><span>{signals.length} signals · click row to expand</span></div>
+            </>
+          )
+        )}
 
+        {/* ── RAW FILINGS TABLE ─────────────────────────────────────────── */}
+        {tab==='raw'&&(
+          loading?<SkeletonRows count={12}/>:rawFilings.length===0?(
+            <div className="ws-empty">No filings match these filters.</div>
+          ):(
+            <>
+              {/* Same outer width as signals. 7-col grid: chevron+date | ticker | insider | role | type | ±position | value */}
+              <div className="ws-col-hdrs ws-col-hdrs--raw">
+                <span className="ws-col-sort">Ticker</span>
+                {!isMobile&&<span className="ws-col-sort">Insider</span>}
+                <button className={`ws-col-sort${rawSort==='date'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('date')}>Date{rawSort==='date'&&(rawDir<0?' ↓':' ↑')}</button>
+                {!isMobile&&<span className="ws-col-sort"><InfoTip tip={TIPS.role}>Role</InfoTip></span>}
+                <span className="ws-col-sort"><InfoTip tip={TIPS.tradeType}>Type</InfoTip></span>
+                {!isMobile&&<button className={`ws-col-sort ws-col-sort--right${rawSort==='pctChange'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('pctChange')}><InfoTip tip={TIPS.pctPosition}>% Position</InfoTip>{rawSort==='pctChange'&&(rawDir<0?' ↓':' ↑')}</button>}
+                <button className={`ws-col-sort ws-col-sort--right${rawSort==='value'?' ws-col-sort--active':''}`} onClick={()=>onRawSort('value')}><InfoTip tip={TIPS.tradeValue}>Value</InfoTip>{rawSort==='value'&&(rawDir<0?' ↓':' ↑')}</button>
+              </div>
+              <div>
+                {rawFilings.map((f,i)=>{
+                  const isBuy=f.transactionType==='buy';
+                  const isExp=expandedRaws.has(i);
+                  const secUrl=secFilingUrl(f.accessionNumber,f.cikIssuer);
+                  // Sibling filings for this insider × ticker combo
+                  const siblingFilings=isExp?filings.filter(x=>x.ticker===f.ticker&&x.insiderName===f.insiderName&&x.isOpenMarket&&x.accessionNumber!==f.accessionNumber).sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||'')).slice(0,5):[];
+                  return (
+                    <div key={i} className={`ws-row${isExp?' ws-row--open':''}`}
+                      style={{borderLeft:`3px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+
+                      <div className="ws-row__main ws-row__main--raw" style={{cursor:'pointer'}}
+                        onClick={()=>toggleRaw(i)}>
+                        <div className="ws-row__cell">
+                          <div style={{display:'flex',alignItems:'center',gap:5}}>
+                            <span className="ws-row__chevron ws-row__chevron--lg">{isExp?'▾':'▸'}</span>
+                            <span className="ticker">{f.ticker}</span>
+                          </div>
+                          {isMobile&&<div className="ws-mob-sub" style={{fontSize:10,color:'var(--text-3)',marginTop:1,paddingLeft:18}}>{f.insiderName}</div>}
+                        </div>
+                        {!isMobile&&<div className="ws-row__cell ws-row__cell--overflow" style={{fontSize:12}}>{f.insiderName}</div>}
+                        <div className="ws-row__cell ws-row__cell--muted" style={{fontSize:11}}>
+                          {fmt.dateShort(f.transactionDate||f.date)}
+                        </div>
+                        {!isMobile&&<div className="ws-row__cell"><Badge type={`rel-${f.relationship||'weak'}`}>{f.relationship==='strong'?'C-Suite':f.relationship==='medium'?'Officer':'Dir'}</Badge></div>}
+                        <div className="ws-row__cell"><span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span></div>
+                        {!isMobile&&<div className="ws-row__cell ws-row__cell--right">
+                          <span className={`ws-row__pos-change${isBuy?' val-buy':' val-sell'}`}>
+                            {f.pctOwnedChange!=null ? `${isBuy?'+':'−'}${Math.abs(f.pctOwnedChange).toFixed(1)}%` : '—'}
+                          </span>
+                        </div>}
+                        <div className="ws-row__cell ws-row__cell--right">
+                          <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                        </div>
+                      </div>
+
+                      {isExp&&(
+                        <div className="ws-row__detail" onClick={e=>e.stopPropagation()}>
+
+                          {/* Filing details */}
+                          <div className="ws-row__detail-summary">
+                            <div><span className="ws-data-label">Insider</span><div className="ws-row__detail-val">{f.insiderName}</div></div>
+                            <div><span className="ws-data-label">Title</span><div className="ws-row__detail-val">{f.title||'—'}</div></div>
+                            <div><span className="ws-data-label">Position change</span><div className={`ws-row__detail-val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{f.shares?fmt.number(f.shares)+' sh':'—'}</div></div>
+                            <div><span className="ws-data-label">Price / share</span><div className="ws-row__detail-val">{f.price?fmt.price(f.price):'—'}</div></div>
+                            <div><span className="ws-data-label">Total value</span><div className={`ws-row__detail-val${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</div></div>
+                            <div><span className="ws-data-label">Company</span><div className="ws-row__detail-val">{f.company||f.ticker}</div></div>
+                            <div><span className="ws-data-label">Sector</span><div className="ws-row__detail-val">{f.sector||'—'}</div></div>
+                            {secUrl&&<div><span className="ws-data-label">Source</span><div><a href={secUrl} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ SEC filing</a></div></div>}
+                          </div>
+
+                          {/* Other trades by same insider at same ticker */}
+                          {siblingFilings.length>0&&(
+                            <div className="ws-row__detail-trades">
+                              <div className="ws-row__detail-trades-hdr">
+                                <span className="ws-data-label">Other trades — {f.insiderName} at {f.ticker}</span>
+                              </div>
+                              {siblingFilings.map((sf,si)=>{
+                                const sfb=sf.transactionType==='buy';
+                                return (
+                                  <div key={si} className="ws-row__trade-line">
+                                    <span className="ws-row__trade-date ws-data-label">{fmt.dateShort(sf.transactionDate||sf.date)}</span>
+                                    <span className={`ws-type-badge${sfb?' ws-type-badge--buy':' ws-type-badge--sell'}`} style={{flexShrink:0}}>{sfb?'Buy':'Sell'}</span>
+                                    {sf.shares&&<span className={`ws-row__pos-change${sfb?' val-buy':' val-sell'}`}>{sfb?'+':'−'}{fmt.number(sf.shares)} sh</span>}
+                                    <span className={`ws-data-mono${sfb?' val-buy':' val-sell'}`} style={{marginLeft:'auto',flexShrink:0}}>{sfb?'+':'−'}{fmt.money(sf.value)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Single CTA: opens raw explore with same filters + this ticker pre-selected */}
+                          <div className="ws-row__detail-footer">
+                            <button className="ws-row__detail-cta" onClick={()=>openRawDrawer(f.ticker, f.company)}>
+                              Open full ↗
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="ws-tbl-footer">
+                <span>Showing {rawFilings.length} of {allRaw.length} filings · open-market only · click row to expand</span>
+              </div>
+            </>
+          )
+        )}
       </div>
-      {newsExpanded&&<NewsDrawer watchlist={watchlist} filings={filings} onClose={()=>setNewsExpanded(false)}/>}
-      {insidersExpanded&&(
+
+      {/* Full-screen explore drawer — desktop only. On mobile, openSignalsDrawer
+          and openRawDrawer redirect to onOpenDetail instead of setting drawer state,
+          but this guard ensures the drawer never renders on small viewports. */}
+      {!isMobile&&(drawer==='signals'||drawer==='insiders')&&(
         <InsightsDrawer
-          type="insiders"
+          type={drawer}
           filings={filings}
+          initialDetail={drawerInitSignal}
+          onClose={()=>{setDrawer(null);setDrawerInitSignal(null);}}
+          onSwitchToData={()=>{setDrawer(null);setDrawerInitSignal(null);setTimeout(()=>setDrawer('raw'),50);}}
+          sigSort={sigSort} sigDir={sigDir} sigOnSort={onSigSort}
+          ensureFilingsWindow={()=>{}} filingsLoading={loading}
           watchlist={watchlist}
-          onClose={()=>setInsidersExpanded(false)}
-          sigSort="conviction" sigDir={-1} sigOnSort={()=>{}}
-          ensureFilingsWindow={()=>{}}
-          filingsLoading={loading}
+          initialFilters={{days,sourceF,sectorF,minStrength:minStr}}
+          pro={pro}
+        />
+      )}
+      {!isMobile&&drawer==='raw'&&(
+        <DataDrawer
+          initialDetail={drawerInitTicker || {type:'data',dataFilters:{days,sectorF,txType,rawRoleF}}}
+          initialDetailStack={[]}
+          filterState={{days,sectorF,txType,rawRoleF}}
+          onClose={()=>{setDrawer(null);setDrawerInitTicker(null);}}
+          onSwitchTab={(tab)=>{setDrawer(null);setDrawerInitTicker(null);setTimeout(()=>setDrawer(tab==='signals'?'signals':'insiders'),50);}}
+          watchlist={watchlist}
+          portfolioTickers={[]}
+          pro={pro}
+          onUpgrade={onUpgrade}
         />
       )}
     </div>
   );
 }
 
+
+// ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
 // Helper — does this ticker have a reversal in the last 30d?
 // Cheap per-row check using cached reversal list passed in.
 function detectReversalForTicker(ticker, filings) {
@@ -3453,262 +4864,553 @@ function detectReversals(filings) {
   });
 }
 
+
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
-function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow, watchlist }) {
-  const { pro } = useBilling();
-  const [appetite] = React.useContext(RiskAppetiteContext);
-  const [days, setDays] = useState(7);
-  // days=null means "All" — must resolve to no cutoff at all, not today's
-  // date. The date-arithmetic version below silently coerced null to 0,
-  // which set the cutoff to today (the narrowest possible window, the exact
-  // opposite of "All") rather than an unbounded one.
-  const cutoff = useMemo(()=>{
-    if (days==null) return '2010-01-01'; // full dataset floor — the Worker's own date-floor enforcement handles free-tier clamping server-side
-    const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];
-  },[days]);
-  const [sigSort, setSigSort] = useState('conviction');
-  const [sigDir,  setSigDir]  = useState(-1);
-  const [sourceF, setSourceF] = useState('');
-  const [sectorF, setSectorF] = useState('');
-  const [tab, setTab] = useState('research');
-  const [minStrength, setMinStrength] = useState(1); // 1=any 2=medium+ 3=high only
-  const [modal, setModal] = useState(null); // 'signals' | 'insiders' | null
-  const [modalInitial, setModalInitial] = useState(null); // pre-selected item when opening
-  const hlRef = useRef(null);
-
-  // Opens the Explore drawer pre-selected to whatever was clicked, instead of
-  // the small centered quick-info modal — keeps this page's detail-viewing
-  // in one consistent environment rather than two different ones.
-  function openInDrawer(d) {
-    if (d.type==='trader') { setModal('insiders'); setModalInitial(d); }
-    else { setModal('signals'); setModalInitial(d); }
-  }
-
-  const sectors = useMemo(()=>[...new Set(filings.map(f=>f.sector).filter(s=>s&&s!=='Other'))].sort(),[filings]);
-
-  // Conviction thresholds matching the bar segments (max=15): 33%=5, 66%=10
-  const strengthThreshold = minStrength===3?10:minStrength===2?5:0;
-
-  const signals = useMemo(()=>{
-    const result = filterAndScoreSignals(filings, { cutoff, sourceF, sectorF, strengthThreshold });
-
-    return result
-      .sort((a,b)=>{
-        const av=a[sigSort],bv=b[sigSort];
-        let r;
-        if(typeof av==='number') r = av<bv?-1:av>bv?1:0;
-        else r = String(av||'').localeCompare(String(bv||''));
-        return sigDir>0?r:-r;
-      });
-  },[filings,cutoff,sourceF,sectorF,sigSort,sigDir,strengthThreshold]);
-
-  useEffect(()=>{
-    if (highlightTicker&&hlRef.current)
-      hlRef.current.scrollIntoView({behavior:'smooth',block:'center'});
-  },[highlightTicker,signals]);
-
-  function sigOnSort(col){if(sigSort===col)setSigDir(d=>-d);else{setSigSort(col);setSigDir(-1);}}
-  function resetFilters(){setDays(7);setMinStrength(1);setSourceF('');setSectorF('');}
-  const filtersAreDefault = days===7 && minStrength===1 && !sourceF && !sectorF;
-
-  const [portModal, setPortModal] = useState(false);
-
+// ─── Shared insider profile components (module-level, no closure) ─────────────
+function ScoreRing({ score=0, size=76 }) {
+  const pct=Math.min((score||0)/100,1);
+  const r2=(size-8)/2, circ=2*Math.PI*r2, dash=pct*circ;
+  const color=score>=65?'var(--green-600)':score>=35?'var(--accent)':'var(--amber-600)';
   return (
-    <div className="page-content">
-      {/* Portfolio bar — above everything, full width */}
-      {/* Two-column body — signals | insiders */}
-      <div className="ins-3col">
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{flexShrink:0}}>
+      <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke="var(--surface-3)" strokeWidth={6}/>
+      <circle cx={size/2} cy={size/2} r={r2} fill="none" stroke={color} strokeWidth={6}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        transform={`rotate(-90 ${size/2} ${size/2})`}
+        style={{transition:'stroke-dasharray .4s ease'}}/>
+      <text x={size/2} y={size/2-4} textAnchor="middle" dominantBaseline="middle"
+        style={{fontSize:size*0.22,fontWeight:700,fontFamily:'var(--font-mono)',fill:color,userSelect:'none'}}>
+        {score!=null?score:'—'}
+      </text>
+      <text x={size/2} y={size/2+size*0.2} textAnchor="middle" dominantBaseline="middle"
+        style={{fontSize:size*0.13,fill:'var(--text-3)',fontFamily:'var(--font)',userSelect:'none'}}>
+        /100
+      </text>
+    </svg>
+  );
+}
 
-        {/* LEFT: Signals */}
-        <div className="ins-sig-panel ins-3col__signals">
-          <div className="ins-sig-panel__hdr">
-            <span className="ins-sig-panel__title">Insider signals</span>
-            <TileInfoButton section="insights-formula" title="Insider signals"/>
-            <div className="dash-tile__hdr-controls">
-              <button className="btn btn--ghost btn--icon" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('signals');}} title="Open full Explore view">⤢</button>
-            </div>
+function ProfileCard({ r, profileCompanies, profileTrades, txExpanded, setTxExpanded, onOpenDetail, watchlist, loading, setInsiderDrawerDetail }) {
+  if (!r) return (
+    <div className="ip-profile-empty">
+      <div style={{fontSize:40,marginBottom:12,opacity:.25}}>◎</div>
+      <div style={{fontSize:13,color:'var(--text-3)'}}>Select an insider from the list</div>
+    </div>
+  );
+  const hrC=r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-2)';
+  const retC=(r.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
+  const initials=(r.insider_name||'').split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const role=insiderRoleLabel(r);
+  return (
+    <div className="ip-profile">
+      <div className="ip-profile__head">
+        <div className="ip-profile__avatar">{initials}</div>
+        <div className="ip-profile__identity">
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div className="ip-profile__name">{r.insider_name}</div>
+            <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}><FollowBtn name={r.insider_name} watchlist={watchlist}/></div>
           </div>
+          {profileCompanies.length>0&&(
+            <div className="ip-profile__affiliations">
+              {profileCompanies.slice(0,4).map(c=>(
+                <span key={c.ticker} className="ip-aff-badge" onClick={()=>onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company||c.ticker,expand:true})}>
+                  <Badge type={role.badge}>{role.label}</Badge>
+                  <span style={{fontSize:11,color:'var(--text-2)'}}>at</span>
+                  <span className="ticker" style={{fontSize:11,cursor:'pointer'}}>{c.ticker}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <ScoreRing score={r.proxy_score??0} size={76}/>
+      </div>
 
-          {/* Filters — belong to this panel specifically, not floating above
-              both columns ambiguously. Each group gets its own labeled block
-              with real spacing so they read as distinct controls. */}
-          <div className="ins-filter-row">
-            <div className="ins-filter-group">
-              <span className="ins-filter-group__label">Window</span>
-              <div className="dash-tile-pills">
-                {[{v:1,l:'1d'},{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
-                  <button key={o.l} className={`dash-tile-pill${days===o.v?' dash-tile-pill--active':''}`}
-                    onClick={()=>{setDays(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
-                ))}
-              </div>
-            </div>
-            <div className="drawer__toolbar-divider"/>
-            <div className="ins-filter-group">
-              <span className="ins-filter-group__label">Strength</span>
-              <div className="ins-strength-pills">
-                {[{v:1,l:'Any'},{v:2,l:'Med+'},{v:3,l:'High'}].map(o=>(
-                  <button key={o.v}
-                    className={`ins-strength-pill${minStrength===o.v?' ins-strength-pill--active':''}`}
-                    style={o.v===3&&minStrength===3?{background:'var(--green-600)',borderColor:'var(--green-600)',color:'#fff'}:
-                           o.v===2&&minStrength===2?{background:'var(--amber-600)',borderColor:'var(--amber-600)',color:'#fff'}:{}}
-                    onClick={()=>setMinStrength(o.v)}>{o.l}</button>
-                ))}
-              </div>
-            </div>
-            <div className="drawer__toolbar-divider"/>
-            <div className="ins-filter-group">
-              <span className="ins-filter-group__label">Type</span>
-              <div className="dash-tile-pills">
-                {[['','All'],['corporate','Corporate'],['political','Congressional']].map(([v,l])=>(
-                  <button key={v} className={`dash-tile-pill${sourceF===v?' dash-tile-pill--active':''}`}
-                    onClick={()=>{
-                      setSourceF(v);
-                      // Congressional filings can take up to 45 days to be
-                      // disclosed — a real, structural lag, not a bug. A
-                      // narrow window (the 7-day default, or anything under
-                      // 90) will very often show zero congressional activity
-                      // even when hundreds of real filings exist, simply
-                      // because most haven't been required to file yet by
-                      // that point. Widen automatically rather than let
-                      // someone select "Congressional" and reasonably
-                      // conclude the feature is broken.
-                      if (v==='political' && (days==null ? false : days<90)) {
-                        setDays(90);
-                        ensureFilingsWindow&&ensureFilingsWindow(90);
-                      }
-                    }}>{l}</button>
-                ))}
-              </div>
-            </div>
-            <div className="drawer__toolbar-divider"/>
-            <div className="ins-filter-group">
-              <span className="ins-filter-group__label">Sector</span>
-              <select className="ins-filter-select" value={sectorF} onChange={e=>setSectorF(e.target.value)}>
-                <option value="">All sectors</option>
-                {sectors.map(s=><option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <span className="td-muted ins-filter-count">
-              {signals.length} signals
-              {!pro&&<span className="free-tier-inline"> · free plan: last 12mo only</span>}
-            </span>
-            {!filtersAreDefault&&(
-              <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
-            )}
+      <div className="ip-profile__stats">
+        {[
+          {label:'Hit rate',tip:TIPS.hitRate,val:r.hit_rate!=null?`${r.hit_rate}%`:'—',color:hrC},
+          {label:'Avg return',tip:TIPS.avgReturn,val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—',color:retC},
+          {label:'OM buys',tip:TIPS.omBuys,val:r.om_buys,color:'var(--text)'},
+          {label:'OM sells',tip:TIPS.omSells,val:r.om_sells||0,color:'var(--text)'},
+          {label:'Priced trades',tip:TIPS.pricedTrades,val:r.priced!=null?r.priced:'—',color:'var(--text)'},
+          {label:'Total bought',tip:TIPS.totalBought,val:fmt.money(r.bought_value),color:'var(--text)'},
+        ].map(s=>(
+          <div key={s.label} className="ip-stat">
+            <span className="ip-stat__val" style={{color:s.color,fontFamily:'var(--font-mono)'}}>{s.val}</span>
+            <span className="ip-stat__label">{s.tip?<InfoTip tip={s.tip}>{s.label}</InfoTip>:s.label}</span>
           </div>
+        ))}
+      </div>
 
-          <div className="ins-sig-col-hdrs">
-            <button className="ins-col-sort" onClick={()=>sigOnSort('ticker')}>Ticker · Company{sigSort==='ticker'&&(sigDir<0?' ↓':' ↑')}</button>
-            <span>Type</span>
-            <button className="ins-col-sort" onClick={()=>sigOnSort('cSuiteBuys')}>Exec{sigSort==='cSuiteBuys'&&(sigDir<0?' ↓':' ↑')}</button>
-            <button className="ins-col-sort" title="Conviction = exec participation × buy size × clustering" onClick={()=>sigOnSort('conviction')}>Signal ⓘ{sigSort==='conviction'&&(sigDir<0?' ↓':' ↑')}</button>
-            <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>sigOnSort('netValue')}>Net flow{sigSort==='netValue'&&(sigDir<0?' ↓':' ↑')}</button>
-          </div>
-          <div className="ins-sig-panel__body">
-            {loading?<div className="state-box"><Spinner/><p>Computing signals…</p></div>
-            :signals.length===0?<div className="ins-empty">
-              <div style={{fontWeight:500,marginBottom:4}}>No qualifying signals</div>
-              <div style={{fontSize:11,color:'var(--text-3)',lineHeight:1.5}}>
-                {minStrength>1
-                  ? 'Try lowering the strength filter or widening the timespan.'
-                  : sourceF==='political'
-                    ? 'Congressional trades can take up to 45 days to be disclosed — a much longer lag than corporate Form 4s. Try widening the window to 90d or All.'
-                    : 'Form 4s file 1–2 business days after trades. Try 7d or 30d.'}
+      <div className="ip-profile__section">
+        <div className="ip-profile__section-label">Companies traded</div>
+        {loading?(
+          <SkeletonRows count={2}/>
+        ):profileCompanies.length===0?(
+          <div className="ws-empty" style={{padding:'8px 0',fontSize:11}}>No company data yet.</div>
+        ):(
+          <div className="ip-profile__companies">
+            {profileCompanies.slice(0,8).map(c=>(
+              <div key={c.ticker} className="ip-company-chip"
+                onClick={()=>onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company||c.ticker,expand:true})}>
+                <span className="ticker" style={{fontSize:11}}>{c.ticker}</span>
+                <span className="ip-company-chip__name">{c.company||c.ticker}</span>
+                <div className="ip-company-chip__counts">
+                  {c.buys>0&&<span className="val-buy" style={{fontSize:10,fontWeight:700}}>+{c.buys}</span>}
+                  {c.sells>0&&<span className="val-sell" style={{fontSize:10,fontWeight:700}}>−{c.sells}</span>}
+                </div>
               </div>
-            </div>
-            :<div className="ins-sig-list">
-              {signals.map((s,i)=>{
-                const isHL=s.ticker===highlightTicker, isSel=s.ticker===selectedSignal?.ticker;
-                const spent=s.avgReturn!=null&&s.avgReturn>20, big=s.avgReturn!=null&&s.avgReturn>50;
-                const hasReversal=detectReversalForTicker(s.ticker,filings);
-                const isCongress=s.isPolitical;
-                const typeLabel=isCongress?'Congressional':'Corporate';
-                const convPct=Math.min((s.conviction/15)*100,100);
-                const tier=tierFromPct(convPct, appetite);
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="ip-profile__section" style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
+        <div className="ip-profile__section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span>Transactions{profileTrades.length?` · ${profileTrades.length} found`:''}</span>
+        </div>
+        {loading?(
+          <SkeletonRows count={5}/>
+        ):profileTrades.length===0?(
+          <div className="ws-empty" style={{padding:'16px 0',fontSize:12}}>
+            No open-market transactions found.
+          </div>
+        ):(
+          <div className="ip-tx-list-wrap">
+            <div className="ip-tx-list">
+              {profileTrades.slice(0,8).map((f,i)=>{
+                const isBuy=f.transactionType==='buy', isExpTx=txExpanded.has(i);
                 return (
-                  <div key={s.ticker} ref={isHL?hlRef:null}
-                    className={`ins-sig-row ins-sig-row--${tier}${isSel?' ins-sig-row--selected':''}`}
-                    onClick={()=>{setHighlightTicker(s.ticker);onSelectSignal(s);openInDrawer({type:'signal',...s});}}>
-                    <div className="ins-sig-row__left">
-                      <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
-                        <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
-                        {s.isPolitical&&<span className="badge badge--src-congress">Congress</span>}
-                        {hasReversal&&<span className="reversal-badge" title="Insider recently traded in the opposite direction of their prior trade"><IconReversal className="reversal-badge__icon"/></span>}
-                        <StarBtn ticker={s.ticker} watchlist={watchlist}/>
+                  <div key={i} className="ip-tx-row" style={{borderLeft:`2px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                    <div className="ip-tx-row__main" onClick={()=>setTxExpanded(s=>{const n=new Set(s);n.has(i)?n.delete(i):n.add(i);return n;})}>
+                      <span className="ip-tx-row__date">{fmt.dateShort(f.transactionDate||f.date)}</span>
+                      <span className="ticker" style={{fontSize:12,minWidth:40}}>{f.ticker}</span>
+                      <span style={{fontSize:11,color:'var(--text-3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',margin:'0 8px'}}>{f.company}</span>
+                      <span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span>
+                      <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`} style={{minWidth:72,textAlign:'right'}}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                      <span className="ip-tx-row__chevron">{isExpTx?'▾':'▸'}</span>
+                    </div>
+                    {isExpTx&&(
+                      <div className="ip-tx-row__detail">
+                        <div><span className="ws-data-label">Shares</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.shares?fmt.number(f.shares):'—'}</span></div>
+                        <div><span className="ws-data-label">Price</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.price?fmt.price(f.price):'—'}</span></div>
+                        <div><span className="ws-data-label">Total</span><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
+                        {f.accessionNumber&&f.cikIssuer&&<div><span className="ws-data-label">SEC</span><a href={secFilingUrl(f.accessionNumber,f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">View →</a></div>}
                       </div>
-                      <div className="ins-sig-row__co">{s.company}</div>
-                      {s.sector&&s.sector!=='Other'&&<div className="td-muted" style={{fontSize:11}}>{s.sector}</div>}
-                    </div>
-                    <div className="ins-sig-row__type">
-                      <span className={`ins-type-badge${isCongress?' ins-type-badge--congress':''}`}>{typeLabel}</span>
-                      <div className="td-muted ins-sig-row__type-meta">
-                        {s.insiderCount} insider{s.insiderCount!==1?'s':''} · {fmt.ago(s.lastTradeDate)}
-                      </div>
-                    </div>
-                    <div className="ins-sig-row__exec">
-                      {s.cSuiteBuys>0
-                        ? <span className="csuite-badge">{s.cSuiteBuys}×</span>
-                        : <span className="td-muted" style={{fontSize:11}}>—</span>}
-                    </div>
-                    <div className="ins-sig-row__signal">
-                      <ConvictionBar score={s.conviction} showLabel={true}/>
-                      {s.avgReturn!=null&&(
-                        <span className={`ins-spent-badge ${big?'ins-spent-badge--big':spent?'ins-spent-badge--spent':'ins-spent-badge--fresh'}`}>
-                          {s.avgReturn>=0?'+':''}{s.avgReturn.toFixed(0)}% {big||spent?'spent':'fresh'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="ins-sig-row__right">
-                      <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
-                    </div>
+                    )}
                   </div>
                 );
               })}
-            </div>}
+            </div>
+            {profileTrades.length>8&&<div className="ip-tx-fade"/>}
+            <button className="ip-tx-explore-btn"
+              onClick={()=>setInsiderDrawerDetail&&setInsiderDrawerDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
+              Explore full profile →
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, onSelectSignal, selectedSignal, onOpenDetail, onCloseDetail, user, ensureFilingsWindow, watchlist, onUpgrade }) {
+  const { pro } = useBilling();
+  const isMobile = useIsMobile();
+
+  const [rows, setRows]           = useState(null);
+  const [lbError, setLbError]     = useState(null);
+  const [lbLoading, setLbLoading] = useState(false);
+  const [yearsBack, setYearsBack] = useState(2);
+  const [lbSource, setLbSource]   = useState(null);
+  const [sort, setSort]           = useState('proxy_score');
+  const [dir, setDir]             = useState(-1);
+  const [search, setSearch]       = useState('');
+  const [selected, setSelected]   = useState(null);
+  const [txExpanded, setTxExpanded] = useState(new Set());
+  const [insiderDrawerDetail, setInsiderDrawerDetail] = useState(null);
+
+  // Discoverability filters
+  const [minTrades, setMinTrades] = useState(0);
+  const [minHitRate, setMinHitRate] = useState(0);
+  const [minScore, setMinScore] = useState(0);
+  const [roleFilter, setRoleFilter] = useState('');   // '' | 'strong' | 'medium'
+  const [dirFilter, setDirFilter] = useState('');     // '' | 'buyers' | 'sellers'
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Server-side search for insiders outside the top 500
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchRows, setSearchRows] = useState(null);
+  useEffect(()=>{
+    const t = setTimeout(()=>setSearchTerm(search), 300);
+    return ()=>clearTimeout(t);
+  },[search]);
+
+  // Base load — shared module-level cache, stale-while-revalidate
+  useEffect(()=>{
+    if (!cfg.NEON_PROXY_URL){setLbError('Not configured');return;}
+    setLbLoading(true);setLbError(null);
+    fetchLeaderboard(500, 2, yearsBack, lbSource)
+      .then(r=>{
+        setRows(r);
+        setSelected(s => s ?? (r[0]||null));
+        setLbLoading(false);
+      })
+      .catch(e=>{setLbError(e.message||'Failed to load');setRows(prev=>prev||[]);setLbLoading(false);});
+  },[yearsBack,lbSource]);
+
+  // Server-side name search — queries the full database when typing
+  useEffect(()=>{
+    if (!searchTerm) { setSearchRows(null); return; }
+    setLbLoading(true);
+    fetchLeaderboard(500, 1, yearsBack, lbSource, searchTerm)
+      .then(r=>{setSearchRows(r);setLbLoading(false);})
+      .catch(()=>{setSearchRows([]);setLbLoading(false);});
+  },[searchTerm, yearsBack, lbSource]);
+
+  const sorted = useMemo(()=>{
+    const source = searchTerm ? searchRows : rows;
+    if (!source) return [];
+    const q = search.toLowerCase();
+    return [...source]
+      .filter(r=>{
+        // Client-side name filter for instant feedback while debounce is pending
+        if (q && !searchTerm && !(r.insider_name||'').toLowerCase().includes(q) && !(r.insider_title||'').toLowerCase().includes(q)) return false;
+        if (minTrades > 0 && (r.priced||0) < minTrades) return false;
+        if (minHitRate > 0 && (r.hit_rate==null || r.hit_rate < minHitRate)) return false;
+        if (minScore > 0 && (r.proxy_score||0) < minScore) return false;
+        if (roleFilter && r.relationship !== roleFilter) return false;
+        if (dirFilter === 'buyers' && Number(r.om_buys||0) === 0) return false;
+        if (dirFilter === 'sellers' && Number(r.om_sells||0) === 0) return false;
+        return true;
+      })
+      .sort((a,b)=>{const av=a[sort]??-Infinity,bv=b[sort]??-Infinity;return dir>0?av-bv:bv-av;});
+  },[rows,searchRows,searchTerm,search,sort,dir,minTrades,minHitRate,minScore,roleFilter,dirFilter]);
+
+  const hasInsiderFilters = minTrades>0||minHitRate>0||minScore>0||roleFilter||dirFilter;
+  function resetInsiderFilters(){setMinTrades(0);setMinHitRate(0);setMinScore(0);setRoleFilter('');setDirFilter('');}
+
+  function onSortClick(col){if(sort===col)setDir(d=>-d);else{setSort(col);setDir(-1);}}
+
+  const stats=useMemo(()=>{
+    if(!rows?.length)return{};
+    const withHR=rows.filter(r=>r.hit_rate!=null);
+    const avgHit=withHR.length?Math.round(withHR.reduce((s,r)=>s+r.hit_rate,0)/withHR.length):null;
+    return{count:rows.length,avgHit,topScore:rows.length?Math.max(...rows.map(r=>r.proxy_score??0)):'—',totalVal:rows.reduce((s,r)=>s+(r.bought_value||0),0)};
+  },[rows]);
+  const totalValDisplay = isNaN(stats.totalVal) ? '—' : fmt.money(stats.totalVal||0);
+
+  // Load full history on mount so profileTrades has data
+  useEffect(()=>{
+    if (ensureFilingsWindow) ensureFilingsWindow(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+  // Transactions for selected insider — query directly from DB so we always
+  // have data regardless of the main filings window. Falls back to filtering
+  // the in-memory filings if the query fails.
+  const [profileTrades, setProfileTrades] = useState([]);
+  const [profileLoading, setProfileLoading] = useState(false);
+  // Cache per-insider trades so revisiting is instant
+  const tradeCache = useRef({});
+  useEffect(()=>{
+    if (!selected?.insider_name) { setProfileTrades([]); return; }
+    const cacheKey = selected.insider_name.toLowerCase();
+    if (tradeCache.current[cacheKey]) {
+      setProfileTrades(tradeCache.current[cacheKey]);
+      setProfileLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setProfileLoading(true);
+    const name = selected.insider_name.replace(/'/g, "''");
+    queryNeon(`
+      SELECT accession_number, cik_issuer, transaction_date, filing_date AS date,
+             ticker, company_name AS company, insider_name, insider_title AS title,
+             transaction_type, transaction_code, is_open_market, is_officer,
+             shares::float, price_per_share::float AS price, value::float,
+             shares_owned_after::float, pct_owned_change::float, sector, relationship
+      FROM public.filings
+      WHERE LOWER(insider_name) = LOWER('${name}')
+        AND is_open_market = true
+      ORDER BY COALESCE(transaction_date, filing_date) DESC
+      LIMIT 50
+    `).then(rows => {
+      if (cancelled) return;
+      const mapped = (rows||[]).map(r => ({
+        accessionNumber: r.accession_number, cikIssuer: r.cik_issuer,
+        transactionDate: r.transaction_date, date: r.date,
+        ticker: r.ticker, company: r.company, insiderName: r.insider_name,
+        title: r.title, transactionType: r.transaction_type,
+        transactionCode: r.transaction_code, isOpenMarket: r.is_open_market,
+        isOfficer: r.is_officer, shares: r.shares, price: r.price, value: r.value,
+        sharesOwnedAfter: r.shares_owned_after, pctOwnedChange: r.pct_owned_change,
+        sector: r.sector, relationship: r.relationship,
+      }));
+      tradeCache.current[cacheKey] = mapped;
+      setProfileTrades(mapped);
+    }).catch(()=>{
+      if (cancelled) return;
+      // Fallback: filter from in-memory filings
+      const nameLower = (selected.insider_name||'').toLowerCase();
+      setProfileTrades(filings
+        .filter(f=>(f.insiderName||'').toLowerCase()===nameLower)
+        .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
+        .slice(0,50));
+    }).finally(()=>{ if (!cancelled) setProfileLoading(false); });
+    return ()=>{ cancelled=true; };
+  },[selected?.insider_name]);
+
+  // Companies this insider has traded at — all transaction types
+  const profileCompanies = useMemo(()=>{
+    const map={};
+    profileTrades.forEach(f=>{
+      if(!map[f.ticker]) map[f.ticker]={ticker:f.ticker,company:f.company||f.ticker,buys:0,sells:0,lastDate:''};
+      if(f.transactionType==='buy') map[f.ticker].buys++;
+      else map[f.ticker].sells++;
+      const d=f.transactionDate||f.date||'';
+      if(d>map[f.ticker].lastDate) map[f.ticker].lastDate=d;
+    });
+    return Object.values(map).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));
+  },[profileTrades]);
+
+  return (
+    <div className="ws-page">
+      <div style={{marginBottom:20}}>
+        <h1 className="ws-page-title">Insider Profiles</h1>
+        <p className="ws-page-sub">Ranked by composite score — hit rate, returns, volume &amp; role.</p>
+      </div>
+
+      {/* Stat strip */}
+      <div className="ws-stat-strip">
+        <HelpStat label="Showing" value={rows?sorted.length:'—'} sub={rows?`of ${stats.count} insiders`:''} tip="Number of insiders matching your current filters, out of total tracked."/>
+        <HelpStat label="Avg hit rate" value={stats.avgHit!=null?`${stats.avgHit}%`:'—'} sub="Profitable trades" color={stats.avgHit>=60?'var(--green-600)':undefined} tip={TIPS.hitRate}/>
+        <HelpStat label="Top score" value={rows?stats.topScore:'—'} sub="Out of 100" color="var(--green-600)" tip={TIPS.insiderScore}/>
+        <HelpStat label="Total buy value" value={rows?totalValDisplay:'—'} sub={yearsBack?`${yearsBack}yr window`:'All time'} style={{fontSize:16}} tip={TIPS.totalBought}/>
+      </div>
+
+      {/* Filter tile — full width above list/profile */}
+      <div className="ws-tile" style={{marginBottom:16}}>
+        <div className="ws-filter-bar">
+          <div className="ws-filter-bar__row">
+            <div className="ws-search-wrap" style={{maxWidth:200}}>
+              <span className="ws-search-icon">⌕</span>
+              <input className="ws-search-input" value={search}
+                onChange={e=>setSearch(e.target.value)} placeholder="Search…"/>
+              {search&&<button className="ws-search-clear" onClick={()=>setSearch('')}>×</button>}
+            </div>
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Window</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[{v:1,l:'1yr'},{v:2,l:'2yr'},{v:5,l:'5yr'},{v:null,l:'All'}].map(o=>(
+                  <button key={o.l} className={`ws-pill ws-pill--sm${yearsBack===o.v?' ws-pill--active':''}`}
+                    onClick={()=>setYearsBack(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Source</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[[null,'All'],['corporate','Corp'],['congress','Cong']].map(([v,l])=>(
+                  <button key={l} className={`ws-pill ws-pill--sm${lbSource===v?' ws-pill--active':''}`}
+                    onClick={()=>setLbSource(v)}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Role</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[['','All'],['strong','C-Suite'],['medium','Officer']].map(([v,l])=>(
+                  <button key={v} className={`ws-pill ws-pill--sm${roleFilter===v?' ws-pill--active':''}`}
+                    onClick={()=>setRoleFilter(v)}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <button className="ip-rail__filter-more" onClick={()=>setFiltersOpen(f=>!f)}>
+              {filtersOpen?'Less ▴':'More ▾'}
+            </button>
+          </div>
+          {filtersOpen&&<div className="ws-filter-bar__row">
+            <div className="ws-filter-group" style={{borderLeft:'none',paddingLeft:0}}>
+              <span className="ws-filter-label">Direction</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[['','All'],['buyers','Buyers'],['sellers','Sellers']].map(([v,l])=>(
+                  <button key={v} className={`ws-pill ws-pill--sm${dirFilter===v?' ws-pill--active':''}`}
+                    onClick={()=>setDirFilter(v)}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Min trades</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[{v:0,l:'Any'},{v:5,l:'5+'},{v:10,l:'10+'},{v:25,l:'25+'}].map(o=>(
+                  <button key={o.v} className={`ws-pill ws-pill--sm${minTrades===o.v?' ws-pill--active':''}`}
+                    onClick={()=>setMinTrades(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Min hit rate</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[{v:0,l:'Any'},{v:60,l:'60%+'},{v:70,l:'70%+'},{v:80,l:'80%+'}].map(o=>(
+                  <button key={o.v} className={`ws-pill ws-pill--sm${minHitRate===o.v?' ws-pill--active':''}`}
+                    onClick={()=>setMinHitRate(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+            <div className="ws-filter-group">
+              <span className="ws-filter-label">Min score</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[{v:0,l:'Any'},{v:40,l:'40+'},{v:60,l:'60+'},{v:75,l:'75+'}].map(o=>(
+                  <button key={o.v} className={`ws-pill ws-pill--sm${minScore===o.v?' ws-pill--active':''}`}
+                    onClick={()=>setMinScore(o.v)}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+            {hasInsiderFilters&&<button className="ws-clear-btn" onClick={resetInsiderFilters}>Clear</button>}
+          </div>}
+        </div>
+      </div>
+
+      {/* Main: insider list (left) + profile viewer (right) */}
+      <div className="ip-layout">
+
+        {/* Insider list — left column */}
+        <div className="ws-tile ip-rail">
+          <div className="ip-rail__sort-bar">
+            {[['proxy_score','Score'],['hit_rate','Hit %'],['avg_return','Return'],['om_buys','Buys']].map(([k,l])=>(
+              <button key={k} className={`ip-rail__sort-btn${sort===k?' ip-rail__sort-btn--active':''}`}
+                onClick={()=>onSortClick(k)}>{l}{sort===k&&(dir<0?' ↓':' ↑')}</button>
+            ))}
+          </div>
+          <div className="ip-rail__list">
+            {lbError?(
+              lbError.includes('access') ? (
+                <div style={{padding:'32px 20px',textAlign:'center'}}>
+                  <div style={{fontSize:24,marginBottom:8}}>◈</div>
+                  <div style={{fontSize:13,fontWeight:600,color:'var(--text)',marginBottom:6}}>Insider profiles are a Pro feature</div>
+                  <p style={{fontSize:12,color:'var(--text-3)',lineHeight:1.5,marginBottom:14,maxWidth:280,margin:'0 auto 14px'}}>Ranked scorecards for every tracked insider — hit rates, returns, trade history, and composite scores.</p>
+                  <button className="wl-upsell__cta" style={{fontSize:12,padding:'8px 20px'}} onClick={()=>onUpgrade('pro_direct')}>
+                    Upgrade to Pro — $6.99/mo →
+                  </button>
+                </div>
+              ) : <div className="ws-empty" style={{color:'var(--red-600)',fontSize:11}}>{lbError}</div>
+            )
+            :rows===null?<SkeletonRows count={15}/>
+            :lbLoading&&sorted.length===0?<SkeletonRows count={8}/>
+            :sorted.length===0?<div className="ws-empty" style={{fontSize:11}}>No results{search?' for "'+search+'"':''}.</div>
+            :sorted.map((r,i)=>{
+              const isActive=selected?.insider_name===r.insider_name;
+              const role=insiderRoleLabel(r);
+              // Show the metric matching the current sort column
+              let metricText = null, metricColor = 'var(--text-3)';
+              if (sort === 'proxy_score') {
+                metricText = `${r.proxy_score??0}/100`;
+                metricColor = r.proxy_score>=65?'var(--green-600)':r.proxy_score>=35?'var(--accent)':'var(--text-3)';
+              } else if (sort === 'hit_rate') {
+                if (r.hit_rate != null) {
+                  metricColor = r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-3)';
+                  metricText = `${r.hit_rate}% hit`;
+                }
+              } else if (sort === 'avg_return') {
+                if (r.avg_return != null) {
+                  metricColor = r.avg_return>=0?'var(--green-600)':'var(--red-600)';
+                  metricText = `${r.avg_return>=0?'+':''}${r.avg_return.toFixed(1)}% return`;
+                }
+              } else if (sort === 'om_buys') {
+                metricText = `${r.om_buys||0} buys · ${fmt.money(r.bought_value)}`;
+              }
+              return (
+                <div key={r.insider_name}>
+                  <div
+                    className={`ip-rail-row${isActive?' ip-rail-row--active':''}`}
+                    onClick={()=>{setSelected(isActive&&isMobile?null:r);setTxExpanded(new Set());}}>
+                    <span className="ip-rail-row__rank">{i+1}</span>
+                    <div className="ip-rail-row__info">
+                      <div className="ip-rail-row__name">{r.insider_name}</div>
+                      <div className="ip-rail-row__meta">
+                        <Badge type={role.badge}>{role.label}</Badge>
+                        {metricText&&<span style={{fontSize:10,color:metricColor,fontFamily:'var(--font-mono)',fontWeight:600}}>{metricText}</span>}
+                      </div>
+                    </div>
+                    <div style={{width:72,flexShrink:0}}><ConvictionBar score={r.proxy_score??0} max={100}/></div>
+                  </div>
+                  {/* Mobile: inline profile with stats + recent trades */}
+                  {isMobile&&isActive&&(
+                    <div className="ip-rail-row__expand">
+                      <div className="ip-rail-row__expand-stats">
+                        <div><span className="ws-data-label">Score</span><div className="ws-row__detail-val" style={{color:r.proxy_score>=65?'var(--green-600)':r.proxy_score>=35?'var(--accent)':'var(--text-3)'}}>{r.proxy_score??0}/100</div></div>
+                        {r.hit_rate!=null&&<div><span className="ws-data-label">Hit rate</span><div className="ws-row__detail-val" style={{color:r.hit_rate>=70?'var(--green-600)':r.hit_rate<50?'var(--red-600)':'var(--text-3)'}}>{r.hit_rate}%</div></div>}
+                        {r.avg_return!=null&&<div><span className="ws-data-label">Avg return</span><div className={`ws-row__detail-val${r.avg_return>=0?' val-buy':' val-sell'}`}>{r.avg_return>=0?'+':''}{r.avg_return.toFixed(1)}%</div></div>}
+                        <div><span className="ws-data-label">Buys</span><div className="ws-row__detail-val">{r.om_buys||0} · {fmt.money(r.bought_value)}</div></div>
+                        <div><span className="ws-data-label">Sells</span><div className="ws-row__detail-val">{r.om_sells||0} · {fmt.money(r.sold_value)}</div></div>
+                        <div><span className="ws-data-label">Trades scored</span><div className="ws-row__detail-val">{r.priced||0}</div></div>
+                      </div>
+                      {profileCompanies.length>0&&(
+                        <div className="ip-rail-row__expand-companies">
+                          <span className="ws-data-label" style={{marginBottom:4,display:'block'}}>Companies</span>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                            {profileCompanies.slice(0,6).map(c=>(
+                              <span key={c.ticker} className="ip-aff-badge" style={{fontSize:10,padding:'2px 6px'}}>
+                                <span className="ticker" style={{fontSize:10}}>{c.ticker}</span>
+                                {c.buys>0&&<span className="val-buy" style={{fontSize:9,fontWeight:700}}>+{c.buys}</span>}
+                                {c.sells>0&&<span className="val-sell" style={{fontSize:9,fontWeight:700}}>−{c.sells}</span>}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {profileLoading?<SkeletonRows count={3}/>
+                      :profileTrades.length>0&&(
+                        <div className="ip-rail-row__expand-trades">
+                          <span className="ws-data-label" style={{marginBottom:4,display:'block'}}>Recent trades</span>
+                          {profileTrades.slice(0,4).map((f,ti)=>{
+                            const isBuy=f.transactionType==='buy';
+                            return (
+                              <div key={ti} className="ip-rail-row__expand-trade">
+                                <span style={{fontSize:10,color:'var(--text-3)',minWidth:56}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                                <span className="ticker" style={{fontSize:10,minWidth:36}}>{f.ticker}</span>
+                                <span className={`ws-type-badge ws-type-badge--sm${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span>
+                                <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`} style={{marginLeft:'auto',fontSize:11}}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* MIDDLE: Portfolio (compact, stacked above Top insiders) + Top insiders leaderboard */}
-        <div className="ins-3col__insiders" style={{display:'flex',flexDirection:'column',gap:12,minHeight:0}}>
-          <InsightsPortfolioBar
-            filings={filings} cutoff={cutoff} days={days}
-            onOpenDetail={openInDrawer}
-            onExpand={()=>{onCloseDetail&&onCloseDetail();setPortModal(true);}}
-            pro={pro}
+        {/* Profile viewer — right column */}
+        <div className="ws-tile ip-profile-tile">
+          <ProfileCard
+            r={selected}
+            profileCompanies={profileCompanies}
+            profileTrades={profileTrades}
+            txExpanded={txExpanded}
+            setTxExpanded={setTxExpanded}
+            onOpenDetail={onOpenDetail}
+            watchlist={watchlist}
+            loading={profileLoading}
+            setInsiderDrawerDetail={setInsiderDrawerDetail}
           />
-        <div className="ins-lb-panel-wrap" style={{flex:1,minHeight:0}}>
-          <div className="ins-sig-panel__hdr">
-            <span className="ins-sig-panel__title">Top insiders</span>
-            <TileInfoButton section="insights-formula" title="Top insiders"/>
-            <div className="dash-tile__hdr-controls">
-              <button className="btn btn--ghost btn--icon" onClick={()=>{onCloseDetail&&onCloseDetail();setModal('insiders');}} title="Open full Explore view">⤢</button>
-            </div>
-          </div>
-          <div className="ins-lb-panel__body">
-            <InsiderLeaderboardSidebar onOpenDetail={openInDrawer} watchlist={watchlist}/>
-          </div>
-        </div>
         </div>
 
       </div>
 
-      {modal&&(
+      {/* Full explore drawer — opens with selected insider profile pre-loaded */}
+      {insiderDrawerDetail&&(
         <InsightsDrawer
-          type={modal}
+          type="insiders"
           filings={filings}
-          initialDetail={modalInitial}
-          onClose={()=>{setModal(null);setModalInitial(null);}}
-          sigSort={sigSort} sigDir={sigDir} sigOnSort={sigOnSort}
-          ensureFilingsWindow={ensureFilingsWindow} filingsLoading={loading}
-          watchlist={watchlist}
-          initialFilters={{days, sourceF, sectorF, minStrength}}
-        />
-      )}
-      {portModal&&(
-        <PortfolioDrawer
-          filings={filings} cutoff={cutoff} days={days}
-          onOpenDetail={onOpenDetail}
-          onClose={()=>setPortModal(false)}
+          initialDetail={insiderDrawerDetail}
+          initialDetailStack={[]}
+          onClose={()=>setInsiderDrawerDetail(null)}
+          ensureFilingsWindow={ensureFilingsWindow||(()=>{})}
+          filingsLoading={loading}
           watchlist={watchlist}
           pro={pro}
         />
@@ -3716,16 +5418,190 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
     </div>
   );
 }
-
-// ─── InsightsDrawer ───────────────────────────────────────────────────────────
 // Two-pane deep-dive drawer:
 //   Left pane  = sortable/filterable list (signals or insiders)
 //   Right pane = DetailPanel rendered inline with its own nav stack
 // Clicking any row in the left pane drives the right pane without closing.
 // Within the right pane, clicking an insider name / ticker navigates inline
 // via the same back-button stack DetailPanel already supports.
-function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, initialDetailStack, ensureFilingsWindow, filingsLoading, watchlist, initialFilters }) {
+function InsiderProfileDrawer({ name, title, filings, watchlist, lbRows, onOpenDetail }) {
+  const [txExpanded, setTxExpanded] = useState(new Set());
+  const r = useMemo(()=>{
+    if (!lbRows) return null;
+    const nameLower = (name||'').toLowerCase();
+    return lbRows.find(x=>(x.insider_name||'').toLowerCase()===nameLower)||null;
+  }, [lbRows, name]);
+  const role = insiderRoleLabel(r);
+
+  // Full trade history — query DB directly, no limit
+  const [profileTrades, setProfileTrades] = useState([]);
+  const [tradesLoading, setTradesLoading] = useState(true);
+  useEffect(()=>{
+    let cancelled = false;
+    setTradesLoading(true);
+    setProfileTrades([]);
+    const escaped = (name||'').replace(/'/g, "''");
+    queryNeon(`
+      SELECT accession_number, cik_issuer, transaction_date, filing_date AS date,
+             ticker, company_name AS company, insider_name, insider_title AS title,
+             transaction_type, transaction_code, is_open_market, is_officer,
+             shares::float, price_per_share::float AS price, value::float,
+             shares_owned_after::float, pct_owned_change::float, sector, relationship
+      FROM public.filings
+      WHERE LOWER(insider_name) = LOWER('${escaped}')
+        AND is_open_market = true
+      ORDER BY COALESCE(transaction_date, filing_date) DESC
+      LIMIT 200
+    `).then(rows => {
+      if (cancelled) return;
+      setProfileTrades((rows||[]).map(row => ({
+        accessionNumber: row.accession_number, cikIssuer: row.cik_issuer,
+        transactionDate: row.transaction_date, date: row.date,
+        ticker: row.ticker, company: row.company, insiderName: row.insider_name,
+        title: row.title, transactionType: row.transaction_type,
+        transactionCode: row.transaction_code, isOpenMarket: row.is_open_market,
+        shares: row.shares, price: row.price, value: row.value,
+        sharesOwnedAfter: row.shares_owned_after, pctOwnedChange: row.pct_owned_change,
+        sector: row.sector, relationship: row.relationship,
+      })));
+    }).catch(()=>{
+      if (cancelled) return;
+      const nameLower = (name||'').toLowerCase();
+      setProfileTrades(filings
+        .filter(f=>(f.insiderName||'').toLowerCase()===nameLower)
+        .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||'')));
+    }).finally(()=>{ if (!cancelled) setTradesLoading(false); });
+    return ()=>{ cancelled=true; };
+  },[name]);
+
+  const profileCompanies = useMemo(()=>{
+    const map={};
+    profileTrades.forEach(f=>{
+      if(!map[f.ticker]) map[f.ticker]={ticker:f.ticker,company:f.company,buys:0,sells:0,lastDate:''};
+      if(f.transactionType==='buy') map[f.ticker].buys++; else map[f.ticker].sells++;
+      const d=f.transactionDate||f.date||'';
+      if(d>map[f.ticker].lastDate) map[f.ticker].lastDate=d;
+    });
+    return Object.values(map).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));
+  },[profileTrades]);
+  const initials = name.split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const hrC = r?.hit_rate>=70?'var(--green-600)':r?.hit_rate<50?'var(--red-600)':'var(--text-2)';
+  const retC = (r?.avg_return??0)>=0?'var(--green-600)':'var(--red-600)';
+
+  return (
+    <div className="ip-profile" style={{padding:'20px 24px',gap:18,overflowY:'auto',height:'100%'}}>
+      <div className="ip-profile__head">
+        <div className="ip-profile__avatar">{initials}</div>
+        <div className="ip-profile__identity">
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div className="ip-profile__name">{name}</div>
+            <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}><FollowBtn name={name} watchlist={watchlist}/></div>
+          </div>
+          {profileCompanies.length>0&&(
+            <div className="ip-profile__affiliations">
+              {profileCompanies.slice(0,4).map(c=>(
+                <span key={c.ticker} className="ip-aff-badge" onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company})}>
+                  <Badge type={role.badge}>{role.label}</Badge>
+                  <span style={{fontSize:11,color:'var(--text-2)'}}>at</span>
+                  <span className="ticker" style={{fontSize:11,cursor:'pointer'}}>{c.ticker}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <ScoreRing score={r?.proxy_score??0} size={72}/>
+      </div>
+      {r&&(
+        <div className="ip-profile__stats" style={{gridTemplateColumns:'repeat(5,1fr)'}}>
+          {[
+            {label:'Hit rate',val:r.hit_rate!=null?`${r.hit_rate}%`:'—',color:hrC},
+            {label:'Avg return',val:r.avg_return!=null?(r.avg_return>=0?'+':'')+r.avg_return.toFixed(1)+'%':'—',color:retC},
+            {label:'OM buys',val:r.om_buys,color:'var(--text)'},
+            {label:'OM sells',val:r.om_sells||0,color:'var(--text)'},
+            {label:'Total bought',val:fmt.money(r.bought_value),color:'var(--text)'},
+          ].map(s=>(
+            <div key={s.label} className="ip-stat">
+              <span className="ip-stat__val" style={{color:s.color,fontFamily:'var(--font-mono)'}}>{s.val}</span>
+              <span className="ip-stat__label">{s.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {profileCompanies.length>0&&(
+        <div className="ip-profile__section">
+          <div className="ip-profile__section-label">Companies traded</div>
+          <div className="ip-profile__companies">
+            {profileCompanies.slice(0,6).map(c=>(
+              <div key={c.ticker} className="ip-company-chip"
+                onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:c.ticker,company:c.company})}>
+                <span className="ticker" style={{fontSize:11}}>{c.ticker}</span>
+                <span className="ip-company-chip__name">{c.company}</span>
+                <div className="ip-company-chip__counts">
+                  {c.buys>0&&<span className="val-buy" style={{fontSize:10,fontWeight:700}}>+{c.buys}</span>}
+                  {c.sells>0&&<span className="val-sell" style={{fontSize:10,fontWeight:700}}>−{c.sells}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="ip-profile__section" style={{flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
+        <div className="ip-profile__section-label">
+          <span>All transactions{profileTrades.length?` · ${profileTrades.length} found`:''}</span>
+        </div>
+        {tradesLoading?(
+          <SkeletonRows count={8}/>
+        ):profileTrades.length===0?(
+          <div className="ws-empty" style={{padding:'12px 0',fontSize:12}}>No open-market transactions found.</div>
+        ):(
+          <div className="ip-tx-list">
+            {profileTrades.map((f,i)=>{
+              const isBuy=f.transactionType==='buy', isExpTx=txExpanded.has(i);
+              return (
+                <div key={i} className="ip-tx-row" style={{borderLeft:`2px solid ${isBuy?'var(--green-600)':'var(--red-600)'}`}}>
+                  <div className="ip-tx-row__main" onClick={()=>setTxExpanded(s=>{const n=new Set(s);n.has(i)?n.delete(i):n.add(i);return n;})}>
+                    <span className="ip-tx-row__date">{fmt.dateShort(f.transactionDate||f.date)}</span>
+                    <span className="ticker" style={{fontSize:12,minWidth:40}}>{f.ticker}</span>
+                    <span style={{fontSize:11,color:'var(--text-3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',margin:'0 8px'}}>{f.company}</span>
+                    <span className={`ws-type-badge${isBuy?' ws-type-badge--buy':' ws-type-badge--sell'}`}>{isBuy?'Buy':'Sell'}</span>
+                    <span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`} style={{minWidth:72,textAlign:'right'}}>{isBuy?'+':'−'}{fmt.money(f.value)}</span>
+                    <span className="ip-tx-row__chevron">{isExpTx?'▾':'▸'}</span>
+                  </div>
+                  {isExpTx&&(
+                    <div className="ip-tx-row__detail">
+                      <div><span className="ws-data-label">Shares</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.shares?fmt.number(f.shares):'—'}</span></div>
+                      <div><span className="ws-data-label">Price</span><span style={{fontFamily:'var(--font-mono)',fontSize:12}}>{f.price?fmt.price(f.price):'—'}</span></div>
+                      <div><span className="ws-data-label">Total</span><span className={`ws-data-mono${isBuy?' val-buy':' val-sell'}`}>{isBuy?'+':'−'}{fmt.money(f.value)}</span></div>
+                      {f.accessionNumber&&f.cikIssuer&&<div><span className="ws-data-label">SEC</span><a href={secFilingUrl(f.accessionNumber,f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ View</a></div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, initialDetail, initialDetailStack, ensureFilingsWindow, filingsLoading, watchlist, initialFilters, pro, onSwitchToData }) {
   const [appetite] = React.useContext(RiskAppetiteContext);
+
+  // Tab switcher — user can pivot between views within the drawer
+  const [activeTab, setActiveTab] = useState(type || 'signals'); // 'signals' | 'insiders' | 'data'
+
+  // Reset detail when switching tabs so the pane doesn't show stale content.
+  // Pre-warm: start the leaderboard fetch on click BEFORE state updates, so
+  // data is already in flight by the time the tab renders.
+  function switchTab(tab) {
+    if (tab === activeTab) return;
+    if (tab === 'data' && onSwitchToData) { onSwitchToData(); return; }
+    if (tab === 'insiders') fetchLeaderboard(500, 2, lbYearsBack, lbSource).catch(()=>{});
+    setActiveTab(tab);
+    setDetail(null);
+    setDetailStack([]);
+  }
 
   // ── left pane state ──────────────────────────────────────────────────────
   // Seeded from the tile's current selections when opened via "Explore full
@@ -3734,7 +5610,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   // tile context (e.g. a deep-linked ticker/insider URL).
   const [search, setSearch]   = useState('');
   const [lbRows, setLbRows]   = useState(null);
-  const [lbSort, setLbSort]   = useState('hit_rate');
+  const [lbSort, setLbSort]   = useState('proxy_score');
   const [lbYearsBack, setLbYearsBack] = useState(2); // null = all-time
   const [lbSource, setLbSource] = useState(null); // null='all' | 'corporate' | 'congress'
   const [lbMinValue, setLbMinValue] = useState(50000); // minimum bought_value, filtered client-side — defaults to $50K rather than "Any" so a handful of small trades hitting 100% by chance doesn't dominate the default hit-rate sort
@@ -3742,7 +5618,11 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const [srcF,   setSrcF]     = useState(initialFilters?.sourceF ?? '');
   const [secF,   setSecF]     = useState(initialFilters?.sectorF ?? '');
   const [minStr, setMinStr]   = useState(initialFilters?.minStrength ?? 1);
-  const [daysBack, setDaysBack] = useState(initialFilters?.days ?? 30); // null = All time
+  const [daysBack, setDaysBack] = useState(() => {
+    const initial = initialFilters?.days ?? 7;
+    if (!pro && (initial === null || initial > 7)) return 7;
+    return initial;
+  });
   const [minValue, setMinValue] = useState(0);  // $ net value floor — tile has no equivalent to seed from
 
   // ── right pane nav stack ─────────────────────────────────────────────────
@@ -3755,6 +5635,11 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 
   function navigate(d) {
     if (detail) setDetailStack(s=>[...s, detail]);
+    // When navigating to an insider profile, switch to the insiders tab
+    // so the new profile layout renders instead of the old inline one
+    if (d?.type === 'trader' && activeTab !== 'insiders') {
+      setActiveTab('insiders');
+    }
     setDetail(d);
   }
   function goBack() {
@@ -3767,7 +5652,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const sectors = useMemo(()=>[...new Set(filings.map(f=>f.sector).filter(s=>s&&s!=='Other'))].sort(),[filings]);
 
   // Strength threshold
-  const strengthThreshold = minStr===3?10:minStr===2?5:0;
+  const strengthThreshold = minStr===3?60:minStr===2?35:0;
 
   // Filtered signals — computed directly from raw `filings`, NOT from the
   // `signals` prop the parent page passes in. The parent's own signal set is
@@ -3788,7 +5673,10 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
       return true;
     });
     let s = buildSignals(base)
-      .filter(sig=>sig.cSuiteBuys>=1||sig.insiderCount>=2||sig.netValue>=100_000||sig.isPolitical)
+      .filter(sig=>{
+        if (sig.direction === 'sell') return sig.sellValue >= 50_000;
+        return sig.cSuiteBuys>=1||sig.insiderCount>=2||sig.netValue>=100_000||sig.isPolitical;
+      })
       .filter(sig=>sig.conviction>=strengthThreshold);
     if (minValue>0) s = s.filter(sig=>Math.abs(sig.netValue)>=minValue);
     if (search) { const q=search.toLowerCase(); s=s.filter(sig=>sig.ticker.toLowerCase().includes(q)||sig.company.toLowerCase().includes(q)); }
@@ -3800,24 +5688,57 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
     });
   },[filings,strengthThreshold,srcF,secF,daysBack,minValue,search,sigSort,sigDir]);
 
-  // Insiders
+  // ── Insiders: shared cache + server-side search ──────────────────────────
+  // Base load (no name filter) uses the shared module-level cache so
+  // navigating between Insights tile → drawer → back doesn't re-query.
+  // Stale-while-revalidate: filter changes keep showing previous rows with
+  // a loading indicator instead of wiping to a skeleton.
+  const [lbLoading, setLbLoading] = useState(false);
+  // Server-side search rows — when the user types a name, we query the
+  // server with the name in the WHERE clause so insiders outside the
+  // top 500 are findable. Null = not searching, use base rows.
+  const [lbSearchRows, setLbSearchRows] = useState(null);
+  // Debounced search term for server-side insider search
+  const [lbSearchTerm, setLbSearchTerm] = useState('');
   useEffect(()=>{
-    if (type!=='insiders') return;
-    queryNeon(LEADERBOARD_QUERY(200, null, 2, lbYearsBack, lbSource))
-      .then(r=>setLbRows(processLeaderboardRows(r)))
-      .catch(()=>setLbRows([]));
-  },[type,lbYearsBack,lbSource]);
+    if (activeTab!=='insiders') return;
+    const t = setTimeout(()=>setLbSearchTerm(search), 300);
+    return ()=>clearTimeout(t);
+  },[search, activeTab]);
+
+  // Base load — shared cache, stale-while-revalidate
+  useEffect(()=>{
+    if (activeTab!=='insiders') return;
+    setLbLoading(true);
+    fetchLeaderboard(500, 2, lbYearsBack, lbSource)
+      .then(r=>{setLbRows(r);setLbLoading(false);})
+      .catch(()=>{setLbRows(prev=>prev||[]);setLbLoading(false);});
+  },[activeTab,lbYearsBack,lbSource]);
+
+  // Server-side name search — fires when debounced search term changes.
+  // Searches the full database, not just the cached top 500.
+  useEffect(()=>{
+    if (activeTab!=='insiders') return;
+    if (!lbSearchTerm) { setLbSearchRows(null); return; }
+    setLbLoading(true);
+    fetchLeaderboard(500, 1, lbYearsBack, lbSource, lbSearchTerm)
+      .then(r=>{setLbSearchRows(r);setLbLoading(false);})
+      .catch(()=>{setLbSearchRows([]);setLbLoading(false);});
+  },[lbSearchTerm, lbYearsBack, lbSource, activeTab]);
 
   const sortedLb = useMemo(()=>{
-    if (!lbRows) return [];
-    let rows = lbRows;
-    if (search) { const q=search.toLowerCase(); rows=rows.filter(r=>r.insider_name.toLowerCase().includes(q)); }
+    // Use server search results when searching, base rows otherwise
+    const source = lbSearchTerm ? lbSearchRows : lbRows;
+    if (!source) return [];
+    let rows = source;
+    // Client-side name filter for instant feedback while debounce is pending
+    if (search && !lbSearchTerm) { const q=search.toLowerCase(); rows=rows.filter(r=>r.insider_name.toLowerCase().includes(q)); }
     if (lbMinValue>0) { rows=rows.filter(r=>(r.bought_value||0)>=lbMinValue); }
     return [...rows].sort((a,b)=>{
       const av=a[lbSort]??-Infinity, bv=b[lbSort]??-Infinity;
       return lbDir>0?av-bv:bv-av;
     });
-  },[lbRows,lbSort,lbDir,search,lbMinValue]);
+  },[lbRows,lbSearchRows,lbSearchTerm,lbSort,lbDir,search,lbMinValue]);
   function lbOnSort(col){ if(lbSort===col)setLbDir(d=>-d); else{setLbSort(col);setLbDir(-1);} }
 
   function resetDrawerFilters(){setMinStr(1);setDaysBack(30);setMinValue(0);setSrcF('');setSecF('');setSearch('');}
@@ -3835,14 +5756,14 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   useEffect(()=>{
     if (detail) return;
     if (initialDetail) { setDetail(initialDetail); return; }
-    if (type==='signals' && filteredSignals.length) setDetail({type:'signal',...filteredSignals[0]});
-  },[type, filteredSignals.length > 0, initialDetail]);
+    if (activeTab==='signals' && filteredSignals.length) setDetail({type:'signal',...filteredSignals[0]});
+  },[activeTab, filteredSignals.length > 0, initialDetail]);
 
   useEffect(()=>{
     if (detail) return;
     if (initialDetail) return; // already handled above
-    if (type==='insiders' && sortedLb.length) setDetail({type:'trader',name:sortedLb[0].insider_name,title:sortedLb[0].insider_title});
-  },[type, sortedLb.length > 0, initialDetail]);
+    if (activeTab==='insiders' && sortedLb.length) setDetail({type:'trader',name:sortedLb[0].insider_name,title:sortedLb[0].insider_title});
+  },[activeTab, sortedLb.length > 0, initialDetail]);
 
   // Scroll the left list to whatever's selected when the drawer first opens —
   // without this, expanding from a quick-glance preview lands the user on a
@@ -3868,22 +5789,25 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
     <div className="drawer-overlay" onClick={e=>{ if(e.target.classList.contains('drawer-overlay')) onClose(); }}>
       <div className="drawer">
 
-        {/* ── Drawer header ─────────────────────────────────────────── */}
-        <div className="drawer__hdr drawer__hdr--stacked">
-          {/* Row 1 — identity + close only. Filters (including search) live
-              together in row 2 as one real toolbar, not split across two
-              places. */}
-          <div className="drawer__hdr-row1">
-            <span className="drawer__title">
-              {type==='signals' ? 'Insider Signals' : 'Top Insiders'}
-            </span>
-            <button className="modal-close" onClick={onClose} title="Close (Esc)"><IconClose style={{width:12,height:12}}/></button>
+        {/* Branded top bar — matches topnav height so the page behind remains visible */}
+        <div className="drawer__topbar">
+          <div className="drawer__topbar-logo">
+            <div className="topnav__mark" style={{width:22,height:22}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="topnav__wordmark" style={{fontSize:14}}>Seli</span>
           </div>
+          <div className="drawer__tabs">
+            {[['signals','Signals'],['insiders','Insiders'],['data','Raw Data']].map(([k,l])=>(
+              <button key={k}
+                className={`drawer__tab${activeTab===k?' drawer__tab--active':''}`}
+                onClick={()=>switchTab(k)}>{l}</button>
+            ))}
+          </div>
+          {!pro&&<button className="drawer__topbar-cta" onClick={()=>{ if(window.__seliUpgrade) window.__seliUpgrade('pro_direct'); }}>Go Pro</button>}
+          <button className="modal-close" onClick={onClose} title="Close (Esc)" style={{marginLeft:pro?'auto':0}}><IconClose style={{width:12,height:12}}/></button>
+        </div>
 
-          {/* Row 2 — one unified toolbar. Search is a filter like any other,
-              so it lives in the same row with the same divider treatment
-              instead of floating alone above everything else. */}
-          {type==='signals'&&(
+        {/* Filter toolbar — changes per active tab */}
+        {activeTab==='signals'&&(
             <div className="drawer__toolbar">
               <div className="drawer__filter-group drawer__filter-group--search">
                 <span className="drawer__filter-label">Search</span>
@@ -3914,10 +5838,16 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Window</span>
                 <div className="dash-tile-pills" style={{gap:2}}>
-                  {[{v:3,l:'3d'},{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
+                  {[{v:3,l:'3d'},{v:7,l:'7d'}].map(o=>(
                     <button key={o.l} className={`dash-tile-pill${daysBack===o.v?' dash-tile-pill--active':''}`}
                       onClick={()=>{setDaysBack(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
                   ))}
+                  {pro ? [{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
+                    <button key={o.l} className={`dash-tile-pill${daysBack===o.v?' dash-tile-pill--active':''}`}
+                      onClick={()=>{setDaysBack(o.v);ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
+                  )) : (
+                    <button className="dash-tile-pill dash-tile-pill--locked" onClick={()=>{}}>More <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>
+                  )}
                 </div>
               </div>
 
@@ -3960,7 +5890,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               )}
             </div>
           )}
-          {type==='insiders'&&(
+          {activeTab==='insiders'&&(
             <div className="drawer__toolbar">
               <div className="drawer__filter-group drawer__filter-group--search">
                 <span className="drawer__filter-label">Search</span>
@@ -3974,27 +5904,33 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Source</span>
                 <div className="dash-tile-pills" style={{gap:2}}>
-                  {[[null,'All'],['corporate','Corporate'],['congress','Congress']].map(([v,l])=>(
-                    <button key={l} className={`dash-tile-pill${lbSource===v?' dash-tile-pill--active':''}`}
-                      onClick={()=>setLbSource(v)}>{l}</button>
-                  ))}
+                  {[[null,'All'],['corporate','Corporate'],['congress','Congress']].map(([v,l])=>{
+                    if (!pro && v !== null) return null;
+                    return (
+                      <button key={l} className={`dash-tile-pill${lbSource===v?' dash-tile-pill--active':''}`}
+                        onClick={()=>setLbSource(v)}>{l}</button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="drawer__toolbar-divider"/>
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Window</span>
                 <div className="dash-tile-pills" style={{gap:2}}>
-                  {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>(
-                    <button key={l} className={`dash-tile-pill${lbYearsBack===v?' dash-tile-pill--active':''}`}
-                      onClick={()=>setLbYearsBack(v)}>{l}</button>
-                  ))}
+                  {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>{
+                    if (!pro && v !== null) return null;
+                    return (
+                      <button key={l} className={`dash-tile-pill${lbYearsBack===v?' dash-tile-pill--active':''}`}
+                        onClick={()=>setLbYearsBack(v)}>{l}</button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="drawer__toolbar-divider"/>
               <div className="drawer__filter-group">
                 <span className="drawer__filter-label">Sort by</span>
                 <div className="dash-tile-pills" style={{gap:2}}>
-                  {[['hit_rate','Hit rate'],['om_buys','Buys'],['bought_value','Bought'],['avg_return','Biggest return']].map(([k,l])=>(
+                  {[['proxy_score','Score'],['om_buys','Buys'],['bought_value','Bought'],['avg_return','Biggest return']].map(([k,l])=>(
                     <button key={k} className={`dash-tile-pill${lbSort===k?' dash-tile-pill--active':''}`}
                       onClick={()=>lbOnSort(k)}>{l}{lbSort===k&&(lbDir<0?'↓':'↑')}</button>
                   ))}
@@ -4015,19 +5951,18 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               </div>
             </div>
           )}
-        </div>
 
         {/* ── Two-pane body ──────────────────────────────────────────── */}
         <div className="drawer__body">
 
           {/* LEFT: list */}
           <div className="drawer__list" ref={listRef}>
-            {type==='signals'&&(
+            {activeTab==='signals'&&(
               <>
                 <div className="drawer__list-hdr">
                   <span>{filteredSignals.length} signals{filingsLoading&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>loading more…</span>}</span>
                   <div className="dash-sig-sort" style={{marginLeft:'auto',gap:2}}>
-                    {[['conviction','Conv'],['netValue','Net $'],['cSuiteBuys','Exec'],['lastTradeDate','Recent']].map(([k,l])=>(
+                    {[['conviction','Conv'],['netValue','Net $'],['buys','Moves'],['lastTradeDate','Recent']].map(([k,l])=>(
                       <button key={k} className={`dash-sort-btn${sigSort===k?' dash-sort-btn--active':''}`} onClick={()=>sigOnSort(k)}>
                         {l}{sigSort===k&&(sigDir<0?'↓':'↑')}
                       </button>
@@ -4037,8 +5972,8 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                 {filteredSignals.length===0
                   ? <div className="drawer__empty">No signals match your filters</div>
                   : filteredSignals.map(s=>{
-                    const isActive = detail?.ticker===s.ticker && detail?.type==='signal';
-                    const convPct  = Math.min((s.conviction/15)*100,100);
+                    const isActive = detail?.ticker===s.ticker && detail?.activeTab==='signal';
+                    const convPct  = Math.min((s.conviction/100)*100,100);
                     const tier     = tierFromPct(convPct, appetite);
                     return (
                       <div key={s.ticker}
@@ -4046,15 +5981,15 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                         className={`drawer__list-row drawer__list-row--${tier}${isActive?' drawer__list-row--active':''}`}
                         onClick={()=>{ setDetail({type:'signal',...s}); setDetailStack([]); }}>
                         <div className="drawer__list-row__main">
-                          <span className="ticker" style={{fontSize:12,fontWeight:700}}>{s.ticker}</span>
-                          {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:11}}>{s.cSuiteBuys}×</span>}
-                          {s.isPolitical&&<span className="badge badge--src-congress" style={{fontSize:11}}>C</span>}
-                          <span className="td-muted" style={{fontSize:11,flex:1}}>{s.company}</span>
+                          <span className="ticker" style={{fontSize:'0.75rem',fontWeight:700}}>{s.ticker}</span>
+                          {s.cSuiteBuys>0&&<span className="csuite-badge" style={{fontSize:'0.6875rem'}}>{s.cSuiteBuys}×</span>}
+                          {s.isPolitical&&<span className="badge badge--src-congress" style={{fontSize:'0.6875rem'}}>C</span>}
+                          <span className="td-muted" style={{fontSize:'0.6875rem',flex:1}}>{s.company}</span>
                           <span className={`td-mono drawer__list-row__val ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
                         </div>
                         <div className="drawer__list-row__sub">
                           <ConvictionBar score={s.conviction}/>
-                          <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.ago(s.lastTradeDate)}</span>
+                          <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{fmt.ago(s.lastTradeDate)}</span>
                         </div>
                       </div>
                     );
@@ -4063,40 +5998,32 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
               </>
             )}
 
-            {type==='insiders'&&(
+            {activeTab==='insiders'&&(
               <>
                 <div className="drawer__list-hdr">
-                  <span>{sortedLb.length} insiders</span>
+                  <span>{lbRows===null&&!lbSearchRows?'':''+sortedLb.length+' insiders'}{lbLoading&&sortedLb.length>0&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
                 </div>
-                {lbRows===null
-                  ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
-                  : sortedLb.length===0
-                    ? <div className="drawer__empty">No insiders match</div>
-                    : sortedLb.map((r,i)=>{
-                      const isActive = detail?.name===r.insider_name && detail?.type==='trader';
+                {lbRows===null&&!lbSearchRows
+                  ? <SkeletonRows count={12}/>
+                  : lbLoading&&sortedLb.length===0
+                    ? <SkeletonRows count={8}/>
+                    : sortedLb.length===0
+                      ? <div className="drawer__empty">No insiders match</div>
+                      : sortedLb.map((r,i)=>{
+                      const isActive = detail?.type==='trader' && detail?.name===r.insider_name;
                       return (
                         <div key={i}
                           data-row-key={r.insider_name}
                           className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
                           onClick={()=>{ setDetail({type:'trader',name:r.insider_name,title:r.insider_title}); setDetailStack([]); }}>
                           <div className="drawer__list-row__main">
-                            <span className="td-muted" style={{fontSize:11,width:18}}>{i+1}</span>
-                            <span style={{fontSize:12,fontWeight:500,flex:1}}>{r.insider_name}</span>
-                            {r.hit_rate!=null
-                              ? <span
-                                  className={`td-mono ${r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}`}
-                                  style={{fontSize:13,fontWeight:700,cursor:r.avg_spy_return!=null?'help':'default'}}
-                                  title={r.avg_spy_return!=null
-                                    ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
-                                    : undefined}
-                                >{r.hit_rate}%</span>
-                              : <span className="td-muted" style={{fontSize:11,fontWeight:500,cursor:'help'}}
-                                  title="Congressional filings disclose only a dollar range — no share count or purchase price — so a price-based hit rate can't be computed. Ranked by buy activity instead.">n/a</span>
-                            }
+                            <span className="td-muted" style={{fontSize:'0.6875rem',width:18}}>{i+1}</span>
+                            <span style={{fontSize:'0.75rem',fontWeight:500,flex:1}}>{r.insider_name}</span>
+                            <span className="td-mono" style={{fontSize:13,fontWeight:700}}>{r.proxy_score}</span>
                           </div>
                           <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:11}}>{r.insider_title||'Unknown'}</span>
-                            <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'Unknown'}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
                           </div>
                         </div>
                       );
@@ -4110,19 +6037,21 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
           <div className="drawer__detail">
             {!detail
               ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
-                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {type==='signals'?'signal':'trader'} to explore</div>
+                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
+                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {activeTab==='signals'?'signal':'trader'} to explore</div>
                 </div>
-              : <DetailPanel
-                  detail={detail}
-                  filings={filings}
-                  onClose={()=>setDetail(null)}
-                  onNavigate={(d)=>navigate(d)}
-                  onBack={goBack}
-                  canGoBack={detailStack.length>0}
-                  watchlist={watchlist}
-                  inline={true}
-                />
+              : activeTab==='insiders' && detail.type==='trader'
+                ? <InsiderProfileDrawer name={detail.name} title={detail.title} filings={filings} watchlist={watchlist} lbRows={lbRows||[]} onOpenDetail={(d)=>navigate(d)}/>
+                : <DetailPanel
+                    detail={detail}
+                    filings={filings}
+                    onClose={()=>setDetail(null)}
+                    onNavigate={(d)=>navigate(d)}
+                    onBack={goBack}
+                    canGoBack={detailStack.length>0}
+                    watchlist={watchlist}
+                    inline={true}
+                  />
             }
           </div>
 
@@ -4161,9 +6090,9 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <span>Portfolio</span>
       {port && (
         <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
-          {lastRefreshed && <span className="td-muted" style={{fontWeight:400,fontSize:10}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
+          {lastRefreshed && <span className="td-muted" style={{fontWeight:400,fontSize:'0.625rem'}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
           <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} title="Refresh positions" style={{width:22,height:22}}>
-            <span style={{display:'inline-block',fontSize:12,animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
+            <span style={{display:'inline-block',fontSize:'0.75rem',animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
           </button>
         </div>
       )}
@@ -4175,7 +6104,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
         <div className="port-mini-tile__body">
-          <span className="td-muted" style={{fontSize:11}}>
+          <span className="td-muted" style={{fontSize:'0.6875rem'}}>
             Pro feature — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=billing')}>upgrade</button> to see insider activity on your real holdings.
           </span>
         </div>
@@ -4188,7 +6117,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
         <div className="port-mini-tile__body" style={{flexDirection:'row',alignItems:'center'}}>
-          <span className="td-muted" style={{fontSize:11,color:'var(--red-600)'}}>Couldn't load your positions.</span>
+          <span className="td-muted" style={{fontSize:'0.6875rem'}}>{connected ? 'No positions available from your broker yet.' : 'Couldn\'t load your positions.'}</span>
           <button className="btn btn--ghost btn--sm" style={{marginLeft:'auto'}} onClick={refresh} disabled={refreshing}>{refreshing?'Retrying…':'Retry'}</button>
         </div>
       </div>
@@ -4200,7 +6129,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
       <div className="port-mini-tile">
         <div className="ins-sig-panel__hdr"><span className="ins-sig-panel__title">Portfolio</span></div>
         <div className="port-mini-tile__body">
-          <span className="td-muted" style={{fontSize:11}}>
+          <span className="td-muted" style={{fontSize:'0.6875rem'}}>
             No brokerage connected — <button className="port-inline-link" onClick={()=>navigateTo('/settings?section=brokers')}>Link your account</button> to see your real holdings and get notified when insiders trade your stocks.
           </span>
         </div>
@@ -4238,7 +6167,7 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
             {perf===undefined ? (
               <div style={{display:'flex',justifyContent:'center',padding:'0.5rem'}}><Spinner size={12}/></div>
             ) : perf===null || perf.length<2 ? (
-              <p className="td-muted" style={{fontSize:10,textAlign:'center',padding:'0.4rem 0'}}>Performance history will appear here once available.</p>
+              <p className="td-muted" style={{fontSize:'0.625rem',textAlign:'center',padding:'0.4rem 0'}}>Performance history will appear here once available.</p>
             ) : (
               <PortfolioChartWithRanges points={perf} compact onExplore={onExpand}/>
             )}
@@ -4248,17 +6177,17 @@ function InsightsPortfolioBar({ filings, cutoff, days, onOpenDetail, onExpand, p
               pushing Top insiders (below) out of view */}
           <div className="port-mini-tile__list">
             {pos.length===0
-              ? <p className="td-muted" style={{fontSize:11,padding:'8px 0'}}>No open positions in your connected account.</p>
+              ? <p className="td-muted" style={{fontSize:'0.6875rem',padding:'8px 0'}}>No open positions in your connected account.</p>
               : [...pos].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>{
                   const hasActivity=activeSignalTickers.has(p.symbol);
                   const hasPnl = p.openPnl!=null;
                   return (
                     <div key={i} className="port-mini-row" onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:p.company})}>
-                      <span className="ticker" style={{fontSize:12,minWidth:50}}>{p.symbol}</span>
+                      <span className="ticker" style={{fontSize:'0.75rem',minWidth:50}}>{p.symbol}</span>
                       {hasActivity&&<span className="ins-port-chip__signal-badge" style={{fontSize:'0.5rem'}}>activity</span>}
-                      <span className="td-muted" style={{fontSize:10,flex:1,textAlign:'right'}}>{fmt.money(p.marketValue)}</span>
+                      <span className="td-muted" style={{fontSize:'0.625rem',flex:1,textAlign:'right'}}>{fmt.money(p.marketValue)}</span>
                       {hasPnl && (
-                        <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:10,fontFamily:'var(--font-mono)',minWidth:70,textAlign:'right'}}>
+                        <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:'0.625rem',fontFamily:'var(--font-mono)',minWidth:70,textAlign:'right'}}>
                           {p.openPnl>=0?'+':''}{p.openPnlPct.toFixed(1)}%
                         </span>
                       )}
@@ -4334,8 +6263,8 @@ function PortfolioPerformanceChart({ points, onClick, compact=true }) {
   const hover = hoverIdx != null ? { point: points[hoverIdx], coord: coords[hoverIdx] } : null;
 
   return (
-    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none"
-      style={{display:'block',cursor:onClick?'pointer':'default'}}
+    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet"
+      style={{display:'block',cursor:onClick?'pointer':'default',maxHeight:compact?160:240}}
       onClick={onClick} role={onClick?'button':undefined} aria-label={onClick?'Open portfolio explorer':undefined}
       onMouseMove={handleMove} onMouseLeave={()=>setHoverIdx(null)}>
       {yTicks.map((v,i)=>{
@@ -4362,15 +6291,12 @@ function PortfolioPerformanceChart({ points, onClick, compact=true }) {
           <line x1={hover.coord.x} y1={PAD_T} x2={hover.coord.x} y2={H-PAD_B}
             stroke="var(--text-3)" strokeWidth="1" strokeDasharray="2,2"/>
           <circle cx={hover.coord.x} cy={hover.coord.y} r="3.5" fill={color} stroke="var(--surface)" strokeWidth="1.5"/>
-          {/* Tooltip box — flipped to the left side of the guide line past
-              the chart's own midpoint, so it never renders partially off
-              the right edge for points late in the series. */}
-          {(() => {
-            const boxW = 92, boxH = 30;
-            const flip = hover.coord.x > PAD_L + plotW/2;
-            const boxX = flip ? hover.coord.x - boxW - 8 : hover.coord.x + 8;
-            const boxY = Math.max(PAD_T, Math.min(H-PAD_B-boxH, hover.coord.y - boxH/2));
-            return (
+          {/* Tooltip box — flipped past chart midpoint so it never clips right edge */}
+          {(()=>{
+            const boxW=92,boxH=30,flip=hover.coord.x>PAD_L+plotW/2;
+            const boxX=flip?hover.coord.x-boxW-8:hover.coord.x+8;
+            const boxY=Math.max(PAD_T,Math.min(H-PAD_B-boxH,hover.coord.y-boxH/2));
+            return(
               <g>
                 <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="4"
                   fill="var(--surface)" stroke="var(--border-md)" strokeWidth="0.5"/>
@@ -4392,26 +6318,23 @@ function PortfolioPerformanceChart({ points, onClick, compact=true }) {
 // points client-side rather than re-fetching per range — same pattern as
 // Insights' own day-window selector.
 const PORTFOLIO_CHART_RANGES = [
-  { key:'1w',  label:'1W',  days:7 },
   { key:'1m',  label:'1M',  days:30 },
-  { key:'3m',  label:'3M',  days:90 },
-  { key:'1y',  label:'1Y',  days:365 },
   { key:'all', label:'All', days:null },
 ];
 function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
-  const [range, setRange] = useState('1m');
+  const [range, setRange] = useState('all');
   const { display, fellBack } = useMemo(() => {
     const r = PORTFOLIO_CHART_RANGES.find(r=>r.key===range);
     if (!r || r.days==null) return { display: points, fellBack: false };
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-r.days);
-    const iso = cutoff.toISOString().split('T')[0];
-    const inRange = points.filter(p=>p.date>=iso);
-    // Fewer than 2 points for the selected range isn't really "no data" —
-    // it just means the position or the available history doesn't go back
-    // that far yet. Show whatever data does exist (the life of the
-    // position) rather than an empty state, but say so explicitly instead
-    // of silently displaying something different from what was selected.
-    return inRange.length>=2 ? { display: inRange, fellBack: false } : { display: points, fellBack: points.length>=2 };
+    const iso = cutoff.toISOString().split('T')[0]; // YYYY-MM-DD
+    // Normalize each point's date to YYYY-MM-DD before comparing —
+    // API may return full ISO timestamps or already-trimmed date strings.
+    const inRange = points.filter(p=>{
+      const d = p.date ? String(p.date).slice(0,10) : '';
+      return d >= iso;
+    });
+    return inRange.length>=3 ? { display: inRange, fellBack: false } : { display: points, fellBack: points.length>=3 };
   }, [points, range]);
 
   return (
@@ -4425,9 +6348,9 @@ function PortfolioChartWithRanges({ points, compact=false, onExplore }) {
           </button>
         ))}
       </div>
-      {display.length<2 ? (
+      {display.length<3 ? (
         <p className="td-muted" style={{fontSize:compact?10:11,textAlign:'center',padding:compact?'0.5rem 0':'1rem 0'}}>
-          Not enough data yet.
+          Not enough data yet — portfolio history builds over time.
         </p>
       ) : (
         <>
@@ -4519,14 +6442,14 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
               {[['positions','Positions'],['activity','Insider activity'],['news','News']].map(([id,l])=>(
                 <button key={id}
                   className={`dash-tile-pill${tab===id?' dash-tile-pill--active':''}`}
-                  style={{fontSize:11}} onClick={()=>setTab(id)}>{l}</button>
+                  style={{fontSize:'0.6875rem'}} onClick={()=>setTab(id)}>{l}</button>
               ))}
             </div>
 
             {/* POSITIONS TAB */}
             {tab==='positions' && (
               !port
-                ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
+                ? <SkeletonRows count={6}/>
                 : pos.length===0
                   ? <div className="drawer__empty">No open positions.<br/>Connect Alpaca to track your holdings here.</div>
                   : [...pos]
@@ -4544,9 +6467,9 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
                           onClick={()=>{ setSelected(p.symbol); setDetail({type:'ticker',ticker:p.symbol,company:''}); setDetailStack([]); }}>
                           <div className="drawer__list-row__main">
                             <span className="ticker" style={{fontSize:13,fontWeight:700}}>{p.symbol}</span>
-                            {hasActivity&&<span className="reversal-badge" style={{fontSize:11}}>insider activity</span>}
-                            <span className="td-muted" style={{fontSize:11,flex:1}}>{qty%1?qty.toFixed(2):qty} sh · {fmt.money(mv)}</span>
-                            {upl!=null && <span className={`td-mono ${upl>=0?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:700}}>{upl>=0?'+':''}{fmt.money(upl)}</span>}
+                            {hasActivity&&<span className="reversal-badge" style={{fontSize:'0.6875rem'}}>insider activity</span>}
+                            <span className="td-muted" style={{fontSize:'0.6875rem',flex:1}}>{qty%1?qty.toFixed(2):qty} sh · {fmt.money(mv)}</span>
+                            {upl!=null && <span className={`td-mono ${upl>=0?'val-buy':'val-sell'}`} style={{fontSize:'0.75rem',fontWeight:700}}>{upl>=0?'+':''}{fmt.money(upl)}</span>}
                           </div>
                           {upl!=null && (
                             <div className="port-plbar-track">
@@ -4567,20 +6490,20 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
                   : Object.entries(activityByTicker).map(([ticker,trades])=>(
                     <div key={ticker}>
                       <div className="port-activity-ticker-hdr">
-                        <span className="ticker" style={{fontSize:12}}>{ticker}</span>
-                        <span className="td-muted" style={{fontSize:11,marginLeft:6}}>{trades.length} trade{trades.length!==1?'s':''}</span>
+                        <span className="ticker" style={{fontSize:'0.75rem'}}>{ticker}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:6}}>{trades.length} trade{trades.length!==1?'s':''}</span>
                       </div>
                       {trades.map((f,i)=>(
                         <div key={i} className="drawer__list-row"
                           onClick={()=>{ setSelected(ticker); setDetail({type:'ticker',ticker,company:''}); setDetailStack([]); setTab('positions'); }}>
                           <div className="drawer__list-row__main">
                             <Badge type={f.transactionType==='buy'?'buy':'sell'}>{f.transactionType==='buy'?<IconBuyTri style={{width:8,height:8}}/>:<IconSellTri style={{width:8,height:8}}/>}</Badge>
-                            <span style={{fontSize:11,fontWeight:500,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName}</span>
-                            <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:12,fontWeight:600}}>{fmt.money(f.value)}</span>
+                            <span style={{fontSize:'0.6875rem',fontWeight:500,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.insiderName}</span>
+                            <span className={`td-mono ${f.transactionType==='buy'?'val-buy':'val-sell'}`} style={{fontSize:'0.75rem',fontWeight:600}}>{fmt.money(f.value)}</span>
                           </div>
                           <div className="drawer__list-row__sub">
-                            <span className="td-muted" style={{fontSize:11}}>{f.title||f.relationship||'Unknown'}</span>
-                            <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem'}}>{f.title||f.relationship||'Unknown'}</span>
+                            <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
                           </div>
                         </div>
                       ))}
@@ -4603,7 +6526,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
               {perf===undefined ? (
                 <div style={{padding:'0.75rem',display:'flex',justifyContent:'center'}}><Spinner size={14}/></div>
               ) : perf===null || perf.length<2 ? (
-                <p className="td-muted" style={{fontSize:11,padding:'0.6rem 1rem'}}>
+                <p className="td-muted" style={{fontSize:'0.6875rem',padding:'0.6rem 1rem'}}>
                   Performance history will appear here once enough data has been collected.
                 </p>
               ) : (
@@ -4612,7 +6535,7 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
             </div>
             {!detail
               ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
+                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
                   <div style={{fontSize:13,color:'var(--text-3)'}}>Select a position to see insider trades</div>
                 </div>
               : <DetailPanel
@@ -4643,20 +6566,23 @@ function PortfolioDrawer({ filings, cutoff, days, onClose, watchlist, pro }) {
 // Active insiders — who has been most active in the selected window
 
 // ─── Leaderboard sidebar ────────────────────────────────────────────────────────
-function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
+function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
-  const [yearsBack, setYearsBack] = useState(null); // null = all-time, matches the previous fixed default
+  const [yearsBack, setYearsBack] = useState(2); // 2yr default — fast enough for sidebar preview
   const [source, setSource] = useState(null); // null='all' | 'corporate' | 'congress'
   const [sort, setSort] = useState('proxy_score');
   const [dir, setDir] = useState(-1);
 
+  // Shared cache: request the full 500 so the cache is warm when the user
+  // opens the full Insights tile or InsightsDrawer — the sidebar just
+  // slices to 20 for display but populates the same cache entry.
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) { setError('Not configured'); return; }
-    setRows(null); setError(null);
-    queryNeon(LEADERBOARD_QUERY(20, null, 5, yearsBack, source))
-      .then(r=>setRows(processLeaderboardRows(r)))
-      .catch(e=>setError(e.message||'Failed to load'));
+    setError(null);
+    fetchLeaderboard(500, 5, yearsBack, source)
+      .then(r=>setRows(r))
+      .catch(e=>{setError(e.message||'Failed to load');setRows(prev=>prev||[]);});
   },[yearsBack,source]);
 
   const sorted = useMemo(()=>{
@@ -4664,12 +6590,15 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
     return [...rows].sort((a,b)=>{
       const av=a[sort]??-Infinity, bv=b[sort]??-Infinity;
       return dir>0?av-bv:bv-av;
-    });
+    }).slice(0, 20); // sidebar preview — only show top 20
   },[rows,sort,dir]);
   function onSortClick(col){ if(sort===col)setDir(d=>-d); else{setSort(col);setDir(-1);} }
+  const isMobile = useIsMobile();
+  const [expandedKey, setExpandedKey] = useState(null);
 
   return (
     <div className="ins-lb-list-wrap">
+      {pro && (
       <div className="ins-lb-pill-row">
         <span className="ins-lb-pill-row__label">Window</span>
         {[[1,'1yr'],[2,'2yr'],[5,'5yr'],[null,'All']].map(([v,l])=>(
@@ -4682,44 +6611,62 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist }) {
             onClick={()=>setSource(v)}>{l}</button>
         ))}
       </div>
+      )}
       <div className="ins-lb-col-hdr">
         <span className="ins-lb-col-hdr__spacer"/>
         <span className="ins-lb-col-hdr__name">Insider</span>
         <button className={`ins-lb-col-hdr__sort${sort==='om_buys'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('om_buys')}>Buys{sort==='om_buys'&&(dir<0?' ↓':' ↑')}</button>
-        <button className={`ins-lb-col-hdr__sort${sort==='hit_rate'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('hit_rate')}>Hit rate{sort==='hit_rate'&&(dir<0?' ↓':' ↑')}</button>
+        <button className={`ins-lb-col-hdr__sort${sort==='proxy_score'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('proxy_score')}>Score{sort==='proxy_score'&&(dir<0?' ↓':' ↑')}</button>
       </div>
-      {error?<div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
-      :rows===null?<div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
+      {error?(
+        error.includes('access') ? (
+          <div className="ins-empty" style={{flexDirection:'column',gap:8,padding:'20px 12px',textAlign:'center'}}>
+            <div style={{fontSize:12,color:'var(--text-2)'}}>Insider rankings are a Pro feature</div>
+            <button className="wl-upsell__cta" style={{fontSize:11,padding:'6px 16px'}} onClick={()=>{ if(window.__seliUpgrade) window.__seliUpgrade('pro_direct'); }}>
+              Upgrade to Pro →
+            </button>
+          </div>
+        ) : <div className="ins-empty"><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{error}</div>
+      )
+      :rows===null?<SkeletonRows count={8}/>
       :rows.length===0?<div className="ins-empty">Not enough data yet</div>
       :<div className="ins-lb-list">
-        {sorted.slice(0,15).map((r,i)=>(
-          <div key={i} className="ins-lb-card" onClick={()=>onOpenDetail&&onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title})}>
+        {sorted.slice(0, expandedHome ? 30 : 15).map((r,i)=>{
+          const isExpanded = isMobile && expandedKey===r.insider_name;
+          return (
+          <div key={i} className={`ins-lb-card${isExpanded?' ins-lb-card--expanded':''}`}
+            onClick={()=>{
+              if (isMobile) { setExpandedKey(k=>k===r.insider_name?null:r.insider_name); return; }
+              onOpenDetail&&onOpenDetail({type:'trader',name:r.insider_name,title:r.insider_title});
+            }}>
             <div className="ins-lb-card__rank">{i+1}</div>
             <div className="ins-lb-card__body">
               <div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>
-              <div className="td-muted" style={{fontSize:11}}>{r.insider_title||'Unknown'}</div>
+              <div className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'Unknown'}</div>
               <div className="ins-lb-card__meta">
                 <Badge type={`rel-${r.relationship||'weak'}`}>{r.relationship==='strong'?'C-Suite':r.relationship==='medium'?'Officer':'Dir'}</Badge>
-                <span className="td-muted" style={{fontSize:11}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
+                <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.om_buys} buys · {fmt.money(r.bought_value)}</span>
               </div>
             </div>
             <div className="ins-lb-card__score">
               {watchlist&&<FollowBtn name={r.insider_name} watchlist={watchlist}/>}
-              {r.hit_rate!=null
-                ? <div
-                    className={`ins-lb-card__rate ${r.hit_rate>=70?'val-buy':r.hit_rate>=50?'':'val-sell'}`}
-                    style={{cursor:r.avg_spy_return!=null?'help':'default'}}
-                    title={r.avg_spy_return!=null
-                      ? `Insider avg return: ${r.avg_return>=0?'+':''}${r.avg_return}% · Market (S&P 500) over the same periods: ${r.avg_spy_return>=0?'+':''}${r.avg_spy_return.toFixed(1)}%`
-                      : undefined}
-                  >{r.hit_rate}%</div>
-                : <div className="ins-lb-card__rate td-muted" style={{fontSize:'0.6875rem',cursor:'help'}}
-                    title="Congressional filings disclose only a dollar range — no share count or purchase price — so a price-based hit rate can't be computed. Ranked by buy activity instead.">n/a</div>
-              }
-              <ConvictionBar score={r.proxy_score} max={4}/>
+              <div className="ins-lb-card__rate td-mono" style={{fontWeight:700}}>{r.proxy_score}</div>
+              <ConvictionBar score={r.proxy_score} max={100}/>
             </div>
+            {isMobile && <div className="ins-sig-row__expand-chevron">{isExpanded ? '▴ Less' : '▾ More'}</div>}
+            {isExpanded && (
+              <div className="ins-sig-row__expanded" onClick={e=>e.stopPropagation()}>
+                <div className="ins-sig-row__expanded-grid">
+                  <div><span className="td-muted">Sells</span><br/>{r.om_sells||0}</div>
+                  <div><span className="td-muted">Bought value</span><br/>{fmt.money(r.bought_value)}</div>
+                  {r.hit_rate!=null && <div><span className="td-muted">Hit rate</span><br/><span className={r.hit_rate>=70?'val-buy':r.hit_rate<50?'val-sell':''}>{r.hit_rate}%</span></div>}
+                  {r.avg_return!=null && <div><span className="td-muted">Avg return</span><br/><span className={r.avg_return>=0?'val-buy':'val-sell'}>{r.avg_return>=0?'+':''}{r.avg_return}%</span></div>}
+                </div>
+              </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>}
     </div>
   );
@@ -4760,8 +6707,11 @@ const SEC_TO_ETF_LABEL = {
 // the full per-insider trustScore() pipeline for every insider in the DB isn't
 // practical in one query. This is consistent with the same approximation used
 // for "Related Insiders" on the trader profile.
-function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2, sourceFilter=null) {
+function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2, sourceFilter=null, nameFilter=null) {
   const sectorClause = sectorFilter ? `AND f.sector = '${sectorFilter.replace(/'/g,"''")}'` : '';
+  // Server-side name search — highly selective, so the LATERAL JOINs only
+  // run over the handful of matching rows instead of the full table.
+  const nameClause = nameFilter ? `AND f.insider_name ILIKE '%${nameFilter.replace(/'/g,"''")}%'` : '';
   // Date window is now a real parameter rather than hardcoded — yearsBack=null
   // means no date filter at all (true all-time), used by the unsortable
   // preview tiles (Dashboard, Insights side panel) where "all-time" is the
@@ -4844,6 +6794,7 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
              -- across filings (e.g. "President" vs "President and CEO").
              MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
              MODE() WITHIN GROUP (ORDER BY f.relationship)  AS relationship,
+             BOOL_OR(f.transaction_code LIKE 'CONGRESS%') AS is_congress,
              COUNT(*) FILTER (WHERE f.transaction_type='buy' AND f.is_open_market) AS om_buys,
              COUNT(*) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market) AS om_sells,
              COUNT(*) FILTER (WHERE f.transaction_type='buy') AS total_buys,
@@ -4915,6 +6866,7 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
         ${dateClause}
         ${sectorClause}
         ${sourceClause}
+        ${nameClause}
       GROUP BY f.insider_name
       HAVING COUNT(*) FILTER (WHERE f.transaction_type IN ('buy','sell') AND f.is_open_market) >= ${minTrades}
     ) agg
@@ -4924,6 +6876,51 @@ function LEADERBOARD_QUERY(limit=50, sectorFilter=null, minTrades=5, yearsBack=2
 }
 
 // (processLeaderboardRows now lives in src/lib/scoring.js — imported above.)
+
+// ─── Shared leaderboard cache ────────────────────────────────────────────────
+// Module-level so every component that needs leaderboard data (sidebar preview,
+// Insights tile, InsightsDrawer) shares a single cache instead of independently
+// firing the same expensive LATERAL JOIN query. Keyed by filter combination.
+// The sidebar's LIMIT 20 can slice from a cached LIMIT 500 if it's warm.
+const _lbCache = new Map();
+function lbCacheKey(yearsBack, source) { return `${yearsBack}|${source||'all'}`; }
+
+// Fetch with shared cache — returns processed rows. Callers get the cached
+// promise if an identical request is already in flight, avoiding duplicate
+// concurrent queries for the same filter set.
+function fetchLeaderboard(limit, minTrades, yearsBack, source, nameFilter=null) {
+  // Name-filtered queries are one-off searches, not cached — the result set
+  // is specific to the search string and usually tiny.
+  if (nameFilter) {
+    return queryNeon(LEADERBOARD_QUERY(limit, null, minTrades, yearsBack, source, nameFilter))
+      .then(r => processLeaderboardRows(r));
+  }
+  const key = lbCacheKey(yearsBack, source);
+  const cached = _lbCache.get(key);
+  // Return cached data if we have it AND the cached limit covers what's asked
+  if (cached && cached.limit >= limit && cached.rows) return Promise.resolve(cached.rows);
+  // If an identical or wider request is already in flight, piggyback on it
+  if (cached && cached.promise && cached.limit >= limit) return cached.promise;
+  const promise = queryNeon(LEADERBOARD_QUERY(limit, null, minTrades, yearsBack, source))
+    .then(r => {
+      const rows = processLeaderboardRows(r);
+      _lbCache.set(key, { rows, limit, promise: null });
+      return rows;
+    })
+    .catch(e => {
+      // Don't cache failures — let the next caller retry
+      const entry = _lbCache.get(key);
+      if (entry && entry.promise === promise) _lbCache.delete(key);
+      throw e;
+    });
+  _lbCache.set(key, { rows: null, limit, promise });
+  return promise;
+}
+// Invalidate when filters change to a set we haven't seen
+function invalidateLbCache(yearsBack, source) {
+  const key = lbCacheKey(yearsBack, source);
+  _lbCache.delete(key);
+}
 
 
 // ─── SECTOR MONEY FLOW environment ─────────────────────────────────────────────
@@ -4982,6 +6979,63 @@ async function proxySQL(sql) {
 // thrown error) specifically when no snapshot exists yet, since that's an
 // expected, recoverable state the caller should fall back from — not
 // something to bail out of the whole export over.
+// ── CSV download (per-year files, zipped, in R2) ────────────────────────────
+// The production export path for full-database purchases: downloads a ZIP
+// of one CSV per calendar year — Excel and Numbers both cap out at 1,048,576
+// rows (the old .xls limit both inherited), which this dataset blows past as
+// a single file. The server scopes the data to the PURCHASE DATE, not
+// today, so re-downloads never leak data bought later for free. No NDJSON
+// parsing, no XLSX building, no multi-GB browser heap. The old NDJSON→XLSX
+// pipeline (fetchExportViaSnapshot + downloadFullExport) stays for the Data
+// page's filtered in-app export where the dataset is small enough to build
+// client-side.
+async function downloadCSVFromR2(mode = 'consume', onProgress = null, purchaseId = null) {
+  const r = await fetch(`${cfg.NEON_PROXY_URL}/export/csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
+    body: JSON.stringify({ mode, ...(purchaseId ? { purchaseId } : {}) }),
+  });
+
+  if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
+  if (r.status === 403) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error || 'Full data export requires a one-time purchase.');
+  }
+  if (r.status === 202) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.error || 'Your export is being prepared — try again in a few minutes.');
+  }
+  if (!r.ok) throw new Error(`Export failed (status ${r.status})`);
+
+  // Stream the response into a Blob with progress tracking
+  const contentLength = Number(r.headers.get('Content-Length') || 0);
+  const reader = r.body.getReader();
+  const chunks = [];
+  let received = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (onProgress) {
+      const mb = Math.round(received / 1024 / 1024);
+      const pct = contentLength ? Math.round((received / contentLength) * 100) : 0;
+      onProgress(contentLength ? `${mb} MB (${pct}%)` : `${mb} MB downloaded…`);
+    }
+  }
+
+  const blob = new Blob(chunks, { type: 'application/zip' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `seli_insider_trades_${new Date().toISOString().split('T')[0]}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+  return received;
+}
+
 async function fetchExportViaSnapshot(mode, onProgress) {
   const r = await fetch(`${cfg.NEON_PROXY_URL}/export/snapshot`, {
     method: 'POST',
@@ -5309,7 +7363,7 @@ function FilterPanel({
         <div style={{display:'flex',gap:12}}>
           <label className="fp-check">
             <input type="checkbox" checked={openMkt} onChange={e=>setOpenMkt(e.target.checked)}/>
-            Open market
+            Open market only
           </label>
           <label className="fp-check">
             <input type="checkbox" checked={fromPortfolio} onChange={e=>setFromPortfolio(e.target.checked)}/>
@@ -5334,7 +7388,7 @@ function FilterPanel({
       <div className="ins-filter-group">
         <span className="ins-filter-group__label">Role</span>
         <div className="dash-tile-pills">
-          {[['','All'],['strong','C-Suite'],['medium','Officer'],['weak','Director']].map(([v,l])=>(
+          {[['','All'],['strong','Exec'],['medium','Officer'],['weak','Director']].map(([v,l])=>(
             <button key={v} className={`dash-tile-pill${relF===v?' dash-tile-pill--active':''}`} onClick={()=>setRelF(v)}>{l}</button>
           ))}
         </div>
@@ -5380,7 +7434,7 @@ function FilterPanel({
 // already done — same reasoning InsightsDrawer already uses for its own
 // initialFilters. Runs its own query rather than reading DataPage's state
 // directly, since DataPage may since have unmounted.
-function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers }) {
+function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers, pro, onUpgrade, onSwitchTab }) {
   const f = filterState || {};
   const [search,   setSearch]   = useState(f.search || '');
   const [typeF,    setTypeF]    = useState(f.typeF || '');
@@ -5394,6 +7448,12 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [dateTo,   setDateTo]   = useState(f.dateTo || '');
   const [sortKey,  setSortKey]  = useState(f.sortKey || 'transaction_date');
   const [sortDir,  setSortDir]  = useState(f.sortDir ?? -1);
+
+  function resetFilters() {
+    setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
+    setOpenMkt(false); setFromPortfolio(false);
+    setDPreset(7); setDateFrom(''); setDateTo('');
+  }
 
   const [rows,    setRows]    = useState(null);
   const [sectors, setSectors] = useState([]);
@@ -5411,7 +7471,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
     const ef=dateFrom||(dPreset!=null?(()=>{const d=new Date();d.setDate(d.getDate()-dPreset);return d.toISOString().split('T')[0];})():null);
     const et=dateTo||new Date().toISOString().split('T')[0];
     if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
-    c.push(`COALESCE(transaction_date,filing_date)>='${pro ? '2010-01-01' : new Date(Date.now()-365*86400000).toISOString().split('T')[0]}'`);
+    c.push(`COALESCE(transaction_date,filing_date)>='2013-01-01'`); // hard floor — matches earliest backfilled data
     c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
     if (typeF)  c.push(`transaction_type='${typeF}'`);
     if (relF)   c.push(`relationship='${relF}'`);
@@ -5435,9 +7495,12 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
     return `ORDER BY ${sortKey} ${dir} NULLS LAST`;
   }
 
+  // Stale-while-revalidate: keep showing previous rows while new query runs.
+  // Only null out on very first load (rows starts null from useState).
+  const [dataLoading, setDataLoading] = useState(false);
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
-    setRows(null);
+    setDataLoading(true);
     proxySQL(`
       SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
              relationship,transaction_type,transaction_code,is_open_market,
@@ -5445,7 +7508,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
       FROM public.filings ${where()}
       ${orderBy()}
       LIMIT 300
-    `).then(setRows).catch(()=>setRows([]));
+    `).then(r=>{setRows(r);setDataLoading(false);}).catch(()=>{setRows(prev=>prev||[]);setDataLoading(false);});
   },[search,typeF,relF,sectorF,sourceF,openMkt,fromPortfolio,dPreset,dateFrom,dateTo,sortKey,sortDir]);
 
   function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
@@ -5469,9 +7532,20 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   return (
     <div className="drawer-overlay" onClick={(e)=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="drawer">
-        <div className="drawer__hdr-row1">
-          <span className="drawer__title">Filings</span>
-          <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{width:12,height:12}}/></button>
+        <div className="drawer__topbar">
+          <div className="drawer__topbar-logo">
+            <div className="topnav__mark" style={{width:22,height:22}}><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="topnav__wordmark" style={{fontSize:14}}>Seli</span>
+          </div>
+          <div className="drawer__tabs">
+            {[['signals','Signals'],['insiders','Insiders'],['data','Raw Data']].map(([k,l])=>(
+              <button key={k}
+                className={`drawer__tab${k==='data'?' drawer__tab--active':''}`}
+                onClick={()=>{ if(k!=='data' && onSwitchTab) onSwitchTab(k); }}>{l}</button>
+            ))}
+          </div>
+          <button className="drawer__topbar-cta" onClick={()=>onUpgrade&&onUpgrade('data_export_direct')}>Export CSV</button>
+          <button className="btn btn--ghost btn--icon" onClick={onClose} style={{marginLeft:0}}><IconClose style={{width:12,height:12}}/></button>
         </div>
 
         <div className="drawer__toolbar">
@@ -5487,12 +7561,40 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
           <div className="drawer__filter-group">
             <span className="drawer__filter-label">Window</span>
             <div className="dash-tile-pills" style={{gap:2}}>
-              {DATA_DATE_PRESETS.map(p=>(
-                <button key={p.l} className={`dash-tile-pill${dPreset===p.d&&!dateFrom?' dash-tile-pill--active':''}`}
-                  onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>{p.l}</button>
-              ))}
+              {DATA_DATE_PRESETS.map(p=>{
+                if (!pro && p.d === null) return null;
+                return (
+                  <button key={p.l} className={`dash-tile-pill${dPreset===p.d&&!dateFrom?' dash-tile-pill--active':''}`}
+                    onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>{p.l}</button>
+                );
+              })}
+              {!pro&&<button className="dash-tile-pill dash-tile-pill--locked" onClick={()=>onUpgrade&&onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>}
             </div>
           </div>
+          <div className="drawer__toolbar-divider"/>
+          <div className="drawer__filter-group">
+            <span className="drawer__filter-label">Date range</span>
+            <div className="drawer__date-range">
+              <input type="date" className="drawer__date-input" value={dateFrom}
+                min={!pro ? new Date(Date.now()-365*86400000).toISOString().split('T')[0] : undefined}
+                onChange={e=>{
+                  if (!pro) {
+                    const floor = new Date(Date.now()-365*86400000).toISOString().split('T')[0];
+                    if (e.target.value && e.target.value < floor) { onUpgrade&&onUpgrade('full_history'); return; }
+                  }
+                  setDateFrom(e.target.value);setDPreset(null);
+                }}/>
+              <span className="drawer__date-sep">→</span>
+              <input type="date" className="drawer__date-input" value={dateTo}
+                onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
+            </div>
+          </div>
+          {(search||typeF||relF||sectorF||sourceF||openMkt||fromPortfolio||dPreset!==7||dateFrom||dateTo) && (
+            <>
+              <div className="drawer__toolbar-spacer"/>
+              <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
+            </>
+          )}
         </div>
 
         <FilterPanel
@@ -5508,13 +7610,15 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
         <div className="drawer__body">
           <div className="drawer__list" ref={listRef}>
             <div className="drawer__list-hdr">
-              <span>{rows==null?'Loading…':`${rows.length}${rows.length===300?'+':''} filing${rows.length===1?'':'s'}`}</span>
+              <span>{rows==null?'':''+rows.length+(rows.length===300?'+':'')+' filing'+(rows.length===1?'':'s')}{dataLoading&&rows!=null&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
             </div>
             {rows===null
-              ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
-              : rows.length===0
-                ? <div className="drawer__empty">No filings match these filters</div>
-                : rows.map((r,i)=>{
+              ? <SkeletonRows count={12}/>
+              : dataLoading&&rows.length===0
+                ? <SkeletonRows count={8}/>
+                : rows.length===0
+                  ? <div className="drawer__empty">No filings match these filters</div>
+                  : rows.map((r,i)=>{
                   const tt=r.transaction_type;
                   const trade = {
                     ticker:r.ticker,company:r.company_name,company_name:r.company_name,
@@ -5538,14 +7642,14 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                       className={`drawer__list-row${isActive?' drawer__list-row--active':''}`}
                       onClick={()=>navigate({type:'transaction',trade})}>
                       <div className="drawer__list-row__main">
-                        <span className="ticker" style={{fontSize:12,fontWeight:700}}>{r.ticker||'—'}</span>
+                        <span className="ticker" style={{fontSize:'0.75rem',fontWeight:700}}>{r.ticker||'—'}</span>
                         <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>{tt==='buy'?'Buy':tt==='sell'?'Sell':'Other'}</Badge>
-                        <span className="td-muted" style={{fontSize:11,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.company_name}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.company_name}</span>
                         <span className={`td-mono drawer__list-row__val ${tt==='buy'?'val-buy':tt==='sell'?'val-sell':''}`}>{r.value?fmt.money(r.value):'—'}</span>
                       </div>
                       <div className="drawer__list-row__sub">
-                        <span className="td-muted" style={{fontSize:11}}>{r.insider_name}</span>
-                        <span className="td-muted" style={{fontSize:11,marginLeft:'auto'}}>{fmt.dateShort(r.transaction_date||r.filing_date)}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_name}</span>
+                        <span className="td-muted" style={{fontSize:'0.6875rem',marginLeft:'auto'}}>{fmt.dateShort(r.transaction_date||r.filing_date)}</span>
                       </div>
                     </div>
                   );
@@ -5556,7 +7660,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
           <div className="drawer__detail">
             {!detail
               ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
+                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
                   <div style={{fontSize:13,color:'var(--text-3)'}}>Select a filing to see details</div>
                 </div>
               : <DetailPanel
@@ -5598,6 +7702,16 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   const [sectors, setSectors] = useState([]);
   const [search,  setSearch]  = useState('');
   const [searchInput, setSearchInput] = useState('');
+  // Auto-commits searchInput → search (which the fetch effect below actually
+  // depends on) a moment after typing stops, rather than requiring Enter.
+  // Debounced rather than committing on every keystroke — this triggers a
+  // paired COUNT(*) + paginated SELECT, and firing that twice per letter
+  // while someone's mid-word would be wasteful; a short pause after the
+  // last keystroke is unnoticeable to a person typing but avoids that.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const [typeF,   setTypeF]   = useState('');
   const [relF,    setRelF]    = useState('');
@@ -5611,6 +7725,19 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
 
   const [sortKey, setSortKey] = useState('transaction_date');
   const [sortDir, setSortDir] = useState(-1);
+  const isMobile = useIsMobile();
+
+  function resetFilters() {
+    setSearch(''); setSearchInput('');
+    setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
+    setOpenMkt(false); setFromPortfolio(false);
+    setDPreset(7); setDateFrom(''); setDateTo('');
+  }
+  // Mobile-only — the real table has 10 columns, no reasonable phone width
+  // fits that, so mobile gets a separate compact card list instead of a
+  // squeezed/overflowing version of the same table. Tapping a card expands
+  // it in place for the columns that don't fit in the compact view.
+  const [expandedRow, setExpandedRow] = useState(null);
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
@@ -5623,10 +7750,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
     const ef=dateFrom||(dPreset!=null?(()=>{const d=new Date();d.setDate(d.getDate()-dPreset);return d.toISOString().split('T')[0];})():null);
     const et=dateTo||new Date().toISOString().split('T')[0]; // always clamp to today unless user picks a later date themselves
     if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
-    // Hard floor: Pro users can access the full dataset (2010+), free users
-    // get 1 year. The Worker's own date-floor enforcement is the real gate;
-    // this client-side floor just keeps the query from being unbounded.
-    c.push(`COALESCE(transaction_date,filing_date)>='${pro ? '2010-01-01' : new Date(Date.now()-365*86400000).toISOString().split('T')[0]}'`);
+    c.push(`COALESCE(transaction_date,filing_date)>='2013-01-01'`); // hard floor — matches earliest backfilled data
     c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
     if (typeF)  c.push(`transaction_type='${typeF}'`);
     if (relF)   c.push(`relationship='${relF}'`);
@@ -5695,47 +7819,124 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
         <div className="filter-bar filter-bar--wrap">
           <div className="search-wrap">
             <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" placeholder="Ticker, insider, company… (Enter)"
-              value={searchInput} onChange={e=>setSearchInput(e.target.value)}
+            <input type="search" placeholder="Ticker, insider, company…"
+              value={searchInput}
+              onChange={e=>setSearchInput(e.target.value)}
               onKeyDown={e=>e.key==='Enter'&&setSearch(searchInput)}/>
           </div>
           <div className="drawer__toolbar-divider"/>
           <div className="date-pills">
-            {DATA_DATE_PRESETS.map(p=>(
-              <button key={p.l} className={`pill${dPreset===p.d&&!dateFrom?' pill--active':''}`}
-                title={p.l==='All'&&!pro?'Free plan is still capped at the last 12 months — Pro unlocks true full history':undefined}
-                onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>
-                {p.l}</button>
-            ))}
+            {DATA_DATE_PRESETS.map(p=>{
+              if (!pro && p.d === null) return null;
+              return (
+                <button key={p.l} className={`pill${dPreset===p.d&&!dateFrom?' pill--active':''}`}
+                  onClick={()=>{setDPreset(p.d);setDateFrom('');setDateTo('');}}>
+                  {p.l}
+                </button>
+              );
+            })}
+            {!pro&&<button className="pill dash-tile-pill--locked" onClick={()=>onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{marginLeft:3,fontSize:'0.5rem'}}>Pro</span></button>}
           </div>
-          <div className="drawer__toolbar-divider"/>
-          <div style={{display:'flex',alignItems:'center',gap:7}}>
-            <input type="date" value={dateFrom} onChange={e=>{setDateFrom(e.target.value);setDPreset(null);}}/>
-            <span style={{color:'var(--text-3)',fontSize:12}}>→</span>
-            <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
-          </div>
+          {!isMobile && (
+            <>
+              <div className="drawer__toolbar-divider"/>
+              <div style={{display:'flex',alignItems:'center',gap:7}}>
+                <input type="date" value={dateFrom}
+                  min={!pro ? new Date(Date.now()-365*86400000).toISOString().split('T')[0] : undefined}
+                  onChange={e=>{
+                    if (!pro) {
+                      const floor = new Date(Date.now()-365*86400000).toISOString().split('T')[0];
+                      if (e.target.value && e.target.value < floor) { onUpgrade('full_history'); return; }
+                    }
+                    setDateFrom(e.target.value);setDPreset(null);
+                  }}/>
+                <span style={{color:'var(--text-3)',fontSize:'0.75rem'}}>→</span>
+                <input type="date" value={dateTo} onChange={e=>{setDateTo(e.target.value);setDPreset(null);}}/>
+              </div>
+            </>
+          )}
+          {activeFilterCount > 0 || search || dPreset !== 7 || dateFrom || dateTo ? (
+            <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
+          ) : null}
+          <TileInfoButton section="data-source" title="All filings" tileId="data-filings"/>
           <button className="btn btn--primary btn--sm" style={{marginLeft:'auto',flexShrink:0}}
-            onClick={()=>onUpgrade('data_export')}>
-            Export CSV <span className="settings-pro-badge" style={{marginLeft:6}}>$</span>
+            onClick={()=>onUpgrade('data_export_direct')}>
+            Export CSV
           </button>
         </div>
 
-      <FilterPanel
-        sectors={sectors}
-        openMkt={openMkt} setOpenMkt={setOpenMkt}
-        fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
-        sectorF={sectorF} setSectorF={setSectorF}
-        sourceF={sourceF} setSourceF={setSourceF}
-        relF={relF} setRelF={setRelF}
-        typeF={typeF} setTypeF={setTypeF}
-      />
+      {isMobile ? (
+        <details className="data-filter-collapse">
+          <summary>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</summary>
+          <FilterPanel
+            sectors={sectors}
+            openMkt={openMkt} setOpenMkt={setOpenMkt}
+            fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
+            sectorF={sectorF} setSectorF={setSectorF}
+            sourceF={sourceF} setSourceF={setSourceF}
+            relF={relF} setRelF={setRelF}
+            typeF={typeF} setTypeF={setTypeF}
+          />
+        </details>
+      ) : (
+        <FilterPanel
+          sectors={sectors}
+          openMkt={openMkt} setOpenMkt={setOpenMkt}
+          fromPortfolio={fromPortfolio} setFromPortfolio={setFromPortfolio}
+          sectorF={sectorF} setSectorF={setSectorF}
+          sourceF={sourceF} setSourceF={setSourceF}
+          relF={relF} setRelF={setRelF}
+          typeF={typeF} setTypeF={setTypeF}
+        />
+      )}
       </div>
 
       <div className="data-layout">
         <div className="data-main">
           {error?<div className="state-box state-box--error"><p><IconWarning style={{width:14,height:14,marginRight:4,verticalAlign:"-2px"}}/>{error}</p></div>
-          :loading?<div className="state-box"><Spinner/><p>Loading…</p></div>
+          :loading?<SkeletonRows count={15}/>
           :rows.length===0?<div className="state-box"><IconEmpty style={{width:28,height:28,color:"var(--text-3)"}}/><p>No filings match these filters.</p></div>
+          :isMobile?<div className="data-mobile-list">
+            {rows.map((r,i)=>{
+              const rel=r.relationship||'weak';
+              const rl=rel==='strong'?'Exec':rel==='medium'?'Officer':'Dir';
+              const tt=r.transaction_type;
+              const rowKey = `${r.ticker}-${r.transaction_date||r.filing_date}-${i}`;
+              const isOpen = expandedRow===rowKey;
+              return (
+                <div key={rowKey} className={`data-mobile-card row-${tt}${isOpen?' data-mobile-card--expanded':''}`}
+                  onClick={()=>setExpandedRow(k=>k===rowKey?null:rowKey)}>
+                  <div className="data-mobile-card__top">
+                    <span className="ticker">{r.ticker||'—'}</span>
+                    <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>
+                      {tt==='buy'?<><IconBuyTri style={{width:8,height:8,marginRight:3}}/>Buy</>:tt==='sell'?<><IconSellTri style={{width:8,height:8,marginRight:3}}/>Sell</>:'◆ Other'}
+                    </Badge>
+                    <span className={`td-mono ${tt==='buy'?'val-buy':tt==='sell'?'val-sell':''}`} style={{marginLeft:'auto'}}>{fmt.money(r.value)}</span>
+                  </div>
+                  <div className="data-mobile-card__sub">
+                    <span className="td-overflow">{r.company_name}</span>
+                    <span className="td-muted">{fmt.dateShort(r.transaction_date||r.filing_date)}</span>
+                  </div>
+                  {isOpen && (
+                    <div className="data-mobile-card__expanded" onClick={e=>e.stopPropagation()}>
+                      <div className="data-mobile-card__grid">
+                        <div><span className="td-muted">Insider</span><br/>{r.insider_name||'—'}<br/><span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.insider_title||'—'}</span></div>
+                        <div><span className="td-muted">Relationship</span><br/><Badge type={`rel-${rel}`}>{rl}</Badge></div>
+                        <div><span className="td-muted">Shares</span><br/>{fmt.number(r.shares)}</div>
+                        <div><span className="td-muted">Price</span><br/>{fmt.price(r.price_per_share)}</div>
+                        <div><span className="td-muted">Sector</span><br/>{r.sector!=='Other'?r.sector:'—'}</div>
+                        <div><span className="td-muted">% owned change</span><br/>{r.pct_owned_change!=null?<span className="val-buy">+{parseFloat(r.pct_owned_change).toFixed(1)}%</span>:'—'}</div>
+                        <div><span className="td-muted">Transaction code</span><br/>{r.transaction_code?<span title={TX_CODE_TOOLTIPS[r.transaction_code]||r.transaction_code}>{TX_CODE_SHORT[r.transaction_code]||r.transaction_code}</span>:'—'}</div>
+                        {r.filing_date && r.filing_date!==r.transaction_date && (
+                          <div><span className="td-muted">Filed</span><br/>{fmt.dateShort(r.filing_date)}</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
           :<div className="table-wrap">
             <table>
               <thead><tr>
@@ -5747,7 +7948,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               <tbody>
                 {rows.map((r,i)=>{
                   const rel=r.relationship||'weak';
-                  const rl=rel==='strong'?'C-Suite':rel==='medium'?'Officer':'Dir';
+                  const rl=rel==='strong'?'Exec':rel==='medium'?'Officer':'Dir';
                   const tt=r.transaction_type;
                   return (
                     <tr key={i} className={`row-${tt} row-clickable`}
@@ -5768,7 +7969,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                       <td className="td-date">
                         <div className="td-date-main">{fmt.dateShort(r.transaction_date||r.filing_date)}</div>
                         {r.filing_date&&r.filing_date!==r.transaction_date&&
-                          <div style={{fontSize:11,color:'var(--text-3)'}}>filed {fmt.dateShort(r.filing_date)}</div>}
+                          <div style={{fontSize:'0.6875rem',color:'var(--text-3)'}}>filed {fmt.dateShort(r.filing_date)}</div>}
                       </td>
                       <td><span className="ticker dp-clickable" onClick={e=>{e.stopPropagation();r.ticker&&onOpenDetail&&onOpenDetail({type:'ticker',dataFilters,ticker:r.ticker,company:r.company_name});}}>{r.ticker||'—'}</span></td>
                       <td className="td-company">
@@ -5777,7 +7978,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                       </td>
                       <td className="td-insider">
                         <div className="td-overflow dp-clickable" onClick={e=>{e.stopPropagation();r.insider_name&&onOpenDetail&&onOpenDetail({type:'trader',dataFilters,name:r.insider_name,title:r.insider_title});}}>{r.insider_name}</div>
-                        <div className="td-muted td-overflow" style={{fontSize:11}}>{r.insider_title||'—'}</div>
+                        <div className="td-muted td-overflow" style={{fontSize:'0.6875rem'}}>{r.insider_title||'—'}</div>
                       </td>
                       <td>
                         <Badge type={tt==='buy'?'buy':tt==='sell'?'sell':'other'}>
@@ -5807,7 +8008,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                 {total!=null
                   ? `${pg*DATA_PAGE+1}–${Math.min((pg+1)*DATA_PAGE,total||0)} of ${total.toLocaleString()} filing${total===1?'':'s'}`
                   : ''}
-                {!pro&&<span> · Free plan shows the last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
+                {!pro&&<span className="td-muted"> · Free plan: last 12 months — <button className="free-tier-note__link" onClick={()=>onUpgrade('full_history')}>upgrade</button> for full history</span>}
               </span>
               <div className="pagination__btns">
                 <button className="btn btn--sm" onClick={()=>fetchPg(0)}       disabled={pg===0||loading||totalPgs<=1}>««</button>
@@ -5819,6 +8020,16 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Sticky export CTA — always visible at the bottom of the data page */}
+      <div className="data-export-banner">
+        <div className="data-export-banner__text">
+          <strong>Want the full dataset?</strong> Every filing on record, delivered as CSV.
+        </div>
+        <button className="data-export-banner__cta" onClick={()=>onUpgrade('data_export_direct')}>
+          Buy Export — $39.99
+        </button>
       </div>
     </div>
   );
@@ -5833,221 +8044,532 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
 // ─── WATCHLIST PAGE ───────────────────────────────────────────────────────────
 // Shows all recent insider activity for tickers the user has starred.
 // Entirely localStorage-backed — no auth needed.
-function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow }) {
-  const [days, setDays] = useState(30);
-  const [tab, setTab]   = useState('tickers');
-  const [sortKey, setSortKey] = useState('netValue');
-  const [sortDir, setSortDir] = useState(-1);
-  const [detail, setDetail] = useState(null);
-  const [detailStack, setDetailStack] = useState([]);
-  const cutoff = useMemo(()=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().split('T')[0];},[days]);
+// ─── WatchlistPortfolioFull ───────────────────────────────────────────────────
+// Full-width portfolio tile: chart left, scrollable position list right.
+// Only rendered for pro users.
+function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
+  const pro = true;
+  const { port, err, connected, refresh, refreshing, lastRefreshed, perf } = usePortfolio(pro);
 
-  const watchedTickers  = watchlist.tickers;
-  const watchedInsiders = watchlist.insiders || [];
+  const posSymbols = useMemo(()=>(port?.positions||[]).map(p=>p.symbol),[port]);
+  const activeSignalTickers = useMemo(()=>{
+    const relevant = filings.filter(f=>posSymbols.includes(f.ticker)&&(f.transactionDate||f.date||'')>=cutoff&&f.isOpenMarket);
+    return new Set(relevant.map(f=>f.ticker));
+  },[filings,cutoff,posSymbols.join(',')]);
 
-  function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
-  function goBack() { setDetailStack(s=>{ const next=[...s]; const prev=next.pop(); setDetail(prev||null); return next; }); }
-  function selectRow(d) { setDetailStack([]); setDetail(d); }
-  function jumpTo(i) { setDetail(detailStack[i]); setDetailStack(s=>s.slice(0,i)); }
-  const crumbLabel = (d) => d.type==='ticker' ? d.ticker : d.name;
-
-  // Reset selection when switching tabs or when the currently-selected item
-  // gets unwatched out from under it (star/follow toggled off from within
-  // the open detail pane itself).
-  useEffect(()=>{ setDetail(null); setDetailStack([]); }, [tab]);
-  useEffect(()=>{
-    if (detail?.type==='ticker' && !watchedTickers.includes(detail.ticker)) { setDetail(null); setDetailStack([]); }
-    if (detail?.type==='trader' && !watchedInsiders.includes(detail.name)) { setDetail(null); setDetailStack([]); }
-  }, [watchedTickers, watchedInsiders]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const signals = useMemo(()=>{
-    if (!watchedTickers.length) return [];
-    const base = filings.filter(f=>{
-      if (!watchedTickers.includes(f.ticker)) return false;
-      if ((f.transactionDate||f.date||'') < cutoff) return false;
-      return true;
+  // Last insider trade date per portfolio symbol
+  const lastActivity = useMemo(()=>{
+    const map = {};
+    filings.filter(f=>posSymbols.includes(f.ticker)&&f.isOpenMarket).forEach(f=>{
+      const d=f.transactionDate||f.date||'';
+      if(!map[f.ticker]||d>map[f.ticker].d) map[f.ticker]={d,type:f.transactionType};
     });
-    const built = buildSignals(base);
-    // Tickers with zero qualifying signals in this window still belong on the
-    // list — they're watched regardless of recent activity — so backfill a
-    // bare placeholder row for any watched ticker buildSignals didn't produce.
-    const seen = new Set(built.map(s=>s.ticker));
-    watchedTickers.forEach(t=>{
-      if (!seen.has(t)) built.push({ ticker:t, company:'', conviction:0, netValue:0, cSuiteBuys:0, insiderCount:0, lastTradeDate:null });
-    });
-    return built;
-  },[filings, watchedTickers, cutoff]);
+    return map;
+  },[filings,posSymbols.join(',')]);
 
-  const insiderRows = useMemo(()=>{
-    if (!watchedInsiders.length) return [];
-    const byName = {};
-    filings
-      .filter(f=>watchedInsiders.includes(f.insiderName) && (f.transactionDate||f.date||'')>=cutoff)
-      .forEach(f=>{
-        if (!byName[f.insiderName]) byName[f.insiderName] = { name:f.insiderName, title:f.title||'', trades:0, netValue:0, lastDate:null };
-        byName[f.insiderName].trades++;
-        byName[f.insiderName].netValue += (f.transactionType==='buy'?1:-1) * (f.value||0);
-        const d = f.transactionDate||f.date;
-        if (!byName[f.insiderName].lastDate || d>byName[f.insiderName].lastDate) byName[f.insiderName].lastDate = d;
-      });
-    watchedInsiders.forEach(n=>{ if (!byName[n]) byName[n] = { name:n, title:'', trades:0, netValue:0, lastDate:null }; });
-    return Object.values(byName);
-  },[filings, watchedInsiders, cutoff]);
+  if (!cfg.NEON_PROXY_URL) return null;
+  if (connected===false) return (
+    <div style={{padding:'20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+      <div>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>Portfolio</div>
+        <div style={{fontSize:12,color:'var(--text-3)'}}>Link your brokerage to see insider activity on your real holdings.</div>
+      </div>
+      <button className="btn btn--primary btn--sm" onClick={()=>window.dispatchEvent(new CustomEvent('seli:nav',{detail:'settings'}))}>Link brokerage →</button>
+    </div>
+  );
 
-  const sortedTickerRows = useMemo(()=>{
-    return [...signals].sort((a,b)=>{
-      const av=a[sortKey]??-Infinity, bv=b[sortKey]??-Infinity;
-      if (typeof av==='string') return sortDir>0 ? av.localeCompare(bv) : bv.localeCompare(av);
-      return sortDir>0 ? av-bv : bv-av;
-    });
-  },[signals, sortKey, sortDir]);
-
-  const sortedInsiderRows = useMemo(()=>{
-    const key = sortKey==='conviction' ? 'trades' : sortKey==='lastTradeDate' ? 'lastDate' : sortKey; // map shared sort keys to this tab's field names
-    return [...insiderRows].sort((a,b)=>{
-      const av=a[key]??-Infinity, bv=b[key]??-Infinity;
-      if (typeof av==='string') return sortDir>0 ? av.localeCompare(bv) : bv.localeCompare(av);
-      return sortDir>0 ? av-bv : bv-av;
-    });
-  },[insiderRows, sortKey, sortDir]);
-
-  function onSort(key) { if (sortKey===key) setSortDir(d=>-d); else { setSortKey(key); setSortDir(-1); } }
-
-  const rows = tab==='tickers' ? sortedTickerRows : sortedInsiderRows;
-  const emptyNow = tab==='tickers' ? watchedTickers.length===0 : watchedInsiders.length===0;
+  const pos = port?.positions||[];
+  const totalPnl = pos.reduce((s,p)=>s+(p.openPnl||0),0);
+  const totalCost = pos.reduce((s,p)=>s+((p.marketValue||0)-(p.openPnl||0)),0);
+  const totalPnlPct = totalCost>0?(totalPnl/totalCost)*100:null;
+  const sorted = [...pos].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0));
 
   return (
-    <div className="page-content">
-      <div className="wl-toolbar">
-        <div className="ins-filter-group">
-          <span className="ins-filter-group__label">View</span>
-          <div className="settings-tabs">
-            <button className={`settings-tab${tab==='tickers'?' settings-tab--active':''}`} onClick={()=>setTab('tickers')}>
-              Tickers {watchedTickers.length>0&&<span className="wl-tab-count">{watchedTickers.length}</span>}
-            </button>
-            <button className={`settings-tab${tab==='insiders'?' settings-tab--active':''}`} onClick={()=>setTab('insiders')}>
-              Insiders {watchedInsiders.length>0&&<span className="wl-tab-count">{watchedInsiders.length}</span>}
-            </button>
-          </div>
+    <div>
+      <div className="ws-tile__hdr">
+        <div className="ws-tile__hdr-left">
+          <span className="ws-tile__title">Portfolio</span>
+          {port&&<span className="ws-tile__sub">{fmt.money(port.totalValue)}{totalPnlPct!=null?` · ${totalPnl>=0?'+':''}${totalPnlPct.toFixed(1)}%`:''}</span>}
         </div>
-        <div className="drawer__toolbar-divider" style={{alignSelf:'stretch',margin:0}}/>
-        <div className="ins-filter-group">
-          <span className="ins-filter-group__label">Window</span>
-          <div className="dash-tile-pills">
-            {[7,30,90].map(d=>(
-              <button key={d} className={`dash-tile-pill${days===d?' dash-tile-pill--active':''}`} onClick={()=>{setDays(d);ensureFilingsWindow&&ensureFilingsWindow(d);}}>{d}d</button>
-            ))}
-          </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {lastRefreshed&&<span style={{fontSize:11,color:'var(--text-3)'}}>Updated {fmt.ago(lastRefreshed.toISOString())}</span>}
+          <button className="btn btn--ghost btn--icon" onClick={refresh} disabled={refreshing} style={{width:26,height:26}} title="Refresh">
+            <span style={{fontSize:13,display:'inline-block',animation:refreshing?'spin 1s linear infinite':'none'}}>⟳</span>
+          </button>
         </div>
-        <p className="page-sub" style={{margin:'0 0 0 auto'}}>
-          {watchedTickers.length} ticker{watchedTickers.length!==1?'s':''} · {watchedInsiders.length} insider{watchedInsiders.length!==1?'s':''} tracked
-        </p>
       </div>
 
-      {emptyNow ? (
-        <div className="wl-empty">
-          {tab==='tickers' ? (
-            <div className="wl-empty__icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" width="40" height="40">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-            </div>
-          ) : (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} width="40" height="40" style={{color:'var(--text-3)'}}><circle cx="12" cy="12" r="9"/></svg>
-          )}
-          <div className="wl-empty__title">{tab==='tickers' ? 'No tickers watched yet' : 'No insiders followed yet'}</div>
-          <div className="wl-empty__sub">
-            {tab==='tickers'
-              ? 'Click the star on any ticker in Insights, the detail panel, or All Data to start tracking it here.'
-              : 'Click "Follow" on any insider in the leaderboard or trader profile to track their activity here.'}
-          </div>
-        </div>
+      {!port ? (
+        <div style={{padding:'24px',display:'flex',justifyContent:'center'}}><Spinner size={16}/></div>
       ) : (
-        <div className="drawer__body wl-drawer-body">
-          <div className="drawer__list">
-            <div className="drawer__list-hdr">
-              <span>{rows.length} {tab}</span>
-            </div>
-            {tab==='tickers' ? (
-              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 100px 90px'}}>
-                <button className="ins-col-sort" onClick={()=>onSort('ticker')}>Ticker · Company{sortKey==='ticker'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" onClick={()=>onSort('conviction')}>Signal{sortKey==='conviction'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
-              </div>
+        /* 60% chart · 40% position list */
+        <div style={{display:'grid',gridTemplateColumns:'3fr 2fr',minHeight:0}}>
+          {/* Chart */}
+          <div style={{padding:'12px 16px',borderRight:'0.5px solid var(--border)',minWidth:0}}>
+            {perf===undefined ? (
+              <div style={{display:'flex',justifyContent:'center',padding:'2rem'}}><Spinner size={14}/></div>
+            ) : perf===null||perf.length<2 ? (
+              <div style={{padding:'2rem',textAlign:'center',color:'var(--text-3)',fontSize:12}}>Performance history will appear here once available.</div>
             ) : (
-              <div className="ins-sig-col-hdrs" style={{gridTemplateColumns:'1fr 70px 90px'}}>
-                <button className="ins-col-sort" onClick={()=>onSort('name')}>Insider{sortKey==='name'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" onClick={()=>onSort('trades')}>Trades{sortKey==='trades'&&(sortDir<0?' ↓':' ↑')}</button>
-                <button className="ins-col-sort" style={{textAlign:'right',justifyContent:'flex-end'}} onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
-              </div>
+              <PortfolioChartWithRanges points={perf} compact onExplore={()=>{}}/>
             )}
-
-            <div className="drawer__list-scroll">
-              {tab==='tickers' ? sortedTickerRows.map(s=>{
-                const isSel = detail?.type==='ticker' && detail.ticker===s.ticker;
-                return (
-                  <div key={s.ticker} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={{gridTemplateColumns:'1fr 100px 90px'}}
-                    onClick={()=>selectRow({type:'ticker', ticker:s.ticker, company:s.company})}>
-                    <div className="ins-sig-row__left">
-                      <span className="ticker ins-sig-row__ticker">{s.ticker}</span>
-                      <div className="ins-sig-row__co">{s.company}</div>
-                    </div>
-                    <ConvictionBar score={s.conviction}/>
-                    <span className={`ins-sig-row__net ${s.netValue>=0?'val-buy':'val-sell'}`}>{s.netValue>=0?'+':''}{fmt.money(s.netValue)}</span>
-                  </div>
-                );
-              }) : sortedInsiderRows.map(r=>{
-                const isSel = detail?.type==='trader' && detail.name===r.name;
-                return (
-                  <div key={r.name} className={`ins-sig-row${isSel?' ins-sig-row--selected':''}`} style={{gridTemplateColumns:'1fr 70px 90px'}}
-                    onClick={()=>selectRow({type:'trader', name:r.name, title:r.title})}>
-                    <div className="ins-sig-row__left">
-                      <span className="ins-sig-row__ticker" style={{fontSize:13}}>{r.name}</span>
-                      {r.title&&<div className="ins-sig-row__co">{r.title}</div>}
-                    </div>
-                    <span className={`ins-sig-row__net ${r.netValue>=0?'val-buy':'val-sell'}`}>{r.trades} trade{r.trades!==1?'s':''}</span>
-                  </div>
-                );
-              })}
-            </div>
           </div>
-
-          <div className="drawer__detail">
-            {!detail
-              ? <div className="drawer__detail-empty">
-                  <div style={{fontSize:24,marginBottom:8,opacity:.3}}>←</div>
-                  <div style={{fontSize:13,color:'var(--text-3)'}}>Select a {tab==='tickers'?'ticker':'insider'} to explore</div>
+          {/* Position list — wider, with last activity column */}
+          <div style={{minWidth:0,overflowY:'auto',maxHeight:320}}>
+            {/* Column header */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr auto auto auto',gap:6,padding:'6px 14px',borderBottom:'0.5px solid var(--border-md)',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',color:'var(--text-3)'}}>
+              <span>Holding</span>
+              <span style={{textAlign:'right',minWidth:60}}>Last trade</span>
+              <span style={{textAlign:'right',minWidth:52}}>Value</span>
+              <span style={{textAlign:'right',minWidth:48}}>P&amp;L</span>
+            </div>
+            {sorted.length===0?(
+              <div style={{padding:'12px 14px',fontSize:12,color:'var(--text-3)'}}>No open positions.</div>
+            ):sorted.map((p,i)=>{
+              const hasActivity=activeSignalTickers.has(p.symbol);
+              const last=lastActivity[p.symbol];
+              return (
+                <div key={i}
+                  style={{display:'grid',gridTemplateColumns:'1fr auto auto auto',gap:6,alignItems:'center',padding:'7px 14px',borderBottom:'0.5px solid var(--border)',cursor:'pointer',transition:'background .07s'}}
+                  onMouseEnter={e=>e.currentTarget.style.background='var(--surface-2)'}
+                  onMouseLeave={e=>e.currentTarget.style.background=''}
+                  onClick={()=>onOpenDetail&&onOpenDetail({type:'ticker',ticker:p.symbol,company:p.company,expand:true})}>
+                  <div style={{display:'flex',alignItems:'center',gap:5,minWidth:0}}>
+                    <span className="ticker" style={{fontSize:12}}>{p.symbol}</span>
+                    {hasActivity&&<span style={{fontSize:9,fontWeight:700,padding:'1px 4px',borderRadius:3,background:'var(--accent-50)',color:'var(--accent)'}}>▲</span>}
+                  </div>
+                  <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',textAlign:'right',minWidth:60,whiteSpace:'nowrap'}}>
+                    {last ? fmt.ago(last.d) : '—'}
+                  </span>
+                  <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:'var(--text-2)',textAlign:'right',minWidth:52}}>{fmt.money(p.marketValue)}</span>
+                  <span className={p.openPnl!=null?(p.openPnl>=0?'val-buy':'val-sell'):''}
+                    style={{fontFamily:'var(--font-mono)',fontSize:11,textAlign:'right',minWidth:48}}>
+                    {p.openPnl!=null?(p.openPnl>=0?'+':'')+p.openPnlPct?.toFixed(1)+'%':'—'}
+                  </span>
                 </div>
-              : <>
-                  {detailStack.length>0 && (
-                    <div className="wl-breadcrumb">
-                      {detailStack.map((d,i)=>(
-                        <React.Fragment key={i}>
-                          <button className="wl-breadcrumb__item" onClick={()=>jumpTo(i)}>{crumbLabel(d)}</button>
-                          <span className="wl-breadcrumb__sep">›</span>
-                        </React.Fragment>
-                      ))}
-                      <span className="wl-breadcrumb__current">{crumbLabel(detail)}</span>
-                    </div>
-                  )}
-                  <DetailPanel
-                    detail={detail}
-                    filings={filings}
-                    onClose={()=>{setDetail(null);setDetailStack([]);}}
-                    onNavigate={navigate}
-                    onBack={goBack}
-                    canGoBack={detailStack.length>0}
-                    watchlist={watchlist}
-                    inline={true}
-                  />
-                </>
-            }
+              );
+            })}
           </div>
         </div>
       )}
     </div>
   );
 }
+
+function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow, user }) {
+  const { pro } = useBilling();
+  const [days, setDays]       = useState(null); // null = All time
+  const [tab, setTab]         = useState('tickers');
+  const [sortKey, setSortKey] = useState('lastTradeDate');
+  const [sortDir, setSortDir] = useState(-1);
+  const isMobile = useIsMobile();
+  const [feedCollapsed, setFeedCollapsed] = useState(false);
+
+  // Alert prefs — load only for pro users
+  const { prefs, saving, saved, save } = useNotificationPrefs(user?.id, pro);
+  const [localPrefs, setLocalPrefs] = useState(null);
+  // Always sync from server when prefs loads/changes — merge with defaults
+  // for new fields that don't exist in the DB yet
+  const alertDefaults = { instant_watchlist_ticker:false, instant_high_conviction:false, instant_followed_insider:false, daily_digest:false, instant_large_trade:false, csuite_only:false };
+  useEffect(()=>{ if(prefs) setLocalPrefs(p=>({...alertDefaults,...prefs})); },[prefs]);
+  function updPref(key,val){ setLocalPrefs(p=>({...p,[key]:val})); }
+  const hasUnsavedAlerts = localPrefs && prefs && JSON.stringify(localPrefs) !== JSON.stringify({...alertDefaults,...prefs});
+
+  // CRITICAL: ensure full history is loaded on mount so "Last activity" is
+  // never blank — the app only fetches 7d by default, but watchlist needs all-time
+  useEffect(()=>{
+    if (ensureFilingsWindow) ensureFilingsWindow(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const cutoff = useMemo(()=>{
+    if(days===null) return null;
+    const d=new Date(); d.setDate(d.getDate()-days); return d.toISOString().split('T')[0];
+  },[days]);
+
+  const watchedTickers  = useMemo(()=>[...new Set(watchlist.tickers)], [watchlist.tickers]);
+  // Filter out any values that look like ticker symbols (all-caps, ≤5 chars) — these
+  // shouldn't be in the insider list but can appear due to old data or sync bugs
+  const watchedInsiders = useMemo(()=>[...new Set((watchlist.insiders||[]).filter(n=>n&&n.length>5&&!/^[A-Z0-9]{1,5}$/.test(n)))], [watchlist.insiders]);
+
+  // Recent activity — open-market only, all-time so it's never empty for watched items
+  const recentActivity = useMemo(()=>{
+    const wt=new Set(watchedTickers), wi=new Set(watchedInsiders);
+    if(!wt.size&&!wi.size) return [];
+    return filings
+      .filter(f=>f.isOpenMarket&&(wt.has(f.ticker)||wi.has(f.insiderName)))
+      .sort((a,b)=>(b.transactionDate||b.date||'').localeCompare(a.transactionDate||a.date||''))
+      .slice(0,50);
+  },[filings,watchedTickers,watchedInsiders]);
+
+  // Ticker rows — always use all-time absLast so "Last activity" is never blank
+  const signals = useMemo(()=>{
+    if(!watchedTickers.length) return [];
+    const allForWatched = filings.filter(f=>f.isOpenMarket&&watchedTickers.includes(f.ticker));
+    // absLast: all-time most recent trade per ticker (for Last activity column)
+    const absLast = {};
+    allForWatched.forEach(f=>{
+      const d=f.transactionDate||f.date||'';
+      if(!absLast[f.ticker]||d>absLast[f.ticker].d) absLast[f.ticker]={d,type:f.transactionType};
+    });
+    const base = cutoff ? allForWatched.filter(f=>(f.transactionDate||f.date||'')>=cutoff) : allForWatched;
+    const rawBuilt = buildSignals(base);
+
+    // buildSignals produces one row per ticker PER DIRECTION (buy + sell separately).
+    // Merge them: one row per ticker with true net value and the higher conviction.
+    const byTicker = {};
+    rawBuilt.forEach(s=>{
+      if(!byTicker[s.ticker]) {
+        byTicker[s.ticker] = {...s};
+      } else {
+        // Keep higher conviction, accumulate net value (buy signal has positive netValue, sell negative)
+        if(s.conviction > byTicker[s.ticker].conviction) byTicker[s.ticker].conviction = s.conviction;
+        // netValue is buyValue - sellValue on each signal; just take the first one since both
+        // already compute the full net (the formula is the same in buildSignals)
+      }
+    });
+
+    const built = Object.values(byTicker);
+    // Annotate with absLast so lastTradeDate is always populated
+    built.forEach(s=>{
+      const ab=absLast[s.ticker];
+      if(!s.lastTradeDate&&ab) s.lastTradeDate=ab.d;
+      if(!s.lastTradeType&&ab) s.lastTradeType=ab.type;
+      // Always override with absLast to ensure freshness
+      if(ab&&ab.d>(s.lastTradeDate||'')) { s.lastTradeDate=ab.d; s.lastTradeType=ab.type; }
+    });
+    // Ensure every watched ticker appears even with zero signals
+    const seen=new Set(built.map(s=>s.ticker));
+    watchedTickers.forEach(t=>{
+      if(!seen.has(t)){
+        const ab=absLast[t];
+        built.push({ticker:t,company:'',conviction:0,netValue:0,cSuiteBuys:0,
+          insiderCount:0,lastTradeDate:ab?.d||null,lastTradeType:ab?.type||null,buys:0,sells:0,sector:''});
+      }
+    });
+    return built;
+  },[filings,watchedTickers,cutoff]);
+
+  // Insider rows — always populate lastDate from all-time absLast
+  const insiderRows = useMemo(()=>{
+    if(!watchedInsiders.length) return [];
+    const absLast={};
+    filings.filter(f=>f.isOpenMarket&&watchedInsiders.includes(f.insiderName)).forEach(f=>{
+      const d=f.transactionDate||f.date||'';
+      if(!absLast[f.insiderName]||d>absLast[f.insiderName].d) absLast[f.insiderName]={d,type:f.transactionType};
+    });
+    const byName={};
+    filings.filter(f=>f.isOpenMarket&&watchedInsiders.includes(f.insiderName)&&(!cutoff||(f.transactionDate||f.date||'')>=cutoff))
+      .forEach(f=>{
+        if(!byName[f.insiderName]) byName[f.insiderName]={name:f.insiderName,title:f.title||'',trades:0,netValue:0,lastDate:null,lastType:null};
+        byName[f.insiderName].trades++;
+        byName[f.insiderName].netValue+=(f.transactionType==='buy'?1:-1)*(f.value||0);
+        const d=f.transactionDate||f.date;
+        if(!byName[f.insiderName].lastDate||d>byName[f.insiderName].lastDate){
+          byName[f.insiderName].lastDate=d; byName[f.insiderName].lastType=f.transactionType;
+        }
+      });
+    // Fill missing with absLast
+    watchedInsiders.forEach(n=>{
+      if(!byName[n]) {
+        const ab=absLast[n];
+        byName[n]={name:n,title:'',trades:0,netValue:0,lastDate:ab?.d||null,lastType:ab?.type||null};
+      } else if(!byName[n].lastDate&&absLast[n]) {
+        byName[n].lastDate=absLast[n].d; byName[n].lastType=absLast[n].type;
+      }
+    });
+    return Object.values(byName);
+  },[filings,watchedInsiders,cutoff]);
+
+  const sortedTickerRows=useMemo(()=>[...signals].sort((a,b)=>{
+    const av=a[sortKey]??'',bv=b[sortKey]??'';
+    if(typeof av==='string') return sortDir>0?av.localeCompare(bv):bv.localeCompare(av);
+    return sortDir>0?av-bv:bv-av;
+  }),[signals,sortKey,sortDir]);
+
+  const sortedInsiderRows=useMemo(()=>{
+    const key=sortKey==='lastTradeDate'?'lastDate':sortKey==='netValue'?'netValue':'trades';
+    return [...insiderRows].sort((a,b)=>{
+      const av=a[key]??'',bv=b[key]??'';
+      if(typeof av==='string') return sortDir>0?av.localeCompare(bv):bv.localeCompare(av);
+      return sortDir>0?av-bv:bv-av;
+    });
+  },[insiderRows,sortKey,sortDir]);
+
+  function onSort(key){if(sortKey===key)setSortDir(d=>-d);else{setSortKey(key);setSortDir(-1);}}
+
+  const emptyNow=tab==='tickers'?watchedTickers.length===0:watchedInsiders.length===0;
+  const allEmpty=watchedTickers.length===0&&watchedInsiders.length===0;
+
+  // FREE USER — show conversion page
+  if(!pro) return (
+    <div className="ws-page">
+      <div style={{marginBottom:24}}>
+        <h1 className="ws-page-title">Watchlist</h1>
+        <p className="ws-page-sub">Track stocks you own or want to own. Get notified when insiders trade them.</p>
+      </div>
+
+      {/* Hero upsell */}
+      <div className="wl-upsell">
+        <div className="wl-upsell__content">
+          <div className="wl-upsell__icon">★</div>
+          <h2 className="wl-upsell__title">Your personal insider signal tracker</h2>
+          <p className="wl-upsell__sub">Star any ticker to watch it. Get alerts when C-suite executives buy or sell your stocks. Link your portfolio to see insider activity on every holding.</p>
+          <button className="wl-upsell__cta" onClick={()=>watchlist.setShowUpgrade&&watchlist.setShowUpgrade('watchlist')}>
+            Upgrade to Pro — $6.99/mo →
+          </button>
+          <p className="wl-upsell__fine">Cancel any time. Includes full Data access, alert digests &amp; portfolio linking.</p>
+        </div>
+        <div className="wl-upsell__features">
+          {[
+            {icon:'◎', title:'Track your portfolio', body:'Follow any ticker and see every insider trade on stocks you own or are watching.'},
+            {icon:'◉', title:'Instant alerts', body:'Email alerts when a C-suite executive makes an open-market buy or sell on a stock you follow.'},
+            {icon:'⊘', title:'Link your brokerage', body:'Connect Fidelity, Alpaca, or 400+ brokers to automatically populate your watchlist from your real holdings.'},
+            {icon:'◈', title:'Insider history', body:'Deep-dive into any followed insider\'s full trade history, hit rate, and average return.'},
+          ].map(f=>(
+            <div key={f.title} className="wl-upsell__feature">
+              <span className="wl-upsell__feature-icon">{f.icon}</span>
+              <div>
+                <div className="wl-upsell__feature-title">{f.title}</div>
+                <div className="wl-upsell__feature-body">{f.body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Free preview — still let them star tickers */}
+      {!allEmpty&&(
+        <div className="ws-tile" style={{marginTop:20}}>
+          <div className="ws-tile__hdr">
+            <div className="ws-tile__hdr-left">
+              <span className="ws-tile__title">Your watched tickers</span>
+              <span className="ws-tile__sub">Upgrade to see activity</span>
+            </div>
+          </div>
+          <div style={{padding:'12px 16px',display:'flex',gap:10,flexWrap:'wrap'}}>
+            {watchedTickers.map(t=>(
+              <div key={t} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',background:'var(--surface-2)',borderRadius:'var(--radius-md)',border:'0.5px solid var(--border)'}}>
+                <span className="ticker">{t}</span>
+                <StarBtn ticker={t} watchlist={watchlist}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // PRO USER — full watchlist experience
+  if(allEmpty) return (
+    <div className="ws-page">
+      <div style={{marginBottom:20}}><h1 className="ws-page-title">Watchlist</h1></div>
+      <div className="ws-tile">
+        <div className="ws-empty" style={{padding:'48px 20px'}}>
+          <div style={{fontSize:32,marginBottom:12}}>☆</div>
+          <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Nothing watched yet</div>
+          <div>Star tickers or follow insiders from Data, Insiders, or any detail panel.</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="ws-page">
+      <div style={{marginBottom:20}}><h1 className="ws-page-title">Watchlist</h1></div>
+
+      {/* ── Portfolio — full width at top for pro users with chart left + ticker list right ── */}
+      <div className="ws-tile" style={{marginBottom:16}}>
+        <WatchlistPortfolioFull filings={filings} cutoff={cutoff||'2010-01-01'} onOpenDetail={onOpenDetail}/>
+      </div>
+
+      {/* ── Watchlist table + Recent activity side by side ── */}
+      <div className="ws-wl-bottom" style={{marginBottom:16}}>
+
+        {/* Left: ticker / insider table */}
+        <div className="ws-tile wl-list-tile">
+          <div className="ws-tile__hdr">
+            <div className="ws-pills" style={{gap:0}}>
+              <button className={`ws-pill ws-pill--tab${tab==='tickers'?' ws-pill--active':''}`} onClick={()=>setTab('tickers')}>
+                Tickers{watchedTickers.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedTickers.length}</span>}
+              </button>
+              <button className={`ws-pill ws-pill--tab${tab==='insiders'?' ws-pill--active':''}`} onClick={()=>setTab('insiders')}>
+                Insiders{watchedInsiders.length>0&&<span className="ws-tile__count" style={{marginLeft:5}}>{watchedInsiders.length}</span>}
+              </button>
+            </div>
+            <div className="ws-filter-group" style={{marginLeft:'auto'}}>
+              <span className="ws-filter-label">Activity</span>
+              <div className="ws-pills" style={{gap:3}}>
+                {[{v:7,l:'7d'},{v:30,l:'30d'},{v:90,l:'90d'},{v:null,l:'All'}].map(o=>(
+                  <button key={o.l} className={`ws-pill ws-pill--sm${days===o.v?' ws-pill--active':''}`}
+                    onClick={()=>{setDays(o.v);if(o.v)ensureFilingsWindow&&ensureFilingsWindow(o.v);}}>{o.l}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {emptyNow?(
+            <div className="ws-empty">{tab==='tickers'?'No tickers watched. Star any ticker from Data or Insiders.':'No insiders followed. Follow any insider from the leaderboard.'}</div>
+          ):(
+            <>
+              <div className="ws-col-hdrs ws-col-hdrs--wl">
+                <button className="ws-col-sort" onClick={()=>onSort(tab==='tickers'?'ticker':'name')}>
+                  {tab==='tickers'?'Ticker · Company':'Insider'}
+                  {(sortKey==='ticker'||sortKey==='name')&&(sortDir<0?' ↓':' ↑')}
+                </button>
+                <button className="ws-col-sort" onClick={()=>onSort('lastTradeDate')}>Last activity{sortKey==='lastTradeDate'&&(sortDir<0?' ↓':' ↑')}</button>
+                <button className="ws-col-sort ws-col-sort--right" onClick={()=>onSort('netValue')}>Net flow{sortKey==='netValue'&&(sortDir<0?' ↓':' ↑')}</button>
+              </div>
+              <div>
+                {tab==='tickers' ? sortedTickerRows.map(s=>{
+                  const lastType=s.lastTradeType;
+                  return (
+                    <div key={s.ticker} className="ws-data-row ws-data-row--clickable"
+                      onClick={()=>onOpenDetail({type:'ticker',ticker:s.ticker,company:s.company,expand:true})}>
+                      <div className="ws-data-row__main ws-row__main--wl">
+                        {/* Ticker + company */}
+                        <div className="ws-data-row__cell" style={{display:'flex',alignItems:'center',gap:8}}>
+                          <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
+                            <StarBtn ticker={s.ticker} watchlist={watchlist}/>
+                          </div>
+                          <div style={{minWidth:0}}>
+                            <div style={{display:'flex',alignItems:'center',gap:5}}>
+                              <span className="ticker">{s.ticker}</span>
+                            </div>
+                            <div style={{fontSize:11,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.company}</div>
+                          </div>
+                        </div>
+                        {/* Last activity */}
+                        <div className="ws-data-row__cell">
+                          {s.lastTradeDate?(
+                            <div style={{display:'flex',alignItems:'center',gap:5}}>
+                              <span style={{fontSize:11,color:'var(--text-2)'}}>{fmt.ago(s.lastTradeDate)}</span>
+                              {lastType&&<span className={`wl-feed__badge wl-feed__badge--${lastType==='buy'?'buy':'sell'}`}>{lastType==='buy'?'Buy':'Sell'}</span>}
+                            </div>
+                          ):<span style={{fontSize:11,color:'var(--text-3)'}}>{loading?'Loading…':'—'}</span>}
+                        </div>
+                        {/* Net flow */}
+                        <div className="ws-data-row__cell ws-data-row__cell--right">
+                          <span className={`ws-data-mono${s.netValue>=0?' val-buy':' val-sell'}`} style={{fontSize:12}}>
+                            {s.netValue>=0?'+':''}{fmt.money(s.netValue)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }) : sortedInsiderRows.map(r=>(
+                  <div key={r.name} className="ws-data-row ws-data-row--clickable"
+                    onClick={()=>onOpenDetail({type:'trader',name:r.name,title:r.title,expand:true})}>
+                    <div className="ws-data-row__main ws-row__main--wl">
+                      {/* Insider name + follow button */}
+                      <div className="ws-data-row__cell" style={{display:'flex',alignItems:'center',gap:8}}>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontWeight:600,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+                          {r.title&&<div style={{fontSize:11,color:'var(--text-3)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</div>}
+                        </div>
+                        <div onClick={e=>e.stopPropagation()} style={{flexShrink:0}}>
+                          <FollowBtn name={r.name} watchlist={watchlist}/>
+                        </div>
+                      </div>
+                      {/* Last activity */}
+                      <div className="ws-data-row__cell">
+                        {r.lastDate?(
+                          <div style={{display:'flex',alignItems:'center',gap:5}}>
+                            <span style={{fontSize:11,color:'var(--text-2)'}}>{fmt.ago(r.lastDate)}</span>
+                            {r.lastType&&<span className={`wl-feed__badge wl-feed__badge--${r.lastType==='buy'?'buy':'sell'}`}>{r.lastType==='buy'?'Buy':'Sell'}</span>}
+                          </div>
+                        ):<span style={{fontSize:11,color:'var(--text-3)'}}>{loading?'Loading…':'—'}</span>}
+                      </div>
+                      {/* Trades */}
+                      <div className="ws-data-row__cell ws-data-row__cell--right">
+                        <span style={{fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-2)'}}>{r.trades} trade{r.trades!==1?'s':''}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Right: Recent activity */}
+        <div className="ws-tile">
+          <div className="ws-tile__hdr">
+            <div className="ws-tile__hdr-left">
+              <span className="ws-tile__title">Recent activity</span>
+              {recentActivity.length>0&&<span className="ws-tile__count">{recentActivity.length}</span>}
+            </div>
+            {recentActivity.length>0&&<button className="ws-tile__action" onClick={()=>setFeedCollapsed(c=>!c)}>{feedCollapsed?'Show':'Hide'}</button>}
+          </div>
+          {!feedCollapsed&&(recentActivity.length===0?(
+            <div className="ws-empty" style={{padding:'16px 14px'}}>{loading?'Loading…':'No open-market trades from your watched items yet.'}</div>
+          ):(
+            <div style={{maxHeight:420,overflowY:'auto'}}>
+              {recentActivity.map((f,i)=>(
+                <div key={`${f.accessionNumber||i}`} className="ws-filing-row"
+                  onClick={()=>onOpenDetail({type:'ticker',ticker:f.ticker,company:f.company,expand:true})}>
+                  <div className="ws-filing-row__bar" style={{background:f.transactionType==='buy'?'var(--green-600)':'var(--red-600)'}}/>
+                  <div className="ws-filing-row__body">
+                    <div className="ws-filing-row__top">
+                      <span className="td-muted" style={{fontSize:10,minWidth:44}}>{fmt.dateShort(f.transactionDate||f.date)}</span>
+                      <span className="ticker">{f.ticker}</span>
+                      <span className={`wl-feed__badge wl-feed__badge--${f.transactionType==='buy'?'buy':'sell'}`} style={{marginLeft:'auto'}}>{f.transactionType==='buy'?'Buy':'Sell'}</span>
+                      <span style={{fontWeight:600,fontSize:11,minWidth:52,textAlign:'right'}}>{f.value?fmt.money(f.value):'—'}</span>
+                    </div>
+                    <div className="ws-filing-row__meta">{f.insiderName}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Alert settings — full width ── */}
+      <div style={{marginTop:16}}>
+        <div className="ws-tile">
+          <div className="ws-tile__hdr">
+            <div className="ws-tile__hdr-left">
+              <span className="ws-tile__title">Alert settings</span>
+              <span className="ws-tile__sub">Email alerts for your watchlist</span>
+              {hasUnsavedAlerts&&<span className="ws-unsaved-badge">Unsaved changes</span>}
+            </div>
+          </div>
+          {!localPrefs?(
+            <div className="ws-empty" style={{padding:'16px 14px'}}>Loading…</div>
+          ):(
+            <div className="wl-alerts-grid">
+              <div className="wl-alerts-col">
+                <div className="wl-alerts-col__title">Instant alerts</div>
+                <SettingsToggle label="Watched ticker traded" sub="Any insider makes an open-market buy or sell on a stock you follow" checked={localPrefs.instant_watchlist_ticker} onChange={e=>updPref('instant_watchlist_ticker',e.target.checked)} pro={pro}/>
+                <SettingsToggle label="High-conviction signal" sub="A new signal scoring 60+ appears for a stock you watch" checked={localPrefs.instant_high_conviction||false} onChange={e=>updPref('instant_high_conviction',e.target.checked)} pro={pro}/>
+                <SettingsToggle label="Followed insider files" sub="Someone you follow submits a new Form 4 to the SEC" checked={localPrefs.instant_followed_insider} onChange={e=>updPref('instant_followed_insider',e.target.checked)} pro={pro}/>
+              </div>
+              <div className="wl-alerts-col">
+                <div className="wl-alerts-col__title">Digest & thresholds</div>
+                <SettingsToggle label="Daily digest email" sub="A summary of all watchlist activity from the previous trading day" checked={localPrefs.daily_digest||false} onChange={e=>updPref('daily_digest',e.target.checked)} pro={pro}/>
+                <SettingsToggle label="Large trade alert" sub="Any single trade above $500K on a watched ticker" checked={localPrefs.instant_large_trade||false} onChange={e=>updPref('instant_large_trade',e.target.checked)} pro={pro}/>
+                <SettingsToggle label="C-Suite activity only" sub="Only alert when a CEO, CFO, COO, or President trades — ignore directors" checked={localPrefs.csuite_only||false} onChange={e=>updPref('csuite_only',e.target.checked)} pro={pro}/>
+              </div>
+              <div style={{gridColumn:'1/-1',padding:'10px 16px',borderTop:'0.5px solid var(--border)',display:'flex',alignItems:'center',gap:12}}>
+                <button className="btn btn--primary" style={{padding:'7px 16px',fontSize:12}} onClick={()=>save(localPrefs)} disabled={saving}>
+                  {saving?'Saving…':saved?'✓ Saved':'Save alerts'}
+                </button>
+                <button className="ws-tile__action"
+                  style={{fontSize:11,background:'none',border:'none',cursor:'pointer',padding:0}}
+                  onClick={()=>{ const e=new CustomEvent('seli:nav',{detail:'settings'}); window.dispatchEvent(e); }}>
+                  All settings →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 
 // ─── PORTFOLIO PAGE ───────────────────────────────────────────────────────────
 
@@ -6076,49 +8598,86 @@ function TermsPage() {
       </nav>
       <div className="legal-content">
         <h1>Terms of Service</h1>
-        <p className="legal-date">Last updated: June 26, 2025</p>
+        <p className="legal-date">Last updated: August 2, 2026</p>
 
         <h2>1. Acceptance of Terms</h2>
-        <p>By accessing or using Seli ("the Service"), operated by Kevin Maresca ("we," "us," or "our"), you agree to be bound by these Terms of Service. If you don't agree, please don't use Seli.</p>
+        <p>By accessing or using Seli ("the Service"), operated by SELI LLC, a New Mexico limited liability company ("SELI," "we," "us," or "our"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use Seli.</p>
+        <p>We may update these Terms at any time. Material changes will be communicated by email or a notice within the Service at least 30 days before they take effect. Your continued use of Seli after the effective date constitutes acceptance of the revised Terms. If you do not agree to the updated Terms, you must stop using the Service.</p>
 
         <h2>2. Description of Service</h2>
-        <p>Seli aggregates and scores publicly available SEC Form 4 insider trading disclosures, congressional trading disclosures filed under the STOCK Act, and related market data. Every trade you see on Seli is sourced from public government databases, including the SEC's EDGAR system.</p>
+        <p>Seli is a data aggregation and research platform. It collects and organizes publicly available SEC Form 4 insider trading disclosures, congressional periodic transaction reports filed under the STOCK Act, and related public market data. The data is sourced from government databases including the SEC's EDGAR system and congressional disclosure portals.</p>
+        <p>Seli applies a uniform, non-personalized scoring methodology to this data and presents it alongside the original filing data. The scoring is applied identically to every trade and every user.</p>
 
         <h2>3. Not Financial Advice</h2>
-        <p>Seli is informational and educational, not investment guidance. Nothing here (conviction scores, rankings, alerts, or anything else) constitutes financial, investment, legal, or tax advice. We are not a registered investment advisor, broker-dealer, or financial planner. Talk to a qualified financial professional before making investment decisions. Past insider trading patterns don't predict future results.</p>
+        <p><strong>Seli does not provide financial, investment, legal, or tax advice.</strong> No content on Seli, including conviction scores, insider rankings, alert notifications, portfolio overlays, data exports, or any other feature, constitutes a recommendation to buy, sell, or hold any security. Seli is not a registered investment advisor, broker-dealer, or financial planner under federal or state law.</p>
+        <p>The scoring methodology is based on published academic research describing historical statistical tendencies across large samples of insider trades. Historical patterns do not predict future results. Individual trades, insiders, and market conditions vary. You are solely responsible for your own investment decisions.</p>
+        <p>Consult a qualified financial professional before making investment decisions based on any information you find on Seli or elsewhere.</p>
 
-        <h2>4. Data Accuracy</h2>
-        <p>We make reasonable efforts to keep Seli's data accurate, but we make no representations or warranties about its completeness, accuracy, or timeliness. SEC filings themselves can contain errors, and there can be delays between a filing's actual date and when it appears in Seli. You assume all risk associated with relying on this information.</p>
+        <h2>4. Data Accuracy and Limitations</h2>
+        <p>We make commercially reasonable efforts to keep Seli's data accurate and current, but we make no representations or warranties about the completeness, accuracy, reliability, or timeliness of any data on the platform. Specific limitations include:</p>
+        <ul>
+          <li>SEC Form 4 filings may be filed up to two business days after a transaction occurs. Congressional disclosures may be filed up to 45 days after a transaction.</li>
+          <li>SEC filings themselves may contain errors filed by the reporting persons.</li>
+          <li>Ingestion, parsing, or scoring errors may occasionally occur on Seli's end despite reasonable quality controls.</li>
+          <li>Market data (prices, returns, sector classifications) is sourced from third-party providers and may be delayed, incomplete, or inaccurate.</li>
+          <li>Historical data coverage varies by time period and may be less complete for earlier years.</li>
+        </ul>
+        <p>You assume all risk associated with relying on this information.</p>
 
         <h2>5. User Accounts</h2>
-        <p>You'll need an account to access certain features. You're responsible for keeping your account credentials secure, providing accurate information, and telling us right away if you notice unauthorized use of your account.</p>
+        <p>An account is required to access certain features. You are responsible for maintaining the confidentiality of your account credentials, providing accurate registration information, and notifying us promptly of any unauthorized use at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+        <p>We may suspend or terminate accounts that violate these Terms, remain inactive for an extended period, or are used in a manner that threatens the security or integrity of the Service.</p>
 
         <h2>6. Brokerage Connections</h2>
-        <p>If you connect a brokerage account, you're authorizing Seli to retrieve read-only account data (positions, balances, account information) on your behalf. We never store your brokerage credentials, and Seli can never execute a trade for you. You can disconnect your brokerage account at any time from Settings.</p>
+        <p>If you connect a brokerage account through SnapTrade, you authorize Seli to retrieve read-only account data (positions, balances, account metadata) on your behalf. Seli never stores your brokerage login credentials and can never execute trades or move funds on your behalf. The brokerage connection is subject to SnapTrade's own terms and privacy policy. You can disconnect your brokerage at any time from Settings, which immediately revokes Seli's access.</p>
 
-        <h2>7. Subscriptions and Billing</h2>
-        <p>Certain features require a paid subscription. Subscriptions bill monthly. You can cancel anytime; cancellation takes effect at the end of your current billing period, not immediately. We reserve the right to change pricing with 30 days' notice. Payments are processed by Stripe and subject to Stripe's own terms of service.</p>
+        <h2>7. Subscriptions, Billing, and Refunds</h2>
+        <p>Certain features require a paid Pro subscription ({PRO_PRICE_LABEL}) or a one-time data export purchase ($39.99). All payments are processed by Stripe and subject to <a href="https://stripe.com/legal" target="_blank" rel="noopener noreferrer">Stripe's terms of service</a>.</p>
+        <p><strong>Subscriptions.</strong> Pro subscriptions bill monthly. You may cancel at any time; cancellation takes effect at the end of the current billing period. No partial-month refunds are issued for cancellations. We reserve the right to change pricing with at least 30 days' notice to current subscribers.</p>
+        <p><strong>Data exports.</strong> Each data export purchase provides a one-time download of the database as it exists at the time of purchase. Data exports are non-refundable once the download link has been generated.</p>
+        <p><strong>Refund requests.</strong> If you believe you were charged in error or have not received the service you paid for, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> within 30 days of the charge. We will review each request individually.</p>
 
         <h2>8. Prohibited Uses</h2>
-        <p>You may not: (a) use Seli for any unlawful purpose; (b) scrape, crawl, or otherwise systematically extract data from Seli; (c) resell or redistribute our data without written permission; (d) attempt to gain unauthorized access to any part of Seli; (e) use Seli to facilitate insider trading or securities fraud.</p>
+        <p>You agree not to:</p>
+        <ul>
+          <li>Use Seli for any purpose that violates applicable law, including securities law.</li>
+          <li>Scrape, crawl, or systematically extract data from Seli by automated means.</li>
+          <li>Resell, sublicense, or redistribute Seli's data, scoring, or rankings without written permission.</li>
+          <li>Attempt to reverse-engineer the scoring methodology, algorithms, or backend systems.</li>
+          <li>Attempt to gain unauthorized access to any part of Seli, its infrastructure, or other users' accounts.</li>
+          <li>Use Seli in any manner that could disable, overburden, or impair the Service.</li>
+          <li>Use Seli to facilitate insider trading, securities fraud, or market manipulation.</li>
+        </ul>
 
         <h2>9. Intellectual Property</h2>
-        <p>Seli, including its design, algorithms, and conviction scoring methodology, is the property of Kevin Maresca. The underlying SEC filing data itself is public domain. You may not copy, modify, or distribute Seli's proprietary systems without permission.</p>
+        <p>The Service, including its design, user interface, algorithms, scoring methodology, and all related intellectual property, is owned by SELI LLC. The underlying SEC and congressional filing data is public domain. Your use of Seli does not grant you ownership of or rights to any part of the Service beyond the limited license to use it under these Terms.</p>
+        <p>You may use data you access through Seli (including data exports you purchase) for your own personal, non-commercial research purposes. Redistribution, resale, or commercial use of exported data requires written permission from SELI LLC.</p>
 
         <h2>10. Disclaimer of Warranties</h2>
-        <p>Seli is provided "as is," without warranty of any kind. We disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, and non-infringement.</p>
+        <p><strong>SELI IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, COMPLETENESS, AND NON-INFRINGEMENT.</strong></p>
+        <p>We do not warrant that the Service will be uninterrupted, error-free, or free from harmful components. We do not warrant the accuracy, reliability, or completeness of any data, scores, rankings, or other content on the platform.</p>
 
         <h2>11. Limitation of Liability</h2>
-        <p>To the maximum extent permitted by law, Kevin Maresca isn't liable for indirect, incidental, special, consequential, or punitive damages arising from your use of Seli, including investment losses.</p>
+        <p><strong>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, SELI LLC, ITS MEMBERS, OFFICERS, AND AGENTS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, LOSS OF DATA, INVESTMENT LOSSES, OR BUSINESS INTERRUPTION, ARISING OUT OF OR IN CONNECTION WITH YOUR USE OF OR INABILITY TO USE SELI, REGARDLESS OF THE THEORY OF LIABILITY (CONTRACT, TORT, STRICT LIABILITY, OR OTHERWISE), EVEN IF WE HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</strong></p>
+        <p>Our total aggregate liability for all claims arising out of or relating to these Terms or the Service shall not exceed the greater of (a) the total amount you paid to SELI LLC in the twelve (12) months immediately preceding the event giving rise to the claim, or (b) one hundred dollars ($100).</p>
 
-        <h2>12. Governing Law</h2>
-        <p>These Terms are governed by the laws of the State of New Mexico, United States, without regard to conflict of law principles.</p>
+        <h2>12. Indemnification</h2>
+        <p>You agree to indemnify, defend, and hold harmless SELI LLC, its members, officers, employees, and agents from and against any and all claims, damages, losses, liabilities, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to: (a) your use of or reliance on the Service; (b) your violation of these Terms; (c) your violation of any applicable law or regulation; or (d) any investment decisions you make based in whole or in part on information obtained through Seli.</p>
 
-        <h2>13. Changes to Terms</h2>
-        <p>We may update these Terms at any time. Continuing to use Seli after a change means you accept the new Terms.</p>
+        <h2>13. Dispute Resolution</h2>
+        <p><strong>Governing law.</strong> These Terms are governed by and construed in accordance with the laws of the State of New Mexico, without regard to conflict of law principles.</p>
+        <p><strong>Informal resolution.</strong> Before filing any formal proceeding, you agree to first contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and attempt to resolve the dispute informally for at least 30 days.</p>
+        <p><strong>Jurisdiction.</strong> If informal resolution fails, any legal action or proceeding arising under these Terms shall be brought exclusively in the state or federal courts located in Bernalillo County, New Mexico, and you consent to the personal jurisdiction of such courts.</p>
+        <p><strong>Class action waiver.</strong> You agree that any dispute resolution proceedings will be conducted only on an individual basis and not as a class, consolidated, or representative action.</p>
 
-        <h2>14. Contact</h2>
-        <p>Questions about these Terms? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+        <h2>14. Severability</h2>
+        <p>If any provision of these Terms is found to be unenforceable or invalid, that provision shall be limited or eliminated to the minimum extent necessary so that the remaining Terms remain in full force and effect.</p>
+
+        <h2>15. Entire Agreement</h2>
+        <p>These Terms, together with the <a href="/privacy">Privacy Policy</a> and <a href="/cookies">Cookie Policy</a>, constitute the entire agreement between you and SELI LLC regarding your use of Seli and supersede any prior agreements.</p>
+
+        <h2>16. Contact</h2>
+        <p>SELI LLC<br/>Albuquerque, New Mexico<br/><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__frame">
@@ -6130,7 +8689,9 @@ function TermsPage() {
         <div className="lp-footer__links">
           <a href="/">Home</a>
           <span>·</span>
-          <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
+          <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+          <span>·</span>
+          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
         </div>
         </div>
       </footer>
@@ -6157,56 +8718,95 @@ function PrivacyPage() {
       </nav>
       <div className="legal-content">
         <h1>Privacy Policy</h1>
-        <p className="legal-date">Last updated: June 26, 2025</p>
+        <p className="legal-date">Last updated: August 2, 2026</p>
 
         <h2>1. Overview</h2>
-        <p>Seli, operated by Kevin Maresca, takes your privacy seriously. Here's exactly what Seli collects, how it's used, and the rights you have over your own data.</p>
+        <p>This Privacy Policy describes how SELI LLC ("SELI," "we," "us," or "our") collects, uses, shares, and protects your personal information when you use Seli. By using the Service, you consent to the practices described in this policy.</p>
 
         <h2>2. Information We Collect</h2>
+
         <h3>Account Information</h3>
-        <p>When you create a Seli account, we collect your email address and, if you sign in with Google, your Google profile name and picture. Authentication runs through Clerk (clerk.com). Seli never stores your password.</p>
+        <p>When you create a Seli account, we collect your email address and, if you sign in with Google, your name and profile picture. Authentication is handled by Clerk (clerk.com). Seli never receives or stores your password.</p>
 
-        <h3>Watchlist Data</h3>
-        <p>Tickers and insiders you add to your watchlist are stored in Seli's database, tied to your account.</p>
+        <h3>Billing Information</h3>
+        <p>If you subscribe to Pro or purchase a data export, payment is processed by Stripe. Seli receives a Stripe customer ID and subscription status. We never receive, process, or store your full credit card number, bank account details, or other payment credentials.</p>
 
-        <h3>Brokerage Connection Data</h3>
-        <p>If you connect a brokerage account, Seli stores an encrypted access token to retrieve your portfolio data, and holds your position data temporarily for display. Seli never stores your brokerage username or password.</p>
+        <h3>Watchlist and Preference Data</h3>
+        <p>Tickers and insiders you add to your watchlist, notification preferences, and display settings (theme, filters) are stored in our database and tied to your account.</p>
+
+        <h3>Brokerage Data</h3>
+        <p>If you connect a brokerage account through SnapTrade, Seli stores an encrypted connection token and retrieves your portfolio positions (holdings, balances, account metadata) on a read-only basis. Seli never receives or stores your brokerage login credentials and cannot execute trades or transfer funds.</p>
 
         <h3>Usage Data</h3>
-        <p>Standard server logs (IP addresses, browser type, pages visited) for security and performance monitoring. Seli never sells this data.</p>
+        <p>We collect standard server logs (IP addresses, browser type, pages visited, timestamps) for security monitoring, performance optimization, and debugging. If analytics tooling is added in the future, this policy will be updated before any new data collection begins.</p>
 
         <h2>3. How We Use Your Information</h2>
-        <p>To: (a) provide and improve Seli; (b) show your portfolio alongside relevant insider trading signals; (c) send transactional emails (account verification, password reset) through Clerk; (d) send alert emails if you subscribe to Pro notifications; (e) process payments through Stripe.</p>
-
-        <h2>4. Data Sharing</h2>
-        <p>Seli doesn't sell your personal data. We share data only with the service providers who help run Seli:</p>
+        <p>We use the information we collect to:</p>
         <ul>
-          <li><strong>Clerk</strong> (clerk.com): authentication and user management</li>
-          <li><strong>Stripe</strong> (stripe.com): payment processing</li>
-          <li><strong>Neon</strong> (neon.tech): database hosting</li>
-          <li><strong>Cloudflare</strong> (cloudflare.com): hosting and security</li>
+          <li>Provide, operate, and improve the Service.</li>
+          <li>Display insider trading activity relevant to your portfolio holdings and watchlist.</li>
+          <li>Send transactional emails (account verification, password reset) through Clerk.</li>
+          <li>Send digest and instant alert notifications if you have enabled them in Settings.</li>
+          <li>Process payments through Stripe.</li>
+          <li>Respond to support requests.</li>
+          <li>Detect and prevent fraud, abuse, or security incidents.</li>
         </ul>
 
+        <h2>4. Data Sharing and Sub-Processors</h2>
+        <p><strong>Seli does not sell your personal data.</strong> We do not share your personal information with third parties for their own marketing purposes. We share data only with the following service providers ("sub-processors") who process it on our behalf to operate the Service:</p>
+        <table className="legal-table">
+          <thead><tr><th>Provider</th><th>Purpose</th><th>Data shared</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://clerk.com/privacy" target="_blank" rel="noopener noreferrer">Clerk</a></td><td>Authentication, user management</td><td>Email, name, profile picture</td></tr>
+            <tr><td><a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer">Stripe</a></td><td>Payment processing</td><td>Email, payment method (direct to Stripe)</td></tr>
+            <tr><td><a href="https://neon.tech/privacy" target="_blank" rel="noopener noreferrer">Neon</a></td><td>Database hosting</td><td>Account data, watchlist, preferences</td></tr>
+            <tr><td><a href="https://cloudflare.com/privacypolicy" target="_blank" rel="noopener noreferrer">Cloudflare</a></td><td>Hosting, CDN, security</td><td>Request metadata (IP, headers)</td></tr>
+            <tr><td><a href="https://snaptrade.com/privacy" target="_blank" rel="noopener noreferrer">SnapTrade</a></td><td>Brokerage connection</td><td>Connection token, portfolio data</td></tr>
+            <tr><td><a href="https://resend.com/privacy" target="_blank" rel="noopener noreferrer">Resend</a></td><td>Email delivery</td><td>Email address, email content</td></tr>
+          </tbody>
+        </table>
+        <p>We may also disclose your information if required by law, subpoena, court order, or other legal process, or if we believe disclosure is necessary to protect the rights, property, or safety of SELI LLC, our users, or the public.</p>
+
         <h2>5. Data Retention</h2>
-        <p>Your account data stays with us for as long as your account is active. Delete your account, and we delete your personal data within 30 days. Watchlist and broker connection data is removed immediately on disconnection or account deletion, with no delay.</p>
+        <p>Your account data is retained for as long as your account is active. If you delete your account, we will delete your personal data within 30 days. Watchlist data, notification preferences, and brokerage connection tokens are deleted immediately upon account deletion or disconnection. Anonymized, aggregated data that cannot be used to identify you may be retained indefinitely for service improvement purposes.</p>
 
         <h2>6. Security</h2>
-        <p>Encrypted connections (HTTPS), encrypted storage of sensitive tokens (AES-256), and access controls throughout. No system is 100% secure, so you use Seli at your own risk.</p>
+        <p>We use industry-standard security measures including encrypted connections (TLS/HTTPS), encrypted storage of sensitive tokens (AES-256), and access controls. Despite these measures, no method of transmission or storage is 100% secure, and we cannot guarantee absolute security.</p>
 
         <h2>7. Your Rights</h2>
-        <p>You can: (a) access or export your data by contacting us; (b) delete your account and everything tied to it, anytime; (c) disconnect any brokerage connection anytime from Settings; (d) opt out of marketing emails anytime.</p>
+        <p>Depending on your jurisdiction, you may have the following rights regarding your personal data:</p>
+        <ul>
+          <li><strong>Access.</strong> Request a copy of the personal data we hold about you.</li>
+          <li><strong>Correction.</strong> Request correction of inaccurate personal data.</li>
+          <li><strong>Deletion.</strong> Request deletion of your account and associated personal data.</li>
+          <li><strong>Portability.</strong> Request your data in a structured, machine-readable format.</li>
+          <li><strong>Opt-out.</strong> Unsubscribe from digest or alert emails at any time from Settings or by using the unsubscribe link in any email.</li>
+          <li><strong>Disconnect.</strong> Revoke brokerage access at any time from Settings.</li>
+        </ul>
+        <p>To exercise any of these rights, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. We will respond within 30 days.</p>
 
-        <h2>8. Cookies</h2>
-        <p>Seli uses only essential cookies required for authentication (managed by Clerk), with no advertising or tracking cookies. Full details live in our <a href="/cookies">Cookie Policy</a>.</p>
+        <h2>8. State Privacy Rights</h2>
 
-        <h2>9. Children's Privacy</h2>
-        <p>Seli isn't directed at children under 13, and we don't knowingly collect personal information from anyone under 13.</p>
+        <h3>California (CCPA/CPRA)</h3>
+        <p>If you are a California resident, you have the right to: (a) know what personal information we collect, use, and disclose; (b) request deletion of your personal information; (c) opt out of the sale or sharing of your personal information (Seli does not sell or share personal information for cross-context behavioral advertising); and (d) not be discriminated against for exercising your privacy rights. To submit a verifiable consumer request, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
 
-        <h2>10. Changes to This Policy</h2>
-        <p>We may update this Privacy Policy periodically. We'll notify you of material changes by email or in Seli itself.</p>
+        <h3>Other U.S. States</h3>
+        <p>Residents of Colorado, Connecticut, Virginia, Utah, and other states with consumer privacy laws have similar rights to access, correct, delete, and opt out of certain processing of personal data. Contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> to exercise these rights.</p>
 
-        <h2>11. Contact</h2>
-        <p>Questions about this Privacy Policy? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+        <h2>9. Cookies</h2>
+        <p>Seli uses only essential cookies required for authentication. We do not use advertising, analytics, or tracking cookies. Full details are in our <a href="/cookies">Cookie Policy</a>.</p>
+
+        <h2>10. Children's Privacy</h2>
+        <p>Seli is not directed at anyone under the age of 18. We do not knowingly collect personal information from anyone under 18. If we learn that we have collected personal information from someone under 18, we will delete it promptly.</p>
+
+        <h2>11. International Users</h2>
+        <p>Seli is operated from the United States. If you access Seli from outside the United States, your information will be transferred to and processed in the United States, which may have different data protection standards than your jurisdiction.</p>
+
+        <h2>12. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy periodically. Material changes will be communicated by email or a notice within the Service. The "Last updated" date at the top of this page reflects when it was most recently revised.</p>
+
+        <h2>13. Contact</h2>
+        <p>SELI LLC<br/>Albuquerque, New Mexico<br/><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__frame">
@@ -6218,7 +8818,9 @@ function PrivacyPage() {
         <div className="lp-footer__links">
           <a href="/">Home</a>
           <span>·</span>
-          <a href="/terms" className="lp-footer__link-muted">Terms of Service</a>
+          <a href="/terms" className="lp-footer__link-muted">Terms</a>
+          <span>·</span>
+          <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
         </div>
         </div>
       </footer>
@@ -6345,7 +8947,7 @@ const HELP_SECTIONS = [
     render: () => (
       <>
         <h3>What does Pro include?</h3>
-        <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests, for $11.99 per month.</p>
+        <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests{BETA_ACTIVE ? `, for ${PRO_PRICE_DISPLAY} per month (founding member rate — normally ${PRO_PRICE_FULL}/mo)` : `, for ${PRO_PRICE_FULL} per month`}.</p>
         <h3>What's the Full Data Export?</h3>
         <p>A separate, one-time $39.99 purchase: a complete pull of the database as a spreadsheet, independent of a Pro subscription. Each purchase includes one download. If you need it again later, use Re-download in Settings &gt; Billing at no extra charge (this pulls current data, not a frozen copy from your original purchase date).</p>
         <h3>How do I cancel Pro?</h3>
@@ -6389,6 +8991,600 @@ const HELP_SECTIONS = [
     ),
   },
 ];
+
+// ── Public CSV Data Download page ─────────────────────────────────────────
+// SEO-optimized public page for the $39.99 one-time data export.
+// No auth required to view — purchase CTA opens the sign-in modal for
+// unauthenticated visitors, or navigates to Settings > Billing for
+// signed-in users.
+function DataDownloadPage() {
+  const [dark, setDark] = useTheme();
+
+  const SAMPLE_ROWS = [
+    { date:'2026-07-28', ticker:'AAPL', company:'Apple Inc.', insider:'WILLIAMS JEFFREY E', title:'General Counsel', type:'Buy', shares:'10,500', price:'$198.42', value:'$2.1M', pct:'+12.3%', role:'Executive', routine:'No' },
+    { date:'2026-07-25', ticker:'NVDA', company:'NVIDIA Corp', insider:'HUANG JEN HSUN', title:'CEO', type:'Buy', shares:'50,000', price:'$112.80', value:'$5.6M', pct:'+3.1%', role:'Executive', routine:'No' },
+    { date:'2026-07-24', ticker:'JPM', company:'JPMorgan Chase', insider:'DIMON JAMES', title:'CEO', type:'Buy', shares:'25,000', price:'$221.35', value:'$5.5M', pct:'+1.8%', role:'Executive', routine:'Yes' },
+    { date:'2026-07-22', ticker:'MSFT', company:'Microsoft Corp', insider:'NADELLA SATYA', title:'CEO', type:'Sell', shares:'8,000', price:'$438.90', value:'$3.5M', pct:'-0.4%', role:'Executive', routine:'Yes' },
+    { date:'2026-07-20', ticker:'TSLA', company:'Tesla, Inc.', insider:'TANEJA VAIBHAV', title:'CFO', type:'Buy', shares:'5,000', price:'$248.15', value:'$1.2M', pct:'+8.7%', role:'Executive', routine:'No' },
+  ];
+
+  const COLUMNS = [
+    { name:'transaction_date',     desc:'Date the trade occurred' },
+    { name:'filing_date',          desc:'Date the SEC filing was published' },
+    { name:'ticker',               desc:'Stock ticker symbol' },
+    { name:'company_name',         desc:'Full company name' },
+    { name:'insider_name',         desc:'Reporting insider' },
+    { name:'insider_title',        desc:'Title or role at the company' },
+    { name:'transaction_type',     desc:'Buy or Sell' },
+    { name:'transaction_code',     desc:'SEC code (P = purchase, S = sale)' },
+    { name:'is_open_market',       desc:'Voluntary open-market trade' },
+    { name:'shares',               desc:'Shares traded' },
+    { name:'price_per_share',      desc:'Price at time of trade' },
+    { name:'value',                desc:'Total dollar value' },
+    { name:'shares_owned_after',   desc:'Holdings after the trade' },
+    { name:'pct_owned_change',     desc:'Position change (%)' },
+    { name:'relationship',         desc:'Executive, Officer, or Director' },
+    { name:'is_routine',           desc:'Routine pattern flag (Cohen et al. 2012)' },
+    { name:'sector',               desc:'Sector classification' },
+    { name:'accession_number',     desc:'SEC EDGAR accession number for source verification' },
+  ];
+
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  function handleBuy() {
+    setCheckoutLoading(true);
+    fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.url) window.location.href = d.url;
+        else { alert('Could not start checkout. Please try again.'); setCheckoutLoading(false); }
+      })
+      .catch(() => { alert('Could not start checkout. Please try again.'); setCheckoutLoading(false); });
+  }
+
+  const buyCTA = (
+    <div style={{textAlign:'center'}}>
+      <button className="lp-btn-primary lp-btn-primary--lg" onClick={handleBuy} disabled={checkoutLoading}>
+        {checkoutLoading ? 'Loading checkout...' : 'Buy now — $39.99'}
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
+      <nav className="lp-nav">
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+          </a>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginLeft:'auto'}}>
+            <a href="/about" className="lp-nav__link">About</a>
+            <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={()=>setDark(d=>!d)} title="Toggle theme">
+              {dark?<IconSun style={{width:15,height:15}}/>:<IconMoon style={{width:15,height:15}}/>}
+            </button>
+          </div>
+        </div>
+      </nav>
+      <div className="legal-content" style={{maxWidth:960}}>
+
+        <div className="lp-info__eyebrow">Insider Trading Data Export</div>
+        <h1 style={{fontSize:'clamp(1.375rem, 5vw, 2.25rem)',fontWeight:800,letterSpacing:'-1px',lineHeight:1.1,marginBottom:20}}>Download 10+ Years of SEC Insider Trading Data</h1>
+        <p style={{fontSize:'0.9375rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:8}}>
+          The same insider trading data that powers Bloomberg terminals and institutional research desks — structured, clean, and
+          a fraction of the cost. Every open-market SEC Form 4 filing from corporate executives, directors, and 10% owners,
+          with routine-trade flags for separating signal from noise. One-time purchase, yours forever.
+        </p>
+        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginBottom:12}}>
+          Compressed ZIP · one CSV per calendar year · {COLUMNS.length} fields per transaction · Excel, Python, R, or any tool that reads CSV
+        </p>
+        <p style={{fontSize:'0.8125rem',color:'var(--text-2)',lineHeight:1.6,marginBottom:28}}>
+          Researchers, quants, and serious investors use insider trading data to build models, screen for
+          investment ideas, and backtest strategies. Academic studies show insider purchases outperform the
+          market by 4–5% annually. This is the raw data behind those findings — ready for your own analysis.
+          Congressional disclosures are available for free within the app but are not included in the data export.
+        </p>
+
+        {buyCTA}
+
+        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',textAlign:'center',marginTop:10,marginBottom:0}}>
+          Checkout powered by Stripe. No account required.
+        </p>
+
+        <hr style={{border:'none',borderTop:'0.5px solid var(--border)',margin:'40px 0'}}/>
+
+        <section className="lp-info__section">
+          <h2>Sample data</h2>
+          <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch',margin:'12px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem',minWidth:420}}>
+              <thead>
+                <tr style={{borderBottom:'1px solid var(--border)'}}>
+                  {['Date','Ticker','Insider','Type','Value','Role'].map(h=>(
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,fontSize:'0.6875rem',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'0.04em',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {SAMPLE_ROWS.map((r,i)=>(
+                  <tr key={i} style={{borderBottom:'0.5px solid var(--border)'}}>
+                    <td style={{padding:'8px 10px',whiteSpace:'nowrap'}}>{r.date}</td>
+                    <td style={{padding:'8px 10px',fontWeight:600,color:'var(--accent-strong)',whiteSpace:'nowrap'}}>{r.ticker}</td>
+                    <td style={{padding:'8px 10px',whiteSpace:'nowrap'}}>{r.insider}</td>
+                    <td style={{padding:'8px 10px'}}><span style={{color:r.type==='Buy'?'var(--green-600)':'var(--red-600)',fontWeight:600}}>{r.type}</span></td>
+                    <td style={{padding:'8px 10px',textAlign:'right',fontWeight:600,whiteSpace:'nowrap'}}>{r.value}</td>
+                    <td style={{padding:'8px 10px',whiteSpace:'nowrap'}}>{r.role}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',fontStyle:'italic'}}>
+            Representative sample showing 6 of {COLUMNS.length} fields. Actual export contains all columns listed below.
+          </p>
+        </section>
+
+        <section className="lp-info__section">
+          <h2>Column schema ({COLUMNS.length} fields)</h2>
+          <div style={{overflowX:'auto',margin:'12px 0',border:'0.5px solid var(--border)',borderRadius:8}}>
+            <table className="legal-table" style={{margin:0}}>
+              <thead>
+                <tr><th style={{width:200}}>Column</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                {COLUMNS.map(c=>(
+                  <tr key={c.name}>
+                    <td><code style={{fontSize:'0.75rem',background:'var(--surface-2)',padding:'2px 6px',borderRadius:3}}>{c.name}</code></td>
+                    <td>{c.desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="lp-info__section">
+          <h2>Use cases</h2>
+          <ul className="lp-info__principles">
+            <li><strong>Backtest insider trading signals.</strong> Filter to open-market executive
+              purchases and measure forward returns across holding periods.</li>
+            <li><strong>Academic research.</strong> Over a decade of Form 4 insider filings with
+              consistent parsing, ready for statistical analysis.</li>
+            <li><strong>Sector analysis.</strong> Aggregate insider buying and selling patterns by
+              sector, time period, or insider role.</li>
+            <li><strong>Congressional trading.</strong> STOCK Act disclosures in the same schema as
+              corporate filings for direct comparison.</li>
+            <li><strong>Build your own models.</strong> The raw data behind Seli's scoring, available
+              for your own methodology.</li>
+          </ul>
+          <p style={{fontSize:'0.875rem',color:'var(--text-2)'}}>
+            Raw EDGAR XML is free but requires heavy parsing. Commercial insider data APIs run
+            $200-500+/month. This is a one-time $39.99 purchase with no recurring fee.
+          </p>
+        </section>
+
+        <section style={{textAlign:'center',padding:'40px 0',borderTop:'0.5px solid var(--border)',marginTop:24}}>
+          {buyCTA}
+          <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:16,marginBottom:20}}>
+            One-time purchase. No subscription. Re-download anytime from your account.
+          </p>
+          <a href="/" style={{fontSize:'0.875rem',color:'var(--accent-strong)',textDecoration:'none',fontWeight:500}}>
+            Or explore Seli free — real-time signals, scoring, and alerts →
+          </a>
+        </section>
+
+      </div>
+      <footer className="lp-footer">
+        <div className="lp-footer__frame">
+          <div className="lp-footer__logo">
+            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
+          </div>
+          <div className="lp-footer__links">
+            <a href="/">Home</a>
+            <span>·</span>
+            <a href="/about" className="lp-footer__link-muted">About</a>
+            <span>·</span>
+            <a href="/terms" className="lp-footer__link-muted">Terms</a>
+            <span>·</span>
+            <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+// ── Purchase Complete page ─────────────────────────────────────────────────
+// Shown after Stripe Checkout redirect. Verifies payment, shows download
+// button, and displays the order ID for re-download reference.
+function PurchaseCompletePage() {
+  const [dark, setDark] = useTheme();
+  const [status, setStatus] = useState('loading'); // loading | ready | error
+  const [orderInfo, setOrderInfo] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    if (!sessionId) { setStatus('error'); return; }
+
+    // Verify the session and get order info
+    fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv-download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, info_only: true }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setStatus('error'); return; }
+        setOrderInfo({ sessionId, orderId: d.order_id, email: d.email, date: d.purchase_date });
+        setStatus('ready');
+      })
+      .catch(() => setStatus('error'));
+  }, []);
+
+  function handleDownload() {
+    setDownloading(true);
+    const params = new URLSearchParams(window.location.search);
+    fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv-download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: params.get('session_id') }),
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('Download failed');
+        return r.blob();
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `seli_insider_trades_${orderInfo?.date || 'export'}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setDownloading(false);
+      })
+      .catch(() => { setDownloading(false); setStatus('error'); });
+  }
+
+  return (
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
+      <nav className="lp-nav">
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+          </a>
+        </div>
+      </nav>
+      <div className="legal-content" style={{maxWidth:600,textAlign:'center',paddingTop:60}}>
+        {status === 'loading' && (
+          <>
+            <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:12}}>Verifying your purchase...</div>
+            <SkeletonRows count={3}/>
+          </>
+        )}
+        {status === 'ready' && (
+          <>
+            <div style={{fontSize:'2.5rem',marginBottom:8}}>✓</div>
+            <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Payment confirmed</div>
+            <p style={{color:'var(--text-2)',marginBottom:24}}>
+              Your insider trading dataset is ready to download.
+            </p>
+            <button
+              className="lp-btn-primary lp-btn-primary--lg"
+              onClick={handleDownload}
+              disabled={downloading}
+              style={{marginBottom:24}}
+            >
+              {downloading ? 'Preparing download...' : 'Download dataset (.zip)'}
+            </button>
+
+            <div style={{background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8,padding:'20px 24px',textAlign:'left',marginBottom:24}}>
+              <div style={{fontSize:'0.75rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em',color:'var(--text-3)',marginBottom:12}}>Order details — save this</div>
+              <div style={{display:'grid',gridTemplateColumns:'auto 1fr',gap:'8px 16px',fontSize:'0.875rem'}}>
+                <span style={{color:'var(--text-3)'}}>Order ID</span>
+                <span style={{fontFamily:'monospace',fontSize:'0.8125rem',wordBreak:'break-all'}}>{orderInfo?.orderId || '—'}</span>
+                <span style={{color:'var(--text-3)'}}>Email</span>
+                <span>{orderInfo?.email || '—'}</span>
+                <span style={{color:'var(--text-3)'}}>Data through</span>
+                <span>{orderInfo?.date || '—'}</span>
+              </div>
+            </div>
+
+            <p style={{fontSize:'0.8125rem',color:'var(--text-3)',lineHeight:1.6}}>
+              Need to re-download later? Go to <a href="/redownload" style={{color:'var(--accent-strong)'}}>seli.app/redownload</a> and
+              enter your Order ID and email. A receipt has been sent to your email by Stripe.
+            </p>
+          </>
+        )}
+        {status === 'error' && (
+          <>
+            <div style={{fontSize:'2.5rem',marginBottom:8}}>×</div>
+            <div style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Something went wrong</div>
+            <p style={{color:'var(--text-2)',marginBottom:24}}>
+              We couldn't verify your purchase. If you were charged, your payment is safe.
+            </p>
+            <p style={{fontSize:'0.875rem',color:'var(--text-3)',marginBottom:24}}>
+              Contact <a href="mailto:admin@seli.app" style={{color:'var(--accent-strong)'}}>admin@seli.app</a> with
+              your Stripe receipt and we'll get your download sorted.
+            </p>
+            <a href="/data-download" className="lp-btn-primary">Back to Data Export</a>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Re-download page ──────────────────────────────────────────────────────
+function RedownloadPage() {
+  const [dark, setDark] = useTheme();
+  const { isSignedIn, getToken } = useAuth();
+  const [orderId, setOrderId] = useState('');
+  const [email, setEmail] = useState('');
+  const [lookupStatus, setLookupStatus] = useState('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [history, setHistory] = useState(null);
+  const [historyError, setHistoryError] = useState(null);
+  const [downloadProgress, setDownloadProgress] = useState(null);
+  const [activeTab, setActiveTab] = useState(isSignedIn ? 'history' : 'lookup');
+
+  useEffect(() => {
+    if (!isSignedIn) { setHistory([]); return; }
+    setActiveTab('history');
+    (async () => {
+      try {
+        const token = await getToken();
+        const r = await fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/billing/status', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const d = await r.json();
+        // API returns dataExports, not purchases
+        setHistory(d.dataExports || []);
+      } catch (e) { setHistoryError(e.message); setHistory([]); }
+    })();
+  }, [isSignedIn]);
+
+  async function downloadBlob(fetchPromise, filename) {
+    setDownloadProgress({ label: 'Preparing download...', pct: 0 });
+    setErrorMsg('');
+    try {
+      const r = await fetchPromise;
+      if (!r.ok) {
+        // Try to parse a JSON error body — but the response might be HTML
+        // (e.g. a 404 page) or empty, so fall back gracefully.
+        let msg = `Server returned ${r.status}`;
+        try {
+          const ct = r.headers.get('content-type') || '';
+          if (ct.includes('json')) {
+            const d = await r.json();
+            if (d.error) msg = d.error;
+          }
+        } catch {}
+        throw new Error(msg);
+      }
+      const total = parseInt(r.headers.get('content-length') || '0', 10);
+      const reader = r.body.getReader();
+      const chunks = [];
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        const recMB = (received / 1_048_576).toFixed(1);
+        const pct = total > 0 ? Math.round((received / total) * 100) : null;
+        setDownloadProgress({
+          label: total > 0
+            ? `Downloading… ${recMB}MB / ${(total / 1_048_576).toFixed(1)}MB`
+            : `Downloading… ${recMB}MB`,
+          pct,
+        });
+      }
+      const blob = new Blob(chunks);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setDownloadProgress({ label: 'Download complete', pct: 100 });
+      setTimeout(() => setDownloadProgress(null), 3000);
+    } catch (e) {
+      setDownloadProgress(null);
+      setErrorMsg(e.message || 'Download failed — try again in a moment.');
+      setLookupStatus('error');
+    }
+  }
+
+  function handleRedownload(purchase) {
+    (async () => {
+      const token = await getToken();
+      await downloadBlob(
+        fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/export/csv', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'redownload', purchaseId: purchase.stripe_payment_intent_id }),
+        }),
+        `seli_insider_trades_${purchase.purchased_at?.split('T')[0] || 'export'}.zip`
+      );
+    })();
+  }
+
+  function handleLookup(e) {
+    e.preventDefault();
+    if (!orderId.trim() || !email.trim()) return;
+    setLookupStatus('loading');
+    setErrorMsg('');
+    downloadBlob(
+      fetch(cfg.NEON_PROXY_URL.replace(/\/+$/, '') + '/checkout/csv-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId.trim(), email: email.trim() }),
+      }),
+      'seli_insider_trades_export.zip'
+    ).then(() => setLookupStatus('idle'));
+  }
+
+  const tabStyle = (active) => ({
+    padding:'10px 20px',fontSize:'0.875rem',fontWeight:active?600:400,
+    color:active?'var(--accent-strong)':'var(--text-3)',
+    background:'none',border:'none',
+    borderBottom:active?'2px solid var(--accent-strong)':'2px solid transparent',
+    cursor:'pointer',fontFamily:'var(--font)',
+  });
+
+  return (
+    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
+      <nav className="lp-nav">
+        <div className="lp-nav__frame">
+          <a className="lp-nav__logo" href="/">
+            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
+            <span className="lp-wordmark">Seli</span>
+          </a>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginLeft:'auto'}}>
+            <a href="/help" className="lp-nav__link">Help</a>
+            <a href="/data-download" className="lp-nav__link">Buy data</a>
+          </div>
+        </div>
+      </nav>
+      <div className="legal-content" style={{maxWidth:560,paddingTop:48}}>
+
+        <h1 style={{fontSize:'1.5rem',fontWeight:700,marginBottom:8}}>Download your data export</h1>
+        <p style={{color:'var(--text-2)',marginBottom:24,fontSize:'0.9375rem'}}>
+          Already purchased? Re-download your dataset below.
+        </p>
+
+        {downloadProgress && (
+          <div style={{marginBottom:24,padding:'16px 20px',background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:8}}>
+            <div style={{fontSize:'0.8125rem',fontWeight:500,marginBottom:8}}>{downloadProgress.label}</div>
+            <div style={{width:'100%',height:6,background:'var(--surface-3)',borderRadius:3,overflow:'hidden'}}>
+              <div style={{
+                width: downloadProgress.pct != null ? `${downloadProgress.pct}%` : '60%',
+                height:'100%', background:'var(--accent-strong)', borderRadius:3,
+                transition:'width 0.3s ease',
+                animation: downloadProgress.pct == null ? 'skel-fade 1s ease-in-out infinite alternate' : 'none',
+              }}/>
+            </div>
+          </div>
+        )}
+
+        <div style={{display:'flex',gap:0,marginBottom:24,borderBottom:'1px solid var(--border)'}}>
+          <button onClick={() => setActiveTab('history')} style={tabStyle(activeTab==='history')}>My purchases</button>
+          <button onClick={() => setActiveTab('lookup')} style={tabStyle(activeTab==='lookup')}>Look up an order</button>
+        </div>
+
+        {/* Fixed-height tab content area prevents width/height jumping */}
+        <div style={{minHeight:260}}>
+
+          {activeTab === 'history' && (
+            <section>
+              {!isSignedIn ? (
+                <div style={{textAlign:'center',padding:'32px 0'}}>
+                  <p style={{color:'var(--text-2)',marginBottom:16,fontSize:'0.9375rem'}}>
+                    Sign in to see purchases linked to your account.
+                  </p>
+                  <SignInButton mode="modal" afterSignInUrl="/redownload">
+                    <button className="lp-btn-primary">Sign in</button>
+                  </SignInButton>
+                </div>
+              ) : history === null ? (
+                <SkeletonRows count={3}/>
+              ) : history.length === 0 ? (
+                <div style={{textAlign:'center',padding:'32px 0'}}>
+                  <p style={{color:'var(--text-3)',fontSize:'0.9375rem',marginBottom:16}}>
+                    {historyError ? 'Could not load purchase history.' : 'No data export purchases on this account.'}
+                  </p>
+                  <a href="/data-download" style={{color:'var(--accent-strong)',fontSize:'0.875rem',fontWeight:500,textDecoration:'none'}}>
+                    Purchase the dataset →
+                  </a>
+                </div>
+              ) : (
+                <div style={{border:'0.5px solid var(--border)',borderRadius:8,overflow:'hidden'}}>
+                  {history.map((p, i) => {
+                    const dateStr = p.purchased_at ? p.purchased_at.slice(0, 10) : null;
+                    return (
+                      <div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderBottom:i < history.length - 1 ? '0.5px solid var(--border)' : 'none'}}>
+                        <div>
+                          <div style={{fontWeight:600,fontSize:'0.875rem'}}>Insider Trading Dataset</div>
+                          <div style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:2}}>
+                            {dateStr ? fmt.date(dateStr) : '—'} · ${(p.amount_cents / 100).toFixed(2)}
+                            {p.downloaded_at ? ' · downloaded' : ''}
+                          </div>
+                        </div>
+                        <button
+                          className="btn btn--primary btn--sm"
+                          onClick={() => handleRedownload(p)}
+                          disabled={downloadProgress != null}
+                        >Re-download</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {isSignedIn && history && history.length > 0 && errorMsg && (
+                <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6,marginTop:12}}>
+                  {errorMsg}
+                </div>
+              )}
+              {isSignedIn && history && history.length > 0 && (
+                <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:12}}>
+                  Each re-download delivers the latest available data.
+                </p>
+              )}
+            </section>
+          )}
+
+          {activeTab === 'lookup' && (
+            <section>
+              <p style={{color:'var(--text-2)',marginBottom:20,fontSize:'0.875rem'}}>
+                Enter the Order ID and email from your Stripe receipt to re-download.
+              </p>
+              <div style={{display:'flex',flexDirection:'column',gap:16}}>
+                <div>
+                  <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Order ID</label>
+                  <input type="text" value={orderId} onChange={e => setOrderId(e.target.value)}
+                    placeholder="pi_3Nk8..."
+                    style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontFamily:'monospace',boxSizing:'border-box'}}
+                  />
+                </div>
+                <div>
+                  <label style={{display:'block',fontSize:'0.8125rem',fontWeight:600,color:'var(--text-2)',marginBottom:6}}>Email used at checkout</label>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    style={{width:'100%',padding:'10px 12px',fontSize:'0.875rem',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',boxSizing:'border-box'}}
+                  />
+                </div>
+                <button className="lp-btn-primary" onClick={handleLookup}
+                  disabled={lookupStatus === 'loading' || !orderId.trim() || !email.trim() || downloadProgress != null}
+                  style={{width:'100%',padding:'12px'}}
+                >{lookupStatus === 'loading' ? 'Verifying...' : 'Download'}</button>
+                {lookupStatus === 'error' && (
+                  <div style={{fontSize:'0.8125rem',color:'var(--red-600)',padding:'10px 12px',background:'rgba(239,68,68,0.08)',borderRadius:6}}>
+                    {errorMsg || 'Could not verify this order. Double-check your Order ID and email.'}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+        </div>
+
+        <p style={{fontSize:'0.8125rem',color:'var(--text-3)',marginTop:28,lineHeight:1.6,textAlign:'center'}}>
+          Need help? Contact <a href="mailto:admin@seli.app" style={{color:'var(--accent-strong)'}}>admin@seli.app</a>
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function HelpCenterPage() {
   const [activeId, setActiveId] = useState('using-seli');
@@ -6469,15 +9665,18 @@ const DEFAULT_PREFS = {
   digest_corporate:       true,
   digest_watchlist_only:  false,
   digest_min_conviction:  'any',
-  digest_max_signals:     10,   // 0 = unlimited
-  digest_min_value:       0,    // 0 = any amount
+  digest_max_signals:     10,
+  digest_min_value:       0,
   // Instant alerts
   instant_watchlist_ticker: false,
   instant_followed_insider: false,
   instant_high_conviction:  false,
   instant_reversal:         false,
-  instant_min_value:                 0,        // 0 = any amount
-  instant_high_conviction_threshold: 1000000,   // was hardcoded server-side before
+  instant_large_trade:      false,
+  instant_min_value:        0,
+  instant_high_conviction_threshold: 1000000,
+  // Preferences
+  csuite_only:              false,
 };
 
 function useNotificationPrefs(userId, pro) {
@@ -6564,13 +9763,43 @@ function useSnapTrade(pro) {
     }
   }, [pro]);
 
-  useEffect(() => { refreshStatus(); }, [refreshStatus]);
+  // On mount: if we just returned from SnapTrade's redirect, confirm the
+  // connection first (flips status from 'pending' to 'active' on the worker)
+  // then check status. Without this, the row stays 'pending' and every
+  // downstream query filtering by status='active' returns nothing.
+  // SnapTrade redirects back with ?connection_id=... (their own param),
+  // ignoring the query string on customRedirect.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isSnapTradeReturn = params.has('connection_id') || params.get('snaptrade');
+    if (isSnapTradeReturn && pro && cfg.NEON_PROXY_URL) {
+      (async () => {
+        try {
+          const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+          await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/confirm`, { method: 'POST', headers, body: JSON.stringify({}) });
+        } catch (e) {
+          console.error('[useSnapTrade] confirm failed:', e.message);
+        }
+        // Clean SnapTrade params from the URL so a page refresh doesn't re-confirm
+        const url = new URL(window.location);
+        url.searchParams.delete('snaptrade');
+        url.searchParams.delete('status');
+        url.searchParams.delete('connection_id');
+        window.history.replaceState({}, '', url.pathname + (url.search || ''));
+        await refreshStatus();
+      })();
+    } else {
+      refreshStatus();
+    }
+  }, [refreshStatus, pro]);
 
   async function connect() {
     setConnecting(true); setError(null);
     try {
       const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/connect`, { method: 'POST', headers });
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/snaptrade/connect`, {
+        method: 'POST', headers, body: JSON.stringify({})
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Connect failed');
       window.location.href = data.redirectURI; // hand off to SnapTrade's hosted portal
@@ -6600,15 +9829,16 @@ function SettingsPage({ user, onUpgrade }) {
   const { pro } = useBilling();
   const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
   const snaptrade = useSnapTrade(pro);
-  const portfolio = usePortfolio();
+  const portfolio = usePortfolio(pro);
   const [section, setSection] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('section') || (params.get('snaptrade') ? 'brokers' : 'billing');
+    return params.get('section') || (params.has('connection_id') || params.get('snaptrade') ? 'brokers' : 'billing');
   });
   const [local,   setLocal]   = useState(null);
-  const [testState, setTestState] = useState(null); // null | 'sending' | 'sent' | error string
+  const [testState, setTestState] = useState(null);
 
-  useEffect(()=>{ if (prefs && !local) setLocal({...prefs}); },[prefs]);
+  useEffect(()=>{ if (prefs) setLocal(p=>({...DEFAULT_PREFS,...prefs})); },[prefs]);
+  const hasUnsavedSettings = local && prefs && JSON.stringify(local) !== JSON.stringify({...DEFAULT_PREFS,...prefs});
 
   function upd(key, val) { setLocal(p=>({...p, [key]:val})); }
 
@@ -6635,381 +9865,273 @@ function SettingsPage({ user, onUpgrade }) {
   const [notifTab, setNotifTab] = useState('digests'); // sub-tab within Notifications
 
   return (
-    <div className="settings-page">
-      <div className="settings-layout">
+    <div className="ws-page ws-page--narrow">
 
-        {/* ── Left sidebar nav ─────────────────────────────────────────── */}
-        <div className="settings-sidenav">
-          {SECTIONS.map(s=>(
-            <button key={s.id}
-              className={`settings-sidenav__item${section===s.id?' settings-sidenav__item--active':''}`}
-              onClick={()=>setSection(s.id)}
-              title={s.label}
-              aria-label={s.label}>
-              <span className="settings-sidenav__icon">{s.Icon ? <s.Icon style={{width:14,height:14}}/> : s.icon}</span>
-              {s.label}
-            </button>
-          ))}
-        </div>
+      {/* Page header */}
+      <div style={{marginBottom:20}}>
+        <h1 className="ws-page-title">Settings</h1>
+        <p className="ws-page-sub">Manage your plan, alerts, and connected accounts.</p>
+      </div>
 
-        {/* ── Content ──────────────────────────────────────────────────── */}
-        <div className="settings-content">
+      {/* Horizontal tab nav — replaces left sidebar */}
+      <div className="ws-settings-tabs">
+        {SECTIONS.map(s=>(
+          <button key={s.id}
+            className={`ws-settings-tab${section===s.id?' ws-settings-tab--active':''}`}
+            onClick={()=>setSection(s.id)}>
+            <span className="ws-settings-tab__icon">{s.Icon ? <s.Icon style={{width:13,height:13}}/> : s.icon}</span>
+            {s.label}
+          </button>
+        ))}
+      </div>
 
-          {/* BILLING */}
-          {section==='billing'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">Billing</div>
-              <div className="settings-section__desc">Manage your plan, payment, and data export purchases.</div>
+      {/* Content — each section is a ws-tile */}
+      <div>
+
+        {/* BILLING */}
+        {section==='billing'&&(
+          <div className="ws-tile">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Billing</span>
+                <span className="ws-tile__sub">Plan, payment, and data export</span>
+              </div>
+            </div>
+            <div className="ws-tile__body">
               <BillingSection user={user} />
             </div>
-          )}
+          </div>
+        )}
 
-          {/* NOTIFICATIONS — digests and instant alerts as sub-tabs */}
-          {section==='notifications'&&(<>
-            <div className="settings-tabs" style={{marginBottom:14}}>
-              <button className={`settings-tab${notifTab==='digests'?' settings-tab--active':''}`} onClick={()=>setNotifTab('digests')}>Email digests</button>
-              <button className={`settings-tab${notifTab==='instant'?' settings-tab--active':''}`} onClick={()=>setNotifTab('instant')}>Instant alerts</button>
+        {/* NOTIFICATIONS */}
+        {section==='notifications'&&(<>
+          {/* Sub-tabs for digests vs instant */}
+          <div className="ws-toolbar-hdr" style={{background:'var(--surface)',border:'0.5px solid var(--border)',borderRadius:'var(--radius-lg)',marginBottom:14,overflow:'hidden'}}>
+            <div className="ws-toolbar-tabs">
+              <button className={`ws-toolbar-tab${notifTab==='digests'?' ws-toolbar-tab--active':''}`} onClick={()=>setNotifTab('digests')}>Email digests</button>
+              <button className={`ws-toolbar-tab${notifTab==='instant'?' ws-toolbar-tab--active':''}`} onClick={()=>setNotifTab('instant')}>Instant alerts</button>
             </div>
+            <div className="ws-toolbar-right" style={{display:'flex',alignItems:'center',gap:8}}>
+              {hasUnsavedSettings&&<span className="ws-unsaved-badge">Unsaved changes</span>}
+              {!pro&&<>
+                <span style={{fontSize:11,color:'var(--text-3)'}}>Pro required · </span>
+                <button className="ws-tile__action" style={{fontSize:11}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
+              </>}
+            </div>
+          </div>
 
           {/* EMAIL DIGESTS */}
           {notifTab==='digests'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">
-                Email digests
-                {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
+            <div className="ws-tile">
+              <div className="ws-tile__hdr">
+                <div className="ws-tile__hdr-left">
+                  <span className="ws-tile__title">Email digests</span>
+                  {!pro&&<span className="settings-pro-badge" style={{marginLeft:8,fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:999,background:'var(--accent-50)',color:'var(--accent)'}}>Pro</span>}
+                </div>
               </div>
-              <div className="settings-section__desc">
-                Scheduled summaries delivered to your inbox. Choose your frequency and what to include.
-                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}> Upgrade to Pro to enable email digests.</button>}
-              </div>
-
-              {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
-
-                {/* Frequency — independent toggles, not mutually exclusive */}
-                <div className="settings-group">
-                  <div className="settings-group__label">Frequency</div>
-                  <SettingsToggle
-                    label="Daily digest"
-                    sub="Every weekday morning at 8am ET"
-                    checked={local.daily_digest}
-                    onChange={e=>upd('daily_digest', e.target.checked)}
-                    pro={pro}
-                  />
-                  <SettingsToggle
-                    label="Weekly digest"
-                    sub="Every Monday morning at 8am ET"
-                    checked={local.weekly_digest}
-                    onChange={e=>upd('weekly_digest', e.target.checked)}
-                    pro={pro}
-                  />
-                </div>
-
-                {/* Content — what to include in digests */}
-                <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
-                  <div className="settings-group__label">What to include</div>
-                  <SettingsToggle
-                    label="Top insider signals"
-                    sub="Highest-scoring buys from the selected window"
-                    checked={local.digest_top_signals}
-                    onChange={e=>upd('digest_top_signals', e.target.checked)}
-                    pro={pro}
-                    disabled={!local.daily_digest && !local.weekly_digest}
-                  />
-                  <SettingsToggle
-                    label="Corporate trades (Form 4)"
-                    sub="C-suite and officer open-market transactions"
-                    checked={local.digest_corporate}
-                    onChange={e=>upd('digest_corporate', e.target.checked)}
-                    pro={pro}
-                    disabled={!local.daily_digest && !local.weekly_digest}
-                  />
-                  <SettingsToggle
-                    label="Congressional trades (STOCK Act)"
-                    sub="Senator and representative disclosures"
-                    checked={local.digest_congressional}
-                    onChange={e=>upd('digest_congressional', e.target.checked)}
-                    pro={pro}
-                    disabled={!local.daily_digest && !local.weekly_digest}
-                  />
-                  <SettingsToggle
-                    label="Watchlist activity only"
-                    sub="Limit digest to tickers and insiders you follow"
-                    checked={local.digest_watchlist_only}
-                    onChange={e=>upd('digest_watchlist_only', e.target.checked)}
-                    pro={pro}
-                    disabled={!local.daily_digest && !local.weekly_digest}
-                  />
-                </div>
-
-                {/* Score filter */}
-                <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
-                  <div className="settings-group__label">Minimum signal strength</div>
-                  <div className="settings-group__desc">Only include trades scoring above this level</div>
-                  <div className="settings-pills" style={{marginTop:10}}>
-                    {[
-                      {v:'any',    l:'Any signal',  d:'All open-market trades'},
-                      {v:'medium', l:'Medium+',     d:'Exec participation or $100K+'},
-                      {v:'high',   l:'High only',   d:'C-suite clusters above $1M'},
-                    ].map(o=>(
-                      <button key={o.v}
-                        className={`settings-pill${local.digest_min_conviction===o.v?' settings-pill--active':''}${!pro?' settings-pill--locked':''}`}
-                        onClick={()=>pro&&upd('digest_min_conviction', o.v)}
-                        title={o.d}>
-                        {o.l}
-                      </button>
-                    ))}
+              <div className="ws-tile__body">
+                {!pro&&(
+                  <div className="ws-settings-upgrade-banner">
+                    Scheduled digests are a Pro feature. Upgrade to get daily or weekly summaries delivered to your inbox.
+                    <button className="ws-tile__action" style={{marginLeft:10}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
                   </div>
-                </div>
+                )}
 
-                {/* Volume & sizing controls */}
-                <div className={`settings-group${(!local.daily_digest&&!local.weekly_digest)||!pro?' settings-group--dimmed':''}`}>
-                  <div className="settings-group__label">Digest size</div>
-                  <div className="settings-row">
-                    <div style={{flex:1}}>
-                      <div className="settings-row__label">Max tickers per digest</div>
-                      <div className="settings-row__sub">Caps how many tickers appear in one email, ranked by net flow</div>
+                {!local ? (
+                  <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+                ) : (<>
+                  <div className="ws-settings-group">
+                    <div className="ws-settings-group__label">Frequency</div>
+                    <SettingsToggle label="Daily digest" sub="Every weekday morning at 8am ET" checked={local.daily_digest} onChange={e=>upd('daily_digest',e.target.checked)} pro={pro}/>
+                    <SettingsToggle label="Weekly digest" sub="Every Monday morning at 8am ET" checked={local.weekly_digest} onChange={e=>upd('weekly_digest',e.target.checked)} pro={pro}/>
+                  </div>
+
+                  <div className={`ws-settings-group${((!local.daily_digest&&!local.weekly_digest)||!pro)?' ws-settings-group--dimmed':''}`}>
+                    <div className="ws-settings-group__label">Include in digests</div>
+                    <SettingsToggle label="Top insider signals" sub="Highest-scoring buys from the selected window" checked={local.digest_top_signals} onChange={e=>upd('digest_top_signals',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
+                    <SettingsToggle label="Corporate trades (Form 4)" sub="C-suite and officer open-market transactions" checked={local.digest_corporate} onChange={e=>upd('digest_corporate',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
+                    <SettingsToggle label="Congressional trades (STOCK Act)" sub="Senator and representative disclosures" checked={local.digest_congressional} onChange={e=>upd('digest_congressional',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
+                    <SettingsToggle label="Watchlist activity only" sub="Limit digest to tickers and insiders you follow" checked={local.digest_watchlist_only} onChange={e=>upd('digest_watchlist_only',e.target.checked)} pro={pro} disabled={!local.daily_digest&&!local.weekly_digest}/>
+                  </div>
+
+                  <div className={`ws-settings-group${((!local.daily_digest&&!local.weekly_digest)||!pro)?' ws-settings-group--dimmed':''}`}>
+                    <div className="ws-settings-group__label">Filters</div>
+                    <div className="ws-settings-row">
+                      <div style={{flex:1}}>
+                        <div className="ws-settings-row__label">Minimum conviction score</div>
+                        <div className="ws-settings-row__sub">Only include signals at or above this score</div>
+                      </div>
+                      <select className="ws-select" value={local.digest_min_conviction} disabled={!pro} onChange={e=>upd('digest_min_conviction',Number(e.target.value))}>
+                        <option value={0}>Any score</option>
+                        <option value={25}>25+</option>
+                        <option value={40}>40+</option>
+                        <option value={60}>60+</option>
+                        <option value={75}>75+</option>
+                      </select>
                     </div>
-                    <select className="settings-select" value={local.digest_max_signals} disabled={!pro}
-                      onChange={e=>upd('digest_max_signals', Number(e.target.value))}>
-                      {[5,10,20,50].map(n=><option key={n} value={n}>{n}</option>)}
-                      <option value={0}>Unlimited</option>
-                    </select>
-                  </div>
-                  <div className="settings-row">
-                    <div style={{flex:1}}>
-                      <div className="settings-row__label">Minimum trade value</div>
-                      <div className="settings-row__sub">Skip tickers where no single trade reaches this size</div>
+                    <div className="ws-settings-row">
+                      <div style={{flex:1}}>
+                        <div className="ws-settings-row__label">Minimum trade value</div>
+                        <div className="ws-settings-row__sub">Skip tickers where no single trade reaches this size</div>
+                      </div>
+                      <select className="ws-select" value={local.digest_min_value} disabled={!pro} onChange={e=>upd('digest_min_value',Number(e.target.value))}>
+                        <option value={0}>Any amount</option>
+                        <option value={10000}>$10K+</option>
+                        <option value={50000}>$50K+</option>
+                        <option value={250000}>$250K+</option>
+                        <option value={1000000}>$1M+</option>
+                      </select>
                     </div>
-                    <select className="settings-select" value={local.digest_min_value} disabled={!pro}
-                      onChange={e=>upd('digest_min_value', Number(e.target.value))}>
-                      <option value={0}>Any amount</option>
-                      <option value={10000}>$10K+</option>
-                      <option value={50000}>$50K+</option>
-                      <option value={250000}>$250K+</option>
-                      <option value={1000000}>$1M+</option>
-                    </select>
                   </div>
-                </div>
 
-                <div className="settings-save-row">
-                  <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
-                    {saving?'Saving…':saved?'✓ Saved':'Save digest settings'}
-                  </button>
-                  {pro&&(
-                    <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>
-                      {testState==='sending'?'Sending…':'Send test email'}
+                  <div className="ws-settings-save-row">
+                    <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
+                      {saving?'Saving…':saved?'✓ Saved':'Save digest settings'}
                     </button>
-                  )}
-                  {saved&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Saved</span>}
-                  {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
-                  {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
-                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
-                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}>Upgrade to Pro to save</button>}
-                </div>
-              </>)}
+                    {pro&&<button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>{testState==='sending'?'Sending…':'Send test email'}</button>}
+                    {saved&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Saved</span>}
+                    {testState==='sent'&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Test sent</span>}
+                    {testState&&testState!=='sending'&&testState!=='sent'&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{testState}</span>}
+                    {error&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{error}</span>}
+                  </div>
+                </>)}
+              </div>
             </div>
           )}
 
           {/* INSTANT ALERTS */}
           {notifTab==='instant'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">
-                Instant alerts
-                {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
-              </div>
-              <div className="settings-section__desc">
-                Real-time emails fired within minutes of a filing. Each trigger is independent.
-                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}> Upgrade to Pro to enable instant alerts.</button>}
-              </div>
-
-              {!local ? <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div> : (<>
-
-                <div className="settings-group">
-                  <div className="settings-group__label">Watchlist triggers</div>
-                  <SettingsToggle
-                    label="Watched ticker traded"
-                    sub="Any insider trades a stock on your watchlist"
-                    checked={local.instant_watchlist_ticker}
-                    onChange={e=>upd('instant_watchlist_ticker', e.target.checked)}
-                    pro={pro}
-                  />
-                  <SettingsToggle
-                    label="Followed insider filed"
-                    sub="Someone you follow submits a new Form 4"
-                    checked={local.instant_followed_insider}
-                    onChange={e=>upd('instant_followed_insider', e.target.checked)}
-                    pro={pro}
-                  />
-                  <div className="settings-row">
-                    <div style={{flex:1}}>
-                      <div className="settings-row__label">Minimum trade value</div>
-                      <div className="settings-row__sub">Applies to both watchlist triggers above — skip anything smaller</div>
-                    </div>
-                    <select className="settings-select" value={local.instant_min_value} disabled={!pro}
-                      onChange={e=>upd('instant_min_value', Number(e.target.value))}>
-                      <option value={0}>Any amount</option>
-                      <option value={10000}>$10K+</option>
-                      <option value={50000}>$50K+</option>
-                      <option value={250000}>$250K+</option>
-                    </select>
-                  </div>
+            <div className="ws-tile">
+              <div className="ws-tile__hdr">
+                <div className="ws-tile__hdr-left">
+                  <span className="ws-tile__title">Instant alerts</span>
+                  {!pro&&<span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:999,background:'var(--accent-50)',color:'var(--accent)',marginLeft:8}}>Pro</span>}
                 </div>
-
-                <div className="settings-group">
-                  <div className="settings-group__label">Signal triggers</div>
-                  <SettingsToggle
-                    label="Large executive buy"
-                    sub="C-suite open-market buy at or above the threshold below — regardless of watchlist"
-                    checked={local.instant_high_conviction}
-                    onChange={e=>upd('instant_high_conviction', e.target.checked)}
-                    pro={pro}
-                  />
-                  <div className="settings-row">
-                    <div style={{flex:1}}>
-                      <div className="settings-row__label">Minimum trade size</div>
-                      <div className="settings-row__sub">Single-trade size required to trigger this alert</div>
-                    </div>
-                    <select className="settings-select" value={local.instant_high_conviction_threshold} disabled={!pro}
-                      onChange={e=>upd('instant_high_conviction_threshold', Number(e.target.value))}>
-                      <option value={250000}>$250K+</option>
-                      <option value={500000}>$500K+</option>
-                      <option value={1000000}>$1M+</option>
-                      <option value={2000000}>$2M+</option>
-                      <option value={5000000}>$5M+</option>
-                    </select>
+              </div>
+              <div className="ws-tile__body">
+                {!pro&&(
+                  <div className="ws-settings-upgrade-banner">
+                    Real-time email alerts are a Pro feature. Upgrade to get notified within minutes of a filing.
+                    <button className="ws-tile__action" style={{marginLeft:10}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
                   </div>
-                  <SettingsToggle
-                    label="Reversal detected"
-                    sub="An insider on a watched ticker changes direction"
-                    checked={local.instant_reversal}
-                    onChange={e=>upd('instant_reversal', e.target.checked)}
-                    pro={pro}
-                  />
-                </div>
+                )}
 
-                <div className="settings-save-row">
-                  <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
-                    {saving?'Saving…':saved?'✓ Saved':'Save alert settings'}
-                  </button>
-                  {pro&&(
-                    <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>
-                      {testState==='sending'?'Sending…':'Send test email'}
+                {!local?(
+                  <div style={{padding:'2rem',display:'flex',justifyContent:'center'}}><Spinner/></div>
+                ):(<>
+                  <div className="ws-settings-group">
+                    <div className="ws-settings-group__label">Watchlist triggers</div>
+                    <SettingsToggle label="Watched ticker traded" sub="Any insider trades a stock on your watchlist" checked={local.instant_watchlist_ticker} onChange={e=>upd('instant_watchlist_ticker',e.target.checked)} pro={pro}/>
+                    <SettingsToggle label="Followed insider filed" sub="Someone you follow submits a new Form 4" checked={local.instant_followed_insider} onChange={e=>upd('instant_followed_insider',e.target.checked)} pro={pro}/>
+                    <div className="ws-settings-row">
+                      <div style={{flex:1}}>
+                        <div className="ws-settings-row__label">Minimum trade value</div>
+                        <div className="ws-settings-row__sub">Applies to both watchlist triggers above</div>
+                      </div>
+                      <select className="ws-select" value={local.instant_min_value} disabled={!pro} onChange={e=>upd('instant_min_value',Number(e.target.value))}>
+                        <option value={0}>Any amount</option>
+                        <option value={10000}>$10K+</option>
+                        <option value={50000}>$50K+</option>
+                        <option value={250000}>$250K+</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="ws-settings-group">
+                    <div className="ws-settings-group__label">Signal triggers</div>
+                    <SettingsToggle label="Large executive buy" sub="C-suite open-market buy at or above the threshold below" checked={local.instant_high_conviction} onChange={e=>upd('instant_high_conviction',e.target.checked)} pro={pro}/>
+                    <div className="ws-settings-row">
+                      <div style={{flex:1}}>
+                        <div className="ws-settings-row__label">Minimum trade size</div>
+                        <div className="ws-settings-row__sub">Single-trade size required to trigger this alert</div>
+                      </div>
+                      <select className="ws-select" value={local.instant_high_conviction_threshold} disabled={!pro} onChange={e=>upd('instant_high_conviction_threshold',Number(e.target.value))}>
+                        <option value={250000}>$250K+</option>
+                        <option value={500000}>$500K+</option>
+                        <option value={1000000}>$1M+</option>
+                        <option value={2000000}>$2M+</option>
+                        <option value={5000000}>$5M+</option>
+                      </select>
+                    </div>
+                    <SettingsToggle label="Reversal detected" sub="An insider on a watched ticker changes direction" checked={local.instant_reversal} onChange={e=>upd('instant_reversal',e.target.checked)} pro={pro}/>
+                  </div>
+
+                  <div className="ws-settings-save-row">
+                    <button className="btn btn--primary" onClick={()=>save(local)} disabled={saving||!pro}>
+                      {saving?'Saving…':saved?'✓ Saved':'Save alert settings'}
                     </button>
-                  )}
-                  {saved&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Saved</span>}
-                  {testState==='sent'&&<span className="settings-saved-msg"><IconCheck style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>Test email sent</span>}
-                  {testState&&testState!=='sending'&&testState!=='sent'&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{testState}</span>}
-                  {error&&<span className="settings-saved-msg" style={{color:'var(--red-600)'}}><IconWarning style={{width:11,height:11,marginRight:2,verticalAlign:"-1px"}}/>{error}</span>}
-                  {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('notifications')}>Upgrade to Pro to save</button>}
-                </div>
-              </>)}
+                    {pro&&<button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState==='sending'}>{testState==='sending'?'Sending…':'Send test email'}</button>}
+                    {saved&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Saved</span>}
+                    {testState==='sent'&&<span className="ws-settings-saved"><IconCheck style={{width:11,height:11,marginRight:3}}/>Test sent</span>}
+                    {testState&&testState!=='sending'&&testState!=='sent'&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{testState}</span>}
+                    {error&&<span className="ws-settings-saved" style={{color:'var(--red-600)'}}>{error}</span>}
+                  </div>
+                </>)}
+              </div>
             </div>
           )}
-          </>)}
+        </>)}
 
-          {/* LINK PORTFOLIO */}
-          {section==='brokers'&&(
-            <div className="settings-section">
-              <div className="settings-section__title">
-                Link Portfolio
-                {!pro&&<span className="settings-pro-badge" style={{marginLeft:10}}>Pro</span>}
+        {/* LINK PORTFOLIO */}
+        {section==='brokers'&&(
+          <div className="ws-tile">
+            <div className="ws-tile__hdr">
+              <div className="ws-tile__hdr-left">
+                <span className="ws-tile__title">Link Portfolio</span>
+                {!pro&&<span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:999,background:'var(--accent-50)',color:'var(--accent)',marginLeft:8}}>Pro</span>}
               </div>
-              <div className="settings-section__desc">
-                Connect your brokerage via SnapTrade to see insider activity on your holdings. Read-only — Seli never trades on your behalf, and your login credentials go directly to your brokerage, never to Seli.
-                {!pro&&<button className="settings-section__lock" onClick={()=>onUpgrade('portfolio')}> Upgrade to Pro to connect a brokerage.</button>}
-              </div>
-
-              {pro && (
-                <div className="settings-group">
-                  {snaptrade.status===null ? (
-                    <div className="settings-broker-card"><span className="td-muted">Checking connection status…</span></div>
-                  ) : !snaptrade.status.connection ? (
-                    <div className="settings-broker-card">
-                      <div className="settings-broker-card__left">
-                        <div className="settings-broker-card__name">No brokerage connected</div>
-                        <div className="settings-broker-card__sub">Fidelity, Alpaca, and 400M+ other accounts supported via SnapTrade</div>
-                      </div>
-                      <div className="settings-broker-card__right">
-                        <button className="btn btn--primary btn--sm" onClick={snaptrade.connect} disabled={snaptrade.connecting}>
-                          {snaptrade.connecting?'Redirecting…':'Connect'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="settings-broker-card">
-                      <div className="settings-broker-card__left">
-                        <div className="settings-broker-card__name">{snaptrade.status.connection.broker || 'Brokerage connected'}</div>
-                        <div className="settings-broker-card__sub">
-                          Read-only · Connected {new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})}
-                        </div>
-                      </div>
-                      <div className="settings-broker-card__right">
-                        <span className="settings-broker-status settings-broker-status--connected">Connected</span>
-                        <button className="btn btn--ghost btn--sm" onClick={snaptrade.disconnect}>Disconnect</button>
-                      </div>
-                    </div>
-                  )}
+            </div>
+            <div className="ws-tile__body">
+              {!pro&&(
+                <div className="ws-settings-upgrade-banner">
+                  Portfolio linking is a Pro feature. Connect your brokerage to see insider activity on your holdings.
+                  <button className="ws-tile__action" style={{marginLeft:10}} onClick={()=>onUpgrade('default')}>Upgrade →</button>
                 </div>
               )}
 
-              {pro && snaptrade.status?.connection && (
-                <div className="settings-group">
-                  <div className="settings-group__label" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                    <span>Positions</span>
-                    {portfolio.lastRefreshed && <span style={{fontWeight:400,textTransform:'none',letterSpacing:0,fontSize:11}}>Updated {fmt.ago(portfolio.lastRefreshed.toISOString())}</span>}
-                  </div>
-                  <div style={{padding:'12px 14px'}}>
-                    {!portfolio.port ? (
-                      <div style={{display:'flex',alignItems:'center',gap:8}}><Spinner size={14}/><span className="td-muted" style={{fontSize:12}}>Loading positions…</span></div>
-                    ) : portfolio.err ? (
-                      <p className="td-muted" style={{fontSize:12,color:'var(--red-600)'}}>Couldn't load your positions right now.</p>
-                    ) : portfolio.port.positions.length===0 ? (
-                      <p className="td-muted" style={{fontSize:12}}>No positions found in this account.</p>
-                    ) : (
-                      <>
-                        <p style={{fontSize:13,marginBottom:10}}>
-                          <strong>{portfolio.port.positions.length}</strong> position{portfolio.port.positions.length!==1?'s':''} · <strong>{fmt.money(portfolio.port.totalValue)}</strong> total value
-                        </p>
-                        {[...portfolio.port.positions].sort((a,b)=>Math.abs(b.marketValue||0)-Math.abs(a.marketValue||0)).map((p,i)=>(
-                          <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:i>0?'0.5px solid var(--border)':'none'}}>
-                            <span className="ticker" style={{fontSize:12,minWidth:56}}>{p.symbol}</span>
-                            <span className="td-muted" style={{fontSize:11,flex:1}}>{p.company}</span>
-                            <span style={{fontSize:12,fontFamily:'var(--font-mono)'}}>{fmt.money(p.marketValue)}</span>
-                            {p.openPnl!=null && (
-                              <span className={`${p.openPnl>=0?'val-buy':'val-sell'}`} style={{fontSize:11,fontFamily:'var(--font-mono)',minWidth:90,textAlign:'right'}}>
-                                {p.openPnl>=0?'+':''}{fmt.money(p.openPnl)} ({p.openPnlPct>=0?'+':''}{p.openPnlPct.toFixed(1)}%)
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </>
-                    )}
-                    <button className="btn btn--ghost btn--sm" style={{marginTop:12}} onClick={portfolio.refresh} disabled={portfolio.refreshing}>
-                      {portfolio.refreshing?'Refreshing…':'Refresh'}
+              {pro&&(<>
+                {snaptrade.status===null?(
+                  <div className="ws-settings-broker-card"><span className="td-muted">Checking connection status…</span></div>
+                ):!snaptrade.status.connection?(
+                  <div className="ws-settings-broker-card">
+                    <div className="ws-settings-broker-card__left">
+                      <div className="ws-settings-broker-card__name">No brokerage connected</div>
+                      <div className="ws-settings-broker-card__sub">Fidelity, Alpaca, and 400M+ other accounts supported via SnapTrade</div>
+                    </div>
+                    <button className="btn btn--primary btn--sm" onClick={snaptrade.connect} disabled={snaptrade.connecting}>
+                      {snaptrade.connecting?'Redirecting…':'Connect brokerage'}
                     </button>
                   </div>
-                </div>
-              )}
+                ):(
+                  <div className="ws-settings-broker-card ws-settings-broker-card--connected">
+                    <div className="ws-settings-broker-card__left">
+                      <div className="ws-settings-broker-card__name">{snaptrade.status.connection.broker||'Brokerage connected'}</div>
+                      <div className="ws-settings-broker-card__sub">
+                        Read-only · Connected {new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})}
+                      </div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <span className="settings-broker-status settings-broker-status--connected">● Connected</span>
+                      <button className="btn btn--ghost btn--sm" onClick={snaptrade.disconnect}>Disconnect</button>
+                    </div>
+                  </div>
+                )}
+                {snaptrade.error&&<p style={{color:'var(--red-600)',fontSize:12,marginTop:10}}>{snaptrade.error}</p>}
+              </>)}
 
-              {snaptrade.error && (
-                <p className="settings-section__note" style={{color:'var(--red-600)'}}>{snaptrade.error}</p>
-              )}
-
-              <p className="settings-section__note">
-                Fidelity and Alpaca live-account access is pending broker approval — testing now via Alpaca Paper (no real account needed).
-                Connections are read-only — positions and balances only, no trading access.
+              <p style={{fontSize:12,color:'var(--text-3)',marginTop:14,lineHeight:1.6}}>
+                Connections are read-only — positions and balances only, no trading access. Your login credentials go directly to your brokerage, never to Seli.
+                Fidelity and Alpaca live-account access is pending broker approval — testing via Alpaca Paper (no real account needed).
               </p>
             </div>
-          )}
+          </div>
+        )}
 
-        </div>
       </div>
 
-      {/* Fixed bar, independent of whichever tab's content is showing above it
-          (and however tall that content is) — sits right above the app
-          footer instead of scrolling with the active tab's content, which
-          is what put it at wildly different heights depending on section. */}
-      <div className="settings-legal-bar">
+      {/* Legal links */}
+      <div className="ws-footer" style={{marginTop:24,border:'none',paddingTop:0}}>
+        <a href="/help" target="_blank" rel="noreferrer">Help</a>
         <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
         <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
         <a href="/cookies" target="_blank" rel="noreferrer">Cookies</a>
@@ -7054,49 +10176,47 @@ function InfoTrustPage({ onBack, onEnter }) {
   return (
     <div className="lp-info">
       <div className="lp-info__inner">
-        <a href="/" onClick={onBack} className="lp-info__back">← Back</a>
+        <a href="/" onClick={onBack} className="lp-info__back"> Back</a>
 
         {/* ── Title + brief intro ──────────────────────────────────────── */}
         <div className="lp-info__eyebrow">About Seli</div>
         <h1 className="lp-info__h1">Why insider trades are public record</h1>
         <p className="lp-info__lede">
-          Every year, corporate insiders and members of Congress disclose thousands of stock trades —
-          not because they want to, but because federal law requires it. That disclosure creates a genuinely
-          rare thing in public markets: a legally mandated look at what the people closest to a company are
-          actually doing with their own money.
+          Every year, corporate insiders and members of Congress disclose thousands of stock trades
+          because federal law requires it. That disclosure creates a legally mandated look at what
+          the people closest to a company are actually doing with their own money.
         </p>
 
         {/* ── How insiders beat the market ─────────────────────────────── */}
         <section className="lp-info__section reveal">
           <h2>How insiders beat the market</h2>
           <p>
-            The idea that insider trades carry real predictive information isn't new, and it isn't a fintech
-            marketing claim either. It's decades of published financial economics research, summarized here
-            rather than buried in a wall of citations.
+            The predictive value of insider trades is backed by decades of published financial
+            economics research. Here's a summary of the key findings.
           </p>
           <div className="lp-findings-grid">
             <div className="lp-finding-card reveal reveal--delay-0">
               <div className="lp-finding-card__icon"><IconInsights style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">Buying beats selling as a signal</div>
-              <div className="lp-finding-card__body">Insiders face real legal exposure for selling on bad non-public information. That risk doesn't apply the same way to buying, which is why purchases carry more predictive weight than sales.</div>
+              <div className="lp-finding-card__body">Insiders face real legal exposure for selling on non-public information. That risk doesn't apply the same way to buying, which is why purchases carry more predictive weight than sales.</div>
               <div className="lp-finding-card__cite">Seyhun, 1980s–90s</div>
             </div>
             <div className="lp-finding-card reveal reveal--delay-1">
               <div className="lp-finding-card__icon"><IconFavorites style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">Clusters matter more than one trade</div>
-              <div className="lp-finding-card__body">Several insiders buying independently around the same time is a stronger signal than one person acting alone. Seli's own scoring is built around this directly.</div>
+              <div className="lp-finding-card__body">Several insiders buying independently around the same time is a stronger signal than one person acting alone. Seli's scoring is built around this directly.</div>
               <div className="lp-finding-card__cite">Lakonishok &amp; Lee, 2001</div>
             </div>
             <div className="lp-finding-card reveal reveal--delay-2">
               <div className="lp-finding-card__icon"><IconZap style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">Timing separates signal from noise</div>
-              <div className="lp-finding-card__body">Routine, calendar-driven insider trades carry little predictive value. Opportunistic, irregularly-timed ones carry almost all of it.</div>
+              <div className="lp-finding-card__body">Routine, calendar-driven insider trades carry little predictive value. Opportunistic, irregularly timed ones carry almost all of it.</div>
               <div className="lp-finding-card__cite">Cohen, Malloy &amp; Pomorski, 2012</div>
             </div>
             <div className="lp-finding-card reveal reveal--delay-3">
               <div className="lp-finding-card__icon"><IconData style={{width:18,height:18}}/></div>
               <div className="lp-finding-card__title">The rules keep changing, and matter</div>
-              <div className="lp-finding-card__body">A 2023 SEC rule change to pre-scheduled 10b5-1 trading plans measurably shifted how insiders structure their disclosed sales. This is an active area of research, not a settled 1980s question.</div>
+              <div className="lp-finding-card__body">A 2023 SEC rule change to pre-scheduled 10b5-1 trading plans measurably shifted how insiders structure their disclosed sales. This is an active area of research.</div>
               <div className="lp-finding-card__cite">Avci, Schipani, Seyhun &amp; Verstein, 2025</div>
             </div>
           </div>
@@ -7116,8 +10236,8 @@ function InfoTrustPage({ onBack, onEnter }) {
             {[
               { label:'SEC EDGAR + Congress', desc:'Form 4 filings and STOCK Act disclosures, straight from the source.' },
               { label:'Ingested & parsed', desc:'New filings pulled and structured automatically, typically within minutes of publication.' },
-              { label:'Scored', desc:'Weighted by who\u2019s trading, how much relative to what they hold, and whether others are too.' },
-              { label:'Surfaced', desc:'Ranked and shown as a signal — not buried in a raw filing.' },
+              { label:'Scored', desc:'Weighted by who is trading, how much relative to what they hold, and whether others are too.' },
+              { label:'Surfaced', desc:'Ranked and shown as a signal, with the raw filing always accessible alongside it.' },
             ].map((step,i,arr)=>(
               <React.Fragment key={i}>
                 <div className="lp-pipeline__step">
@@ -7130,33 +10250,31 @@ function InfoTrustPage({ onBack, onEnter }) {
             ))}
           </div>
           <p>
-            You're never limited to just the ranked view. Every account can see the underlying raw filing
-            data — ticker, insider, shares, price, transaction type, date — the same information Seli's own
-            scoring is built from, not a black box on top of it. The scored, ranked signal view sits alongside
-            it for when you want the fast read instead of the raw feed. Both update automatically as new
-            filings arrive.
+            Every account can see the underlying raw filing data: ticker, insider, shares, price,
+            transaction type, date. The scored signal view sits alongside it for a faster read.
+            Both update automatically as new filings arrive.
           </p>
           <p>
-            Seli's conviction score is built directly around the same principles the research above
-            established, not invented from scratch:
+            Seli's conviction score is built directly around the principles the research above
+            established:
           </p>
           <ul className="lp-info__principles">
-            <li><strong>Who's buying matters.</strong> A purchase from a C-suite executive — someone with the
-              broadest view into the company — carries more weight than one from a director with narrower
+            <li><strong>Who's buying matters.</strong> A purchase from a C-suite executive, someone with the
+              broadest view into the company, carries more weight than one from a director with narrower
               visibility.</li>
             <li><strong>Size relative to what they already own matters more than raw dollars.</strong> A
               $500K purchase from someone materially growing their existing stake is a stronger signal than
               the same dollar amount as a routine top-up on a much larger position.</li>
             <li><strong>Multiple insiders acting together matters.</strong> Directly following Lakonishok and
-              Lee's finding — several insiders buying independently around the same time is treated as a
+              Lee's finding: several insiders buying independently around the same time is treated as a
               stronger signal than one person acting alone.</li>
-            <li><strong>Only real, personal-funds market transactions count at all.</strong> Stock grants,
-              option exercises, and other compensation-related transfers are structurally excluded before a
-              signal is ever scored — they don't reflect a personal bet the way an open-market purchase does.</li>
+            <li><strong>Only real, personal-funds market transactions count.</strong> Stock grants,
+              option exercises, and other compensation-related transfers are excluded before a
+              signal is ever scored. They don't reflect a personal bet the way an open-market purchase does.</li>
           </ul>
           <p>
-            We don't publish the exact formula or weights — that's the specific part of this that's ours —
-            but the underlying principles above are the actual mechanism, not a marketing simplification of it.
+            We don't publish the exact formula or weights, but the principles above are the actual
+            mechanism the scoring is built on.
           </p>
         </section>
 
@@ -7166,9 +10284,9 @@ function InfoTrustPage({ onBack, onEnter }) {
           <div className="lp-timeline">
             {[
               { year:'1934', label:'Securities Exchange Act', desc:'Establishes the requirement that corporate insiders disclose their own trades to the public.' },
-              { year:'2002', label:'Sarbanes-Oxley Act', desc:'Shortens the filing deadline from 10 days down to 2 business days — the modern Form 4 window.' },
+              { year:'2002', label:'Sarbanes-Oxley Act', desc:'Shortens the filing deadline from 10 days down to 2 business days, the modern Form 4 window.' },
               { year:'2012', label:'STOCK Act', desc:'Extends mandatory trade disclosure to members of Congress.' },
-              { year:'Today', label:'Seli', desc:'Ingests every new filing — corporate and congressional — within minutes of publication.' },
+              { year:'Today', label:'Seli', desc:'Ingests every new filing, corporate and congressional, within minutes of publication.' },
             ].map((t,i)=>(
               <div key={i} className="lp-timeline__item">
                 <div className="lp-timeline__year">{t.year}</div>
@@ -7203,39 +10321,37 @@ function InfoTrustPage({ onBack, onEnter }) {
           <h2>Disclosures</h2>
           <p>
             <strong>This is not a day-trading tool.</strong> Form 4 filings carry a mandatory disclosure
-            window — insiders can have up to two business days to report a trade after it happens. That's
-            actually faster than it used to be: Sarbanes-Oxley tightened the requirement from ten days down to
-            two specifically to make this data more useful. But two days is still real lag, and for someone
-            making decisions on minute-to-minute price action, this data is structurally too old to act on
-            that way. We'd rather tell you that directly than let you find out the hard way.
+            window. Insiders can have up to two business days to report a trade after it happens. Sarbanes-Oxley
+            tightened the requirement from ten days down to two specifically to make this data more useful, but
+            two days is still real lag. For someone making decisions on minute-to-minute price action, this data
+            is structurally too old to act on that way.
           </p>
           <p>
-            <strong>Scoring accuracy improves as more history is captured</strong>, not just as a matter of
-            more data being generally better — an insider's track record can only be evaluated against the
-            trades Seli has actually ingested. A newly backfilled period naturally starts thinner than one
-            with years of accumulated history behind it.
+            <strong>Scoring accuracy improves as more history is captured.</strong> An insider's track record
+            can only be evaluated against the trades Seli has actually ingested. A newly backfilled period
+            naturally starts thinner than one with years of accumulated history behind it.
           </p>
           <p>
-            <strong>Academic findings describe average, historical tendencies</strong> — not a guarantee about
-            any single trade, any single insider, or what happens next. Insiders are informed about their own
-            companies; they aren't infallible, and markets can move against even a well-timed, well-informed
-            trade.
+            <strong>Academic findings describe average, historical tendencies.</strong> They are not a guarantee
+            about any single trade, any single insider, or what happens next. Insiders are informed about their
+            own companies. They are not infallible, and markets can move against even a well-timed,
+            well-informed trade.
           </p>
           <p>
             <strong>Nothing on this page or in Seli is financial advice.</strong> Seli surfaces public
-            disclosure data and a scoring methodology built on published research — it does not recommend
-            any specific trade, and past patterns, academic or otherwise, don't guarantee future results.
+            disclosure data and a scoring methodology built on published research. It does not recommend
+            any specific trade, and past patterns do not guarantee future results.
           </p>
         </section>
 
         <div className="lp-info__cta">
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="lp-btn-primary lp-btn-primary--lg">Open Seli →</button>
+              <button className="lp-btn-primary lp-btn-primary--lg">Explore Seli →</button>
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Open Seli →</button>
+            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Explore Seli →</button>
           </SignedIn>
         </div>
       </div>
@@ -7275,10 +10391,10 @@ function LPFeatureMock({ type }) {
             {t:'GOOGL', v:'$2,660',  pnl:'+1.4%', sig:false},
           ].map(r => (
             <div key={r.t} className="port-mini-row">
-              <span className="ticker" style={{fontSize:12,minWidth:50}}>{r.t}</span>
+              <span className="ticker" style={{fontSize:'0.75rem',minWidth:50}}>{r.t}</span>
               {r.sig && <span className="ins-port-chip__signal-badge" style={{fontSize:'0.5rem'}}>activity</span>}
-              <span className="td-muted" style={{fontSize:10,flex:1,textAlign:'right'}}>{r.v}</span>
-              <span className={parseFloat(r.pnl)>=0?'val-buy':'val-sell'} style={{fontSize:10,fontFamily:'var(--font-mono)',minWidth:50,textAlign:'right'}}>{r.pnl}</span>
+              <span className="td-muted" style={{fontSize:'0.625rem',flex:1,textAlign:'right'}}>{r.v}</span>
+              <span className={parseFloat(r.pnl)>=0?'val-buy':'val-sell'} style={{fontSize:'0.625rem',fontFamily:'var(--font-mono)',minWidth:50,textAlign:'right'}}>{r.pnl}</span>
             </div>
           ))}
         </div>
@@ -7304,13 +10420,12 @@ function LPFeatureMock({ type }) {
             <span className="lp-mock-alert-email__kind">Instant alert</span>
           </div>
           <div className="lp-mock-alert-email__body">
-            <p className="lp-mock-alert-email__intro">4 of your instant alerts were triggered:</p>
+            <p className="lp-mock-alert-email__intro">3 of your instant alerts were triggered:</p>
             <table className="lp-mock-alert-email__table"><tbody>
               {[
                 {t:'NVDA', co:'NVIDIA Corp',    reason:'Watched ticker traded',  who:'Jensen Huang',   date:'Jul 22, 2026', action:'Buy',  detail:'12,000 sh @ $118.42', val:'$1.42M',    buy:true},
                 {t:'TSLA', co:'Tesla Inc',      reason:'Large executive sale',   who:'Elon Musk',       date:'Jul 21, 2026', action:'Sell', detail:'610 sh @ $248.55',    val:'$151,616',  buy:false},
                 {t:'MSFT', co:'Microsoft Corp', reason:'Followed insider filed', who:'Satya Nadella',   date:'Jul 21, 2026', action:'Buy',  detail:'340 sh @ $421.10',    val:'$143,174',  buy:true},
-                {t:'ADSK', co:'Autodesk Inc',   reason:'You hold this stock',    who:'Andrew Anagnost', date:'Jul 19, 2026', action:'Buy',  detail:'95 sh @ $289.77',     val:'$27,528',   buy:true},
               ].map(r => (
                 <tr key={r.t}>
                   <td>
@@ -7355,6 +10470,9 @@ function LPFeatureMock({ type }) {
                 {d:'Jul 21', t:'MSFT', tt:'buy',  sh:'340',   px:'$421.10', val:'$143,174'},
                 {d:'Jul 21', t:'TSLA', tt:'sell', sh:'610',   px:'$248.55', val:'$151,616'},
                 {d:'Jul 19', t:'ADSK', tt:'buy',  sh:'95',    px:'$289.77', val:'$27,528'},
+                {d:'Jul 18', t:'AAPL', tt:'sell', sh:'32,528',px:'$250.12', val:'$8.1M'},
+                {d:'Jul 18', t:'JPM',  tt:'buy',  sh:'2,400', px:'$267.30', val:'$641,520'},
+                {d:'Jul 17', t:'GOOGL',tt:'buy',  sh:'780',   px:'$192.45', val:'$150,111'},
               ].map((r,i) => (
                 <tr key={i} className={`row-${r.tt}`}>
                   <td className="td-date"><span className="td-date-main">{r.d}</span></td>
@@ -7393,10 +10511,10 @@ function LPFeatureMock({ type }) {
               <div className="ins-lb-card__rank">{i+1}</div>
               <div className="ins-lb-card__body">
                 <div className="ins-lb-card__name">{r.n}</div>
-                <div className="td-muted" style={{fontSize:11}}>{r.title}</div>
+                <div className="td-muted" style={{fontSize:'0.6875rem'}}>{r.title}</div>
                 <div className="ins-lb-card__meta">
-                  <Badge type={`rel-${r.rel}`}>{r.rel==='strong'?'C-Suite':r.rel==='medium'?'Officer':'Dir'}</Badge>
-                  <span className="td-muted" style={{fontSize:11}}>{r.buys} · {r.val}</span>
+                  <Badge type={`rel-${r.rel}`}>{r.rel==='strong'?'Exec':r.rel==='medium'?'Officer':'Dir'}</Badge>
+                  <span className="td-muted" style={{fontSize:'0.6875rem'}}>{r.buys} · {r.val}</span>
                 </div>
               </div>
               <div className="ins-lb-card__score">
@@ -7424,7 +10542,7 @@ function LandingPage({ onEnter, dark, setDark }) {
   // (no auth path involved at all, unlike the generic query endpoint) since
   // this page renders before anyone has signed in. 2018 is the fallback if
   // the fetch hasn't resolved yet or fails outright, not the source of truth.
-  const [dataSinceYear, setDataSinceYear] = useState(2018);
+  const [dataSinceYear, setDataSinceYear] = useState(2010);
   useEffect(() => {
     fetch(`${cfg.NEON_PROXY_URL}/public/data-stats`)
       .then(r => r.ok ? r.json() : null)
@@ -7442,32 +10560,32 @@ function LandingPage({ onEnter, dark, setDark }) {
   // no hedging, no forced enthusiasm.
   const WHATS_INSIDE = [
     {
-      icon: 'IconLink',
-      eyebrow: 'Portfolio',
-      title: 'Watch your own holdings, and theirs',
-      body: 'Link your brokerage and see insider activity on stocks you already own. Or skip that, and just follow the specific tickers and people you want to keep an eye on.',
-      env: 'watchlist',
+      icon: 'IconInsights',
+      eyebrow: 'Scored signals',
+      title: 'Cut through the noise',
+      body: 'Thousands of insider trades are filed every week. Most are routine. Seli scores each one against peer-reviewed research — who traded, how much of their position they moved, whether other insiders are buying the same stock — and surfaces the ones with real conviction behind them.',
+      env: 'insights',
     },
     {
       icon: 'IconZap',
-      eyebrow: 'Alerts',
-      title: 'Get notified the moment it happens',
-      body: 'When someone you follow trades, or a stock you hold gets a cluster of insider buying, you\'ll see it here — as close to real time as public filings allow.',
+      eyebrow: 'Instant alerts',
+      title: 'Be the first to know, not the last to react',
+      body: 'Get notified the moment a filing lands — not hours later when the market has already moved. Follow specific tickers or insiders. Instant alerts, daily digests, or weekly summaries — your call.',
       env: 'settings',
     },
     {
-      icon: 'IconData',
-      eyebrow: 'Data',
-      title: `Every filing since ${dataSinceYear}`,
-      body: `House, Senate, and corporate insider trades, pulled straight from public SEC and STOCK Act disclosures. Nothing here is a rumor or a paid data feed. It's what was actually filed, going back to ${dataSinceYear}.`,
-      env: 'data',
+      icon: 'IconFavorites',
+      eyebrow: 'Watchlist & portfolio',
+      title: 'Track what matters to you',
+      body: 'Build a watchlist of tickers and insiders you care about. Connect your brokerage (read-only) and Seli watches your actual holdings for insider activity. When a CEO or director trades something in your portfolio, you\'ll know.',
+      env: 'watchlist',
     },
     {
-      icon: 'IconInsights',
-      eyebrow: 'Signals',
-      title: 'A ranked history, not a hot take',
-      body: 'Corporate and political insiders ranked by their factual trading history: how often they traded, in what direction, and how large. It\'s a transparent scoring methodology applied the same way to everyone, not a recommendation to follow anyone specific.',
-      env: 'insights',
+      icon: 'IconData',
+      eyebrow: 'Deep-dive data',
+      title: `Every filing since ${dataSinceYear}, at your fingertips`,
+      body: 'Corporate executive trades, congressional stock disclosures, insider profiles, and transaction history — searchable, filterable, and linked to the original government filing. When you want to dig deeper and draw your own conclusions, the full dataset is here.',
+      env: 'data',
     },
   ];
   useEffect(() => {
@@ -7544,26 +10662,27 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Hero */}
       <section className="lp-hero">
         <div className="lp-hero-bg" aria-hidden="true"/>
+        <p className="lp-hero__eyebrow reveal reveal--delay-1">SEC Insider Trading & Congressional Stock Tracker</p>
         <h1 className="lp-hero__h1 reveal reveal--delay-1">
-          Public data from the people who beat the market.<br/>
-          <span className="lp-hero__h1-accent">Legible. Instant. At your fingertips.</span>
+          See what insiders are buying<br/>
+          <span className="lp-hero__h1-accent">before the market reacts.</span>
         </h1>
         <p className="lp-hero__sub reveal reveal--delay-2">
-          Every SEC Form 4 filing and congressional stock disclosure, the moment it's public.
-          No rumors, no paid data feeds, nothing personalized to you — just what corporate
-          executives, directors, and members of Congress actually filed, organized so you can
-          actually read it. Track specific tickers or people, or browse the full record.
+          CEOs, directors, and members of Congress are legally required to disclose their stock trades.
+          Seli watches every SEC Form 4 filing and STOCK Act disclosure, scores each trade by conviction,
+          and alerts you within minutes — not hours.
         </p>
         <div className="lp-hero__cta reveal reveal--delay-3">
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="lp-btn-primary lp-btn-primary--lg">Open Seli →</button>
+              <button className="lp-btn-primary lp-btn-primary--lg">Explore Seli →</button>
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Open Seli →</button>
+            <button className="lp-btn-primary lp-btn-primary--lg" onClick={onEnter}>Explore Seli →</button>
           </SignedIn>
         </div>
+        <p className="lp-hero__trust reveal reveal--delay-3">SEC Form 4 filings · STOCK Act disclosures · Real-time alerts · Free to start</p>
 
         {/* Product preview strip */}
         <div className="lp-preview reveal reveal--delay-4">
@@ -7650,8 +10769,8 @@ function LandingPage({ onEnter, dark, setDark }) {
 
       {/* Features */}
       <section className="lp-features" id="features">
-        <div className="lp-section-label reveal">What's inside</div>
-        <h2 className="lp-section-h2 reveal reveal--delay-1">Public data, actually easy to use.</h2>
+        <div className="lp-section-label reveal">What Seli does</div>
+        <h2 className="lp-section-h2 reveal reveal--delay-1">Insider trading signals, alerts, and data</h2>
         <div className="lp-benefit-list">
           {WHATS_INSIDE.map((f,i)=>{
             const Icon = LP_FEATURE_ICON_MAP[f.icon];
@@ -7677,14 +10796,14 @@ function LandingPage({ onEnter, dark, setDark }) {
       {/* Pricing */}
       <section className="lp-pricing" id="pricing">
         <div className="lp-section-label reveal">Pricing</div>
-        <h2 className="lp-section-h2 reveal reveal--delay-1">Simple, transparent pricing.</h2>
+        <h2 className="lp-section-h2 reveal reveal--delay-1">Start researching for free</h2>
 
         {/* Main plans — two vertical cards */}
         <div className="lp-pricing-top">
           <div className="lp-price-card reveal reveal--delay-1">
             <div className="lp-price-card__name">Free</div>
             <div className="lp-price-card__price">$0<span>/mo</span></div>
-            <div className="lp-price-card__desc">Start tracking insider moves today. No card required.</div>
+            <div className="lp-price-card__desc">Explore insider activity and see what's moving. No card required.</div>
             <ul className="lp-price-card__features">
               {['Dashboard & sector heatmap','7-day signal window','Top insiders leaderboard','Corporate + congressional trades','All filed SEC transactions dating back 1 year'].map(f=>(
                 <li key={f}><span className="lp-check"><IconCheck style={{width:12,height:12}}/></span>{f}</li>
@@ -7704,9 +10823,9 @@ function LandingPage({ onEnter, dark, setDark }) {
             <div className="lp-price-card__badge">Half-off</div>
             <div className="lp-price-card__name">Pro</div>
             <div className="lp-price-card__price">
-              <span className="lp-price-card__price-strike">$11.99</span> $6.99<span>/mo</span>
+              <span className="lp-price-card__price-strike">$13.99</span> $6.99<span>/mo</span>
             </div>
-            <div className="lp-price-card__beta-note">Half off, forever — for the first 25 Beta users</div>
+            <div className="lp-price-card__beta-note">Beta pricing — locked in forever once you subscribe</div>
             <div className="lp-price-card__desc">Full history, every alert, every score — for serious research.</div>
             <ul className="lp-price-card__features">
               {['Everything in Free',`Full historical data (${dataSinceYear}→present)`,'Customizable email alerts, instant or digest','Full score breakdown on every trade','Connect your brokerage (SnapTrade)','Full insiders deep-dive'].map(f=>(
@@ -7737,14 +10856,7 @@ function LandingPage({ onEnter, dark, setDark }) {
           </div>
           <div className="lp-price-card--landscape__action">
             <div className="lp-price-card__price">$39.99<span>/one-time</span></div>
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="lp-btn-ghost lp-btn-ghost--full">Download dataset →</button>
-              </SignInButton>
-            </SignedOut>
-            <SignedIn>
-              <button className="lp-btn-ghost lp-btn-ghost--full" onClick={onEnter}>Download dataset →</button>
-            </SignedIn>
+            <a href="/data-download" className="lp-btn-ghost lp-btn-ghost--full" style={{textDecoration:'none',textAlign:'center'}}>Download dataset →</a>
           </div>
         </div>
       </section>
@@ -7755,11 +10867,14 @@ function LandingPage({ onEnter, dark, setDark }) {
       <section className="lp-about-teaser reveal reveal--delay-1" id="about-teaser">
         <div className="lp-about-teaser__grid">
           <div className="lp-about-teaser__lead">
-            <h2 className="lp-section-h2">The research is real. The filings are public.</h2>
+            <h2 className="lp-section-h2">The information is public. Finding what's important isn't.</h2>
             <p className="lp-about-teaser__intro">
-              This isn't a hunch or a marketing angle. It's decades of financial economics research,
-              hiding behind filings almost nobody reads. Federal law forces every insider to disclose their
-              trades. Seli reads every single one, the moment it lands, so you don't have to.
+              Federal law forces every corporate insider and member of Congress to disclose their stock
+              trades. The data is there — buried in thousands of SEC filings per week. Academic research
+              shows these trades outperform the market: insider purchases generate +4.3% abnormal returns
+              annually (Seyhun, 1986), and cluster buying — multiple insiders at the same company — is
+              an even stronger signal (Lakonishok & Lee, 2001). Seli turns that pile of government filings
+              into something you can actually act on.
             </p>
           </div>
           <div className="lp-about-teaser__advantages">
@@ -7834,8 +10949,8 @@ function LandingPage({ onEnter, dark, setDark }) {
 // External paths are deliberately friendlier than internal page ids
 // (page id 'signals' -> path 'insights') so shared/indexed URLs read well
 // without renaming the internal id everywhere it's already used.
-const PAGE_TO_PATH = { dashboard:'', signals:'insights', data:'data', watchlist:'watchlist', settings:'settings' };
-const PATH_TO_PAGE = { '':'dashboard', insights:'signals', data:'data', watchlist:'watchlist', settings:'settings' };
+const PAGE_TO_PATH = { home:'', dashboard:'data', signals:'insights', data:'data', watchlist:'watchlist', settings:'settings' };
+const PATH_TO_PAGE = { '':'home', home:'home', data:'dashboard', insights:'signals', watchlist:'watchlist', settings:'settings' };
 
 function pathFromAppState(page, detail) {
   // Detail deep-link takes priority — the panel overlays whatever page is
@@ -7858,11 +10973,12 @@ function appStateFromPath(pathname) {
   if (parts[0] === 'insider' && parts[1]) {
     return { page: 'dashboard', detail: { type: 'trader', name: decodeURIComponent(parts[1]), title: '' } };
   }
+  if (!parts[0]) return { page: 'home', detail: null };
   const page = PATH_TO_PAGE[parts[0] || ''];
   return { page: page || 'dashboard', detail: null };
 }
 
-const PAGE_TITLES = { dashboard:'Dashboard', signals:'Insights', data:'Data', watchlist:'Watchlist', settings:'Settings' };
+const PAGE_TITLES = { home:'Home', dashboard:'Dashboard', signals:'Insights', data:'Data', watchlist:'Watchlist', settings:'Settings' };
 
 function titleFromAppState(page, detail) {
   if (detail?.type === 'ticker' && detail.ticker) {
@@ -7883,8 +10999,10 @@ import * as Sentry from '@sentry/react';
 // wouldn't catch a crash in this component's own body.
 function AppInner() {
   const [dark,setDark] = useTheme();
+  const [helpMode, setHelpMode] = useState(false);
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const { user } = useUser();
+  const isMobile = useIsMobile();
   const { pro: billingPro, refreshBilling } = useBilling();
 
   // Register Clerk token getter globally so edgar.js can use it without
@@ -7897,6 +11015,8 @@ function AppInner() {
     } else {
       window.__clerkGetToken = null;
       window.__clerkSignOut  = null;
+      // Invalidate cached token so stale credentials don't survive sign-out
+      if (window.__seliAuth) { window.__seliAuth.token = null; window.__seliAuth.expiry = 0; }
     }
   }, [isSignedIn, getToken, signOut]);
 
@@ -7937,8 +11057,31 @@ function AppInner() {
   // Watchlist (which have their own separate, untouched drawer triggers)
   // don't need this distinction at all.
   const [detailFull,setDetailFull] = useState(()=>!!appStateFromPath(window.location.pathname).detail);
+  // drawerMode tracks which explore tab is active when detailFull is open.
+  // 'auto' = derive from detail type (default), 'signals'|'insiders'|'data' = forced.
+  const [drawerMode, setDrawerMode] = useState('auto');
   const [portfolioTickers, setPortfolioTickers] = useState([]);
   const [showUpgradeModal, setShowUpgradeModal] = useState(null); // null | 'default' | 'data_export' | 'portfolio' | 'notifications' | 'risk_management'
+
+  // Expose the upgrade trigger on window so deeply-nested components (like
+  // InsightsDrawer, which doesn't receive onUpgrade as a prop) can open the
+  // modal without prop-drilling through every intermediate layer.
+  useEffect(()=>{
+    window.__seliUpgrade = (f) => setShowUpgradeModal(f || 'default');
+    return ()=>{ window.__seliUpgrade = null; };
+  },[]);
+
+  // Auto-open upgrade modal from URL params (e.g. /data-download redirects
+  // signed-in users to /?purchase=data_export to land straight in checkout)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const purchase = params.get('purchase');
+    if (purchase === 'data_export' || purchase === 'default') {
+      setShowUpgradeModal(purchase);
+      // Clean the URL so refresh doesn't re-trigger
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
   const [showStaleDataModal, setShowStaleDataModal] = useState(false);
 
   // ── Client-side routing ────────────────────────────────────────────────────
@@ -7959,7 +11102,7 @@ function AppInner() {
     // reverts to the dashboard a moment later": the URL got silently
     // overwritten, and the early-return check above reads the URL fresh
     // on every render, so it stopped matching once that happened.
-    if (['/terms','/privacy','/cookies','/help'].includes(window.location.pathname)) return;
+    if (['/terms','/privacy','/cookies','/help','/data-download','/purchase-complete','/redownload'].includes(window.location.pathname)) return;
     const path = pathFromAppState(page, detail);
     if (window.location.pathname !== path) {
       window.history.pushState({ page, detail }, '', path);
@@ -7981,11 +11124,29 @@ function AppInner() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
+  // Lock body scroll and adjust z-index when any drawer/panel is open
+  const panelOpen = !!detail;
+  const anyDrawerOpen = panelOpen;
+  useEffect(()=>{
+    if (anyDrawerOpen) {
+      document.body.classList.add('drawer-open');
+    } else {
+      document.body.classList.remove('drawer-open');
+    }
+    return ()=>document.body.classList.remove('drawer-open');
+  }, [anyDrawerOpen]);
+  useEffect(()=>{
+    function onSeliNav(e){ if(e.detail) navTo(e.detail); }
+    window.addEventListener('seli:nav', onSeliNav);
+    return ()=>window.removeEventListener('seli:nav', onSeliNav);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // How far back the currently-loaded `filings` array actually covers.
   // null = as wide as this user's plan allows (server enforces the real
   // ceiling — free capped at 1yr, Pro unbounded — client doesn't need to
   // know which plan it is, it just asks and the server clamps correctly).
-  const [filingsWindowDays, setFilingsWindowDays] = useState(90);
+  const [filingsWindowDays, setFilingsWindowDays] = useState(7); // start narrow for fast initial render
 
   // enterApp now triggers Clerk sign-in via SignInButton — kept for
   // compatibility with LandingPage's onEnter prop
@@ -7998,7 +11159,19 @@ function AppInner() {
     finally{setLoading(false);}
   },[]);
 
-  useEffect(()=>{load(filingsWindowDays);},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{
+    // Wait for Clerk to finish loading before fetching — on mobile fresh
+    // loads, the JWT isn't ready when this effect fires, causing a 401
+    // that shows the error banner until manual reload.
+    if (!isLoaded || !isSignedIn) return;
+    load(filingsWindowDays);
+    // Pre-warm the leaderboard cache in parallel — the Insiders tab, sidebar
+    // preview, and InsightsDrawer all share the same module-level cache, so
+    // this fetch (which runs alongside loadFilings, not after) means the
+    // leaderboard is already warm by the time the user navigates there.
+    // fire-and-forget; components handle their own error states.
+    fetchLeaderboard(500, 2, 2, null).catch(()=>{});
+  },[isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Called by any component whose own time-range control lets a user pick
   // something wider than what's currently loaded (e.g. Explore drawer's
@@ -8038,7 +11211,13 @@ function AppInner() {
     if (!lastFilingDate) return null;
     return Math.floor((new Date() - new Date(lastFilingDate + 'T12:00:00')) / (1000*60*60*24));
   }, [lastFilingDate]);
-  const isDataStale = daysSinceLastFiling != null && daysSinceLastFiling >= 3;
+  // Weekend-aware: Friday's filing is the latest expected on Sat/Sun/Mon morning.
+  // Fri→Sat=1d, Fri→Sun=2d, Fri→Mon=3d — all normal. Alert at 4 on those days
+  // (meaning all of Monday passed with nothing). Tue-Fri alert at 2 (a full
+  // trading day went by with no filings).
+  const dayOfWeek = new Date().getDay(); // 0=Sun, 6=Sat
+  const staleThreshold = (dayOfWeek === 0 || dayOfWeek === 1 || dayOfWeek === 6) ? 4 : 2;
+  const isDataStale = daysSinceLastFiling != null && daysSinceLastFiling >= staleThreshold;
 
   useEffect(()=>{
     if (!cfg.NEON_PROXY_URL) return;
@@ -8075,14 +11254,11 @@ function AppInner() {
 
   function drillSignal(s){setHlTick(s.ticker);setSelSig(s);setDetail({type:'signal',...s});setDetailStack([]);setDetailFull(true);setPage('signals');}
   function selectSignal(s){setSelSig(s);if(s)setHlTick(s.ticker);}
-  function openDetail(d){
-    // Push whatever was open before onto the stack — covers both "clicked a
-    // link inside the currently-open detail" and "clicked a different item
-    // from the list while one was already open." Both are real navigation a
-    // person would want to step back out of, not just a silent replace.
+  function openDetail(d, opts = {}){
     setDetailStack(prev => detail ? [...prev, detail] : prev);
     setDetail(d);
-    setDetailFull(false);
+    setDetailFull(opts.expand ? true : false);
+    setDrawerMode('auto');
   }
   function goBackDetail(){
     setDetailStack(prev=>{
@@ -8092,9 +11268,16 @@ function AppInner() {
       return next;
     });
   }
-  function expandDetail(){setDetailFull(true);}
-  function closeDetail(){setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);}
-  function navTo(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);}
+  function expandDetail(){setDetailFull(true);setDrawerMode('auto');}
+  function closeDetail(){setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setDrawerMode('auto');}
+  // cameFromHome powers the "Home › Section" breadcrumb bar on mobile —
+  // any *other* way of reaching a page (bottom nav, a shared link, the
+  // desktop sidebar) should not show a breadcrumb back to a Home the
+  // person never actually came from, so plain navTo() always clears it.
+  // Only seeAllFromHome (used by Home's own "See all →" links) sets it.
+  const [cameFromHome, setCameFromHome] = useState(false);
+  function navTo(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);setCameFromHome(false);}
+  function seeAllFromHome(p){setPage(p);setDetail(null);setDetailStack([]);setDetailFull(false);setSelSig(null);setHlTick(null);setCameFromHome(false);}
 
   // Sort state for the shared full-drawer explorer — independent from
   // InsightsPage's own internal sort state, since this instance is opened
@@ -8103,7 +11286,6 @@ function AppInner() {
   const [expDir,  setExpDir]  = useState(-1);
   function expOnSort(col){ if(expSort===col) setExpDir(d=>-d); else { setExpSort(col); setExpDir(-1); } }
 
-  const panelOpen = !!detail;
   const watchlist = useWatchlist(user);
 
   // ── Landing page gate ──────────────────────────────────────────────────────
@@ -8113,6 +11295,9 @@ function AppInner() {
   if (path === '/privacy') return <PrivacyPage />;
   if (path === '/cookies') return <CookiePage />;
   if (path === '/help') return <HelpCenterPage />;
+  if (path === '/data-download') return <DataDownloadPage />;
+  if (path === '/purchase-complete') return <PurchaseCompletePage />;
+  if (path === '/redownload') return <RedownloadPage />;
 
   // ── Loading state — show minimal spinner while Clerk initializes
   // Prevents the flash of landing page that appears for ~200ms on first load
@@ -8129,23 +11314,27 @@ function AppInner() {
 
   return (
     <>
-    {isDataStale && (
+    {isDataStale && !error && (
       <button className="stale-banner" onClick={() => setShowStaleDataModal(true)}>
         <IconWarning style={{width:14,height:14}}/>
         Live data isn't updating right now — tap for details
       </button>
+    )}
+    {error && (
+      <div className="stale-banner stale-banner--error" role="alert">
+        <IconWarning style={{width:14,height:14}}/>
+        <span>Failed to load filing data. <button className="stale-banner__retry" onClick={()=>load(filingsWindowDays)}>Retry</button></span>
+      </div>
     )}
     {showStaleDataModal && (
       <div className="modal-overlay" onClick={(e)=>{if(e.target===e.currentTarget)setShowStaleDataModal(false);}}>
         <div className="modal-panel stale-modal">
           <div className="modal-panel__hdr">
             <span className="modal-panel__title">Data isn't updating</span>
-            <button className="modal-close" onClick={()=>setShowStaleDataModal(false)} title="Close (Esc)">
-              <IconClose style={{width:12,height:12}}/>
-            </button>
+            <button className="modal-close" onClick={()=>setShowStaleDataModal(false)} title="Close (Esc)"><IconClose style={{width:12,height:12}}/></button>
           </div>
           <div className="modal-body stale-modal__body">
-            <p>Live filing data hasn't updated in a few days. We're aware and working on it — nothing you need to do on your end.</p>
+            <p>Live filing data hasn't updated in a few days. We're aware and working on it.</p>
             <p className="stale-modal__timestamp">
               Last new filing: <strong>{lastFilingDate ? fmt.dateShort(lastFilingDate) : 'unknown'}</strong>
               {daysSinceLastFiling != null && ` (${daysSinceLastFiling} day${daysSinceLastFiling===1?'':'s'} ago)`}
@@ -8154,115 +11343,83 @@ function AppInner() {
         </div>
       </div>
     )}
+    <HelpModeContext.Provider value={helpMode}>
     <GuideProvider>
-    <div className={`app-shell${panelOpen?' app-shell--panel-open':''}${page==='settings'?' app-shell--settings':''}`}>
-      <Sidebar page={page} setPage={navTo} dark={dark} setDark={setDark} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>
-      <main className="main-area">
-        <div className="status-bar">
-          {/* Page title — left */}
-          <span className="status-bar__info">
-            {page==='settings'?'Settings':NAV.find(n=>n.id===page)?.label||'Seli'}
-            <span className="beta-tag beta-tag--status" title="Seli is in private beta">BETA</span>
-          </span>
-          <div className="status-bar__meta">
-            {/* Data freshness */}
-            {lastFilingDate&&(
-              <span className={isDataStale?'status-bar__stale':''} title={isDataStale?`Data through ${lastFilingDate} — may be behind`:`Data current through ${lastFilingDate}`}>
-                <span className="status-bar__dot" style={isDataStale?{background:'var(--amber-600)'}:{}}/>
-                {isDataStale?<><IconWarning style={{width:11,height:11,marginRight:3,verticalAlign:"-1px"}}/>{`Data through ${fmt.dateShort(lastFilingDate)}`}</>:`Through ${fmt.dateShort(lastFilingDate)}`}
-              </span>
-            )}
-            {!lastFilingDate&&<span title={loading?'Syncing…':'Ready'}><span className="status-bar__dot"/>{loading?'Syncing…':'Ready'}</span>}
-            {/* Feedback — real destination (Worker endpoint, stored in a
-                table), not a mailto link that's easy to lose track of.
-                Placed alongside Guide since both are "get help / weigh
-                in" actions. */}
-            <FeedbackButton page={page}/>
-            {/* Guide — reachable anytime, not just on first sign-in or via a
-                tile's "?". Opens in-app rather than a new tab, since it's
-                part of using the product, not a separate reference page. */}
-            <GuideStatusBarButton/>
-            {/* Theme toggle — moved here from the sidebar */}
-            <button className="status-bar__icon-btn" onClick={()=>setDark(d=>!d)}
-              title={dark?'Switch to light mode':'Switch to dark mode'}
-              aria-label={dark?'Switch to light mode':'Switch to dark mode'}>
-              {dark ? <IconSun style={{width:16,height:16}}/> : <IconMoon style={{width:16,height:16}}/>}
-            </button>
-            {/* Avatar — Clerk's own dropdown (manage account, sign out, etc).
-                Settings/billing are reachable via the gear icon in the sidebar. */}
-            <SignedIn>
-              <UserButton
-                afterSignOutUrl="/"
-                appearance={{
-                  elements: {
-                    avatarBox:          'clerk-avatar',
-                    userButtonTrigger:  'clerk-avatar-trigger',
-                    userButtonAvatarBox:'clerk-avatar-box',
-                  }
-                }}
-              />
-            </SignedIn>
-            <SignedOut>
-              <SignInButton mode="modal">
-                <button className="auth-btn">Sign in</button>
-              </SignInButton>
-            </SignedOut>
-          </div>
-        </div>
-        <div className="content-area">
-          {page==='dashboard'&&<DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist}/>}
-          {page==='signals'  &&<InsightsPage   filings={filings} loading={loading}
-            highlightTicker={hlTicker} setHighlightTicker={setHlTick}
-            onSelectSignal={selectSignal} selectedSignal={selSignal}
-            onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user}
-            ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist}/>}
-          {page==='data'     &&<DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'data_export')}/>}
-          {page==='settings'  &&<SettingsPage user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
-          {page==='watchlist' &&<WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow}/>}
-        </div>
-        <footer className="footer">
-          <span className="footer__center">Private Beta · Not financial advice.</span>
-          <a href="/help" target="_blank" rel="noreferrer" className="footer__right">Help</a>
-        </footer>
+    <div className={`ws-shell${panelOpen?' ws-shell--panel-open':''}${page==='settings'?' ws-shell--settings':''}`}>
+      <TopNav
+        page={page} setPage={navTo} dark={dark} setDark={setDark} user={user}
+        onUpgrade={(f) => setShowUpgradeModal(f || 'default')}
+        lastFilingDate={lastFilingDate} isDataStale={isDataStale} loading={loading}
+        helpMode={helpMode} setHelpMode={setHelpMode}
+      />
+      <main className="ws-main">
+        {cameFromHome && page !== 'home' && (
+          <button className="home-breadcrumb" onClick={() => navTo('home')}>
+            <span className="home-breadcrumb__arrow"></span>
+            Home <span className="home-breadcrumb__sep">›</span> {PAGE_TITLES[page]}
+          </button>
+        )}
+        {page==='home'      && <HomePage filings={filings} loading={loading} watchlist={watchlist} user={user} onOpenDetail={openDetail} onSeeAll={seeAllFromHome}/>}
+        {page==='dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
+        {page==='signals'   && <InsightsPage filings={filings} loading={loading} highlightTicker={hlTicker} setHighlightTicker={setHlTick} onSelectSignal={selectSignal} selectedSignal={selSignal} onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user} ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
+        {page==='data'      && <DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'data_export')}/>}
+        {page==='settings'  && <SettingsPage user={user} onUpgrade={(f)=>setShowUpgradeModal(f||'default')}/>}
+        {page==='watchlist' && <WatchlistPage filings={filings} loading={loading} onOpenDetail={openDetail} watchlist={watchlist} ensureFilingsWindow={ensureFilingsWindow} user={user}/>}
       </main>
-      {watchlist.showUpgrade&&(
-        <UpgradeModal feature={watchlist.showUpgrade} pro={billingPro} onClose={()=>watchlist.setShowUpgrade(null)}/>
-      )}
-      {showUpgradeModal&&(
-        <UpgradeModal feature={showUpgradeModal} pro={billingPro} onClose={()=>setShowUpgradeModal(null)}/>
-      )}
-      {panelOpen&&!detailFull&&(
+      {/* Footer outside ws-main — pinned at bottom of ws-shell, always same height */}
+      <footer className="ws-footer">
+        <span>Private Beta · Not financial advice.</span>
+        <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
+        <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+        <a href="/help" target="_blank" rel="noreferrer">Help</a>
+      </footer>
+      {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={billingPro} onClose={()=>watchlist.setShowUpgrade(null)}/>}
+      {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={billingPro} onClose={()=>setShowUpgradeModal(null)}/>}
+      {panelOpen && !detailFull && (
         <>
           <div className="panel-overlay" onClick={closeDetail}/>
           <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onExpand={expandDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
         </>
       )}
-      {panelOpen&&detailFull&&(
-        detail?.dataFilters
+      {panelOpen && detailFull && isMobile && (
+        <>
+          <div className="panel-overlay" onClick={closeDetail}/>
+          <DetailPanel detail={detail} filings={filings} onClose={closeDetail} onNavigate={openDetail} onBack={goBackDetail} canGoBack={detailStack.length>0} watchlist={watchlist}/>
+        </>
+      )}
+      {panelOpen && detailFull && !isMobile && (
+        drawerMode==='data' || (drawerMode==='auto' && detail?.dataFilters)
           ? <DataDrawer
               initialDetail={detail}
               initialDetailStack={detailStack}
-              filterState={detail.dataFilters}
-              onClose={closeDetail}
+              filterState={detail?.dataFilters||{}}
+              onClose={()=>{closeDetail();setDrawerMode('auto');}}
+              onSwitchTab={(tab)=>setDrawerMode(tab)}
               watchlist={watchlist}
               portfolioTickers={portfolioTickers}
+              pro={billingPro}
+              onUpgrade={(f)=>setShowUpgradeModal(f||'default')}
             />
           : <InsightsDrawer
-              type={detail?.type==='trader' ? 'insiders' : 'signals'}
+              type={drawerMode!=='auto' ? drawerMode : detail?.type==='trader' ? 'insiders' : 'signals'}
               filings={filings}
-              onClose={closeDetail}
+              onClose={()=>{closeDetail();setDrawerMode('auto');}}
+              onSwitchToData={()=>setDrawerMode('data')}
               initialDetail={detail}
               initialDetailStack={detailStack}
               sigSort={expSort} sigDir={expDir} sigOnSort={expOnSort}
               ensureFilingsWindow={ensureFilingsWindow}
               filingsLoading={loading}
               watchlist={watchlist}
+              pro={billingPro}
             />
       )}
     </div>
     </GuideProvider>
+    </HelpModeContext.Provider>
     </>
   );
+
 }
 
 // Sentry.init at module level — runs once, on import, before AppInner ever
@@ -8309,7 +11466,98 @@ function AppErrorFallback({ error }) {
 // anywhere in AppInner's tree now shows this fallback instead of a blank
 // white screen, and gets reported to Sentry automatically since
 // Sentry.ErrorBoundary reports what it catches on its own.
+// ── SEO: dynamic canonical URL + page title per route ─────────────────────
+// Without this, every SPA route serves the same static <link rel="canonical">
+// from index.html, which tells Google "every page is a duplicate of the
+// homepage." This sets it correctly per route so /about, /data-download, etc.
+// get indexed as separate pages.
+const SEO_TITLES = {
+  '/':              'Seli — Know When Insiders Move | SEC Form 4 & Congressional Stock Trades',
+  '/about':         'How Insider Trades Beat the Market | Research & Methodology — Seli',
+  '/data-download': 'Download SEC Insider Trading Data (CSV) | 10+ Years of Form 4 Filings — Seli',
+  '/terms':         'Terms of Service — Seli',
+  '/privacy':       'Privacy Policy — Seli',
+  '/cookies':       'Cookie Policy — Seli',
+  '/help':          'Help Center — Seli',
+  '/data':          'Insider Trading Signals & Raw SEC Filings | Market Data — Seli',
+  '/insights':      'Top Insider Traders Ranked by Performance | Leaderboard — Seli',
+  '/home':          'Seli — Know When Insiders Move | SEC Form 4 & Congressional Stock Trades',
+};
+const SEO_DESCRIPTIONS = {
+  '/':              'Track SEC Form 4 insider trades and congressional stock disclosures in real time. Scored by conviction, with instant alerts and portfolio integration. Free to start.',
+  '/about':         'The peer-reviewed research behind insider trading signals. How corporate insider buying outperforms the market by 4-5% annually, and how Seli scores each trade using findings from Seyhun, Lakonishok & Lee, and Cohen et al.',
+  '/data-download': 'Download the complete SEC Form 4 insider trading dataset. 10+ years of corporate executive trades as structured CSV. One-time purchase, $39.99. Works with Excel, Python, R.',
+  '/data':          'Live feed of SEC Form 4 insider trades scored by conviction. Filter by sector, type, role, and date. Export to CSV.',
+  '/insiders':      'See which corporate insiders have the best track records. Ranked by hit rate, average return, and proxy score across 10+ years of open-market trades.',
+};
+
+function useSEO() {
+  React.useEffect(() => {
+    const path = window.location.pathname.replace(/\/$/, '') || '/';
+    const origin = 'https://seli.app';
+    const url = `${origin}${path === '/' ? '' : path}`;
+    const title = SEO_TITLES[path] || 'Seli — Insider Trading Intelligence';
+    const desc = SEO_DESCRIPTIONS[path] || SEO_DESCRIPTIONS['/'];
+
+    // Canonical
+    let link = document.querySelector('link[rel="canonical"]');
+    if (!link) { link = document.createElement('link'); link.rel = 'canonical'; document.head.appendChild(link); }
+    link.href = url;
+
+    // Title
+    document.title = title;
+
+    // Meta description
+    setMeta('description', desc);
+
+    // Open Graph
+    setMeta('og:title', title, 'property');
+    setMeta('og:description', desc, 'property');
+    setMeta('og:url', url, 'property');
+    setMeta('og:type', 'website', 'property');
+    setMeta('og:site_name', 'Seli', 'property');
+    setMeta('og:image', `${origin}/og-image.png`, 'property');
+
+    // Twitter Card
+    setMeta('twitter:card', 'summary_large_image');
+    setMeta('twitter:title', title);
+    setMeta('twitter:description', desc);
+    setMeta('twitter:image', `${origin}/og-image.png`);
+
+    // JSON-LD structured data — WebApplication + Organization
+    let script = document.querySelector('script[data-seli-jsonld]');
+    if (!script) {
+      script = document.createElement('script');
+      script.type = 'application/ld+json';
+      script.setAttribute('data-seli-jsonld', '');
+      document.head.appendChild(script);
+    }
+    script.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'WebApplication',
+      name: 'Seli',
+      url: origin,
+      description: SEO_DESCRIPTIONS['/'],
+      applicationCategory: 'FinanceApplication',
+      operatingSystem: 'Web',
+      offers: [
+        { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free', description: 'Live dashboard, signals, 7-day window' },
+        { '@type': 'Offer', price: '6.99', priceCurrency: 'USD', name: 'Pro', description: 'Full history, alerts, portfolio linking', priceSpecification: { '@type': 'UnitPriceSpecification', billingDuration: 'P1M' } },
+        { '@type': 'Offer', price: '39.99', priceCurrency: 'USD', name: 'Data Export', description: 'Complete SEC Form 4 dataset as CSV' },
+      ],
+      creator: { '@type': 'Organization', name: 'Seli', url: origin },
+    });
+  }, []);
+}
+
+function setMeta(nameOrProp, content, attr='name') {
+  let el = document.querySelector(`meta[${attr}="${nameOrProp}"]`);
+  if (!el) { el = document.createElement('meta'); el.setAttribute(attr, nameOrProp); document.head.appendChild(el); }
+  el.content = content;
+}
+
 export default function App() {
+  useSEO();
   return (
     <Sentry.ErrorBoundary fallback={AppErrorFallback}>
       <BillingProvider>
