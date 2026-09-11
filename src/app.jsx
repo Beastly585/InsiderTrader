@@ -4359,13 +4359,14 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
     });
   }, [filings, sectorF, txType, rawRoleF, rawCutoff, rawDateTo, search]);
 
+  const [rawPage, setRawPage] = useState(1);
   const rawFilings = useMemo(() =>
     [...allRaw].sort((a,b)=>{
       const aV = rawSort==='date'?(a.transactionDate||a.date||''):rawSort==='value'?(a.value||0):rawSort==='pctChange'?(a.pctOwnedChange||0):(a.shares||0);
       const bV = rawSort==='date'?(b.transactionDate||b.date||''):rawSort==='value'?(b.value||0):rawSort==='pctChange'?(b.pctOwnedChange||0):(b.shares||0);
       return rawDir>0?(aV>bV?1:-1):(bV>aV?1:-1);
-    }).slice(0,300),
-  [allRaw, rawSort, rawDir]);
+    }).slice(0, rawPage * 100),
+  [allRaw, rawSort, rawDir, rawPage]);
 
   function onSigSort(col) { if(sigSort===col)setSigDir(d=>-d);else{setSigSort(col);setSigDir(-1);} }
   function onRawSort(col) { if(rawSort===col)setRawDir(d=>-d);else{setRawSort(col);setRawDir(-1);} }
@@ -4754,8 +4755,11 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                   );
                 })}
               </div>
-              <div className="ws-tbl-footer">
+              <div className="ws-tbl-footer" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span>Showing {rawFilings.length} of {allRaw.length} filings · open-market only · click row to expand</span>
+                {rawFilings.length < allRaw.length && (
+                  <button className="btn btn--sm" onClick={()=>setRawPage(p=>p+1)}>Load more</button>
+                )}
               </div>
             </>
           )
@@ -5284,7 +5288,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           </div>
           <div className="ip-rail__list">
             {lbError?(
-              lbError.includes('access') ? (
+              lbError.includes('access') && !pro ? (
                 <div style={{padding:'32px 20px',textAlign:'center'}}>
                   <div style={{fontSize:24,marginBottom:8}}>◈</div>
                   <div style={{fontSize:13,fontWeight:600,color:'var(--text)',marginBottom:6}}>Insider profiles are a Pro feature</div>
@@ -6619,7 +6623,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
         <button className={`ins-lb-col-hdr__sort${sort==='proxy_score'?' ins-lb-col-hdr__sort--active':''}`} onClick={()=>onSortClick('proxy_score')}>Score{sort==='proxy_score'&&(dir<0?' ↓':' ↑')}</button>
       </div>
       {error?(
-        error.includes('access') ? (
+        error.includes('access') && !pro ? (
           <div className="ins-empty" style={{flexDirection:'column',gap:8,padding:'20px 12px',textAlign:'center'}}>
             <div style={{fontSize:12,color:'var(--text-2)'}}>Insider rankings are a Pro feature</div>
             <button className="wl-upsell__cta" style={{fontSize:11,padding:'6px 16px'}} onClick={()=>{ if(window.__seliUpgrade) window.__seliUpgrade('pro_direct'); }}>
@@ -7497,18 +7501,33 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
 
   // Stale-while-revalidate: keep showing previous rows while new query runs.
   // Only null out on very first load (rows starts null from useState).
+  const EXPLORE_PAGE = 200;
   const [dataLoading, setDataLoading] = useState(false);
-  useEffect(()=>{
+  const [explorePage, setExplorePage] = useState(0);
+  const [exploreTotal, setExploreTotal] = useState(null);
+
+  function loadExplorePage(p) {
     if (!cfg.NEON_PROXY_URL) return;
     setDataLoading(true);
+    const w = where();
+    // Get total count on first load or filter change
+    if (p === 0) {
+      proxySQL(`SELECT COUNT(*) AS count FROM public.filings ${w}`).then(r => {
+        setExploreTotal(parseInt(r[0]?.count || 0));
+      }).catch(() => {});
+    }
     proxySQL(`
       SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
              relationship,transaction_type,transaction_code,is_open_market,
              shares::float,price_per_share::float,value::float,pct_owned_change::float,sector
-      FROM public.filings ${where()}
+      FROM public.filings ${w}
       ${orderBy()}
-      LIMIT 300
-    `).then(r=>{setRows(r);setDataLoading(false);}).catch(()=>{setRows(prev=>prev||[]);setDataLoading(false);});
+      LIMIT ${EXPLORE_PAGE} OFFSET ${p * EXPLORE_PAGE}
+    `).then(r=>{setRows(r);setExplorePage(p);setDataLoading(false);}).catch(()=>{setRows(prev=>prev||[]);setDataLoading(false);});
+  }
+
+  useEffect(()=>{
+    loadExplorePage(0);
   },[search,typeF,relF,sectorF,sourceF,openMkt,fromPortfolio,dPreset,dateFrom,dateTo,sortKey,sortDir]);
 
   function navigate(d) { if (detail) setDetailStack(s=>[...s, detail]); setDetail(d); }
@@ -7610,7 +7629,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
         <div className="drawer__body">
           <div className="drawer__list" ref={listRef}>
             <div className="drawer__list-hdr">
-              <span>{rows==null?'':''+rows.length+(rows.length===300?'+':'')+' filing'+(rows.length===1?'':'s')}{dataLoading&&rows!=null&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
+              <span>{rows==null?'':(exploreTotal!=null?`${explorePage*EXPLORE_PAGE+1}–${Math.min((explorePage+1)*EXPLORE_PAGE, exploreTotal)} of ${exploreTotal.toLocaleString()}`:`${rows.length}`)+ ' filing'+(rows.length===1?'':'s')}{dataLoading&&rows!=null&&<span className="td-muted" style={{marginLeft:6,fontWeight:400}}><span className="spinner" style={{width:10,height:10,borderWidth:2,marginRight:4,display:'inline-block',verticalAlign:'-1px'}}/>updating…</span>}</span>
             </div>
             {rows===null
               ? <SkeletonRows count={12}/>
@@ -7655,9 +7674,16 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                   );
                 })
             }
+            {exploreTotal != null && exploreTotal > EXPLORE_PAGE && (
+              <div style={{display:'flex',justifyContent:'center',alignItems:'center',gap:8,padding:'10px 0',fontSize:12}}>
+                <button className="btn btn--sm" disabled={explorePage===0} onClick={()=>loadExplorePage(0)}>««</button>
+                <button className="btn btn--sm" disabled={explorePage===0} onClick={()=>loadExplorePage(explorePage-1)}>‹</button>
+                <span style={{color:'var(--text-2)'}}>{explorePage+1}/{Math.ceil(exploreTotal/EXPLORE_PAGE)}</span>
+                <button className="btn btn--sm" disabled={(explorePage+1)*EXPLORE_PAGE>=exploreTotal} onClick={()=>loadExplorePage(explorePage+1)}>›</button>
+                <button className="btn btn--sm" disabled={(explorePage+1)*EXPLORE_PAGE>=exploreTotal} onClick={()=>loadExplorePage(Math.ceil(exploreTotal/EXPLORE_PAGE)-1)}>»»</button>
+              </div>
+            )}
           </div>
-
-          <div className="drawer__detail">
             {!detail
               ? <div className="drawer__detail-empty">
                   <div style={{fontSize:24,marginBottom:8,opacity:.3}}></div>
