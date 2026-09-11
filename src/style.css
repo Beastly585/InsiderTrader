@@ -1814,6 +1814,7 @@ td { padding:7px 11px; vertical-align:middle; }
   display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap;
   padding: 12px 14px; border-bottom: 0.5px solid var(--border);
   background: var(--surface-2);
+  flex-shrink: 0;
 }
 .ins-filter-group {
   display: flex; flex-direction: column; gap: 5px;
@@ -3251,6 +3252,7 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--surface-2);
   flex-shrink: 0;
   margin-bottom: 0;
+  max-height: 40vh; overflow-y: auto;
 }
 /* Ensure no gap between toolbar and body */
 .drawer__toolbar + .drawer__body,

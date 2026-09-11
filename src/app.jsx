@@ -5618,7 +5618,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const [search, setSearch] = useState('');
   const [lbRows, setLbRows] = useState(null);
   const [lbSort, setLbSort] = useState('proxy_score');
-  const [lbYearsBack, setLbYearsBack] = useState(2); // null = all-time
+  const [lbYearsBack, setLbYearsBack] = useState(pro ? 2 : null); // null = all-time; free users only see the "All" pill so default must match
   const [lbSource, setLbSource] = useState(null); // null='all' | 'corporate' | 'congress'
   const [lbMinValue, setLbMinValue] = useState(50000); // minimum bought_value, filtered client-side — defaults to $50K rather than "Any" so a handful of small trades hitting 100% by chance doesn't dominate the default hit-rate sort
   const [lbDir, setLbDir] = useState(-1);
@@ -7450,7 +7450,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [sourceF, setSourceF] = useState(f.sourceF || '');
   const [openMkt, setOpenMkt] = useState(f.openMkt || false);
   const [fromPortfolio, setFromPortfolio] = useState(f.fromPortfolio || false);
-  const [dPreset, setDPreset] = useState(f.dPreset ?? 7);
+  const [dPreset, setDPreset] = useState(f.dPreset ?? (pro ? 90 : 7));
   const [dateFrom, setDateFrom] = useState(f.dateFrom || '');
   const [dateTo, setDateTo] = useState(f.dateTo || '');
   const [sortKey, setSortKey] = useState(f.sortKey || 'transaction_date');
@@ -7459,7 +7459,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   function resetFilters() {
     setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
     setOpenMkt(false); setFromPortfolio(false);
-    setDPreset(7); setDateFrom(''); setDateTo('');
+    setDPreset(pro ? 90 : 7); setDateFrom(''); setDateTo('');
   }
 
   const [rows, setRows] = useState(null);
@@ -7687,6 +7687,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               </div>
             )}
           </div>
+          <div className="drawer__detail">
           {!detail
             ? <div className="drawer__detail-empty">
               <div style={{ fontSize: 24, marginBottom: 8, opacity: .3 }}></div>
@@ -7703,6 +7704,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               inline={true}
             />
           }
+          </div>
         </div>
       </div>
     </div>
@@ -7750,6 +7752,12 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   const [dPreset, setDPreset] = useState(7);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  // Once billing status resolves, widen the default window for Pro users
+  // if they haven't already changed it from the initial 7d default.
+  const dPresetBumped = useRef(false);
+  useEffect(() => {
+    if (pro && !dPresetBumped.current) { setDPreset(90); dPresetBumped.current = true; }
+  }, [pro]);
 
   const [sortKey, setSortKey] = useState('transaction_date');
   const [sortDir, setSortDir] = useState(-1);
@@ -7759,7 +7767,8 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
     setSearch(''); setSearchInput('');
     setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
     setOpenMkt(false); setFromPortfolio(false);
-    setDPreset(7); setDateFrom(''); setDateTo('');
+    setDPreset(pro ? 90 : 7); setDateFrom(''); setDateTo('');
+    dPresetTouched.current = false;
   }
   // Mobile-only — the real table has 10 columns, no reasonable phone width
   // fits that, so mobile gets a separate compact card list instead of a
@@ -7883,7 +7892,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               </div>
             </>
           )}
-          {activeFilterCount > 0 || search || dPreset !== 7 || dateFrom || dateTo ? (
+          {activeFilterCount > 0 || search || dPreset !== (pro ? 90 : 7) || dateFrom || dateTo ? (
             <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
           ) : null}
           <TileInfoButton section="data-source" title="All filings" tileId="data-filings" />
@@ -10982,7 +10991,7 @@ function LandingPage({ onEnter, dark, setDark }) {
 // (page id 'signals' -> path 'insights') so shared/indexed URLs read well
 // without renaming the internal id everywhere it's already used.
 const PAGE_TO_PATH = { home: '', dashboard: 'data', signals: 'insights', data: 'data', watchlist: 'watchlist', settings: 'settings' };
-const PATH_TO_PAGE = { '': 'home', home: 'home', data: 'dashboard', insights: 'signals', watchlist: 'watchlist', settings: 'settings' };
+const PATH_TO_PAGE = { '': 'home', home: 'home', data: 'dashboard', insights: 'signals', insiders: 'signals', watchlist: 'watchlist', settings: 'settings' };
 
 function pathFromAppState(page, detail) {
   // Detail deep-link takes priority — the panel overlays whatever page is
