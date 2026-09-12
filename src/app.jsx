@@ -1288,6 +1288,7 @@ function IconSun(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12"
 function IconMoon(p) { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>; }
 function IconReversal(p) { return <svg {...ICON_PROPS} {...p}><path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>; }
 function IconClose(p) { return <svg {...ICON_PROPS} {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>; }
+function IconBack(p) { return <svg {...ICON_PROPS} {...p}><polyline points="15 18 9 12 15 6" /></svg>; }
 function IconCheck(p) { return <svg {...ICON_PROPS} {...p}><polyline points="20 6 9 17 4 12" /></svg>; }
 function IconWarning(p) { return <svg {...ICON_PROPS} {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>; }
 function IconBuyTri(p) { return <svg viewBox="0 0 24 24" {...p}><polygon points="12 4 21 19 3 19" fill="currentColor" /></svg>; }
@@ -2683,12 +2684,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   const [busy, setBusy] = useState(false);
   const [bundleOn, setBundleOn] = useState(true);
   const [omOnly, setOmOnly] = useState(true);
-  // Load-more state for ticker + trader detail lists
-  const DETAIL_PAGE = 200;
-  const [tickerHasMore, setTickerHasMore] = useState(false);
-  const [tickerLoadingMore, setTickerLoadingMore] = useState(false);
-  const [traderHasMore, setTraderHasMore] = useState(false);
-  const [traderLoadingMore, setTraderLoadingMore] = useState(false);
 
   // Fetch current price for signal-type details so the NOW column shows data.
   // Signal trades come from the client-side filings array (no price join),
@@ -2905,7 +2900,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
   useEffect(() => {
     if (d.type !== 'trader') return;
-    setTraderRows(null); setBusy(true); setTraderHasMore(false);
+    setTraderRows(null); setBusy(true);
     queryNeon(`
       SELECT f.accession_number,f.cik_issuer,
              f.transaction_date,f.filing_date,f.ticker,f.company_name,
@@ -2922,47 +2917,13 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       ) ph ON true
       WHERE f.insider_name='${d.name.replace(/'/g, "''")}'
         AND f.transaction_type IN ('buy','sell')
-      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT ${DETAIL_PAGE + 1}
-    `).then(r => {
-      const hasMore = r.length > DETAIL_PAGE;
-      setTraderRows(hasMore ? r.slice(0, DETAIL_PAGE) : r);
-      setTraderHasMore(hasMore);
-      setBusy(false);
-    }).catch(() => { setTraderRows([]); setBusy(false); });
+      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
+    `).then(r => { setTraderRows(r); setBusy(false); }).catch(() => { setTraderRows([]); setBusy(false); });
   }, [d.type, d.name]);
-
-  function loadMoreTrader() {
-    if (!traderRows?.length || traderLoadingMore) return;
-    setTraderLoadingMore(true);
-    const offset = traderRows.length;
-    queryNeon(`
-      SELECT f.accession_number,f.cik_issuer,
-             f.transaction_date,f.filing_date,f.ticker,f.company_name,
-             f.transaction_type,f.transaction_code,f.is_open_market,f.is_derivative,
-             f.shares::float,f.price_per_share::float AS price,
-             f.value::float,f.pct_owned_change::float,
-             f.relationship,f.insider_title AS title,f.sector,f.is_entity_owner,
-             f.filing_lag_days,f.shares_owned_after::float,
-             ph.close::float AS current_price
-      FROM public.filings f
-      LEFT JOIN LATERAL (
-        SELECT close FROM public.prices_history
-        WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
-      ) ph ON true
-      WHERE f.insider_name='${d.name.replace(/'/g, "''")}'
-        AND f.transaction_type IN ('buy','sell')
-      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT ${DETAIL_PAGE + 1} OFFSET ${offset}
-    `).then(r => {
-      const hasMore = r.length > DETAIL_PAGE;
-      setTraderRows(prev => [...(prev || []), ...(hasMore ? r.slice(0, DETAIL_PAGE) : r)]);
-      setTraderHasMore(hasMore);
-      setTraderLoadingMore(false);
-    }).catch(() => setTraderLoadingMore(false));
-  }
 
   useEffect(() => {
     if (d.type !== 'ticker') return;
-    setTickerRows(null); setBusy(true); setTickerHasMore(false);
+    setTickerRows(null); setBusy(true);
     queryNeon(`
       SELECT f.accession_number,f.transaction_date,f.filing_date,f.insider_name,
              f.insider_title AS title,f.relationship,
@@ -2981,45 +2942,9 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       ) ph ON true
       WHERE f.ticker='${(d.ticker || '').replace(/'/g, "''")}'
         AND f.transaction_type IN ('buy','sell')
-      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT ${DETAIL_PAGE + 1}
-    `).then(r => {
-      const hasMore = r.length > DETAIL_PAGE;
-      setTickerRows(hasMore ? r.slice(0, DETAIL_PAGE) : r);
-      setTickerHasMore(hasMore);
-      setBusy(false);
-    }).catch(() => { setTickerRows([]); setBusy(false); });
+      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
+    `).then(r => { setTickerRows(r); setBusy(false); }).catch(() => { setTickerRows([]); setBusy(false); });
   }, [d.type, d.ticker]);
-
-  function loadMoreTicker() {
-    if (!tickerRows?.length || tickerLoadingMore) return;
-    setTickerLoadingMore(true);
-    const offset = tickerRows.length;
-    queryNeon(`
-      SELECT f.accession_number,f.transaction_date,f.filing_date,f.insider_name,
-             f.insider_title AS title,f.relationship,
-             f.transaction_type,f.transaction_code,f.is_open_market,
-             f.shares::float,f.price_per_share::float AS price,
-             f.value::float,f.pct_owned_change::float,f.sector,
-             f.cik_issuer,
-             ph.close::float AS current_price,
-             CASE WHEN f.price_per_share>0 AND ph.close IS NOT NULL
-               AND ABS((ph.close-f.price_per_share)/f.price_per_share)>=3.0
-               THEN true ELSE false END AS is_foreign_price
-      FROM public.filings f
-      LEFT JOIN LATERAL (
-        SELECT close FROM public.prices_history
-        WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
-      ) ph ON true
-      WHERE f.ticker='${(d.ticker || '').replace(/'/g, "''")}'
-        AND f.transaction_type IN ('buy','sell')
-      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT ${DETAIL_PAGE + 1} OFFSET ${offset}
-    `).then(r => {
-      const hasMore = r.length > DETAIL_PAGE;
-      setTickerRows(prev => [...(prev || []), ...(hasMore ? r.slice(0, DETAIL_PAGE) : r)]);
-      setTickerHasMore(hasMore);
-      setTickerLoadingMore(false);
-    }).catch(() => setTickerLoadingMore(false));
-  }
 
   const traderStats = useMemo(() => {
     if (!traderRows?.length) return null;
@@ -3288,11 +3213,11 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   return (
     <div className={inline ? 'detail-panel detail-panel--inline' : 'detail-panel'}>
       <div className="detail-panel__header">
-        {canGoBack && <button className="btn btn--ghost btn--icon" onClick={onBack} title="Back"></button>}
+        {canGoBack && <button className="btn btn--ghost btn--icon" onClick={onBack} title="Back"><IconBack style={{ width: 14, height: 14 }} /></button>}
         <div style={{ minWidth: 0, flex: 1 }}>{<DetailPanelHeader d={d} traderStats={traderStats} traderRows={traderRows} inline={inline} watchlist={watchlist} nav={nav} />}</div>
         {!inline && onExpand && <button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
         {!inline && <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{ width: 12, height: 12 }} /></button>}
-        {inline && canGoBack && <button className="btn btn--ghost btn--icon" style={{ fontSize: '0.6875rem' }} onClick={onClose} title="Clear"><IconClose style={{ width: 12, height: 12 }} /></button>}
+        {inline && <button className="btn btn--ghost btn--icon" style={{ fontSize: '0.6875rem' }} onClick={onClose} title={canGoBack ? 'Clear' : 'Deselect'}><IconClose style={{ width: 12, height: 12 }} /></button>}
       </div>
       <div className="detail-panel__body">
 
@@ -3469,15 +3394,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             })}
           </>)}
 
-          {(traderHasMore || traderLoadingMore) && (
-            <div className="dp-load-more">
-              {traderLoadingMore
-                ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: 'inline-block' }} />
-                : <button onClick={loadMoreTrader}>Load more trades</button>
-              }
-            </div>
-          )}
-
         </>))}
 
 
@@ -3498,14 +3414,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             </label>
           </div>
           {tickerRowsDisplay.map((r, i) => <TRow key={i} r={r} showTicker={false} showInsider={true} />)}
-          {(tickerHasMore || tickerLoadingMore) && (
-            <div className="dp-load-more">
-              {tickerLoadingMore
-                ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: 'inline-block' }} />
-                : <button onClick={loadMoreTicker}>Load more</button>
-              }
-            </div>
-          )}
         </>))}
 
         {d.type === 'signal' && (<>
@@ -5711,7 +5619,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
   const [search, setSearch] = useState('');
   const [lbRows, setLbRows] = useState(null);
   const [lbSort, setLbSort] = useState('proxy_score');
-  const [lbYearsBack, setLbYearsBack] = useState(pro ? 2 : null); // null = all-time; free users only see the "All" pill so default must match
+  const [lbYearsBack, setLbYearsBack] = useState(2); // null = all-time
   const [lbSource, setLbSource] = useState(null); // null='all' | 'corporate' | 'congress'
   const [lbMinValue, setLbMinValue] = useState(50000); // minimum bought_value, filtered client-side — defaults to $50K rather than "Any" so a handful of small trades hitting 100% by chance doesn't dominate the default hit-rate sort
   const [lbDir, setLbDir] = useState(-1);
@@ -7072,6 +6980,22 @@ async function proxySQL(sql) {
   return d.rows || [];
 }
 
+// ── Cached sector list ──────────────────────────────────────────────────────
+// The sector vocabulary is static (GICS sectors don't change on a daily
+// basis), so querying DISTINCT sector on every DataDrawer/DataPage mount
+// wastes a Neon round trip. Fetch once, cache at module scope, reuse.
+let _sectorCache = null;
+let _sectorPromise = null;
+function fetchSectorsOnce() {
+  if (_sectorCache) return Promise.resolve(_sectorCache);
+  if (_sectorPromise) return _sectorPromise;
+  if (!cfg.NEON_PROXY_URL) return Promise.resolve([]);
+  _sectorPromise = proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
+    .then(r => { _sectorCache = r.map(x => x.sector).filter(Boolean); _sectorPromise = null; return _sectorCache; })
+    .catch(() => { _sectorPromise = null; return []; });
+  return _sectorPromise;
+}
+
 // Tries the pre-built R2 snapshot first — nearly all of a large export is
 // served from a static file instead of pulled live through Neon, which is
 // what actually removes the sustained-connection pressure that kept
@@ -7536,7 +7460,15 @@ function FilterPanel({
 // directly, since DataPage may since have unmounted.
 function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers, pro, onUpgrade, onSwitchTab }) {
   const f = filterState || {};
+  const [searchInput, setSearchInput] = useState(f.search || '');
   const [search, setSearch] = useState(f.search || '');
+  // Debounce: commit searchInput → search after 300ms of inactivity.
+  // This prevents a fresh SQL query on every keystroke while still
+  // feeling instant — the same pattern the DataPage already uses.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
   const [typeF, setTypeF] = useState(f.typeF || '');
   const [relF, setRelF] = useState(f.relF || '');
   const [sectorF, setSectorF] = useState(f.sectorF || '');
@@ -7550,7 +7482,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [sortDir, setSortDir] = useState(f.sortDir ?? -1);
 
   function resetFilters() {
-    setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
+    setSearchInput(''); setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
     setOpenMkt(false); setFromPortfolio(false);
     setDPreset(7); setDateFrom(''); setDateTo('');
   }
@@ -7560,11 +7492,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [detailStack, setDetailStack] = useState(() => initialDetailStack || []);
   const [detail, setDetail] = useState(initialDetail || null);
 
-  useEffect(() => {
-    if (!cfg.NEON_PROXY_URL) return;
-    proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
-      .then(r => setSectors(r.map(x => x.sector).filter(Boolean))).catch(() => { });
-  }, []);
+  useEffect(() => { fetchSectorsOnce().then(s => setSectors(s)); }, []);
 
   function where() {
     const c = [];
@@ -7599,43 +7527,60 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   // Only null out on very first load (rows starts null from useState).
   const EXPLORE_PAGE = 200;
   const [dataLoading, setDataLoading] = useState(false);
+  const [explorePage, setExplorePage] = useState(0);
   const [exploreTotal, setExploreTotal] = useState(null);
 
-  function loadExplorePage(p, append = false) {
+  // Sequence counter: incremented on every new load. When a response arrives,
+  // it's compared against the current counter — if stale (user changed filters
+  // while the query was in-flight), the response is silently dropped. This
+  // prevents a slow query from overwriting a fast, more recent one.
+  const exploreSeqRef = useRef(0);
+
+  function loadExplorePage(p) {
     if (!cfg.NEON_PROXY_URL) return;
+    const seq = ++exploreSeqRef.current;
     setDataLoading(true);
     const w = where();
-    // Get total count on first load or filter change
-    if (p === 0) {
-      proxySQL(`SELECT COUNT(*) AS count FROM public.filings ${w}`).then(r => {
-        setExploreTotal(parseInt(r[0]?.count || 0));
-      }).catch(() => { });
-    }
+
+    // Single query with inline count — eliminates the separate COUNT(*) round
+    // trip that previously doubled connection pressure on every filter change.
+    // The scalar subquery runs once, and Postgres can often satisfy it from
+    // the same index scan as the main query.
+    const countExpr = p === 0
+      ? `, (SELECT COUNT(*) FROM public.filings ${w}) AS _total_count`
+      : '';
+
     proxySQL(`
       SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
              relationship,transaction_type,transaction_code,is_open_market,
              shares::float,price_per_share::float,value::float,pct_owned_change::float,sector
+             ${countExpr}
       FROM public.filings ${w}
       ${orderBy()}
       LIMIT ${EXPLORE_PAGE} OFFSET ${p * EXPLORE_PAGE}
     `).then(r => {
-      setRows(prev => append && prev ? [...prev, ...r] : r);
+      if (seq !== exploreSeqRef.current) return; // stale — drop it
+      if (p === 0 && r.length > 0 && r[0]._total_count != null) {
+        setExploreTotal(parseInt(r[0]._total_count));
+      } else if (p === 0 && r.length === 0) {
+        setExploreTotal(0);
+      }
+      // Strip the _total_count column before setting rows — downstream
+      // code doesn't expect it and it'd show up in any Object.keys() walk.
+      const clean = r.map(({ _total_count, ...rest }) => rest);
+      setRows(clean);
+      setExplorePage(p);
       setDataLoading(false);
-    }).catch(() => { setRows(prev => prev || []); setDataLoading(false); });
+    }).catch(() => {
+      if (seq !== exploreSeqRef.current) return;
+      setRows(prev => prev || []);
+      setDataLoading(false);
+    });
   }
-
-  // Track how many pages have been loaded for load-more
-  const loadedPagesRef = useRef(0);
 
   useEffect(() => {
-    loadedPagesRef.current = 0;
     loadExplorePage(0);
   }, [search, typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dPreset, dateFrom, dateTo, sortKey, sortDir]);
-
-  function loadMore() {
-    loadedPagesRef.current += 1;
-    loadExplorePage(loadedPagesRef.current, true);
-  }
 
   function navigate(d) { if (detail) setDetailStack(s => [...s, detail]); setDetail(d); }
   function goBack() { const prev = detailStack[detailStack.length - 1]; setDetailStack(s => s.slice(0, -1)); setDetail(prev || null); }
@@ -7680,7 +7625,8 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
             <div className="drawer__search-wrap">
               <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
               <input className="drawer__search" placeholder="Ticker, insider, company…"
-                value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+                value={searchInput} onChange={e => setSearchInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && setSearch(searchInput)} autoFocus />
             </div>
           </div>
           <div className="drawer__toolbar-divider" />
@@ -7736,7 +7682,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
         <div className="drawer__body">
           <div className="drawer__list" ref={listRef}>
             <div className="drawer__list-hdr">
-              <span>{rows == null ? '' : (exploreTotal != null ? `${rows.length} of ${exploreTotal.toLocaleString()}` : `${rows.length}`) + ' filing' + ((rows?.length || 0) === 1 ? '' : 's')}{dataLoading && rows != null && <span className="td-muted" style={{ marginLeft: 6, fontWeight: 400 }}><span className="spinner" style={{ width: 10, height: 10, borderWidth: 2, marginRight: 4, display: 'inline-block', verticalAlign: '-1px' }} />loading…</span>}</span>
+              <span>{rows == null ? '' : (exploreTotal != null ? `${explorePage * EXPLORE_PAGE + 1}–${Math.min((explorePage + 1) * EXPLORE_PAGE, exploreTotal)} of ${exploreTotal.toLocaleString()}` : `${rows.length}`) + ' filing' + (rows.length === 1 ? '' : 's')}{dataLoading && rows != null && <span className="td-muted" style={{ marginLeft: 6, fontWeight: 400 }}><span className="spinner" style={{ width: 10, height: 10, borderWidth: 2, marginRight: 4, display: 'inline-block', verticalAlign: '-1px' }} />updating…</span>}</span>
             </div>
             {rows === null
               ? <SkeletonRows count={12} />
@@ -7781,18 +7727,16 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                     );
                   })
             }
-            {rows && !dataLoading && exploreTotal != null && rows.length < exploreTotal && (
-              <div className="drawer__load-more">
-                <button onClick={loadMore}>Load more ({rows.length} of {exploreTotal.toLocaleString()})</button>
-              </div>
-            )}
-            {dataLoading && rows && rows.length > 0 && (
-              <div className="drawer__load-more">
-                <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: 'inline-block', verticalAlign: '-2px' }} />
+            {exploreTotal != null && exploreTotal > EXPLORE_PAGE && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '10px 0', fontSize: 12 }}>
+                <button className="btn btn--sm" disabled={explorePage === 0} onClick={() => loadExplorePage(0)}>««</button>
+                <button className="btn btn--sm" disabled={explorePage === 0} onClick={() => loadExplorePage(explorePage - 1)}>‹</button>
+                <span style={{ color: 'var(--text-2)' }}>{explorePage + 1}/{Math.ceil(exploreTotal / EXPLORE_PAGE)}</span>
+                <button className="btn btn--sm" disabled={(explorePage + 1) * EXPLORE_PAGE >= exploreTotal} onClick={() => loadExplorePage(explorePage + 1)}>›</button>
+                <button className="btn btn--sm" disabled={(explorePage + 1) * EXPLORE_PAGE >= exploreTotal} onClick={() => loadExplorePage(Math.ceil(exploreTotal / EXPLORE_PAGE) - 1)}>»»</button>
               </div>
             )}
           </div>
-          <div className="drawer__detail">
           {!detail
             ? <div className="drawer__detail-empty">
               <div style={{ fontSize: 24, marginBottom: 8, opacity: .3 }}></div>
@@ -7809,7 +7753,6 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               inline={true}
             />
           }
-          </div>
         </div>
       </div>
     </div>
@@ -7874,11 +7817,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   // it in place for the columns that don't fit in the compact view.
   const [expandedRow, setExpandedRow] = useState(null);
 
-  useEffect(() => {
-    if (!cfg.NEON_PROXY_URL) return;
-    proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
-      .then(r => setSectors(r.map(x => x.sector).filter(Boolean))).catch(() => { });
-  }, []);
+  useEffect(() => { fetchSectorsOnce().then(s => setSectors(s)); }, []);
 
   function where() {
     const c = [];
@@ -7910,43 +7849,51 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
     return `ORDER BY ${sortKey} ${dir} NULLS LAST`;
   }
 
-  async function fetchPg(p, append = false) {
+  // Sequence counter — prevents a slow query from overwriting a newer result
+  const dataSeqRef = useRef(0);
+
+  async function fetchPg(p) {
     if (!cfg.NEON_PROXY_URL) { setError('Unable to connect right now — try refreshing the page.'); return; }
+    const seq = ++dataSeqRef.current;
     setLoading(true); setError(null);
     try {
       const w = where();
-      if (p === 0 || total === null) {
-        const cnt = await proxySQL(`SELECT COUNT(*) AS count FROM public.filings ${w}`);
-        setTotal(parseInt(cnt[0]?.count || 0));
-      }
+      const needsCount = p === 0 || total === null;
+      const countExpr = needsCount
+        ? `, (SELECT COUNT(*) FROM public.filings ${w}) AS _total_count`
+        : '';
       const data = await proxySQL(`
         SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
                relationship,transaction_type,transaction_code,is_open_market,
                shares::float,price_per_share::float,value::float,pct_owned_change::float,sector
+               ${countExpr}
         FROM public.filings ${w}
         ${orderBy()}
         LIMIT ${DATA_PAGE} OFFSET ${p * DATA_PAGE}
       `);
-      setRows(prev => append && prev ? [...prev, ...data] : data);
+      if (seq !== dataSeqRef.current) return; // stale — drop
+      if (needsCount) {
+        setTotal(data.length > 0 && data[0]._total_count != null ? parseInt(data[0]._total_count) : 0);
+      }
+      setRows(data.map(({ _total_count, ...rest }) => rest));
       setPg(p);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      if (seq !== dataSeqRef.current) return;
+      setError(e.message);
+    }
     setLoading(false);
   }
 
-  const loadedPgRef = useRef(0);
-
-  useEffect(() => { setTotal(null); loadedPgRef.current = 0; fetchPg(0); }, [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dateFrom, dateTo, dPreset, search, sortKey, sortDir]);
-
-  function loadMoreData() {
-    loadedPgRef.current += 1;
-    fetchPg(loadedPgRef.current, true);
-  }
+  // SWR: don't null out total on filter change — the old count stays visible
+  // as a stale reference while the new query runs, then gets replaced atomically.
+  useEffect(() => { fetchPg(0); }, [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dateFrom, dateTo, dPreset, search, sortKey, sortDir]);
 
   function onSort(key) {
     if (sortKey === key) setSortDir(d => -d);
     else { setSortKey(key); setSortDir(key === 'transaction_date' ? -1 : 1); }
   }
 
+  const totalPgs = total != null ? Math.ceil(total / DATA_PAGE) : null;
   const activeFilterCount = [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio].filter(Boolean).length;
 
   // Passed through on every onOpenDetail call from this page — marks the
@@ -8150,19 +8097,17 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
             <div className="pagination">
               <span className="pagination__info">
                 {total != null
-                  ? `Showing ${rows.length} of ${total.toLocaleString()} filing${total === 1 ? '' : 's'}`
+                  ? `${pg * DATA_PAGE + 1}–${Math.min((pg + 1) * DATA_PAGE, total || 0)} of ${total.toLocaleString()} filing${total === 1 ? '' : 's'}`
                   : ''}
                 {!pro && <span className="td-muted"> · Free plan: last 12 months — <button className="free-tier-note__link" onClick={() => onUpgrade('full_history')}>upgrade</button> for full history</span>}
               </span>
-              {rows.length < (total || 0) && (
-                <button className="btn btn--sm" onClick={loadMoreData} disabled={loading}>Load more</button>
-              )}
-            </div>
-          )}
-          {loading && rows.length > 0 && (
-            <div className="pagination">
-              <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: 'inline-block', marginRight: 6 }} />
-              <span className="td-muted" style={{ fontSize: '0.75rem' }}>Loading more…</span>
+              <div className="pagination__btns">
+                <button className="btn btn--sm" onClick={() => fetchPg(0)} disabled={pg === 0 || loading || totalPgs <= 1}>««</button>
+                <button className="btn btn--sm" onClick={() => fetchPg(pg - 1)} disabled={pg === 0 || loading || totalPgs <= 1}>‹</button>
+                <span className="pagination__counter">{pg + 1}/{totalPgs || 1}</span>
+                <button className="btn btn--sm" onClick={() => fetchPg(pg + 1)} disabled={pg >= totalPgs - 1 || loading || totalPgs <= 1}>›</button>
+                <button className="btn btn--sm" onClick={() => fetchPg(totalPgs - 1)} disabled={pg >= totalPgs - 1 || loading || totalPgs <= 1}>»»</button>
+              </div>
             </div>
           )}
         </div>
@@ -11098,7 +11043,7 @@ function LandingPage({ onEnter, dark, setDark }) {
 // (page id 'signals' -> path 'insights') so shared/indexed URLs read well
 // without renaming the internal id everywhere it's already used.
 const PAGE_TO_PATH = { home: '', dashboard: 'data', signals: 'insights', data: 'data', watchlist: 'watchlist', settings: 'settings' };
-const PATH_TO_PAGE = { '': 'home', home: 'home', data: 'dashboard', insights: 'signals', insiders: 'signals', watchlist: 'watchlist', settings: 'settings' };
+const PATH_TO_PAGE = { '': 'home', home: 'home', data: 'dashboard', insights: 'signals', watchlist: 'watchlist', settings: 'settings' };
 
 function pathFromAppState(page, detail) {
   // Detail deep-link takes priority — the panel overlays whatever page is
