@@ -4217,11 +4217,11 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
                         </div>
                         {!isMobile && <div className="ws-sig-compact-row__moves"><span style={{ fontSize: 11, color: 'var(--text-2)' }}>{totalMoves}</span></div>}
                         <div className="ws-sig-compact-row__net">
-                          <div className={`ws-sig-row__val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div>
-                          <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{fmt.ago(s.lastTradeDate)}</div>
+                          <span className={`${isBuy ? 'val-buy' : 'val-sell'}`} style={{ fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</span>
+                          <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>{fmt.ago(s.lastTradeDate)}</div>
                         </div>
                         <div className="ws-sig-compact-row__conv">
-                          <ConvictionBar score={s.conviction} max={100} showLabel />
+                          <ConvictionBar score={s.conviction} max={100} />
                         </div>
                       </div>
                     );
@@ -8443,12 +8443,12 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                   <div key={s.ticker} className="ws-data-row ws-data-row--clickable"
                     onClick={() => onOpenDetail({ type: 'ticker', ticker: s.ticker, company: s.company, expand: true })}>
                     <div className="ws-data-row__main ws-row__main--wl">
-                      <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}><StarBtn ticker={s.ticker} watchlist={watchlist} /></div>
-                        <div style={{ minWidth: 0 }}>
+                      <div className="ws-data-row__cell wl-name-cell">
+                        <div className="wl-name-cell__text">
                           <span className="ticker">{s.ticker}</span>
-                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.company}</div>
+                          {s.company && <div className="wl-name-cell__sub">{s.company}</div>}
                         </div>
+                        <div className="wl-name-cell__btn" onClick={e => e.stopPropagation()}><StarBtn ticker={s.ticker} watchlist={watchlist} /></div>
                       </div>
                       <div className="ws-data-row__cell">
                         {s.lastTradeDate ? (
@@ -8490,12 +8490,12 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                 <div key={r.name} className="ws-data-row ws-data-row--clickable"
                   onClick={() => onOpenDetail({ type: 'trader', name: r.name, title: r.title, expand: true })}>
                   <div className="ws-data-row__main ws-row__main--wl">
-                    <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-                        {r.title && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>}
+                    <div className="ws-data-row__cell wl-name-cell">
+                      <div className="wl-name-cell__text">
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
+                        {r.title && <div className="wl-name-cell__sub">{r.title}</div>}
                       </div>
-                      <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}><FollowBtn name={r.name} watchlist={watchlist} /></div>
+                      <div className="wl-name-cell__btn" onClick={e => e.stopPropagation()}><FollowBtn name={r.name} watchlist={watchlist} /></div>
                     </div>
                     <div className="ws-data-row__cell">
                       {r.lastDate ? (
