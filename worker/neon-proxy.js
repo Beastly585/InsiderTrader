@@ -1594,7 +1594,17 @@ async function handleQuery(request, env, origin) {
   // Long-term: replace this passthrough with named endpoints entirely.
   // This is the pragmatic hardening for the existing architecture.
 
-  const normalized = query.replace(/\s+/g, ' ').trim();
+  // Strip SQL comments BEFORE normalizing whitespace. Order matters:
+  // -- comments end at \n, but the whitespace normalizer below converts
+  // all newlines to spaces first. If we normalize first, the comment
+  // regex can't find where the comment ends and eats the rest of the
+  // query. The leaderboard query has "-- splitting into multiple rows"
+  // which caused INTO (a blocked keyword) to fire on every request.
+  const decommented = query
+    .replace(/--[^\n]*/g, '')           // strip single-line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '');  // strip block comments
+
+  const normalized = decommented.replace(/\s+/g, ' ').trim();
   const upper = normalized.toUpperCase();
 
   // Must start with SELECT
@@ -1679,18 +1689,6 @@ async function handleQuery(request, env, origin) {
     return corsResponse({ error: 'Invalid NEON_CONNECTION_STRING' }, 500, origin, env);
   }
 
-  // Neon's HTTP SQL endpoint can optionally route through their connection
-  // pooler by appending -pooler to the hostname. This avoids a fresh compute
-  // wake-up / connection setup on each request and significantly reduces
-  // latency for sequential or concurrent queries from the same Worker.
-  // The cron keep-alive prevents hibernation, but the pooler helps even for
-  // warm computes by reusing pooled connections.
-  //
-  // To enable: set NEON_CONNECTION_STRING to the pooler string, e.g.
-  //   postgresql://role:pass@ep-xxx-pooler.us-east-1.aws.neon.tech/db
-  // (note the -pooler in the hostname — Neon generates this string in the
-  //  dashboard under "Connection pooling".)
-
   // Use full connection string including password in the header
   const headers = {
     'Content-Type':           'application/json',
@@ -1722,14 +1720,7 @@ async function handleQuery(request, env, origin) {
   // so concurrent users hitting the same leaderboard don't each trigger a
   // fresh Neon aggregation.
   const isLeaderboard = query.toLowerCase().includes('benchmark_prices');
-  // Regular filings queries benefit from a short edge cache too — a user
-  // toggling filters back and forth within a few seconds shouldn't hit Neon
-  // every time, and multiple users with the same filter combo (e.g. the
-  // default 7-day view) can share the cached response.
-  const isFilingsQuery = !isLeaderboard && query.toLowerCase().includes('public.filings');
-  const extraHeaders = isLeaderboard ? { 'Cache-Control': 'public, max-age=1800' }
-                     : isFilingsQuery ? { 'Cache-Control': 'public, max-age=5' }
-                     : {};
+  const extraHeaders = isLeaderboard ? { 'Cache-Control': 'public, max-age=1800' } : {};
 
   return new Response(
     JSON.stringify(result),
