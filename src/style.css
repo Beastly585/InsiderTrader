@@ -6338,7 +6338,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* Compact signal row — home signals tile */
 .ws-home-sig-hdrs {
   display: grid;
-  grid-template-columns: 1fr 50px 90px 110px;
+  grid-template-columns: 1fr 60px 100px 100px;
   border-bottom: 0.5px solid var(--border-md);
   background: var(--surface);
 }
@@ -6347,9 +6347,8 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .ws-sig-compact-row {
   display: grid;
-  grid-template-columns: 1fr 50px 90px 110px;
+  grid-template-columns: 1fr 60px 100px 100px;
   align-items: center;
-  gap: 10px;
   padding: 9px 14px;
   border-bottom: 0.5px solid var(--border);
   border-left: 3px solid transparent;
@@ -6359,8 +6358,8 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-sig-compact-row:last-child { border-bottom: none; }
 .ws-sig-compact-row:hover { background: var(--surface-2); }
 .ws-sig-compact-row__ticker { min-width: 0; }
-.ws-sig-compact-row__moves { font-variant-numeric: tabular-nums; text-align: center; }
-.ws-sig-compact-row__net   { text-align: right; }
+.ws-sig-compact-row__moves { text-align: center; font-variant-numeric: tabular-nums; }
+.ws-sig-compact-row__net   { text-align: right; font-variant-numeric: tabular-nums; }
 .ws-sig-compact-row__conv  { text-align: right; }
 
 @media (max-width: 640px) {
