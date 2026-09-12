@@ -6342,6 +6342,9 @@ td { padding:7px 11px; vertical-align:middle; }
   border-bottom: 0.5px solid var(--border-md);
   background: var(--surface);
 }
+/* Center the Moves header, give Conviction header right breathing room */
+.ws-home-sig-hdrs .ws-col-sort:nth-child(2) { text-align: center; padding-left: 0; padding-right: 0; }
+.ws-home-sig-hdrs .ws-col-sort:last-child { padding-right: 16px; }
 @media (max-width: 640px) {
   .ws-home-sig-hdrs { grid-template-columns: minmax(0, 1fr) 70px 60px; }
 }
@@ -6358,16 +6361,14 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-sig-compact-row:last-child { border-bottom: none; }
 .ws-sig-compact-row:hover { background: var(--surface-2); }
 .ws-sig-compact-row__ticker {
-  min-width: 0;
-  overflow: hidden;
+  min-width: 0; overflow: hidden;
 }
-.ws-sig-compact-row__ticker .ticker { white-space: nowrap; }
 .ws-sig-compact-row__ticker > div:last-child {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ws-sig-compact-row__moves { text-align: center; font-variant-numeric: tabular-nums; }
 .ws-sig-compact-row__net   { text-align: right; font-variant-numeric: tabular-nums; }
-.ws-sig-compact-row__conv  { text-align: right; }
+.ws-sig-compact-row__conv  { text-align: right; padding-right: 2px; }
 /* Scale conviction bar down for this compact tile */
 .ws-sig-compact-row__conv .conv-bar-track { min-width: 28px; height: 5px; }
 .ws-sig-compact-row__conv .conv-bar-label { display: none; }
