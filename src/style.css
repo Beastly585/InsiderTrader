@@ -6338,20 +6338,17 @@ td { padding:7px 11px; vertical-align:middle; }
 /* Compact signal row — home signals tile */
 .ws-home-sig-hdrs {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 50px 80px 80px;
+  grid-template-columns: 1fr 50px 90px 110px;
   border-bottom: 0.5px solid var(--border-md);
   background: var(--surface);
 }
-/* Center the Moves header, give Conviction header right breathing room */
-.ws-home-sig-hdrs .ws-col-sort:nth-child(2) { text-align: center; padding-left: 0; padding-right: 0; }
-.ws-home-sig-hdrs .ws-col-sort:last-child { padding-right: 16px; }
 @media (max-width: 640px) {
-  .ws-home-sig-hdrs { grid-template-columns: minmax(0, 1fr) 70px 60px; }
+  .ws-home-sig-hdrs { grid-template-columns: 1fr 90px 100px; }
 }
 .ws-sig-compact-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 50px 80px 80px;
+  display: flex;
   align-items: center;
+  gap: 10px;
   padding: 9px 14px;
   border-bottom: 0.5px solid var(--border);
   border-left: 3px solid transparent;
@@ -6360,23 +6357,8 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .ws-sig-compact-row:last-child { border-bottom: none; }
 .ws-sig-compact-row:hover { background: var(--surface-2); }
-.ws-sig-compact-row__ticker {
-  min-width: 0; overflow: hidden;
-}
-.ws-sig-compact-row__ticker > div:last-child {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ws-sig-compact-row__moves { text-align: center; font-variant-numeric: tabular-nums; }
-.ws-sig-compact-row__net   { text-align: right; font-variant-numeric: tabular-nums; }
-.ws-sig-compact-row__conv  { text-align: right; padding-right: 2px; }
-/* Scale conviction bar down for this compact tile */
-.ws-sig-compact-row__conv .conv-bar-track { min-width: 28px; height: 5px; }
-.ws-sig-compact-row__conv .conv-bar-label { display: none; }
-.ws-sig-compact-row__conv .conv-bar-wrap { gap: 0; max-width: 60px; margin-left: auto; }
-
-@media (max-width: 640px) {
-  .ws-sig-compact-row { grid-template-columns: minmax(0, 1fr) 70px 60px; }
-}
+.ws-sig-compact-row__left  { flex: 1; min-width: 0; }
+.ws-sig-compact-row__right { text-align: right; flex-shrink: 0; }
 
 /* Small column sort header variant for home tiles */
 .ws-col-sort--sm {
@@ -6620,13 +6602,21 @@ td { padding:7px 11px; vertical-align:middle; }
   grid-template-columns: minmax(0,1fr) 6% 10% 8% 8% 11% 44px;
 }
 
-/* ── WATCHLIST: ticker·company(flex) | last activity | net flow ── */
-/* These tables sit in a half-width tile (ws-wl-bottom = 1fr 1fr).
-   Use proportional columns that work at ~540px container width. */
+/* ── WATCHLIST: name+btn | last activity | net flow ── */
 .ws-col-hdrs--wl,
 .ws-row__main--wl {
   grid-template-columns: minmax(0,1fr) 28% 22%;
 }
+.wl-name-cell {
+  display: flex !important; align-items: center; gap: 8px;
+}
+.wl-name-cell__text {
+  min-width: 0; max-width: 260px;
+}
+.wl-name-cell__text > div,
+.wl-name-cell__text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.wl-name-cell__sub { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.wl-name-cell__btn { flex-shrink: 0; }
 
 /* ── Mobile: collapse to fewer columns ── */
 @media (max-width: 900px) {
