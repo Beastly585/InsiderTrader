@@ -1288,7 +1288,6 @@ function IconSun(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12"
 function IconMoon(p) { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>; }
 function IconReversal(p) { return <svg {...ICON_PROPS} {...p}><path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>; }
 function IconClose(p) { return <svg {...ICON_PROPS} {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>; }
-function IconBack(p) { return <svg {...ICON_PROPS} {...p}><polyline points="15 18 9 12 15 6" /></svg>; }
 function IconCheck(p) { return <svg {...ICON_PROPS} {...p}><polyline points="20 6 9 17 4 12" /></svg>; }
 function IconWarning(p) { return <svg {...ICON_PROPS} {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>; }
 function IconBuyTri(p) { return <svg viewBox="0 0 24 24" {...p}><polygon points="12 4 21 19 3 19" fill="currentColor" /></svg>; }
@@ -2684,6 +2683,10 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   const [busy, setBusy] = useState(false);
   const [bundleOn, setBundleOn] = useState(true);
   const [omOnly, setOmOnly] = useState(true);
+  // Track which trade row is expanded in the ticker/trader activity list.
+  // When d.highlightTrade is set (navigated from a list row click), auto-expand
+  // the matching row. Index-based: null = nothing expanded.
+  const [expandedTradeIdx, setExpandedTradeIdx] = useState(null);
 
   // Fetch current price for signal-type details so the NOW column shows data.
   // Signal trades come from the client-side filings array (no price join),
@@ -2707,7 +2710,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     onNavigate({ type, ...forwarded }, opts);
   };
 
-  const TRow = ({ r, showTicker, showInsider }) => {
+  const TRow = ({ r, showTicker, showInsider, expanded, onToggleExpand }) => {
     const tt = r.transaction_type || r.transactionType;
     const code = r.transaction_code || r.transactionCode;
     const isOM = r.is_open_market || r.isOpenMarket;
@@ -2717,15 +2720,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     // strike price that isn't comparable — don't compute a misleading return.
     const hasRealPrice = isOM && pr > 0;
     const isForeign = r.is_foreign_price || r.isForeignPrice || (hasRealPrice && cur && Math.abs((cur - pr) / pr) >= 3);
-    // For a BUY, price rising afterward is a good outcome. For a SELL, it's
-    // the opposite — price rising after you sold means you left money on
-    // the table. The percentage shown stays true to the actual price move
-    // (so it never contradicts the prices displayed next to it — a sale
-    // shown at $6.94 → $7.69 should never read as a negative number, that
-    // would look like a math error), but the color now reflects whether
-    // this was actually a good outcome for THIS trade's direction, which
-    // previously used the same green-if-positive logic for both buys and
-    // sells — backwards for every sell.
     const ret = (hasRealPrice && cur && !isForeign) ? ((cur - pr) / pr * 100) : null;
     const isGoodOutcome = ret != null ? (tt === 'sell' ? ret < 0 : ret >= 0) : null;
     const dt = r.transaction_date || r.transactionDate || r.date;
@@ -2745,24 +2739,20 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
         <span className="dp-trade-sec-tooltip">View SEC filing</span>
       </a>
     ) : null;
-    // Scopes the eventual "expand to full Explore view" to whatever this
-    // panel itself represents — DataDrawer already restores every filter
-    // from this object and scrolls to/highlights the exact row that opened
-    // it (see its own scrolledOnOpenRef effect), it just needed a caller
-    // that actually attaches a dataFilters payload. Ticker/trader panels
-    // are the two contexts this row list is used in with a real single
-    // subject to scope to; anywhere else (a compact signals widget with no
-    // one fixed subject) this stays null and expand falls back to the
-    // existing general Insights drawer, unchanged.
     const rowDataFilters = d.type === 'ticker' && d.ticker ? { search: d.ticker }
       : d.type === 'trader' && d.name ? { search: d.name }
         : null;
-    const openTransaction = () => nav('transaction', { trade: r, dataFilters: rowDataFilters });
+    // When onToggleExpand is available, clicking the row toggles
+    // the expandable details instead of navigating to the transaction view.
+    const handleClick = onToggleExpand
+      ? () => onToggleExpand()
+      : () => nav('transaction', { trade: r, dataFilters: rowDataFilters });
     return (
-      <div className={`dp-trade dp-trade--${tt} dp-clickable`}
+      <>
+      <div className={`dp-trade dp-trade--${tt} dp-clickable${expanded ? ' dp-trade--expanded' : ''}`}
         role="button" tabIndex={0}
-        onClick={openTransaction}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTransaction(); } }}>
+        onClick={handleClick}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}>
         <div className={`dp-trade-split${inline ? '' : ' dp-trade-split--stacked'}`}>
           {/* LEFT — context: what kind of trade, when, who/what ticker.
   
@@ -2895,6 +2885,48 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
           )}
         </div>
       </div>
+      {expanded && (
+        <div className="dp-trade-expand">
+          <div className="dp-trade-expand__inner">
+            {showInsider && r.insider_name && (
+              <div className="dp-trade-expand__row">
+                <span className="dp-trade-expand__label">Insider</span>
+                <span className="dp-trade-expand__val">
+                  <RelBadge rel={r.relationship || 'weak'} />
+                  <span className="dp-clickable" style={{ fontWeight: 500 }}
+                    onClick={e => { e.stopPropagation(); nav('trader', { name: r.insider_name, title: r.title || r.insider_title }); }}>
+                    {r.insider_name}
+                  </span>
+                  {(r.title || r.insider_title) && <span className="td-muted" style={{ marginLeft: 'auto', fontSize: '0.6875rem' }}>{r.title || r.insider_title}</span>}
+                </span>
+              </div>
+            )}
+            <div className="dp-trade-expand__row">
+              <span className="dp-trade-expand__label">Filed</span>
+              <span className="dp-trade-expand__val">{fmt.date(r.filing_date || r.date)}</span>
+            </div>
+            <div className="dp-trade-expand__row">
+              <span className="dp-trade-expand__label">Code</span>
+              <span className="dp-trade-expand__val">
+                <span className="code-pill" title={codeLabel}>{code}</span>
+                {isOM && <span className="dp-trade-om-label" style={{ marginLeft: 6 }}>Open market</span>}
+              </span>
+            </div>
+            {(r.sector) && (
+              <div className="dp-trade-expand__row">
+                <span className="dp-trade-expand__label">Sector</span>
+                <span className="dp-trade-expand__val">{r.sector}</span>
+              </div>
+            )}
+            <div className="dp-trade-expand__links">
+              {showInsider && r.insider_name && <button className="dp-nav-link" onClick={e => { e.stopPropagation(); nav('trader', { name: r.insider_name, title: r.title || r.insider_title }); }}>Trader profile →</button>}
+              {showTicker && r.ticker && <button className="dp-nav-link" onClick={e => { e.stopPropagation(); nav('ticker', { ticker: r.ticker, company: r.company_name }); }}>All {r.ticker} trades →</button>}
+              {secUrl && <a href={secUrl} target="_blank" rel="noopener noreferrer" className="dp-nav-link" onClick={e => e.stopPropagation()}>SEC filing ↗</a>}
+            </div>
+          </div>
+        </div>
+      )}
+      </>
     );
   };
 
@@ -3199,6 +3231,24 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     return bundleOn ? clusterTrades(tickerRows) : tickerRows;
   }, [tickerRows, bundleOn]);
 
+  // Auto-expand the trade row that was clicked from the DataDrawer list.
+  // Matches on insider_name + transaction_date to find the right row index.
+  useEffect(() => {
+    if (d.type !== 'ticker' || !d.highlightTrade || !tickerRowsDisplay.length) return;
+    const ht = d.highlightTrade;
+    const htName = ht.insiderName || ht.insider_name || '';
+    const htDate = ht.transactionDate || ht.transaction_date || '';
+    const idx = tickerRowsDisplay.findIndex(r => {
+      const rName = r.insider_name || '';
+      const rDate = r.transaction_date || r.transactionDate || '';
+      return rName === htName && rDate === htDate;
+    });
+    if (idx >= 0) setExpandedTradeIdx(idx);
+  }, [tickerRowsDisplay, d.highlightTrade]);
+
+  // Reset expanded row when navigating to a different detail
+  useEffect(() => { setExpandedTradeIdx(null); }, [d.type, d.ticker, d.name]);
+
   const byInsider = useMemo(() => {
     if (d.type !== 'signal') return [];
     const map = {};
@@ -3213,11 +3263,11 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   return (
     <div className={inline ? 'detail-panel detail-panel--inline' : 'detail-panel'}>
       <div className="detail-panel__header">
-        {canGoBack && <button className="btn btn--ghost btn--icon" onClick={onBack} title="Back"><IconBack style={{ width: 14, height: 14 }} /></button>}
+        {canGoBack && <button className="btn btn--ghost btn--icon" onClick={onBack} title="Back"></button>}
         <div style={{ minWidth: 0, flex: 1 }}>{<DetailPanelHeader d={d} traderStats={traderStats} traderRows={traderRows} inline={inline} watchlist={watchlist} nav={nav} />}</div>
         {!inline && onExpand && <button className="btn btn--ghost btn--icon" onClick={onExpand} title="Open full Explore view">⤢</button>}
         {!inline && <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{ width: 12, height: 12 }} /></button>}
-        {inline && <button className="btn btn--ghost btn--icon" style={{ fontSize: '0.6875rem' }} onClick={onClose} title={canGoBack ? 'Clear' : 'Deselect'}><IconClose style={{ width: 12, height: 12 }} /></button>}
+        {inline && canGoBack && <button className="btn btn--ghost btn--icon" style={{ fontSize: '0.6875rem' }} onClick={onClose} title="Clear"><IconClose style={{ width: 12, height: 12 }} /></button>}
       </div>
       <div className="detail-panel__body">
 
@@ -3381,7 +3431,12 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                   <details className="position-card__txns" open={perStockBreakdown.length === 1}>
                     <summary>{displayRows.length} transaction{displayRows.length !== 1 ? 's' : ''} for {s.ticker}{omOnly ? ' (open market only)' : ''}</summary>
                     <div className="position-card__txn-list">
-                      {(inline ? displayRows : displayRows.slice(0, 5)).map((r, j) => <TRow key={j} r={r} showTicker={true} showInsider={false} />)}
+                      {(inline ? displayRows : displayRows.slice(0, 5)).map((r, j) => {
+                        const eid = `${s.ticker}-${j}`;
+                        return <TRow key={j} r={r} showTicker={true} showInsider={false}
+                          expanded={expandedTradeIdx === eid}
+                          onToggleExpand={() => setExpandedTradeIdx(expandedTradeIdx === eid ? null : eid)} />;
+                      })}
                     </div>
                     {!inline && displayRows.length > 5 && (
                       <button className="btn btn--ghost btn--sm position-card__view-full" onClick={() => onExpand && onExpand()}>
@@ -3413,7 +3468,9 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               Bundle nearby trades
             </label>
           </div>
-          {tickerRowsDisplay.map((r, i) => <TRow key={i} r={r} showTicker={false} showInsider={true} />)}
+          {tickerRowsDisplay.map((r, i) => <TRow key={i} r={r} showTicker={false} showInsider={true}
+            expanded={expandedTradeIdx === i}
+            onToggleExpand={() => setExpandedTradeIdx(expandedTradeIdx === i ? null : i)} />)}
         </>))}
 
         {d.type === 'signal' && (<>
@@ -6980,22 +7037,6 @@ async function proxySQL(sql) {
   return d.rows || [];
 }
 
-// ── Cached sector list ──────────────────────────────────────────────────────
-// The sector vocabulary is static (GICS sectors don't change on a daily
-// basis), so querying DISTINCT sector on every DataDrawer/DataPage mount
-// wastes a Neon round trip. Fetch once, cache at module scope, reuse.
-let _sectorCache = null;
-let _sectorPromise = null;
-function fetchSectorsOnce() {
-  if (_sectorCache) return Promise.resolve(_sectorCache);
-  if (_sectorPromise) return _sectorPromise;
-  if (!cfg.NEON_PROXY_URL) return Promise.resolve([]);
-  _sectorPromise = proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
-    .then(r => { _sectorCache = r.map(x => x.sector).filter(Boolean); _sectorPromise = null; return _sectorCache; })
-    .catch(() => { _sectorPromise = null; return []; });
-  return _sectorPromise;
-}
-
 // Tries the pre-built R2 snapshot first — nearly all of a large export is
 // served from a static file instead of pulled live through Neon, which is
 // what actually removes the sustained-connection pressure that kept
@@ -7460,15 +7501,7 @@ function FilterPanel({
 // directly, since DataPage may since have unmounted.
 function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, watchlist, portfolioTickers, pro, onUpgrade, onSwitchTab }) {
   const f = filterState || {};
-  const [searchInput, setSearchInput] = useState(f.search || '');
   const [search, setSearch] = useState(f.search || '');
-  // Debounce: commit searchInput → search after 300ms of inactivity.
-  // This prevents a fresh SQL query on every keystroke while still
-  // feeling instant — the same pattern the DataPage already uses.
-  useEffect(() => {
-    const t = setTimeout(() => setSearch(searchInput), 300);
-    return () => clearTimeout(t);
-  }, [searchInput]);
   const [typeF, setTypeF] = useState(f.typeF || '');
   const [relF, setRelF] = useState(f.relF || '');
   const [sectorF, setSectorF] = useState(f.sectorF || '');
@@ -7482,7 +7515,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [sortDir, setSortDir] = useState(f.sortDir ?? -1);
 
   function resetFilters() {
-    setSearchInput(''); setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
+    setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
     setOpenMkt(false); setFromPortfolio(false);
     setDPreset(7); setDateFrom(''); setDateTo('');
   }
@@ -7492,7 +7525,11 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [detailStack, setDetailStack] = useState(() => initialDetailStack || []);
   const [detail, setDetail] = useState(initialDetail || null);
 
-  useEffect(() => { fetchSectorsOnce().then(s => setSectors(s)); }, []);
+  useEffect(() => {
+    if (!cfg.NEON_PROXY_URL) return;
+    proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
+      .then(r => setSectors(r.map(x => x.sector).filter(Boolean))).catch(() => { });
+  }, []);
 
   function where() {
     const c = [];
@@ -7530,52 +7567,24 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [explorePage, setExplorePage] = useState(0);
   const [exploreTotal, setExploreTotal] = useState(null);
 
-  // Sequence counter: incremented on every new load. When a response arrives,
-  // it's compared against the current counter — if stale (user changed filters
-  // while the query was in-flight), the response is silently dropped. This
-  // prevents a slow query from overwriting a fast, more recent one.
-  const exploreSeqRef = useRef(0);
-
   function loadExplorePage(p) {
     if (!cfg.NEON_PROXY_URL) return;
-    const seq = ++exploreSeqRef.current;
     setDataLoading(true);
     const w = where();
-
-    // Single query with inline count — eliminates the separate COUNT(*) round
-    // trip that previously doubled connection pressure on every filter change.
-    // The scalar subquery runs once, and Postgres can often satisfy it from
-    // the same index scan as the main query.
-    const countExpr = p === 0
-      ? `, (SELECT COUNT(*) FROM public.filings ${w}) AS _total_count`
-      : '';
-
+    // Get total count on first load or filter change
+    if (p === 0) {
+      proxySQL(`SELECT COUNT(*) AS count FROM public.filings ${w}`).then(r => {
+        setExploreTotal(parseInt(r[0]?.count || 0));
+      }).catch(() => { });
+    }
     proxySQL(`
       SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
              relationship,transaction_type,transaction_code,is_open_market,
              shares::float,price_per_share::float,value::float,pct_owned_change::float,sector
-             ${countExpr}
       FROM public.filings ${w}
       ${orderBy()}
       LIMIT ${EXPLORE_PAGE} OFFSET ${p * EXPLORE_PAGE}
-    `).then(r => {
-      if (seq !== exploreSeqRef.current) return; // stale — drop it
-      if (p === 0 && r.length > 0 && r[0]._total_count != null) {
-        setExploreTotal(parseInt(r[0]._total_count));
-      } else if (p === 0 && r.length === 0) {
-        setExploreTotal(0);
-      }
-      // Strip the _total_count column before setting rows — downstream
-      // code doesn't expect it and it'd show up in any Object.keys() walk.
-      const clean = r.map(({ _total_count, ...rest }) => rest);
-      setRows(clean);
-      setExplorePage(p);
-      setDataLoading(false);
-    }).catch(() => {
-      if (seq !== exploreSeqRef.current) return;
-      setRows(prev => prev || []);
-      setDataLoading(false);
-    });
+    `).then(r => { setRows(r); setExplorePage(p); setDataLoading(false); }).catch(() => { setRows(prev => prev || []); setDataLoading(false); });
   }
 
   useEffect(() => {
@@ -7625,8 +7634,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
             <div className="drawer__search-wrap">
               <svg className="drawer__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
               <input className="drawer__search" placeholder="Ticker, insider, company…"
-                value={searchInput} onChange={e => setSearchInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && setSearch(searchInput)} autoFocus />
+                value={search} onChange={e => setSearch(e.target.value)} autoFocus />
             </div>
           </div>
           <div className="drawer__toolbar-divider" />
@@ -7706,13 +7714,17 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                       date: r.filing_date, filing_date: r.filing_date,
                       relationship: r.relationship, sector: r.sector,
                     };
-                    const isActive = detail?.type === 'transaction' && detail?.trade?.ticker === r.ticker
-                      && detail?.trade?.insiderName === r.insider_name && detail?.trade?.transactionDate === r.transaction_date;
+                    const isActive = detail?.type === 'ticker' && detail?.ticker === r.ticker;
                     return (
                       <div key={i}
                         data-row-key={rowKey(trade)}
                         className={`drawer__list-row${isActive ? ' drawer__list-row--active' : ''}`}
-                        onClick={() => navigate({ type: 'transaction', trade })}>
+                        onClick={() => navigate({
+                          type: 'ticker',
+                          ticker: r.ticker,
+                          company: r.company_name,
+                          highlightTrade: trade,
+                        })}>
                         <div className="drawer__list-row__main">
                           <span className="ticker" style={{ fontSize: '0.75rem', fontWeight: 700 }}>{r.ticker || '—'}</span>
                           <Badge type={tt === 'buy' ? 'buy' : tt === 'sell' ? 'sell' : 'other'}>{tt === 'buy' ? 'Buy' : tt === 'sell' ? 'Sell' : 'Other'}</Badge>
@@ -7817,7 +7829,11 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   // it in place for the columns that don't fit in the compact view.
   const [expandedRow, setExpandedRow] = useState(null);
 
-  useEffect(() => { fetchSectorsOnce().then(s => setSectors(s)); }, []);
+  useEffect(() => {
+    if (!cfg.NEON_PROXY_URL) return;
+    proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
+      .then(r => setSectors(r.map(x => x.sector).filter(Boolean))).catch(() => { });
+  }, []);
 
   function where() {
     const c = [];
@@ -7849,44 +7865,29 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
     return `ORDER BY ${sortKey} ${dir} NULLS LAST`;
   }
 
-  // Sequence counter — prevents a slow query from overwriting a newer result
-  const dataSeqRef = useRef(0);
-
   async function fetchPg(p) {
     if (!cfg.NEON_PROXY_URL) { setError('Unable to connect right now — try refreshing the page.'); return; }
-    const seq = ++dataSeqRef.current;
     setLoading(true); setError(null);
     try {
       const w = where();
-      const needsCount = p === 0 || total === null;
-      const countExpr = needsCount
-        ? `, (SELECT COUNT(*) FROM public.filings ${w}) AS _total_count`
-        : '';
+      if (p === 0 || total === null) {
+        const cnt = await proxySQL(`SELECT COUNT(*) AS count FROM public.filings ${w}`);
+        setTotal(parseInt(cnt[0]?.count || 0));
+      }
       const data = await proxySQL(`
         SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
                relationship,transaction_type,transaction_code,is_open_market,
                shares::float,price_per_share::float,value::float,pct_owned_change::float,sector
-               ${countExpr}
         FROM public.filings ${w}
         ${orderBy()}
         LIMIT ${DATA_PAGE} OFFSET ${p * DATA_PAGE}
       `);
-      if (seq !== dataSeqRef.current) return; // stale — drop
-      if (needsCount) {
-        setTotal(data.length > 0 && data[0]._total_count != null ? parseInt(data[0]._total_count) : 0);
-      }
-      setRows(data.map(({ _total_count, ...rest }) => rest));
-      setPg(p);
-    } catch (e) {
-      if (seq !== dataSeqRef.current) return;
-      setError(e.message);
-    }
+      setRows(data); setPg(p);
+    } catch (e) { setError(e.message); }
     setLoading(false);
   }
 
-  // SWR: don't null out total on filter change — the old count stays visible
-  // as a stale reference while the new query runs, then gets replaced atomically.
-  useEffect(() => { fetchPg(0); }, [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dateFrom, dateTo, dPreset, search, sortKey, sortDir]);
+  useEffect(() => { setTotal(null); fetchPg(0); }, [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dateFrom, dateTo, dPreset, search, sortKey, sortDir]);
 
   function onSort(key) {
     if (sortKey === key) setSortDir(d => -d);
