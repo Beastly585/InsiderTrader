@@ -3333,6 +3333,25 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .drawer__empty { padding: 20px 14px; font-size: 0.75rem; color: var(--text-3); }
 .drawer__list-scroll { display: flex; flex-direction: column; }
+.drawer__load-more {
+  padding: 10px 14px; text-align: center; border-top: 0.5px solid var(--border);
+  flex-shrink: 0;
+}
+.drawer__load-more button {
+  font-size: 0.6875rem; font-weight: 600; font-family: var(--font);
+  color: var(--accent-strong); background: none; border: none;
+  cursor: pointer; padding: 4px 12px;
+}
+.drawer__load-more button:hover { text-decoration: underline; }
+.dp-load-more {
+  padding: 8px 0; text-align: center;
+}
+.dp-load-more button {
+  font-size: 0.6875rem; font-weight: 600; font-family: var(--font);
+  color: var(--accent-strong); background: none; border: none;
+  cursor: pointer; padding: 4px 12px;
+}
+.dp-load-more button:hover { text-decoration: underline; }
 .wl-drawer-body {
   grid-template-columns: 340px 1fr;
 }

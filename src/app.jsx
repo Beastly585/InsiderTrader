@@ -2683,6 +2683,12 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   const [busy, setBusy] = useState(false);
   const [bundleOn, setBundleOn] = useState(true);
   const [omOnly, setOmOnly] = useState(true);
+  // Load-more state for ticker + trader detail lists
+  const DETAIL_PAGE = 200;
+  const [tickerHasMore, setTickerHasMore] = useState(false);
+  const [tickerLoadingMore, setTickerLoadingMore] = useState(false);
+  const [traderHasMore, setTraderHasMore] = useState(false);
+  const [traderLoadingMore, setTraderLoadingMore] = useState(false);
 
   // Fetch current price for signal-type details so the NOW column shows data.
   // Signal trades come from the client-side filings array (no price join),
@@ -2899,7 +2905,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
 
   useEffect(() => {
     if (d.type !== 'trader') return;
-    setTraderRows(null); setBusy(true);
+    setTraderRows(null); setBusy(true); setTraderHasMore(false);
     queryNeon(`
       SELECT f.accession_number,f.cik_issuer,
              f.transaction_date,f.filing_date,f.ticker,f.company_name,
@@ -2916,13 +2922,47 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       ) ph ON true
       WHERE f.insider_name='${d.name.replace(/'/g, "''")}'
         AND f.transaction_type IN ('buy','sell')
-      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r => { setTraderRows(r); setBusy(false); }).catch(() => { setTraderRows([]); setBusy(false); });
+      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT ${DETAIL_PAGE + 1}
+    `).then(r => {
+      const hasMore = r.length > DETAIL_PAGE;
+      setTraderRows(hasMore ? r.slice(0, DETAIL_PAGE) : r);
+      setTraderHasMore(hasMore);
+      setBusy(false);
+    }).catch(() => { setTraderRows([]); setBusy(false); });
   }, [d.type, d.name]);
+
+  function loadMoreTrader() {
+    if (!traderRows?.length || traderLoadingMore) return;
+    setTraderLoadingMore(true);
+    const offset = traderRows.length;
+    queryNeon(`
+      SELECT f.accession_number,f.cik_issuer,
+             f.transaction_date,f.filing_date,f.ticker,f.company_name,
+             f.transaction_type,f.transaction_code,f.is_open_market,f.is_derivative,
+             f.shares::float,f.price_per_share::float AS price,
+             f.value::float,f.pct_owned_change::float,
+             f.relationship,f.insider_title AS title,f.sector,f.is_entity_owner,
+             f.filing_lag_days,f.shares_owned_after::float,
+             ph.close::float AS current_price
+      FROM public.filings f
+      LEFT JOIN LATERAL (
+        SELECT close FROM public.prices_history
+        WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
+      ) ph ON true
+      WHERE f.insider_name='${d.name.replace(/'/g, "''")}'
+        AND f.transaction_type IN ('buy','sell')
+      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT ${DETAIL_PAGE + 1} OFFSET ${offset}
+    `).then(r => {
+      const hasMore = r.length > DETAIL_PAGE;
+      setTraderRows(prev => [...(prev || []), ...(hasMore ? r.slice(0, DETAIL_PAGE) : r)]);
+      setTraderHasMore(hasMore);
+      setTraderLoadingMore(false);
+    }).catch(() => setTraderLoadingMore(false));
+  }
 
   useEffect(() => {
     if (d.type !== 'ticker') return;
-    setTickerRows(null); setBusy(true);
+    setTickerRows(null); setBusy(true); setTickerHasMore(false);
     queryNeon(`
       SELECT f.accession_number,f.transaction_date,f.filing_date,f.insider_name,
              f.insider_title AS title,f.relationship,
@@ -2941,9 +2981,45 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
       ) ph ON true
       WHERE f.ticker='${(d.ticker || '').replace(/'/g, "''")}'
         AND f.transaction_type IN ('buy','sell')
-      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r => { setTickerRows(r); setBusy(false); }).catch(() => { setTickerRows([]); setBusy(false); });
+      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT ${DETAIL_PAGE + 1}
+    `).then(r => {
+      const hasMore = r.length > DETAIL_PAGE;
+      setTickerRows(hasMore ? r.slice(0, DETAIL_PAGE) : r);
+      setTickerHasMore(hasMore);
+      setBusy(false);
+    }).catch(() => { setTickerRows([]); setBusy(false); });
   }, [d.type, d.ticker]);
+
+  function loadMoreTicker() {
+    if (!tickerRows?.length || tickerLoadingMore) return;
+    setTickerLoadingMore(true);
+    const offset = tickerRows.length;
+    queryNeon(`
+      SELECT f.accession_number,f.transaction_date,f.filing_date,f.insider_name,
+             f.insider_title AS title,f.relationship,
+             f.transaction_type,f.transaction_code,f.is_open_market,
+             f.shares::float,f.price_per_share::float AS price,
+             f.value::float,f.pct_owned_change::float,f.sector,
+             f.cik_issuer,
+             ph.close::float AS current_price,
+             CASE WHEN f.price_per_share>0 AND ph.close IS NOT NULL
+               AND ABS((ph.close-f.price_per_share)/f.price_per_share)>=3.0
+               THEN true ELSE false END AS is_foreign_price
+      FROM public.filings f
+      LEFT JOIN LATERAL (
+        SELECT close FROM public.prices_history
+        WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
+      ) ph ON true
+      WHERE f.ticker='${(d.ticker || '').replace(/'/g, "''")}'
+        AND f.transaction_type IN ('buy','sell')
+      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT ${DETAIL_PAGE + 1} OFFSET ${offset}
+    `).then(r => {
+      const hasMore = r.length > DETAIL_PAGE;
+      setTickerRows(prev => [...(prev || []), ...(hasMore ? r.slice(0, DETAIL_PAGE) : r)]);
+      setTickerHasMore(hasMore);
+      setTickerLoadingMore(false);
+    }).catch(() => setTickerLoadingMore(false));
+  }
 
   const traderStats = useMemo(() => {
     if (!traderRows?.length) return null;
@@ -3393,6 +3469,15 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             })}
           </>)}
 
+          {(traderHasMore || traderLoadingMore) && (
+            <div className="dp-load-more">
+              {traderLoadingMore
+                ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: 'inline-block' }} />
+                : <button onClick={loadMoreTrader}>Load more trades</button>
+              }
+            </div>
+          )}
+
         </>))}
 
 
@@ -3413,6 +3498,14 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
             </label>
           </div>
           {tickerRowsDisplay.map((r, i) => <TRow key={i} r={r} showTicker={false} showInsider={true} />)}
+          {(tickerHasMore || tickerLoadingMore) && (
+            <div className="dp-load-more">
+              {tickerLoadingMore
+                ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: 'inline-block' }} />
+                : <button onClick={loadMoreTicker}>Load more</button>
+              }
+            </div>
+          )}
         </>))}
 
         {d.type === 'signal' && (<>
@@ -7450,7 +7543,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [sourceF, setSourceF] = useState(f.sourceF || '');
   const [openMkt, setOpenMkt] = useState(f.openMkt || false);
   const [fromPortfolio, setFromPortfolio] = useState(f.fromPortfolio || false);
-  const [dPreset, setDPreset] = useState(f.dPreset ?? (pro ? 90 : 7));
+  const [dPreset, setDPreset] = useState(f.dPreset ?? 7);
   const [dateFrom, setDateFrom] = useState(f.dateFrom || '');
   const [dateTo, setDateTo] = useState(f.dateTo || '');
   const [sortKey, setSortKey] = useState(f.sortKey || 'transaction_date');
@@ -7459,7 +7552,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   function resetFilters() {
     setSearch(''); setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
     setOpenMkt(false); setFromPortfolio(false);
-    setDPreset(pro ? 90 : 7); setDateFrom(''); setDateTo('');
+    setDPreset(7); setDateFrom(''); setDateTo('');
   }
 
   const [rows, setRows] = useState(null);
@@ -7506,10 +7599,9 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   // Only null out on very first load (rows starts null from useState).
   const EXPLORE_PAGE = 200;
   const [dataLoading, setDataLoading] = useState(false);
-  const [explorePage, setExplorePage] = useState(0);
   const [exploreTotal, setExploreTotal] = useState(null);
 
-  function loadExplorePage(p) {
+  function loadExplorePage(p, append = false) {
     if (!cfg.NEON_PROXY_URL) return;
     setDataLoading(true);
     const w = where();
@@ -7526,12 +7618,24 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
       FROM public.filings ${w}
       ${orderBy()}
       LIMIT ${EXPLORE_PAGE} OFFSET ${p * EXPLORE_PAGE}
-    `).then(r => { setRows(r); setExplorePage(p); setDataLoading(false); }).catch(() => { setRows(prev => prev || []); setDataLoading(false); });
+    `).then(r => {
+      setRows(prev => append && prev ? [...prev, ...r] : r);
+      setDataLoading(false);
+    }).catch(() => { setRows(prev => prev || []); setDataLoading(false); });
   }
 
+  // Track how many pages have been loaded for load-more
+  const loadedPagesRef = useRef(0);
+
   useEffect(() => {
+    loadedPagesRef.current = 0;
     loadExplorePage(0);
   }, [search, typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dPreset, dateFrom, dateTo, sortKey, sortDir]);
+
+  function loadMore() {
+    loadedPagesRef.current += 1;
+    loadExplorePage(loadedPagesRef.current, true);
+  }
 
   function navigate(d) { if (detail) setDetailStack(s => [...s, detail]); setDetail(d); }
   function goBack() { const prev = detailStack[detailStack.length - 1]; setDetailStack(s => s.slice(0, -1)); setDetail(prev || null); }
@@ -7632,7 +7736,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
         <div className="drawer__body">
           <div className="drawer__list" ref={listRef}>
             <div className="drawer__list-hdr">
-              <span>{rows == null ? '' : (exploreTotal != null ? `${explorePage * EXPLORE_PAGE + 1}–${Math.min((explorePage + 1) * EXPLORE_PAGE, exploreTotal)} of ${exploreTotal.toLocaleString()}` : `${rows.length}`) + ' filing' + (rows.length === 1 ? '' : 's')}{dataLoading && rows != null && <span className="td-muted" style={{ marginLeft: 6, fontWeight: 400 }}><span className="spinner" style={{ width: 10, height: 10, borderWidth: 2, marginRight: 4, display: 'inline-block', verticalAlign: '-1px' }} />updating…</span>}</span>
+              <span>{rows == null ? '' : (exploreTotal != null ? `${rows.length} of ${exploreTotal.toLocaleString()}` : `${rows.length}`) + ' filing' + ((rows?.length || 0) === 1 ? '' : 's')}{dataLoading && rows != null && <span className="td-muted" style={{ marginLeft: 6, fontWeight: 400 }}><span className="spinner" style={{ width: 10, height: 10, borderWidth: 2, marginRight: 4, display: 'inline-block', verticalAlign: '-1px' }} />loading…</span>}</span>
             </div>
             {rows === null
               ? <SkeletonRows count={12} />
@@ -7677,13 +7781,14 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                     );
                   })
             }
-            {exploreTotal != null && exploreTotal > EXPLORE_PAGE && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '10px 0', fontSize: 12 }}>
-                <button className="btn btn--sm" disabled={explorePage === 0} onClick={() => loadExplorePage(0)}>««</button>
-                <button className="btn btn--sm" disabled={explorePage === 0} onClick={() => loadExplorePage(explorePage - 1)}>‹</button>
-                <span style={{ color: 'var(--text-2)' }}>{explorePage + 1}/{Math.ceil(exploreTotal / EXPLORE_PAGE)}</span>
-                <button className="btn btn--sm" disabled={(explorePage + 1) * EXPLORE_PAGE >= exploreTotal} onClick={() => loadExplorePage(explorePage + 1)}>›</button>
-                <button className="btn btn--sm" disabled={(explorePage + 1) * EXPLORE_PAGE >= exploreTotal} onClick={() => loadExplorePage(Math.ceil(exploreTotal / EXPLORE_PAGE) - 1)}>»»</button>
+            {rows && !dataLoading && exploreTotal != null && rows.length < exploreTotal && (
+              <div className="drawer__load-more">
+                <button onClick={loadMore}>Load more ({rows.length} of {exploreTotal.toLocaleString()})</button>
+              </div>
+            )}
+            {dataLoading && rows && rows.length > 0 && (
+              <div className="drawer__load-more">
+                <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: 'inline-block', verticalAlign: '-2px' }} />
               </div>
             )}
           </div>
@@ -7752,12 +7857,6 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
   const [dPreset, setDPreset] = useState(7);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  // Once billing status resolves, widen the default window for Pro users
-  // if they haven't already changed it from the initial 7d default.
-  const dPresetBumped = useRef(false);
-  useEffect(() => {
-    if (pro && !dPresetBumped.current) { setDPreset(90); dPresetBumped.current = true; }
-  }, [pro]);
 
   const [sortKey, setSortKey] = useState('transaction_date');
   const [sortDir, setSortDir] = useState(-1);
@@ -7767,8 +7866,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
     setSearch(''); setSearchInput('');
     setTypeF(''); setRelF(''); setSectorF(''); setSourceF('');
     setOpenMkt(false); setFromPortfolio(false);
-    setDPreset(pro ? 90 : 7); setDateFrom(''); setDateTo('');
-    dPresetTouched.current = false;
+    setDPreset(7); setDateFrom(''); setDateTo('');
   }
   // Mobile-only — the real table has 10 columns, no reasonable phone width
   // fits that, so mobile gets a separate compact card list instead of a
@@ -7812,7 +7910,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
     return `ORDER BY ${sortKey} ${dir} NULLS LAST`;
   }
 
-  async function fetchPg(p) {
+  async function fetchPg(p, append = false) {
     if (!cfg.NEON_PROXY_URL) { setError('Unable to connect right now — try refreshing the page.'); return; }
     setLoading(true); setError(null);
     try {
@@ -7829,19 +7927,26 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
         ${orderBy()}
         LIMIT ${DATA_PAGE} OFFSET ${p * DATA_PAGE}
       `);
-      setRows(data); setPg(p);
+      setRows(prev => append && prev ? [...prev, ...data] : data);
+      setPg(p);
     } catch (e) { setError(e.message); }
     setLoading(false);
   }
 
-  useEffect(() => { setTotal(null); fetchPg(0); }, [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dateFrom, dateTo, dPreset, search, sortKey, sortDir]);
+  const loadedPgRef = useRef(0);
+
+  useEffect(() => { setTotal(null); loadedPgRef.current = 0; fetchPg(0); }, [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dateFrom, dateTo, dPreset, search, sortKey, sortDir]);
+
+  function loadMoreData() {
+    loadedPgRef.current += 1;
+    fetchPg(loadedPgRef.current, true);
+  }
 
   function onSort(key) {
     if (sortKey === key) setSortDir(d => -d);
     else { setSortKey(key); setSortDir(key === 'transaction_date' ? -1 : 1); }
   }
 
-  const totalPgs = total != null ? Math.ceil(total / DATA_PAGE) : null;
   const activeFilterCount = [typeF, relF, sectorF, sourceF, openMkt, fromPortfolio].filter(Boolean).length;
 
   // Passed through on every onOpenDetail call from this page — marks the
@@ -7892,7 +7997,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
               </div>
             </>
           )}
-          {activeFilterCount > 0 || search || dPreset !== (pro ? 90 : 7) || dateFrom || dateTo ? (
+          {activeFilterCount > 0 || search || dPreset !== 7 || dateFrom || dateTo ? (
             <button className="ins-filter-reset" onClick={resetFilters}>Reset filters</button>
           ) : null}
           <TileInfoButton section="data-source" title="All filings" tileId="data-filings" />
@@ -8045,17 +8150,19 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
             <div className="pagination">
               <span className="pagination__info">
                 {total != null
-                  ? `${pg * DATA_PAGE + 1}–${Math.min((pg + 1) * DATA_PAGE, total || 0)} of ${total.toLocaleString()} filing${total === 1 ? '' : 's'}`
+                  ? `Showing ${rows.length} of ${total.toLocaleString()} filing${total === 1 ? '' : 's'}`
                   : ''}
                 {!pro && <span className="td-muted"> · Free plan: last 12 months — <button className="free-tier-note__link" onClick={() => onUpgrade('full_history')}>upgrade</button> for full history</span>}
               </span>
-              <div className="pagination__btns">
-                <button className="btn btn--sm" onClick={() => fetchPg(0)} disabled={pg === 0 || loading || totalPgs <= 1}>««</button>
-                <button className="btn btn--sm" onClick={() => fetchPg(pg - 1)} disabled={pg === 0 || loading || totalPgs <= 1}>‹</button>
-                <span className="pagination__counter">{pg + 1}/{totalPgs || 1}</span>
-                <button className="btn btn--sm" onClick={() => fetchPg(pg + 1)} disabled={pg >= totalPgs - 1 || loading || totalPgs <= 1}>›</button>
-                <button className="btn btn--sm" onClick={() => fetchPg(totalPgs - 1)} disabled={pg >= totalPgs - 1 || loading || totalPgs <= 1}>»»</button>
-              </div>
+              {rows.length < (total || 0) && (
+                <button className="btn btn--sm" onClick={loadMoreData} disabled={loading}>Load more</button>
+              )}
+            </div>
+          )}
+          {loading && rows.length > 0 && (
+            <div className="pagination">
+              <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: 'inline-block', marginRight: 6 }} />
+              <span className="td-muted" style={{ fontSize: '0.75rem' }}>Loading more…</span>
             </div>
           )}
         </div>
