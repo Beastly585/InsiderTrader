@@ -6531,7 +6531,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* ── Watchlist bottom row: Portfolio + Recent activity ── */
 .ws-wl-bottom {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 16px;
   align-items: stretch;
 }

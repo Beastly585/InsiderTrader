@@ -178,7 +178,7 @@ const PRO_PRICE_FULL = '$13.99';
 // reference had — Seli doesn't have real customer reviews yet, and
 // fabricating one would be dishonest. That visual slot is an honest
 // trust line instead.
-function UpgradeModal({ feature, pro, onClose }) {
+function UpgradeModal({ feature, pro, onClose, onBillingRefresh }) {
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', h);
@@ -253,6 +253,9 @@ function UpgradeModal({ feature, pro, onClose }) {
           if (wasPro) {
             setCheckoutProduct(null);
             setProcessing(false);
+            // Refresh billing state so the entire UI reflects Pro access
+            // immediately — without this, the user has to reload the page.
+            if (onBillingRefresh) onBillingRefresh();
             setStatusModal({ type: 'pro', title: "You're a Pro member!" });
             return;
           }
@@ -4413,22 +4416,15 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <h1 className="ws-page-title">Market Data</h1>
           <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
         </div>
-        <button className="btn btn--primary btn--sm" style={{ flexShrink: 0, whiteSpace: 'nowrap' }} onClick={() => onUpgrade('data_export_direct')}>Download the Dataset</button>
+        <button className="data-export-tile" onClick={() => onUpgrade('data_export_direct')}>Download the Dataset</button>
       </div>
 
       {/* Stat strip */}
       <div className="ws-stat-strip">
-        {tab === 'signals' ? (<>
-          <HelpStat label="Signals" value={loading ? '—' : signals.length} sub="after filters" tip="Number of conviction-scored signals matching your current filters." />
-          <HelpStat label="High conviction" value={loading ? '—' : signals.filter(s => s.conviction >= 60).length} sub="Score ≥60" tip={TIPS.highConviction} />
-          <HelpStat label="Net flow" value={loading ? '—' : fmt.money(signals.reduce((s, x) => s + x.netValue, 0))} sub="Buys − sells" color={signals.reduce((s, x) => s + x.netValue, 0) >= 0 ? 'var(--green-600)' : 'var(--red-600)'} tip={TIPS.netFlow} />
-          <HelpStat label="Unique tickers" value={loading ? '—' : new Set(signals.map(s => s.ticker)).size} sub="In current view" tip="Distinct stocks with insider activity in the current filtered view." />
-        </>) : (<>
-          <HelpStat label="Filings" value={loading ? '—' : rawFilings.length} sub="after filters" tip="Number of raw SEC filings matching your current filters." />
-          <HelpStat label="Unique tickers" value={loading ? '—' : new Set(rawFilings.map(f => f.ticker)).size} sub="In current view" tip="Distinct stocks with insider activity in the current filtered view." />
-          <HelpStat label="Buys" value={loading ? '—' : rawFilings.filter(f => (f.transactionType || f.transaction_type) === 'buy').length} sub="Open market" tip="Number of buy transactions in the current view." />
-          <HelpStat label="Sells" value={loading ? '—' : rawFilings.filter(f => (f.transactionType || f.transaction_type) === 'sell').length} sub="Open market" tip="Number of sell transactions in the current view." />
-        </>)}
+        <HelpStat label="Showing" value={tab === 'signals' ? signals.length : rawFilings.length} sub={`${tab === 'signals' ? 'signals' : 'filings'} after filters`} tip="Number of results after all filters are applied." />
+        <HelpStat label="High conviction" value={loading ? '—' : signals.filter(s => s.conviction >= 60).length} sub="Score ≥60" tip={TIPS.highConviction} />
+        <HelpStat label="Unique tickers" value={loading ? '—' : tab === 'signals' ? new Set(signals.map(s => s.ticker)).size : new Set(rawFilings.map(f => f.ticker)).size} sub="In current view" tip="Number of distinct stocks with insider activity in the current filtered view." />
+        <HelpStat label="Net flow" value={loading ? '—' : fmt.money(signals.reduce((s, x) => s + x.netValue, 0))} sub="Buys − sells" color={signals.reduce((s, x) => s + x.netValue, 0) >= 0 ? 'var(--green-600)' : 'var(--red-600)'} tip={TIPS.netFlow} />
       </div>
 
       <div className="ws-tile">
@@ -7694,7 +7690,6 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               </div>
             )}
           </div>
-          <div className="drawer__detail">
           {!detail
             ? <div className="drawer__detail-empty">
               <div style={{ fontSize: 24, marginBottom: 8, opacity: .3 }}></div>
@@ -7711,7 +7706,6 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               inline={true}
             />
           }
-          </div>
         </div>
       </div>
     </div>
@@ -8531,38 +8525,6 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
               </div>
             </>
           )}
-        </div>
-
-        {/* Right: Recent activity */}
-        <div className="ws-tile">
-          <div className="ws-tile__hdr">
-            <div className="ws-tile__hdr-left">
-              <span className="ws-tile__title">Recent activity</span>
-              {recentActivity.length > 0 && <span className="ws-tile__count">{recentActivity.length}</span>}
-            </div>
-            {recentActivity.length > 0 && <button className="ws-tile__action" onClick={() => setFeedCollapsed(c => !c)}>{feedCollapsed ? 'Show' : 'Hide'}</button>}
-          </div>
-          {!feedCollapsed && (recentActivity.length === 0 ? (
-            <div className="ws-empty" style={{ padding: '16px 14px' }}>{loading ? 'Loading…' : 'No open-market trades from your watched items yet.'}</div>
-          ) : (
-            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-              {recentActivity.map((f, i) => (
-                <div key={`${f.accessionNumber || i}`} className="ws-filing-row"
-                  onClick={() => onOpenDetail({ type: 'ticker', ticker: f.ticker, company: f.company, expand: true })}>
-                  <div className="ws-filing-row__bar" style={{ background: f.transactionType === 'buy' ? 'var(--green-600)' : 'var(--red-600)' }} />
-                  <div className="ws-filing-row__body">
-                    <div className="ws-filing-row__top">
-                      <span className="td-muted" style={{ fontSize: 10, minWidth: 44 }}>{fmt.dateShort(f.transactionDate || f.date)}</span>
-                      <span className="ticker">{f.ticker}</span>
-                      <span className={`wl-feed__badge wl-feed__badge--${f.transactionType === 'buy' ? 'buy' : 'sell'}`} style={{ marginLeft: 'auto' }}>{f.transactionType === 'buy' ? 'Buy' : 'Sell'}</span>
-                      <span style={{ fontWeight: 600, fontSize: 11, minWidth: 52, textAlign: 'right' }}>{f.value ? fmt.money(f.value) : '—'}</span>
-                    </div>
-                    <div className="ws-filing-row__meta">{f.insiderName}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))}
         </div>
       </div>
 
@@ -11414,8 +11376,8 @@ function AppInner() {
               <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
               <a href="/help" target="_blank" rel="noreferrer">Help</a>
             </footer>
-            {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={billingPro} onClose={() => watchlist.setShowUpgrade(null)} />}
-            {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={billingPro} onClose={() => setShowUpgradeModal(null)} />}
+            {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={billingPro} onClose={() => watchlist.setShowUpgrade(null)} onBillingRefresh={refreshBilling} />}
+            {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={billingPro} onClose={() => setShowUpgradeModal(null)} onBillingRefresh={refreshBilling} />}
             {panelOpen && !detailFull && (
               <>
                 <div className="panel-overlay" onClick={closeDetail} />
