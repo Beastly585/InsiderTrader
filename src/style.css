@@ -6346,7 +6346,8 @@ td { padding:7px 11px; vertical-align:middle; }
   .ws-home-sig-hdrs { grid-template-columns: 1fr 90px 100px; }
 }
 .ws-sig-compact-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 50px 90px 110px;
   align-items: center;
   gap: 10px;
   padding: 9px 14px;
@@ -6357,8 +6358,14 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .ws-sig-compact-row:last-child { border-bottom: none; }
 .ws-sig-compact-row:hover { background: var(--surface-2); }
-.ws-sig-compact-row__left  { flex: 1; min-width: 0; }
-.ws-sig-compact-row__right { text-align: right; flex-shrink: 0; }
+.ws-sig-compact-row__ticker { min-width: 0; }
+.ws-sig-compact-row__moves { font-variant-numeric: tabular-nums; text-align: center; }
+.ws-sig-compact-row__net   { text-align: right; }
+.ws-sig-compact-row__conv  { text-align: right; }
+
+@media (max-width: 640px) {
+  .ws-sig-compact-row { grid-template-columns: 1fr 90px 100px; }
+}
 
 /* Small column sort header variant for home tiles */
 .ws-col-sort--sm {
@@ -6531,7 +6538,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* ── Watchlist bottom row: Portfolio + Recent activity ── */
 .ws-wl-bottom {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
   align-items: stretch;
 }
