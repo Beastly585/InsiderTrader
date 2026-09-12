@@ -2683,10 +2683,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   const [busy, setBusy] = useState(false);
   const [bundleOn, setBundleOn] = useState(true);
   const [omOnly, setOmOnly] = useState(true);
-  // Track which trade row is expanded in the ticker/trader activity list.
-  // When d.highlightTrade is set (navigated from a list row click), auto-expand
-  // the matching row. Index-based: null = nothing expanded.
-  const [expandedTradeIdx, setExpandedTradeIdx] = useState(null);
 
   // Fetch current price for signal-type details so the NOW column shows data.
   // Signal trades come from the client-side filings array (no price join),
@@ -2710,7 +2706,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     onNavigate({ type, ...forwarded }, opts);
   };
 
-  const TRow = ({ r, showTicker, showInsider, expanded, onToggleExpand }) => {
+  const TRow = ({ r, showTicker, showInsider }) => {
     const tt = r.transaction_type || r.transactionType;
     const code = r.transaction_code || r.transactionCode;
     const isOM = r.is_open_market || r.isOpenMarket;
@@ -2720,6 +2716,15 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     // strike price that isn't comparable — don't compute a misleading return.
     const hasRealPrice = isOM && pr > 0;
     const isForeign = r.is_foreign_price || r.isForeignPrice || (hasRealPrice && cur && Math.abs((cur - pr) / pr) >= 3);
+    // For a BUY, price rising afterward is a good outcome. For a SELL, it's
+    // the opposite — price rising after you sold means you left money on
+    // the table. The percentage shown stays true to the actual price move
+    // (so it never contradicts the prices displayed next to it — a sale
+    // shown at $6.94 → $7.69 should never read as a negative number, that
+    // would look like a math error), but the color now reflects whether
+    // this was actually a good outcome for THIS trade's direction, which
+    // previously used the same green-if-positive logic for both buys and
+    // sells — backwards for every sell.
     const ret = (hasRealPrice && cur && !isForeign) ? ((cur - pr) / pr * 100) : null;
     const isGoodOutcome = ret != null ? (tt === 'sell' ? ret < 0 : ret >= 0) : null;
     const dt = r.transaction_date || r.transactionDate || r.date;
@@ -2739,20 +2744,24 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
         <span className="dp-trade-sec-tooltip">View SEC filing</span>
       </a>
     ) : null;
+    // Scopes the eventual "expand to full Explore view" to whatever this
+    // panel itself represents — DataDrawer already restores every filter
+    // from this object and scrolls to/highlights the exact row that opened
+    // it (see its own scrolledOnOpenRef effect), it just needed a caller
+    // that actually attaches a dataFilters payload. Ticker/trader panels
+    // are the two contexts this row list is used in with a real single
+    // subject to scope to; anywhere else (a compact signals widget with no
+    // one fixed subject) this stays null and expand falls back to the
+    // existing general Insights drawer, unchanged.
     const rowDataFilters = d.type === 'ticker' && d.ticker ? { search: d.ticker }
       : d.type === 'trader' && d.name ? { search: d.name }
         : null;
-    // When onToggleExpand is available, clicking the row toggles
-    // the expandable details instead of navigating to the transaction view.
-    const handleClick = onToggleExpand
-      ? () => onToggleExpand()
-      : () => nav('transaction', { trade: r, dataFilters: rowDataFilters });
+    const openTransaction = () => nav('transaction', { trade: r, dataFilters: rowDataFilters });
     return (
-      <>
-      <div className={`dp-trade dp-trade--${tt} dp-clickable${expanded ? ' dp-trade--expanded' : ''}`}
+      <div className={`dp-trade dp-trade--${tt} dp-clickable`}
         role="button" tabIndex={0}
-        onClick={handleClick}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}>
+        onClick={openTransaction}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTransaction(); } }}>
         <div className={`dp-trade-split${inline ? '' : ' dp-trade-split--stacked'}`}>
           {/* LEFT — context: what kind of trade, when, who/what ticker.
   
@@ -2885,48 +2894,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
           )}
         </div>
       </div>
-      {expanded && (
-        <div className="dp-trade-expand">
-          <div className="dp-trade-expand__inner">
-            {showInsider && r.insider_name && (
-              <div className="dp-trade-expand__row">
-                <span className="dp-trade-expand__label">Insider</span>
-                <span className="dp-trade-expand__val">
-                  <RelBadge rel={r.relationship || 'weak'} />
-                  <span className="dp-clickable" style={{ fontWeight: 500 }}
-                    onClick={e => { e.stopPropagation(); nav('trader', { name: r.insider_name, title: r.title || r.insider_title }); }}>
-                    {r.insider_name}
-                  </span>
-                  {(r.title || r.insider_title) && <span className="td-muted" style={{ marginLeft: 'auto', fontSize: '0.6875rem' }}>{r.title || r.insider_title}</span>}
-                </span>
-              </div>
-            )}
-            <div className="dp-trade-expand__row">
-              <span className="dp-trade-expand__label">Filed</span>
-              <span className="dp-trade-expand__val">{fmt.date(r.filing_date || r.date)}</span>
-            </div>
-            <div className="dp-trade-expand__row">
-              <span className="dp-trade-expand__label">Code</span>
-              <span className="dp-trade-expand__val">
-                <span className="code-pill" title={codeLabel}>{code}</span>
-                {isOM && <span className="dp-trade-om-label" style={{ marginLeft: 6 }}>Open market</span>}
-              </span>
-            </div>
-            {(r.sector) && (
-              <div className="dp-trade-expand__row">
-                <span className="dp-trade-expand__label">Sector</span>
-                <span className="dp-trade-expand__val">{r.sector}</span>
-              </div>
-            )}
-            <div className="dp-trade-expand__links">
-              {showInsider && r.insider_name && <button className="dp-nav-link" onClick={e => { e.stopPropagation(); nav('trader', { name: r.insider_name, title: r.title || r.insider_title }); }}>Trader profile →</button>}
-              {showTicker && r.ticker && <button className="dp-nav-link" onClick={e => { e.stopPropagation(); nav('ticker', { ticker: r.ticker, company: r.company_name }); }}>All {r.ticker} trades →</button>}
-              {secUrl && <a href={secUrl} target="_blank" rel="noopener noreferrer" className="dp-nav-link" onClick={e => e.stopPropagation()}>SEC filing ↗</a>}
-            </div>
-          </div>
-        </div>
-      )}
-      </>
     );
   };
 
@@ -3231,24 +3198,6 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
     return bundleOn ? clusterTrades(tickerRows) : tickerRows;
   }, [tickerRows, bundleOn]);
 
-  // Auto-expand the trade row that was clicked from the DataDrawer list.
-  // Matches on insider_name + transaction_date to find the right row index.
-  useEffect(() => {
-    if (d.type !== 'ticker' || !d.highlightTrade || !tickerRowsDisplay.length) return;
-    const ht = d.highlightTrade;
-    const htName = ht.insiderName || ht.insider_name || '';
-    const htDate = ht.transactionDate || ht.transaction_date || '';
-    const idx = tickerRowsDisplay.findIndex(r => {
-      const rName = r.insider_name || '';
-      const rDate = r.transaction_date || r.transactionDate || '';
-      return rName === htName && rDate === htDate;
-    });
-    if (idx >= 0) setExpandedTradeIdx(idx);
-  }, [tickerRowsDisplay, d.highlightTrade]);
-
-  // Reset expanded row when navigating to a different detail
-  useEffect(() => { setExpandedTradeIdx(null); }, [d.type, d.ticker, d.name]);
-
   const byInsider = useMemo(() => {
     if (d.type !== 'signal') return [];
     const map = {};
@@ -3431,12 +3380,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
                   <details className="position-card__txns" open={perStockBreakdown.length === 1}>
                     <summary>{displayRows.length} transaction{displayRows.length !== 1 ? 's' : ''} for {s.ticker}{omOnly ? ' (open market only)' : ''}</summary>
                     <div className="position-card__txn-list">
-                      {(inline ? displayRows : displayRows.slice(0, 5)).map((r, j) => {
-                        const eid = `${s.ticker}-${j}`;
-                        return <TRow key={j} r={r} showTicker={true} showInsider={false}
-                          expanded={expandedTradeIdx === eid}
-                          onToggleExpand={() => setExpandedTradeIdx(expandedTradeIdx === eid ? null : eid)} />;
-                      })}
+                      {(inline ? displayRows : displayRows.slice(0, 5)).map((r, j) => <TRow key={j} r={r} showTicker={true} showInsider={false} />)}
                     </div>
                     {!inline && displayRows.length > 5 && (
                       <button className="btn btn--ghost btn--sm position-card__view-full" onClick={() => onExpand && onExpand()}>
@@ -3468,9 +3412,7 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
               Bundle nearby trades
             </label>
           </div>
-          {tickerRowsDisplay.map((r, i) => <TRow key={i} r={r} showTicker={false} showInsider={true}
-            expanded={expandedTradeIdx === i}
-            onToggleExpand={() => setExpandedTradeIdx(expandedTradeIdx === i ? null : i)} />)}
+          {tickerRowsDisplay.map((r, i) => <TRow key={i} r={r} showTicker={false} showInsider={true} />)}
         </>))}
 
         {d.type === 'signal' && (<>
@@ -4471,15 +4413,22 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <h1 className="ws-page-title">Market Data</h1>
           <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
         </div>
-        <button className="data-export-tile" onClick={() => onUpgrade('data_export_direct')}>Download the Dataset</button>
+        <button className="btn btn--primary btn--sm" style={{ flexShrink: 0, whiteSpace: 'nowrap' }} onClick={() => onUpgrade('data_export_direct')}>Download the Dataset</button>
       </div>
 
       {/* Stat strip */}
       <div className="ws-stat-strip">
-        <HelpStat label="Showing" value={tab === 'signals' ? signals.length : rawFilings.length} sub={`${tab === 'signals' ? 'signals' : 'filings'} after filters`} tip="Number of results after all filters are applied." />
-        <HelpStat label="High conviction" value={loading ? '—' : signals.filter(s => s.conviction >= 60).length} sub="Score ≥60" tip={TIPS.highConviction} />
-        <HelpStat label="Unique tickers" value={loading ? '—' : tab === 'signals' ? new Set(signals.map(s => s.ticker)).size : new Set(rawFilings.map(f => f.ticker)).size} sub="In current view" tip="Number of distinct stocks with insider activity in the current filtered view." />
-        <HelpStat label="Net flow" value={loading ? '—' : fmt.money(signals.reduce((s, x) => s + x.netValue, 0))} sub="Buys − sells" color={signals.reduce((s, x) => s + x.netValue, 0) >= 0 ? 'var(--green-600)' : 'var(--red-600)'} tip={TIPS.netFlow} />
+        {tab === 'signals' ? (<>
+          <HelpStat label="Signals" value={loading ? '—' : signals.length} sub="after filters" tip="Number of conviction-scored signals matching your current filters." />
+          <HelpStat label="High conviction" value={loading ? '—' : signals.filter(s => s.conviction >= 60).length} sub="Score ≥60" tip={TIPS.highConviction} />
+          <HelpStat label="Net flow" value={loading ? '—' : fmt.money(signals.reduce((s, x) => s + x.netValue, 0))} sub="Buys − sells" color={signals.reduce((s, x) => s + x.netValue, 0) >= 0 ? 'var(--green-600)' : 'var(--red-600)'} tip={TIPS.netFlow} />
+          <HelpStat label="Unique tickers" value={loading ? '—' : new Set(signals.map(s => s.ticker)).size} sub="In current view" tip="Distinct stocks with insider activity in the current filtered view." />
+        </>) : (<>
+          <HelpStat label="Filings" value={loading ? '—' : rawFilings.length} sub="after filters" tip="Number of raw SEC filings matching your current filters." />
+          <HelpStat label="Unique tickers" value={loading ? '—' : new Set(rawFilings.map(f => f.ticker)).size} sub="In current view" tip="Distinct stocks with insider activity in the current filtered view." />
+          <HelpStat label="Buys" value={loading ? '—' : rawFilings.filter(f => (f.transactionType || f.transaction_type) === 'buy').length} sub="Open market" tip="Number of buy transactions in the current view." />
+          <HelpStat label="Sells" value={loading ? '—' : rawFilings.filter(f => (f.transactionType || f.transaction_type) === 'sell').length} sub="Open market" tip="Number of sell transactions in the current view." />
+        </>)}
       </div>
 
       <div className="ws-tile">
@@ -7714,17 +7663,13 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                       date: r.filing_date, filing_date: r.filing_date,
                       relationship: r.relationship, sector: r.sector,
                     };
-                    const isActive = detail?.type === 'ticker' && detail?.ticker === r.ticker;
+                    const isActive = detail?.type === 'transaction' && detail?.trade?.ticker === r.ticker
+                      && detail?.trade?.insiderName === r.insider_name && detail?.trade?.transactionDate === r.transaction_date;
                     return (
                       <div key={i}
                         data-row-key={rowKey(trade)}
                         className={`drawer__list-row${isActive ? ' drawer__list-row--active' : ''}`}
-                        onClick={() => navigate({
-                          type: 'ticker',
-                          ticker: r.ticker,
-                          company: r.company_name,
-                          highlightTrade: trade,
-                        })}>
+                        onClick={() => navigate({ type: 'transaction', trade })}>
                         <div className="drawer__list-row__main">
                           <span className="ticker" style={{ fontSize: '0.75rem', fontWeight: 700 }}>{r.ticker || '—'}</span>
                           <Badge type={tt === 'buy' ? 'buy' : tt === 'sell' ? 'sell' : 'other'}>{tt === 'buy' ? 'Buy' : tt === 'sell' ? 'Sell' : 'Other'}</Badge>
@@ -7749,6 +7694,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               </div>
             )}
           </div>
+          <div className="drawer__detail">
           {!detail
             ? <div className="drawer__detail-empty">
               <div style={{ fontSize: 24, marginBottom: 8, opacity: .3 }}></div>
@@ -7765,6 +7711,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
               inline={true}
             />
           }
+          </div>
         </div>
       </div>
     </div>

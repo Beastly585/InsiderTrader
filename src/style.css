@@ -490,34 +490,6 @@ pre {
 .dp-trade:last-child { border-bottom:none; }
 .dp-trade--buy  { border-left:2px solid var(--green-600); }
 .dp-trade--sell { border-left:2px solid var(--red-600); }
-.dp-trade--expanded { background: var(--surface-2); }
-
-/* Expandable detail section shown below a TRow when clicked */
-.dp-trade-expand {
-  border-bottom: 0.5px solid var(--border);
-  background: var(--surface-2);
-  padding: 0 10px 10px 14px;
-}
-.dp-trade-expand__inner {
-  border-left: 2px solid var(--border-md);
-  padding: 6px 0 4px 12px;
-  display: flex; flex-direction: column; gap: 4px;
-}
-.dp-trade-expand__row {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 0.6875rem;
-}
-.dp-trade-expand__label {
-  color: var(--text-3); min-width: 50px; flex-shrink: 0;
-}
-.dp-trade-expand__val {
-  display: flex; align-items: center; gap: 6px;
-  color: var(--text);
-}
-.dp-trade-expand__links {
-  display: flex; gap: 10px; margin-top: 4px;
-  padding-top: 6px; border-top: 0.5px solid var(--border);
-}
 
 /* Two columns: left is context (what/when/who), right is every number that
    describes the purchase itself, grouped together instead of scattered
