@@ -6664,15 +6664,14 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
                     {isExpanded && (
                       <div className="ins-sig-row__expanded" onClick={e => e.stopPropagation()}>
                         <div className="ins-sig-row__expanded-grid">
+                          <div><span className="td-muted">Buys</span><br />{r.om_buys || 0}</div>
                           <div><span className="td-muted">Sells</span><br />{r.om_sells || 0}</div>
                           <div><span className="td-muted">Bought value</span><br />{fmt.money(r.bought_value)}</div>
                           {r.hit_rate != null && <div><span className="td-muted">Hit rate</span><br /><span className={r.hit_rate >= 70 ? 'val-buy' : r.hit_rate < 50 ? 'val-sell' : ''}>{r.hit_rate}%</span></div>}
                           {r.avg_return != null && <div><span className="td-muted">Avg return</span><br /><span className={r.avg_return >= 0 ? 'val-buy' : 'val-sell'}>{r.avg_return >= 0 ? '+' : ''}{r.avg_return}%</span></div>}
+                          <div><span className="td-muted">Score</span><br /><span style={{ fontWeight: 700 }}>{r.proxy_score}</span></div>
                         </div>
-                        <button className="ip-tx-explore-btn" style={{ marginTop: 8, width: '100%' }}
-                          onClick={() => setInsiderDrawerDetail && setInsiderDrawerDetail({ type: 'trader', name: r.insider_name, title: r.insider_title })}>
-                          Explore full profile →
-                        </button>
+                        {r.active_from && <div className="td-muted" style={{ fontSize: '0.6875rem', marginTop: 6 }}>Active {fmt.dateShort(r.active_from)} – {fmt.dateShort(r.active_to)}</div>}
                       </div>
                     )}
                   </div>
@@ -7963,10 +7962,6 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                                 <div><span className="td-muted">Filed</span><br />{fmt.dateShort(r.filing_date)}</div>
                               )}
                             </div>
-                            <button className="ip-tx-explore-btn" style={{ marginTop: 8, width: '100%' }}
-                              onClick={() => onOpenDetail({ type: 'ticker', ticker: r.ticker, company: r.company_name, expand: true })}>
-                              All {r.ticker} trades →
-                            </button>
                           </div>
                         )}
                       </div>

@@ -6526,6 +6526,13 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .ws-row__detail-cta--secondary:hover { color: var(--text); }
 
+/* Drawer doesn't work on mobile — hide all buttons that open it */
+@media (max-width: 640px) {
+  .ws-row__detail-footer { display: none; }
+  .ws-toolbar-explore-btn { display: none; }
+  .ip-tx-explore-btn { display: none; }
+}
+
 
 
 /* ── Watchlist bottom row: Portfolio + Recent activity ── */
@@ -7117,6 +7124,7 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 .ip-rail { display: flex; flex-direction: column; max-height: 80vh; }
 .ip-rail__list { flex: 1; overflow-y: auto; min-height: 0; }
 .ip-profile-tile { display: flex; flex-direction: column; max-height: 80vh; overflow-y: auto; }
+@media (max-width: 640px) { .ip-profile-tile { display: none !important; } }
 
 /* ── Transaction list cap + fade ───────────────────────────────── */
 .ip-tx-list-wrap { position: relative; }
