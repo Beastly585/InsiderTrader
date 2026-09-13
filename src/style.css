@@ -6607,16 +6607,23 @@ td { padding:7px 11px; vertical-align:middle; }
 .ws-row__main--wl {
   grid-template-columns: minmax(0,1fr) 28% 22%;
 }
+/* Name cell: fixed-width text block so star/follow buttons are pinned at
+   the same X coordinate across every row in both tiles. */
 .wl-name-cell {
   display: flex !important; align-items: center; gap: 8px;
 }
 .wl-name-cell__text {
-  min-width: 0; max-width: 260px;
+  width: 240px; flex-shrink: 0; min-width: 0;
 }
 .wl-name-cell__text > div,
-.wl-name-cell__text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.wl-name-cell__text > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
+}
 .wl-name-cell__sub { font-size: 11px; color: var(--text-3); margin-top: 1px; }
 .wl-name-cell__btn { flex-shrink: 0; }
+@media (max-width: 900px) {
+  .wl-name-cell__text { width: 160px; }
+}
 
 /* ── Mobile: collapse to fewer columns ── */
 @media (max-width: 900px) {
