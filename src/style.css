@@ -6602,27 +6602,12 @@ td { padding:7px 11px; vertical-align:middle; }
   grid-template-columns: minmax(0,1fr) 6% 10% 8% 8% 11% 44px;
 }
 
-/* ── WATCHLIST: name+btn | last activity | net flow ── */
+/* ── WATCHLIST: ticker·company(flex) | last activity | net flow ── */
+/* These tables sit in a half-width tile (ws-wl-bottom = 1fr 1fr).
+   Use proportional columns that work at ~540px container width. */
 .ws-col-hdrs--wl,
 .ws-row__main--wl {
   grid-template-columns: minmax(0,1fr) 28% 22%;
-}
-/* Name cell: fixed-width text block so star/follow buttons are pinned at
-   the same X coordinate across every row in both tiles. */
-.wl-name-cell {
-  display: flex !important; align-items: center; gap: 8px;
-}
-.wl-name-cell__text {
-  width: 240px; flex-shrink: 0; min-width: 0;
-}
-.wl-name-cell__text > div,
-.wl-name-cell__text > span {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
-}
-.wl-name-cell__sub { font-size: 11px; color: var(--text-3); margin-top: 1px; }
-.wl-name-cell__btn { flex-shrink: 0; }
-@media (max-width: 900px) {
-  .wl-name-cell__text { width: 160px; }
 }
 
 /* ── Mobile: collapse to fewer columns ── */
@@ -6632,7 +6617,7 @@ td { padding:7px 11px; vertical-align:middle; }
   .ws-row__main--data { grid-template-columns: minmax(0,1fr) 46px 64px 60px; }
   /* Mobile raw: ticker+insider | date | type | value */
   .ws-col-hdrs--raw,
-  .ws-row__main--raw  { grid-template-columns: minmax(0,1fr) 62px 36px 56px; }
+  .ws-row__main--raw  { grid-template-columns: minmax(0,1fr) 56px 32px 52px; }
   .ws-col-hdrs--ins,
   .ws-row__main--ins  { grid-template-columns: minmax(0,1fr) 12% 20% 14%; }
   .ws-col-hdrs--wl,
@@ -6652,7 +6637,9 @@ td { padding:7px 11px; vertical-align:middle; }
   .ws-row__cell .conv-label { display: none; }
   /* Shrink column header text */
   .ws-col-hdrs--data .ws-row__cell,
-  .ws-col-hdrs--raw .ws-row__cell { font-size: 9px; padding: 6px 5px; }
+  .ws-col-hdrs--raw .ws-row__cell { font-size: 9px; padding: 6px 4px; }
+  .ws-row__main--raw .ws-row__cell { font-size: 11px; padding: 7px 4px; }
+  .ws-row__main--raw .td-mono { font-size: 10px; }
 }
 /* Remove old ins-mobile class — handled by media query above */
 .ws-col-hdrs--ins-mobile,

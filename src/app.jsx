@@ -6669,6 +6669,10 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
                           {r.hit_rate != null && <div><span className="td-muted">Hit rate</span><br /><span className={r.hit_rate >= 70 ? 'val-buy' : r.hit_rate < 50 ? 'val-sell' : ''}>{r.hit_rate}%</span></div>}
                           {r.avg_return != null && <div><span className="td-muted">Avg return</span><br /><span className={r.avg_return >= 0 ? 'val-buy' : 'val-sell'}>{r.avg_return >= 0 ? '+' : ''}{r.avg_return}%</span></div>}
                         </div>
+                        <button className="ip-tx-explore-btn" style={{ marginTop: 8, width: '100%' }}
+                          onClick={() => setInsiderDrawerDetail && setInsiderDrawerDetail({ type: 'trader', name: r.insider_name, title: r.insider_title })}>
+                          Explore full profile →
+                        </button>
                       </div>
                     )}
                   </div>
@@ -7959,6 +7963,10 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                                 <div><span className="td-muted">Filed</span><br />{fmt.dateShort(r.filing_date)}</div>
                               )}
                             </div>
+                            <button className="ip-tx-explore-btn" style={{ marginTop: 8, width: '100%' }}
+                              onClick={() => onOpenDetail({ type: 'ticker', ticker: r.ticker, company: r.company_name, expand: true })}>
+                              All {r.ticker} trades →
+                            </button>
                           </div>
                         )}
                       </div>
@@ -8188,10 +8196,12 @@ function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
 
 function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFilingsWindow, user }) {
   const { pro } = useBilling();
-  const [days, setDays] = useState(null);
+  const [days, setDays] = useState(null); // null = All time
+  const [tab, setTab] = useState('tickers');
   const [sortKey, setSortKey] = useState('lastTradeDate');
   const [sortDir, setSortDir] = useState(-1);
   const isMobile = useIsMobile();
+  const [feedCollapsed, setFeedCollapsed] = useState(false);
 
   // Alert prefs — load only for pro users
   const { prefs, saving, saved, save } = useNotificationPrefs(user?.id, pro);
@@ -8328,6 +8338,7 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
 
   function onSort(key) { if (sortKey === key) setSortDir(d => -d); else { setSortKey(key); setSortDir(-1); } }
 
+  const emptyNow = tab === 'tickers' ? watchedTickers.length === 0 : watchedInsiders.length === 0;
   const allEmpty = watchedTickers.length === 0 && watchedInsiders.length === 0;
 
   // FREE USER — show conversion page
@@ -8412,13 +8423,19 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
         <WatchlistPortfolioFull filings={filings} cutoff={cutoff || '2010-01-01'} onOpenDetail={onOpenDetail} />
       </div>
 
-      {/* ── Watched Tickers tile ── */}
-      {watchedTickers.length > 0 && (
-        <div className="ws-tile" style={{ marginBottom: 16 }}>
+      {/* ── Watchlist table + Recent activity side by side ── */}
+      <div className="ws-wl-bottom" style={{ marginBottom: 16 }}>
+
+        {/* Left: ticker / insider table */}
+        <div className="ws-tile wl-list-tile">
           <div className="ws-tile__hdr">
-            <div className="ws-tile__hdr-left">
-              <span className="ws-tile__title">Tickers</span>
-              <span className="ws-tile__count">{watchedTickers.length}</span>
+            <div className="ws-pills" style={{ gap: 0 }}>
+              <button className={`ws-pill ws-pill--tab${tab === 'tickers' ? ' ws-pill--active' : ''}`} onClick={() => setTab('tickers')}>
+                Tickers{watchedTickers.length > 0 && <span className="ws-tile__count" style={{ marginLeft: 5 }}>{watchedTickers.length}</span>}
+              </button>
+              <button className={`ws-pill ws-pill--tab${tab === 'insiders' ? ' ws-pill--active' : ''}`} onClick={() => setTab('insiders')}>
+                Insiders{watchedInsiders.length > 0 && <span className="ws-tile__count" style={{ marginLeft: 5 }}>{watchedInsiders.length}</span>}
+              </button>
             </div>
             <div className="ws-filter-group" style={{ marginLeft: 'auto' }}>
               <span className="ws-filter-label">Activity</span>
@@ -8430,90 +8447,123 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
               </div>
             </div>
           </div>
-          <div className="ws-col-hdrs ws-col-hdrs--wl">
-            <button className="ws-col-sort" onClick={() => onSort('ticker')}>Ticker · Company{sortKey === 'ticker' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
-            <button className="ws-col-sort" onClick={() => onSort('lastTradeDate')}>Last activity{sortKey === 'lastTradeDate' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
-            <button className="ws-col-sort ws-col-sort--right" onClick={() => onSort('netValue')}>Net flow{sortKey === 'netValue' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
-          </div>
-          {loading && sortedTickerRows.length === 0 ? <SkeletonRows count={watchedTickers.length} /> : (
-            <div>{sortedTickerRows.map(s => {
-              const lastType = s.lastTradeType;
-              return (
-                <div key={s.ticker} className="ws-data-row ws-data-row--clickable"
-                  onClick={() => onOpenDetail({ type: 'ticker', ticker: s.ticker, company: s.company, expand: true })}>
-                  <div className="ws-data-row__main ws-row__main--wl">
-                    <div className="ws-data-row__cell wl-name-cell">
-                      <div className="wl-name-cell__text">
-                        <span className="ticker">{s.ticker}</span>
-                        {s.company && <div className="wl-name-cell__sub">{s.company}</div>}
-                      </div>
-                      <div className="wl-name-cell__btn" onClick={e => e.stopPropagation()}><StarBtn ticker={s.ticker} watchlist={watchlist} /></div>
-                    </div>
-                    <div className="ws-data-row__cell">
-                      {s.lastTradeDate ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{fmt.ago(s.lastTradeDate)}</span>
-                          {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType === 'buy' ? 'buy' : 'sell'}`}>{lastType === 'buy' ? 'Buy' : 'Sell'}</span>}
+
+          {emptyNow ? (
+            <div className="ws-empty">{tab === 'tickers' ? 'No tickers watched. Star any ticker from Data or Insiders.' : 'No insiders followed. Follow any insider from the leaderboard.'}</div>
+          ) : (
+            <>
+              <div className="ws-col-hdrs ws-col-hdrs--wl">
+                <button className="ws-col-sort" onClick={() => onSort(tab === 'tickers' ? 'ticker' : 'name')}>
+                  {tab === 'tickers' ? 'Ticker · Company' : 'Insider'}
+                  {(sortKey === 'ticker' || sortKey === 'name') && (sortDir < 0 ? ' ↓' : ' ↑')}
+                </button>
+                <button className="ws-col-sort" onClick={() => onSort('lastTradeDate')}>Last activity{sortKey === 'lastTradeDate' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
+                <button className="ws-col-sort ws-col-sort--right" onClick={() => onSort('netValue')}>Net flow{sortKey === 'netValue' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
+              </div>
+              <div>
+                {tab === 'tickers' ? sortedTickerRows.map(s => {
+                  const lastType = s.lastTradeType;
+                  return (
+                    <div key={s.ticker} className="ws-data-row ws-data-row--clickable"
+                      onClick={() => onOpenDetail({ type: 'ticker', ticker: s.ticker, company: s.company, expand: true })}>
+                      <div className="ws-data-row__main ws-row__main--wl">
+                        {/* Ticker + company */}
+                        <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
+                            <StarBtn ticker={s.ticker} watchlist={watchlist} />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <span className="ticker">{s.ticker}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.company}</div>
+                          </div>
                         </div>
-                      ) : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{loading ? 'Loading…' : '—'}</span>}
+                        {/* Last activity */}
+                        <div className="ws-data-row__cell">
+                          {s.lastTradeDate ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{fmt.ago(s.lastTradeDate)}</span>
+                              {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType === 'buy' ? 'buy' : 'sell'}`}>{lastType === 'buy' ? 'Buy' : 'Sell'}</span>}
+                            </div>
+                          ) : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{loading ? 'Loading…' : '—'}</span>}
+                        </div>
+                        {/* Net flow */}
+                        <div className="ws-data-row__cell ws-data-row__cell--right">
+                          <span className={`ws-data-mono${s.netValue >= 0 ? ' val-buy' : ' val-sell'}`} style={{ fontSize: 12 }}>
+                            {s.netValue >= 0 ? '+' : ''}{fmt.money(s.netValue)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="ws-data-row__cell ws-data-row__cell--right">
-                      <span className={`ws-data-mono${s.netValue >= 0 ? ' val-buy' : ' val-sell'}`} style={{ fontSize: 12 }}>{s.netValue >= 0 ? '+' : ''}{fmt.money(s.netValue)}</span>
+                  );
+                }) : sortedInsiderRows.map(r => (
+                  <div key={r.name} className="ws-data-row ws-data-row--clickable"
+                    onClick={() => onOpenDetail({ type: 'trader', name: r.name, title: r.title, expand: true })}>
+                    <div className="ws-data-row__main ws-row__main--wl">
+                      {/* Insider name + follow button */}
+                      <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                          {r.title && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>}
+                        </div>
+                        <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
+                          <FollowBtn name={r.name} watchlist={watchlist} />
+                        </div>
+                      </div>
+                      {/* Last activity */}
+                      <div className="ws-data-row__cell">
+                        {r.lastDate ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{fmt.ago(r.lastDate)}</span>
+                            {r.lastType && <span className={`wl-feed__badge wl-feed__badge--${r.lastType === 'buy' ? 'buy' : 'sell'}`}>{r.lastType === 'buy' ? 'Buy' : 'Sell'}</span>}
+                          </div>
+                        ) : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{loading ? 'Loading…' : '—'}</span>}
+                      </div>
+                      {/* Trades */}
+                      <div className="ws-data-row__cell ws-data-row__cell--right">
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{r.trades} trade{r.trades !== 1 ? 's' : ''}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}</div>
+                ))}
+              </div>
+            </>
           )}
         </div>
-      )}
 
-      {/* ── Followed Insiders tile ── */}
-      {watchedInsiders.length > 0 && (
-        <div className="ws-tile" style={{ marginBottom: 16 }}>
+        {/* Right: Recent activity */}
+        <div className="ws-tile">
           <div className="ws-tile__hdr">
             <div className="ws-tile__hdr-left">
-              <span className="ws-tile__title">Insiders</span>
-              <span className="ws-tile__count">{watchedInsiders.length}</span>
+              <span className="ws-tile__title">Recent activity</span>
+              {recentActivity.length > 0 && <span className="ws-tile__count">{recentActivity.length}</span>}
             </div>
+            {recentActivity.length > 0 && <button className="ws-tile__action" onClick={() => setFeedCollapsed(c => !c)}>{feedCollapsed ? 'Show' : 'Hide'}</button>}
           </div>
-          <div className="ws-col-hdrs ws-col-hdrs--wl">
-            <button className="ws-col-sort" onClick={() => onSort('name')}>Insider{sortKey === 'name' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
-            <button className="ws-col-sort" onClick={() => onSort('lastTradeDate')}>Last activity{sortKey === 'lastTradeDate' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
-            <button className="ws-col-sort ws-col-sort--right" onClick={() => onSort('netValue')}>Net flow{sortKey === 'netValue' && (sortDir < 0 ? ' ↓' : ' ↑')}</button>
-          </div>
-          {loading && sortedInsiderRows.length === 0 ? <SkeletonRows count={watchedInsiders.length} /> : (
-            <div>{sortedInsiderRows.map(r => (
-              <div key={r.name} className="ws-data-row ws-data-row--clickable"
-                onClick={() => onOpenDetail({ type: 'trader', name: r.name, title: r.title, expand: true })}>
-                <div className="ws-data-row__main ws-row__main--wl">
-                  <div className="ws-data-row__cell wl-name-cell">
-                    <div className="wl-name-cell__text">
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
-                      {r.title && <div className="wl-name-cell__sub">{r.title}</div>}
+          {!feedCollapsed && (recentActivity.length === 0 ? (
+            <div className="ws-empty" style={{ padding: '16px 14px' }}>{loading ? 'Loading…' : 'No open-market trades from your watched items yet.'}</div>
+          ) : (
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              {recentActivity.map((f, i) => (
+                <div key={`${f.accessionNumber || i}`} className="ws-filing-row"
+                  onClick={() => onOpenDetail({ type: 'ticker', ticker: f.ticker, company: f.company, expand: true })}>
+                  <div className="ws-filing-row__bar" style={{ background: f.transactionType === 'buy' ? 'var(--green-600)' : 'var(--red-600)' }} />
+                  <div className="ws-filing-row__body">
+                    <div className="ws-filing-row__top">
+                      <span className="td-muted" style={{ fontSize: 10, minWidth: 44 }}>{fmt.dateShort(f.transactionDate || f.date)}</span>
+                      <span className="ticker">{f.ticker}</span>
+                      <span className={`wl-feed__badge wl-feed__badge--${f.transactionType === 'buy' ? 'buy' : 'sell'}`} style={{ marginLeft: 'auto' }}>{f.transactionType === 'buy' ? 'Buy' : 'Sell'}</span>
+                      <span style={{ fontWeight: 600, fontSize: 11, minWidth: 52, textAlign: 'right' }}>{f.value ? fmt.money(f.value) : '—'}</span>
                     </div>
-                    <div className="wl-name-cell__btn" onClick={e => e.stopPropagation()}><FollowBtn name={r.name} watchlist={watchlist} /></div>
-                  </div>
-                  <div className="ws-data-row__cell">
-                    {r.lastDate ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{fmt.ago(r.lastDate)}</span>
-                        {r.lastType && <span className={`wl-feed__badge wl-feed__badge--${r.lastType === 'buy' ? 'buy' : 'sell'}`}>{r.lastType === 'buy' ? 'Buy' : 'Sell'}</span>}
-                      </div>
-                    ) : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{loading ? 'Loading…' : '—'}</span>}
-                  </div>
-                  <div className="ws-data-row__cell ws-data-row__cell--right">
-                    {r.trades > 0
-                      ? <span className={`ws-data-mono${r.netValue >= 0 ? ' val-buy' : ' val-sell'}`} style={{ fontSize: 12 }}>{r.netValue >= 0 ? '+' : ''}{fmt.money(r.netValue)}</span>
-                      : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>—</span>
-                    }
+                    <div className="ws-filing-row__meta">{f.insiderName}</div>
                   </div>
                 </div>
-              </div>
-            ))}</div>
-          )}
+              ))}
+            </div>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* ── Alert settings — full width ── */}
       <div style={{ marginTop: 16 }}>
@@ -11247,7 +11297,7 @@ function AppInner() {
   function openDetail(d, opts = {}) {
     setDetailStack(prev => detail ? [...prev, detail] : prev);
     setDetail(d);
-    setDetailFull(opts.expand || d?.expand ? true : false);
+    setDetailFull(opts.expand ? true : false);
     setDrawerMode('auto');
   }
   function goBackDetail() {
