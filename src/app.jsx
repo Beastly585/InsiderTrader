@@ -1381,20 +1381,23 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
           </span>
         )}
         {loading && !lastFilingDate && <span className="topnav__freshness"><span className="topnav__dot" />Syncing…</span>}
-        <FeedbackButton page={page} />
-        <GuideStatusBarButton />
-        <button className="topnav__icon-btn" onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'}>
-          {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
-        </button>
         {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}>Upgrade → $6.99</button>}
+        <button className={`topnav__icon-btn${page === 'settings' ? ' topnav__icon-btn--active' : ''}`} onClick={() => setPage('settings')} title="Settings">
+          <IconSettings style={{ width: 16, height: 16 }} />
+        </button>
         <SignedIn>
           <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'clerk-avatar', userButtonTrigger: 'clerk-avatar-trigger', userButtonAvatarBox: 'clerk-avatar-box' } }} />
         </SignedIn>
         <SignedOut><SignInButton mode="modal"><button className="topnav__upgrade">Sign in</button></SignInButton></SignedOut>
       </div>
-      <button className={`topnav__settings-fab${page === 'settings' ? ' topnav__settings-fab--active' : ''}`} onClick={() => setPage('settings')} title="Settings" aria-label="Settings">
-        <IconSettings style={{ width: 16, height: 16 }} />
-      </button>
+      {/* Utility FAB stack — theme toggle, help guide, feedback — bottom-right */}
+      <div className="fab-stack">
+        <button className="fab-stack__btn" onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'}>
+          {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
+        </button>
+        <GuideStatusBarButton />
+        <FeedbackButton page={page} />
+      </div>
     </header>
   );
 }
@@ -6664,14 +6667,11 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
                     {isExpanded && (
                       <div className="ins-sig-row__expanded" onClick={e => e.stopPropagation()}>
                         <div className="ins-sig-row__expanded-grid">
-                          <div><span className="td-muted">Buys</span><br />{r.om_buys || 0}</div>
                           <div><span className="td-muted">Sells</span><br />{r.om_sells || 0}</div>
                           <div><span className="td-muted">Bought value</span><br />{fmt.money(r.bought_value)}</div>
                           {r.hit_rate != null && <div><span className="td-muted">Hit rate</span><br /><span className={r.hit_rate >= 70 ? 'val-buy' : r.hit_rate < 50 ? 'val-sell' : ''}>{r.hit_rate}%</span></div>}
                           {r.avg_return != null && <div><span className="td-muted">Avg return</span><br /><span className={r.avg_return >= 0 ? 'val-buy' : 'val-sell'}>{r.avg_return >= 0 ? '+' : ''}{r.avg_return}%</span></div>}
-                          <div><span className="td-muted">Score</span><br /><span style={{ fontWeight: 700 }}>{r.proxy_score}</span></div>
                         </div>
-                        {r.active_from && <div className="td-muted" style={{ fontSize: '0.6875rem', marginTop: 6 }}>Active {fmt.dateShort(r.active_from)} – {fmt.dateShort(r.active_to)}</div>}
                       </div>
                     )}
                   </div>

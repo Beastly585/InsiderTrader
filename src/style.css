@@ -5836,16 +5836,28 @@ td { padding:7px 11px; vertical-align:middle; }
 .topnav__upgrade:hover { background:var(--accent-strong); transform:translateY(-1px); box-shadow:0 4px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
 
 /* Floating settings FAB */
-.topnav__settings-fab {
-  position:fixed; bottom:24px; right:24px; z-index:90;
-  width:40px; height:40px; border-radius:50%;
-  display:flex; align-items:center; justify-content:center;
-  background:var(--surface); border:0.5px solid var(--border-md);
-  color:var(--text-2); cursor:pointer; box-shadow:var(--shadow-md);
-  transition:background .1s,color .1s,transform .15s;
+/* Settings icon now lives in the top nav — style it like the other icon btns */
+.topnav__icon-btn--active { color: var(--accent-strong); }
+
+/* Utility FAB stack — bottom-right, vertically stacked */
+.fab-stack {
+  position: fixed; bottom: 24px; right: 24px; z-index: 90;
+  display: flex; flex-direction: column; gap: 8px;
+  align-items: center;
 }
-.topnav__settings-fab:hover { background:var(--surface-2); color:var(--text); transform:rotate(22deg); }
-.topnav__settings-fab--active { background:var(--accent-50); color:var(--accent-strong); border-color:transparent; }
+.fab-stack__btn,
+.fab-stack .status-bar__icon-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 0.5px solid var(--border-md);
+  color: var(--text-2); cursor: pointer; box-shadow: var(--shadow-md);
+  transition: background .1s, color .1s;
+  padding: 0;
+}
+.fab-stack__btn:hover,
+.fab-stack .status-bar__icon-btn:hover {
+  background: var(--surface-2); color: var(--text);
+}
 
 /* ── Bottom nav (mobile) ───────────────────────────────────────────── */
 .bottomnav { position:fixed; bottom:0; left:0; right:0; z-index:100; background:var(--surface); border-top:0.5px solid var(--border); height:56px; display:flex; align-items:center; }
@@ -5875,7 +5887,7 @@ td { padding:7px 11px; vertical-align:middle; }
   .topnav{ padding:0 14px; }
   .topnav__logo{ margin-right:0; }
   .ws-main{ padding-bottom:60px; }
-  .topnav__settings-fab{ display:none; }
+  .fab-stack { display:none; }
 }
 
 /* ── Main + background wash ────────────────────────────────────────── */
@@ -6526,13 +6538,6 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .ws-row__detail-cta--secondary:hover { color: var(--text); }
 
-/* Drawer doesn't work on mobile — hide all buttons that open it */
-@media (max-width: 640px) {
-  .ws-row__detail-footer { display: none; }
-  .ws-toolbar-explore-btn { display: none; }
-  .ip-tx-explore-btn { display: none; }
-}
-
 
 
 /* ── Watchlist bottom row: Portfolio + Recent activity ── */
@@ -6624,7 +6629,7 @@ td { padding:7px 11px; vertical-align:middle; }
   .ws-row__main--data { grid-template-columns: minmax(0,1fr) 46px 64px 60px; }
   /* Mobile raw: ticker+insider | date | type | value */
   .ws-col-hdrs--raw,
-  .ws-row__main--raw  { grid-template-columns: minmax(0,1fr) 56px 32px 52px; }
+  .ws-row__main--raw  { grid-template-columns: minmax(0,1fr) 62px 36px 56px; }
   .ws-col-hdrs--ins,
   .ws-row__main--ins  { grid-template-columns: minmax(0,1fr) 12% 20% 14%; }
   .ws-col-hdrs--wl,
@@ -6644,9 +6649,7 @@ td { padding:7px 11px; vertical-align:middle; }
   .ws-row__cell .conv-label { display: none; }
   /* Shrink column header text */
   .ws-col-hdrs--data .ws-row__cell,
-  .ws-col-hdrs--raw .ws-row__cell { font-size: 9px; padding: 6px 4px; }
-  .ws-row__main--raw .ws-row__cell { font-size: 11px; padding: 7px 4px; }
-  .ws-row__main--raw .td-mono { font-size: 10px; }
+  .ws-col-hdrs--raw .ws-row__cell { font-size: 9px; padding: 6px 5px; }
 }
 /* Remove old ins-mobile class — handled by media query above */
 .ws-col-hdrs--ins-mobile,
@@ -7124,7 +7127,6 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 .ip-rail { display: flex; flex-direction: column; max-height: 80vh; }
 .ip-rail__list { flex: 1; overflow-y: auto; min-height: 0; }
 .ip-profile-tile { display: flex; flex-direction: column; max-height: 80vh; overflow-y: auto; }
-@media (max-width: 640px) { .ip-profile-tile { display: none !important; } }
 
 /* ── Transaction list cap + fade ───────────────────────────────── */
 .ip-tx-list-wrap { position: relative; }
