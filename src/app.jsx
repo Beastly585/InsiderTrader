@@ -162,6 +162,41 @@ function BillingProvider({ children }) {
 
 function useBilling() { return useContext(BillingContext); }
 
+// ─── "While you were away" banner ─────────────────────────────────────────────
+// Non-modal banner for free users. Shows notable trades on tickers they've
+// previously viewed, creating a loss-aversion nudge: "Pro users got this alert
+// X minutes after the filing."
+function WhileAwayBanner({ trades, onDismiss, onUpgrade, onOpenDetail }) {
+  if (!trades.length) return null;
+  const top = trades[0];
+  const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const action = top.transactionType === 'buy' ? 'bought' : 'sold';
+  const filingDate = top.date ? new Date(top.date) : null;
+  // Estimate how quickly Pro users would have been alerted (filings are ingested
+  // within ~30 min of SEC acceptance on average)
+  const alertMinutes = filingDate ? Math.max(15, Math.floor((Date.now() - filingDate.getTime()) / 60000)) : null;
+
+  return (
+    <div className="while-away-banner">
+      <div className="while-away-banner__content">
+        <span className="while-away-banner__icon">📡</span>
+        <div className="while-away-banner__text">
+          <span className="while-away-banner__headline">
+            While you were away, <strong>{top.insiderName}</strong> {action} <strong>{fmt.format(top.value)}</strong> of <button className="while-away-banner__ticker" onClick={() => onOpenDetail({ type: 'ticker', ticker: top.ticker })}>{top.ticker}</button>
+          </span>
+          {trades.length > 1 && (
+            <span className="while-away-banner__more">+ {trades.length - 1} more trade{trades.length > 2 ? 's' : ''} you missed</span>
+          )}
+          <button className="while-away-banner__cta" onClick={onUpgrade}>
+            Pro users got alerted within minutes →
+          </button>
+        </div>
+      </div>
+      <button className="while-away-banner__close" onClick={onDismiss} aria-label="Dismiss">✕</button>
+    </div>
+  );
+}
+
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
 // Beta pricing flag — flip to false when you're ready to end the founding
 // member rate. Beta is indefinite — no user cap.
@@ -206,26 +241,23 @@ function UpgradeModal({ feature, pro, onClose }) {
     else if (isMobileModal && proIntentFeatures.includes(feature)) setCheckoutProduct('pro');
   }, [feature]);
 
-  // Personalized per the specific action that triggered this modal — a
-  // generic "Upgrade to Pro" doesn't tell someone what they were actually
-  // trying to do when they hit the wall, which is what actually motivates
-  // the upgrade in the moment.
+  // Outcome-oriented messages — tell the user what changes for them, not
+  // what features they unlock.
   const FEATURE_MESSAGES = {
-    watchlist_ticker: 'Upgrade to Pro to track unlimited tickers and get notified the moment insiders trade them.',
-    watchlist_insider: 'Upgrade to Pro to follow specific insiders and get notified on their trades.',
-    notifications: 'Upgrade to Pro for email digests and instant alerts on the activity you care about.',
-    portfolio: 'Upgrade to Pro to connect your brokerage and see insider activity on your real holdings.',
+    watchlist_ticker: 'You've hit the free watchlist limit. Pro lets you track unlimited tickers — and alerts you the moment insiders trade them.',
+    watchlist_insider: 'Following insiders is a Pro feature. Pick the people you care about, and Seli does the watching for you.',
+    notifications: 'Set it and forget it. Pro sends you email digests and instant alerts — you only open Seli when something happens.',
+    portfolio: 'Link your brokerage and Seli watches every stock you own. You'll know about insider moves before the market reacts.',
     data_export: 'Get a one-time CSV export of the full historical dataset — no subscription required.',
-    full_history: 'Upgrade to Pro for full historical data — the free plan shows the last 12 months.',
-    default: 'Full insider data, real-time alerts, and your own portfolio — in one view.',
+    full_history: 'Free shows 12 months. Pro unlocks the full picture — every filing back to 2010, so you see the patterns that matter.',
+    default: 'Tell Seli what to watch. It does the rest.',
   };
   const subtitle = FEATURE_MESSAGES[feature] || FEATURE_MESSAGES.default;
 
-  const COMPARISON = [
-    { label: 'Live dashboard & signals', free: true, pro: true },
-    { label: 'Full historical data', free: false, pro: true },
-    { label: 'Portfolio linking', free: false, pro: true },
-    { label: 'Instant alerts', free: false, pro: true },
+  const OUTCOMES = [
+    { icon: '⭐', text: 'Pick the stocks, insiders, or politicians you care about' },
+    { icon: '📡', text: 'Seli monitors every SEC Form 4 filing — 24/7, automatically' },
+    { icon: '🔔', text: 'Get alerted the moment something happens — before the market reacts' },
   ];
 
   if (processing) {
@@ -309,57 +341,41 @@ function UpgradeModal({ feature, pro, onClose }) {
 
   return (
     <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
-      <div className="upgrade-modal upgrade-modal--hero">
+      <div className="upgrade-modal upgrade-modal--narrative">
         <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{ width: 12, height: 12 }} /></button>
 
-        {/* Hero header */}
-        <div className="upgrade-hero__header">
+        {/* Narrative header */}
+        <div className="upgrade-narrative__header">
           <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-          <h2 className="upgrade-hero__title">Unlock the full picture</h2>
-          <p className="upgrade-hero__sub">{subtitle}</p>
+          <h2 className="upgrade-narrative__title">Stop checking. Start knowing.</h2>
+          <p className="upgrade-narrative__sub">{subtitle}</p>
         </div>
 
-        {/* Two-card comparison */}
-        <div className="upgrade-hero__cards">
-          {/* Free card */}
-          <div className="upgrade-hero__card">
-            <div className="upgrade-hero__card-header">
-              <span className="upgrade-hero__card-label">Free</span>
-              <span className="upgrade-hero__card-price">$0</span>
+        {/* Three outcome rows */}
+        <div className="upgrade-narrative__outcomes">
+          {OUTCOMES.map((o, i) => (
+            <div className="upgrade-narrative__outcome" key={i}>
+              <span className="upgrade-narrative__outcome-icon">{o.icon}</span>
+              <span className="upgrade-narrative__outcome-text">{o.text}</span>
             </div>
-            <ul className="upgrade-hero__features">
-              <li><IconCheck style={{ width: 12, height: 12 }} />Live dashboard & signals</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />7-day signal window</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />Top insiders leaderboard</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />1 year of data history</li>
-            </ul>
-          </div>
-
-          {/* Pro card */}
-          <div className="upgrade-hero__card upgrade-hero__card--pro">
-            {BETA_ACTIVE && <span className="upgrade-hero__badge">Half off — forever</span>}
-            <div className="upgrade-hero__card-header">
-              <span className="upgrade-hero__card-label">Pro</span>
-              <span className="upgrade-hero__card-price">
-                {BETA_ACTIVE && <span className="upgrade-hero__strike">{PRO_PRICE_FULL}</span>}
-                {PRO_PRICE_DISPLAY}<span className="upgrade-hero__per">/mo</span>
-              </span>
-            </div>
-            <ul className="upgrade-hero__features">
-              <li><IconCheck style={{ width: 12, height: 12 }} />Everything in Free</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />Full historical data (2010→present)</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />Customizable instant alerts</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />Connect your brokerage</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />Full score breakdown</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />Insiders deep-dive</li>
-            </ul>
-            <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('pro')}>
-              Upgrade to Pro — {PRO_PRICE_LABEL}
-            </button>
-          </div>
+          ))}
         </div>
 
-        {/* Data export — horizontal tile */}
+        {/* Price + CTA */}
+        <div className="upgrade-narrative__cta-section">
+          <div className="upgrade-narrative__price-row">
+            {BETA_ACTIVE && <span className="upgrade-narrative__badge">Half off — forever</span>}
+            <span className="upgrade-narrative__price">
+              {BETA_ACTIVE && <span className="upgrade-hero__strike">{PRO_PRICE_FULL}</span>}
+              {PRO_PRICE_DISPLAY}<span className="upgrade-hero__per">/mo</span>
+            </span>
+          </div>
+          <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('pro')}>
+            Start watching — {PRO_PRICE_LABEL}
+          </button>
+        </div>
+
+        {/* Data export — horizontal tile (kept) */}
         <div className="upgrade-hero__export-tile" onClick={() => setCheckoutProduct('data_export')}>
           <div className="upgrade-hero__export-tile-left">
             <span className="upgrade-hero__export-tile-label">Data Export</span>
@@ -1009,9 +1025,13 @@ async function neonWatchlistLoad() {
   }
 }
 
+const FREE_WATCHLIST_LIMIT = 3;
+
 function useWatchlist(user) {
   const { pro } = useBilling();
-  const [tickers, setTickers] = useState(() => pro ? wlGet(WL_KEY) : []);
+  // Free users can watch up to FREE_WATCHLIST_LIMIT tickers (localStorage only).
+  // Pro users get unlimited tickers synced to Neon.
+  const [tickers, setTickers] = useState(() => wlGet(WL_KEY));
   const [insiders, setInsiders] = useState(() => pro ? wlGet(WL_INSIDER_KEY) : []);
   const [showUpgrade, setShowUpgrade] = useState(null); // null | 'watchlist_ticker' | 'watchlist_insider'
 
@@ -1027,18 +1047,30 @@ function useWatchlist(user) {
     });
   }, [pro, user?.id]);
 
-  // Toggle ticker
+  // Toggle ticker — free users get up to FREE_WATCHLIST_LIMIT tickers
   const toggleTicker = useCallback((ticker) => {
-    if (!pro) { setShowUpgrade('watchlist_ticker'); return; }
     setTickers(prev => {
-      const next = prev.includes(ticker) ? prev.filter(t => t !== ticker) : [...prev, ticker];
+      const isRemoving = prev.includes(ticker);
+      // Removing is always allowed
+      if (isRemoving) {
+        const next = prev.filter(t => t !== ticker);
+        wlSet(next, WL_KEY);
+        if (pro) neonWatchlistMutate('ticker', ticker, 'remove');
+        return next;
+      }
+      // Adding — free users hit the wall at the limit
+      if (!pro && prev.length >= FREE_WATCHLIST_LIMIT) {
+        setShowUpgrade('watchlist_ticker');
+        return prev;
+      }
+      const next = [...prev, ticker];
       wlSet(next, WL_KEY);
-      neonWatchlistMutate('ticker', ticker, prev.includes(ticker) ? 'remove' : 'add');
+      if (pro) neonWatchlistMutate('ticker', ticker, 'add');
       return next;
     });
   }, [pro]);
 
-  // Toggle insider
+  // Toggle insider — Pro-only (no free tier for insider following)
   const toggleInsider = useCallback((name) => {
     if (!pro) { setShowUpgrade('watchlist_insider'); return; }
     setInsiders(prev => {
@@ -1060,6 +1092,8 @@ function useWatchlist(user) {
     tickers, insiders, toggle, has,
     toggleTicker, toggleInsider, hasTicker, hasInsider,
     showUpgrade, setShowUpgrade, pro,
+    freeLimit: FREE_WATCHLIST_LIMIT,
+    freeSlotsLeft: pro ? Infinity : Math.max(0, FREE_WATCHLIST_LIMIT - tickers.length),
   };
 }
 
@@ -1077,6 +1111,71 @@ function useTheme() {
     try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (_) { }
   }, [dark]);
   return [dark, setDark];
+}
+
+// ─── "While you were away" tracking ──────────────────────────────────────────
+// Tracks last-visit timestamp and which tickers the user has viewed/searched.
+// On next visit, cross-references loaded filings to surface notable trades
+// they missed — the banner is the loss-aversion nudge that tells free users
+// "a Pro user would have known about this X minutes after filing."
+const LAST_VISIT_KEY = 'seli_last_visit';
+const VIEWED_TICKERS_KEY = 'seli_viewed_tickers';
+
+function useWhileYouWereAway(filings, pro) {
+  const [missedTrades, setMissedTrades] = useState([]);
+  const [dismissed, setDismissed] = useState(false);
+  const lastVisitRef = useRef(null);
+
+  // On mount: read last visit, then update it
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(LAST_VISIT_KEY);
+      if (stored) lastVisitRef.current = stored;
+      localStorage.setItem(LAST_VISIT_KEY, new Date().toISOString());
+    } catch (_) { }
+  }, []);
+
+  // Track viewed tickers (called from detail panel opens, searches, etc.)
+  const trackTicker = useCallback((ticker) => {
+    if (!ticker) return;
+    try {
+      const existing = JSON.parse(localStorage.getItem(VIEWED_TICKERS_KEY) || '[]');
+      if (!existing.includes(ticker)) {
+        const next = [...existing, ticker].slice(-50); // cap at 50
+        localStorage.setItem(VIEWED_TICKERS_KEY, JSON.stringify(next));
+      }
+    } catch (_) { }
+  }, []);
+
+  // Once filings load, find notable trades on viewed tickers since last visit
+  useEffect(() => {
+    if (pro || !filings.length || !lastVisitRef.current || dismissed) return;
+    try {
+      const viewedTickers = JSON.parse(localStorage.getItem(VIEWED_TICKERS_KEY) || '[]');
+      if (!viewedTickers.length) return;
+      const lastVisit = lastVisitRef.current;
+      const viewedSet = new Set(viewedTickers);
+
+      // Find open-market trades on viewed tickers filed after the last visit
+      const missed = filings
+        .filter(f =>
+          f.isOpenMarket &&
+          viewedSet.has(f.ticker) &&
+          (f.date || '') > lastVisit.split('T')[0] &&
+          (f.value || 0) >= 50000 // only notable trades (≥$50k)
+        )
+        .sort((a, b) => (b.value || 0) - (a.value || 0))
+        .slice(0, 3); // top 3 by value
+
+      if (missed.length) setMissedTrades(missed);
+    } catch (_) { }
+  }, [filings, pro, dismissed]);
+
+  return {
+    missedTrades: dismissed ? [] : missedTrades,
+    dismiss: () => setDismissed(true),
+    trackTicker,
+  };
 }
 
 // ── Mobile detection ──────────────────────────────────────────────────────────
@@ -8333,50 +8432,30 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   const emptyNow = tab === 'tickers' ? watchedTickers.length === 0 : watchedInsiders.length === 0;
   const allEmpty = watchedTickers.length === 0 && watchedInsiders.length === 0;
 
-  // FREE USER — show conversion page
+  // FREE USER — limited watchlist with upgrade nudge
   if (!pro) return (
     <div className="ws-page">
       <div style={{ marginBottom: 24 }}>
         <h1 className="ws-page-title">Watchlist</h1>
-        <p className="ws-page-sub">Track stocks you own or want to own. Get notified when insiders trade them.</p>
+        <p className="ws-page-sub">Track stocks you own or want to own. Star any ticker from the dashboard to add it here.</p>
       </div>
 
-      {/* Hero upsell */}
-      <div className="wl-upsell">
-        <div className="wl-upsell__content">
-          <div className="wl-upsell__icon">★</div>
-          <h2 className="wl-upsell__title">Your personal insider signal tracker</h2>
-          <p className="wl-upsell__sub">Star any ticker to watch it. Get alerts when C-suite executives buy or sell your stocks. Link your portfolio to see insider activity on every holding.</p>
-          <button className="wl-upsell__cta" onClick={() => watchlist.setShowUpgrade && watchlist.setShowUpgrade('watchlist')}>
-            Upgrade to Pro — $6.99/mo →
+      {/* Free slots indicator */}
+      <div className="wl-free-slots">
+        <span className="wl-free-slots__count">{watchedTickers.length}/{FREE_WATCHLIST_LIMIT} free slots used</span>
+        {watchedTickers.length >= FREE_WATCHLIST_LIMIT && (
+          <button className="wl-free-slots__upgrade" onClick={() => watchlist.setShowUpgrade('watchlist_ticker')}>
+            Unlock unlimited →
           </button>
-          <p className="wl-upsell__fine">Cancel any time. Includes full Data access, alert digests &amp; portfolio linking.</p>
-        </div>
-        <div className="wl-upsell__features">
-          {[
-            { icon: '◎', title: 'Track your portfolio', body: 'Follow any ticker and see every insider trade on stocks you own or are watching.' },
-            { icon: '◉', title: 'Instant alerts', body: 'Email alerts when a C-suite executive makes an open-market buy or sell on a stock you follow.' },
-            { icon: '⊘', title: 'Link your brokerage', body: 'Connect Fidelity, Alpaca, or 400+ brokers to automatically populate your watchlist from your real holdings.' },
-            { icon: '◈', title: 'Insider history', body: 'Deep-dive into any followed insider\'s full trade history, hit rate, and average return.' },
-          ].map(f => (
-            <div key={f.title} className="wl-upsell__feature">
-              <span className="wl-upsell__feature-icon">{f.icon}</span>
-              <div>
-                <div className="wl-upsell__feature-title">{f.title}</div>
-                <div className="wl-upsell__feature-body">{f.body}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+        )}
       </div>
 
-      {/* Free preview — still let them star tickers */}
-      {!allEmpty && (
-        <div className="ws-tile" style={{ marginTop: 20 }}>
+      {/* Show watched tickers with activity data */}
+      {watchedTickers.length > 0 ? (
+        <div className="ws-tile" style={{ marginTop: 12 }}>
           <div className="ws-tile__hdr">
             <div className="ws-tile__hdr-left">
               <span className="ws-tile__title">Your watched tickers</span>
-              <span className="ws-tile__sub">Upgrade to see activity</span>
             </div>
           </div>
           <div style={{ padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -8388,7 +8467,22 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
             ))}
           </div>
         </div>
+      ) : (
+        <div className="wl-empty-free">
+          <p className="wl-empty-free__text">Star any stock from the dashboard to start watching it. You'll see it here with recent insider activity.</p>
+        </div>
       )}
+
+      {/* Pro upsell — compact, not a wall */}
+      <div className="wl-upsell-compact">
+        <div className="wl-upsell-compact__content">
+          <span className="wl-upsell-compact__title">Want more?</span>
+          <span className="wl-upsell-compact__sub">Pro: unlimited tickers, instant alerts, portfolio linking, and full insider deep-dives.</span>
+        </div>
+        <button className="wl-upsell-compact__cta" onClick={() => watchlist.setShowUpgrade('watchlist_ticker')}>
+          Go Pro — {PRO_PRICE_LABEL}
+        </button>
+      </div>
     </div>
   );
 
@@ -11404,6 +11498,12 @@ function AppInner() {
     setDetail(d);
     setDetailFull(opts.expand ? true : false);
     setDrawerMode('auto');
+    // Track viewed tickers for "while you were away" banner
+    if (d?.ticker) whileAway.trackTicker(d.ticker);
+    if (d?.type === 'insider' && d?.name) {
+      // When viewing an insider, track any tickers they've traded
+      filings.filter(f => f.insiderName === d.name).forEach(f => whileAway.trackTicker(f.ticker));
+    }
   }
   function goBackDetail() {
     setDetailStack(prev => {
@@ -11432,6 +11532,7 @@ function AppInner() {
   function expOnSort(col) { if (expSort === col) setExpDir(d => -d); else { setExpSort(col); setExpDir(-1); } }
 
   const watchlist = useWatchlist(user);
+  const whileAway = useWhileYouWereAway(filings, billingPro);
 
   // ── Landing page gate ──────────────────────────────────────────────────────
   // ── Simple client-side routing for legal pages ────────────────────────────
@@ -11504,6 +11605,10 @@ function AppInner() {
                   <span className="home-breadcrumb__arrow"></span>
                   Home <span className="home-breadcrumb__sep">›</span> {PAGE_TITLES[page]}
                 </button>
+              )}
+              {/* "While you were away" — loss-aversion banner for free users */}
+              {whileAway.missedTrades.length > 0 && (page === 'home' || page === 'dashboard') && (
+                <WhileAwayBanner trades={whileAway.missedTrades} onDismiss={whileAway.dismiss} onUpgrade={() => setShowUpgradeModal('notifications')} onOpenDetail={openDetail} />
               )}
               {page === 'home' && <HomePage filings={filings} loading={loading} watchlist={watchlist} user={user} onOpenDetail={openDetail} onSeeAll={seeAllFromHome} />}
               {page === 'dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f) => setShowUpgradeModal(f || 'default')} />}
