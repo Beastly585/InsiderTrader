@@ -439,13 +439,13 @@ function getStripePromise() {
 
 const PRODUCT_COPY = {
   pro: {
-    title: 'Upgrade to Pro', price: `${PRO_PRICE_DISPLAY}/month`, endpoint: '/billing/create-subscription',
+    title: 'Seli Pro', price: `${PRO_PRICE_DISPLAY}/month`, endpoint: '/billing/create-subscription',
     subtitle: 'Full insider data, real-time alerts, and your own watchlist — in one view.',
     features: ['Full historical data', 'Portfolio linking', 'Instant alerts'],
   },
   data_export: {
-    title: 'Buy full data export', price: '$39.99 one-time', endpoint: '/billing/create-data-purchase',
-    subtitle: 'A one-time pull of everything currently in the database.',
+    title: 'Own the data', price: '$39.99 one-time', endpoint: '/billing/create-data-purchase',
+    subtitle: 'Every SEC Form 4 filing in one clean CSV — download and go.',
     features: ['Every filing on record', 'Delivered as CSV', 'Re-purchase anytime for a fresh pull'],
   },
 };
@@ -581,6 +581,7 @@ function CheckoutModal({ product, onClose, onSuccess }) {
 
         {/* Left — product info, stays constant regardless of payment state */}
         <div className="checkout-modal__info">
+          <div className="logo-mark checkout-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
           <div className="checkout-modal__info-title">{copy.title}</div>
           <div className="checkout-modal__info-price">{copy.price}</div>
           <p className="checkout-modal__info-subtitle">{copy.subtitle}</p>
@@ -700,7 +701,7 @@ function CheckoutForm({ product, onSuccess, onClose }) {
         onClick={handleConfirm}
         style={{ marginTop: 16 }}
       >
-        {submitting ? 'Processing…' : syncing ? 'Confirming…' : (product === 'pro' ? 'Subscribe' : 'Buy export')}
+        {submitting ? 'Processing…' : syncing ? 'Confirming…' : (product === 'pro' ? 'Go Pro' : 'Buy export')}
       </button>
       <div className="upgrade-modal__note">
         {product === 'pro'
@@ -873,10 +874,10 @@ function BillingSection({ user }) {
         <div className="settings-group__label">Current plan</div>
         <div className="settings-row settings-row--toggle">
           <div>
-            <div className="settings-row__label">{isProPlan ? `Pro — ${PRO_PRICE_LABEL}` : 'Free'}</div>
+            <div className="settings-row__label">{isProPlan ? `Seli Pro — ${PRO_PRICE_LABEL}` : 'Free'}</div>
           </div>
           {!isProPlan && (
-            <button className="btn btn--primary" onClick={() => setCheckoutProduct('pro')}>Upgrade →</button>
+            <button className="btn btn--primary" onClick={() => setCheckoutProduct('pro')}>Go Pro →</button>
           )}
           {isProPlan && !status.cancel_at_period_end && (
             <button className="settings-danger-btn" disabled={busy} onClick={() => setConfirmCancel(true)}>
@@ -1487,7 +1488,7 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
             <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="topnav__wordmark">Seli</span>
           </div>
-          {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}><IconZap style={{ width: 12, height: 12, fill: 'currentColor', strokeWidth: 0 }} /><span className="topnav__upgrade-label">Upgrade — {PRO_PRICE_LABEL}</span></button>}
+          {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}><IconZap style={{ width: 12, height: 12, fill: 'currentColor', strokeWidth: 0 }} /><span className="topnav__upgrade-label">Go Pro — {PRO_PRICE_LABEL}</span></button>}
         </div>
         <nav className="topnav__links">
           {NAV_LINKS.map(n => (
@@ -5422,7 +5423,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Insider profiles are a Pro feature</div>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5, marginBottom: 14, maxWidth: 280, margin: '0 auto 14px' }}>Ranked scorecards for every tracked insider — hit rates, returns, trade history, and composite scores.</p>
                   <button className="wl-upsell__cta" style={{ fontSize: 12, padding: '8px 20px' }} onClick={() => onUpgrade('pro_direct')}>
-                    Upgrade to Pro — $6.99/mo →
+                    Go Pro — {PRO_PRICE_LABEL} →
                   </button>
                 </div>
               ) : <div className="ws-empty" style={{ color: 'var(--red-600)', fontSize: 11 }}>{lbError}</div>
@@ -6759,7 +6760,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
           <div className="ins-empty" style={{ flexDirection: 'column', gap: 8, padding: '20px 12px', textAlign: 'center' }}>
             <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Insider rankings are a Pro feature</div>
             <button className="wl-upsell__cta" style={{ fontSize: 11, padding: '6px 16px' }} onClick={() => { if (window.__seliUpgrade) window.__seliUpgrade('pro_direct'); }}>
-              Upgrade to Pro →
+              Go Pro →
             </button>
           </div>
         ) : <div className="ins-empty"><IconWarning style={{ width: 11, height: 11, marginRight: 3, verticalAlign: "-1px" }} />{error}</div>
@@ -9187,7 +9188,7 @@ const HELP_SECTIONS = [
     label: 'Billing',
     render: () => (
       <>
-        <h3>What does Pro include?</h3>
+        <h3>What does Seli Pro include?</h3>
         <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests, for {PRO_PRICE_DISPLAY} per month.</p>
         <h3>What's the Full Data Export?</h3>
         <p>A separate, one-time $39.99 purchase: a complete pull of the database as a spreadsheet, independent of a Pro subscription. Each purchase includes one download. If you need it again later, use Re-download in Settings &gt; Billing at no extra charge (this pulls current data, not a frozen copy from your original purchase date).</p>
@@ -10269,7 +10270,7 @@ function SettingsPage({ user, onUpgrade }) {
               {hasUnsavedSettings && <span className="ws-unsaved-badge">Unsaved changes</span>}
               {!pro && <>
                 <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Pro required · </span>
-                <button className="ws-tile__action" style={{ fontSize: 11 }} onClick={() => onUpgrade('default')}>Upgrade →</button>
+                <button className="ws-tile__action" style={{ fontSize: 11 }} onClick={() => onUpgrade('default')}>Go Pro →</button>
               </>}
             </div>
           </div>
@@ -10287,7 +10288,7 @@ function SettingsPage({ user, onUpgrade }) {
                 {!pro && (
                   <div className="ws-settings-upgrade-banner">
                     Scheduled digests are a Pro feature. Upgrade to get daily or weekly summaries delivered to your inbox.
-                    <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Upgrade →</button>
+                    <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Go Pro →</button>
                   </div>
                 )}
 
@@ -10366,7 +10367,7 @@ function SettingsPage({ user, onUpgrade }) {
                 {!pro && (
                   <div className="ws-settings-upgrade-banner">
                     Real-time email alerts are a Pro feature. Upgrade to get notified within minutes of a filing.
-                    <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Upgrade →</button>
+                    <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Go Pro →</button>
                   </div>
                 )}
 
@@ -10439,7 +10440,7 @@ function SettingsPage({ user, onUpgrade }) {
               {!pro && (
                 <div className="ws-settings-upgrade-banner">
                   Portfolio linking is a Pro feature. Connect your brokerage to see insider activity on your holdings.
-                  <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Upgrade →</button>
+                  <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Go Pro →</button>
                 </div>
               )}
 
@@ -11174,12 +11175,10 @@ function LandingPage({ onEnter, dark, setDark }) {
               </SignedIn>
             </div>
             <div className="lp-price-card lp-price-card--featured reveal reveal--delay-2">
-              <div className="lp-price-card__badge">Half-off</div>
-              <div className="lp-price-card__name">Pro</div>
+              <div className="lp-price-card__name">Seli Pro</div>
               <div className="lp-price-card__price">
-                <span className="lp-price-card__price-strike">$13.99</span> $6.99<span>/mo</span>
+                $6.99<span>/mo</span>
               </div>
-              <div className="lp-price-card__beta-note">Beta pricing — locked in forever once you subscribe</div>
               <div className="lp-price-card__desc">Full history, every alert, every score — for serious research.</div>
               <ul className="lp-price-card__features">
                 {['Everything in Free', `Full historical data (${dataSinceYear}→present)`, 'Customizable email alerts, instant or digest', 'Full score breakdown on every trade', 'Connect your brokerage (SnapTrade)', 'Full insiders deep-dive'].map(f => (
@@ -11189,11 +11188,11 @@ function LandingPage({ onEnter, dark, setDark }) {
               <div className="lp-price-card__spacer" />
               <SignedOut>
                 <SignInButton mode="modal">
-                  <button className="lp-btn-primary lp-btn-primary--full">Upgrade to Pro →</button>
+                  <button className="lp-btn-primary lp-btn-primary--full">Go Pro →</button>
                 </SignInButton>
               </SignedOut>
               <SignedIn>
-                <button className="lp-btn-primary lp-btn-primary--full" onClick={onEnter}>Upgrade to Pro →</button>
+                <button className="lp-btn-primary lp-btn-primary--full" onClick={onEnter}>Go Pro →</button>
               </SignedIn>
             </div>
           </div>

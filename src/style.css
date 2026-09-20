@@ -5044,7 +5044,10 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--surface-2); border-right: 0.5px solid var(--border);
   display: flex; flex-direction: column;
 }
-.checkout-modal__info-title { font-size: 0.875rem; font-weight: 700; margin-bottom: 4px; }
+.checkout-modal__logo {
+  width: 36px; height: 36px; border-radius: 9px; overflow: hidden; margin-bottom: 14px;
+}
+.checkout-modal__info-title { font-size: 1.125rem; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 4px; }
 .checkout-modal__info-price { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
 .checkout-modal__info-subtitle { font-size: 0.75rem; color: var(--text-2); line-height: 1.5; margin-bottom: 16px; }
 .checkout-modal__features {
