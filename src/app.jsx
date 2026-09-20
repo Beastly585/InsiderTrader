@@ -244,10 +244,10 @@ function UpgradeModal({ feature, pro, onClose }) {
   // Outcome-oriented messages — tell the user what changes for them, not
   // what features they unlock.
   const FEATURE_MESSAGES = {
-    watchlist_ticker: 'You've hit the free watchlist limit. Pro lets you track unlimited tickers — and alerts you the moment insiders trade them.',
+    watchlist_ticker: "You've hit the free watchlist limit. Pro lets you track unlimited tickers — and alerts you the moment insiders trade them.",
     watchlist_insider: 'Following insiders is a Pro feature. Pick the people you care about, and Seli does the watching for you.',
     notifications: 'Set it and forget it. Pro sends you email digests and instant alerts — you only open Seli when something happens.',
-    portfolio: 'Link your brokerage and Seli watches every stock you own. You'll know about insider moves before the market reacts.',
+    portfolio: "Link your brokerage and Seli watches every stock you own. You'll know about insider moves before the market reacts.",
     data_export: 'Get a one-time CSV export of the full historical dataset — no subscription required.',
     full_history: 'Free shows 12 months. Pro unlocks the full picture — every filing back to 2010, so you see the patterns that matter.',
     default: 'Tell Seli what to watch. It does the rest.',
