@@ -245,6 +245,7 @@ function UpgradeModal({ feature, pro, onClose }) {
     portfolio: "Link your brokerage and Seli watches every stock you own. You'll know about insider moves before the market reacts.",
     data_export: 'Get a one-time CSV export of the full historical dataset — no subscription required.',
     full_history: 'Free shows 12 months. Pro unlocks the full picture — every filing back to 2010, so you see the patterns that matter.',
+    my_news: 'My News filters headlines to only the tickers and insiders you follow. Set it up once, and your feed shows only what matters to you.',
     default: 'Tell Seli what to watch. It does the rest.',
   };
   const subtitle = FEATURE_MESSAGES[feature] || FEATURE_MESSAGES.default;
@@ -257,26 +258,26 @@ function UpgradeModal({ feature, pro, onClose }) {
       title: 'Never miss a trade again',
       outcomes: [
         { step: '1', text: 'Pick the stocks, insiders, or politicians you care about' },
-        { step: '2', text: 'Seli monitors every SEC Form 4 filing — 24/7, automatically' },
-        { step: '3', text: 'Get alerted the moment something happens — before the market reacts' },
+        { step: '2', text: 'Seli monitors every Form 4 — 24/7, automatically' },
+        { step: '3', text: 'Get alerted before the market reacts' },
       ],
       cta: 'Start watching',
     },
     data: {
       title: 'See the full picture',
       outcomes: [
-        { step: '1', text: 'Free shows 12 months of filings — Pro unlocks data back to 2010' },
-        { step: '2', text: 'Filter by insider, sector, trade size, and conviction score' },
-        { step: '3', text: 'Spot the patterns that only show up over years, not weeks' },
+        { step: '1', text: 'Unlock every filing back to 2010, not just 12 months' },
+        { step: '2', text: 'Filter by insider, sector, trade size, and score' },
+        { step: '3', text: 'Spot patterns that only show up over years' },
       ],
       cta: 'Unlock full data',
     },
     personalize: {
       title: 'Make it yours',
       outcomes: [
-        { step: '1', text: 'Link your brokerage — Seli watches every stock you already own' },
-        { step: '2', text: 'Follow specific insiders and get notified when they file' },
-        { step: '3', text: 'Your watchlist, your alerts, your edge — all in one view' },
+        { step: '1', text: 'Link your brokerage — Seli watches your portfolio' },
+        { step: '2', text: 'Follow insiders and get notified when they trade' },
+        { step: '3', text: 'Your watchlist, your alerts, one view' },
       ],
       cta: 'Personalize Seli',
     },
@@ -286,7 +287,7 @@ function UpgradeModal({ feature, pro, onClose }) {
   const FEATURE_TO_VARIANT = {
     watchlist_ticker: 'alert', watchlist_insider: 'alert', notifications: 'alert', alerts: 'alert', default: 'alert',
     full_history: 'data', data_explorer: 'data', insider_detail: 'data',
-    portfolio: 'personalize', watchlist_limit: 'personalize',
+    portfolio: 'personalize', watchlist_limit: 'personalize', my_news: 'personalize',
   };
 
   const variant = MODAL_VARIANTS[FEATURE_TO_VARIANT[feature] || 'alert'];
@@ -4114,7 +4115,7 @@ function NewsDrawer({ watchlist, filings, onClose }) {
               title={pro ? 'Only news for your starred tickers and followed insiders\' recent trades' : 'Pro feature — filters news to your starred tickers and followed insiders'}
             >
               <input type="checkbox" checked={myNewsOn && pro}
-                onChange={() => pro ? setMyNewsOn(v => !v) : watchlist?.setShowUpgrade?.('watchlist_ticker')} />
+                onChange={() => pro ? setMyNewsOn(v => !v) : watchlist?.setShowUpgrade?.('my_news')} />
               My news{!pro && <IconLock style={{ width: 10, height: 10, marginLeft: 5, verticalAlign: '-1px', opacity: 0.5 }} />}
             </label>
             <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{ width: 12, height: 12 }} /></button>
@@ -4372,7 +4373,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
                 <button className={`ws-pill ws-pill--sm${!myNews ? ' ws-pill--active' : ''}`}
                   onClick={() => setMyNews(false)}>All</button>
                 <button className={`ws-pill ws-pill--sm${myNews && pro ? ' ws-pill--active' : ''}${!pro ? ' ws-pill--locked' : ''}`}
-                  onClick={() => pro ? setMyNews(true) : onUpgrade('watchlist_ticker')}
+                  onClick={() => pro ? setMyNews(true) : onUpgrade('my_news')}
                   title={pro ? 'News for your watchlist tickers and followed insiders' : 'Pro feature'}>
                   {pro ? 'My news' : <><IconLock style={{ width: 10, height: 10, marginRight: 3, verticalAlign: '-1px' }} />My news</>}
                 </button>

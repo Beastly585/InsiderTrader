@@ -5298,43 +5298,44 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 /* Narrative-style upgrade modal — single pitch, no comparison */
 .upgrade-modal--narrative {
-  max-width: 440px; width: calc(100% - 32px);
+  max-width: 400px; width: calc(100% - 32px);
   padding: 0; overflow: hidden; text-align: center;
 }
 .upgrade-narrative__header {
-  padding: 32px 28px 0;
+  padding: 28px 28px 0;
 }
 .upgrade-narrative__title {
-  font-size: 1.375rem; font-weight: 800; letter-spacing: -0.5px;
-  margin-bottom: 6px; color: var(--text);
+  font-size: 1.5rem; font-weight: 800; letter-spacing: -0.6px;
+  margin-bottom: 8px; color: var(--text); line-height: 1.2;
 }
 .upgrade-narrative__sub {
-  font-size: 0.8125rem; color: var(--text-3); line-height: 1.5;
-  margin-bottom: 20px; max-width: 360px; margin-left: auto; margin-right: auto;
+  font-size: 0.75rem; color: var(--text-3); line-height: 1.5;
+  margin-bottom: 20px; max-width: 320px; margin-left: auto; margin-right: auto;
+  opacity: 0.85;
 }
 
-/* Outcome rows — step number + text */
+/* Outcome rows — step number + text, scannable at a glance */
 .upgrade-narrative__outcomes {
   display: flex; flex-direction: column; gap: 0;
-  padding: 0 28px; margin-bottom: 24px;
+  padding: 0 28px; margin-bottom: 20px;
   text-align: left;
 }
 .upgrade-narrative__outcome {
-  display: flex; align-items: flex-start; gap: 14px;
-  padding: 14px 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0;
   border-bottom: 0.5px solid var(--border);
 }
 .upgrade-narrative__outcome:last-child { border-bottom: none; }
 .upgrade-narrative__step-num {
-  width: 24px; height: 24px; flex-shrink: 0;
+  width: 26px; height: 26px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 50%; border: 1.5px solid var(--accent-strong);
+  border-radius: 50%;
+  background: var(--accent-50, rgba(99,102,241,0.08));
   font-size: 0.6875rem; font-weight: 700; color: var(--accent-strong);
-  line-height: 1;
+  line-height: 1; border: none;
 }
 .upgrade-narrative__outcome-text {
-  font-size: 0.8125rem; color: var(--text-2); line-height: 1.5;
-  padding-top: 2px;
+  font-size: 0.8125rem; color: var(--text-2); line-height: 1.45;
 }
 
 /* CTA section */
@@ -5345,7 +5346,7 @@ td { padding:7px 11px; vertical-align:middle; }
 /* Alt option — data export inline link */
 .upgrade-narrative__alt-option {
   display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 14px 28px 4px;
+  padding: 10px 28px 4px;
   cursor: pointer;
 }
 .upgrade-narrative__alt-text {
@@ -5368,11 +5369,11 @@ td { padding:7px 11px; vertical-align:middle; }
     max-height: 90vh; overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .upgrade-narrative__header { padding: 20px 20px 0; }
-  .upgrade-narrative__title { font-size: 1.125rem; }
+  .upgrade-narrative__header { padding: 24px 20px 0; }
+  .upgrade-narrative__title { font-size: 1.25rem; }
   .upgrade-narrative__outcomes { padding: 0 20px; }
   .upgrade-narrative__cta-section { padding: 0 20px 4px; }
-  .upgrade-narrative__alt-option { padding: 14px 20px 4px; flex-direction: column; gap: 4px; }
+  .upgrade-narrative__alt-option { padding: 10px 20px 4px; flex-direction: column; gap: 4px; }
   .upgrade-modal { max-width: 100vw; width: 100%; border-radius: 12px 12px 0 0; margin-top: auto; }
   .upgrade-modal--export { max-width: 100vw; width: 100%; border-radius: 12px 12px 0 0; }
 }
@@ -5473,7 +5474,8 @@ td { padding:7px 11px; vertical-align:middle; }
 
 .upgrade-modal__trust {
   display: flex; justify-content: center; gap: 16px;
-  padding: 14px 28px 20px; font-size: 0.6875rem; color: var(--text-3);
+  padding: 10px 28px 18px; font-size: 0.625rem; color: var(--text-3);
+  opacity: 0.7;
 }
 .upgrade-modal__close {
   position: absolute; top: 14px; right: 14px; z-index: 2;
@@ -5531,15 +5533,16 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 .upgrade-modal__cta {
   width: 100%;
-  padding: 12px;
+  padding: 14px;
   background: var(--accent-strong);
   color: #fff;
-  border: none; border-radius: 8px;
-  font-size: 0.875rem; font-weight: 600;
+  border: none; border-radius: 10px;
+  font-size: 0.9375rem; font-weight: 700;
   cursor: pointer;
   transition: opacity 0.15s, transform 0.15s;
   margin-bottom: 10px;
   position: relative; overflow: hidden; z-index: 0;
+  letter-spacing: -0.2px;
 }
 .upgrade-modal__cta::after {
   content: ''; position: absolute; top: -50%; left: -60%;
