@@ -6432,16 +6432,14 @@ td { padding:7px 11px; vertical-align:middle; }
   background: var(--surface);
   cursor: default;
 }
-.ws-home-expand__grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 8px 16px; margin-bottom: 10px;
+.ws-home-expand__inline {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 8px;
 }
-.ws-home-expand__val {
-  font-size: 0.75rem; font-weight: 600; color: var(--text); margin-top: 1px;
-}
-.ws-home-expand__actions {
-  display: flex; justify-content: flex-end; padding-top: 6px;
-  border-top: 0.5px solid var(--border);
+.ws-home-expand__tag {
+  display: inline-block; font-size: 0.625rem; font-weight: 600;
+  padding: 2px 7px; border-radius: 4px;
+  background: var(--surface-2); color: var(--text-2);
+  white-space: nowrap; line-height: 1.5;
 }
 .ws-home-expand__more {
   background: none; border: none; cursor: pointer;

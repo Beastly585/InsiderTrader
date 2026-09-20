@@ -4297,17 +4297,14 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
                     </div>
                     {isExp && (
                       <div className="ws-home-expand" onClick={e => e.stopPropagation()}>
-                        <div className="ws-home-expand__grid">
-                          <div><span className="ws-data-label">Insider</span><div className="ws-home-expand__val">{f.insiderName}</div></div>
-                          <div><span className="ws-data-label">Title</span><div className="ws-home-expand__val">{f.title || '—'}</div></div>
-                          <div><span className="ws-data-label">Shares</span><div className="ws-home-expand__val">{f.shares ? fmt.number(f.shares) : '—'}</div></div>
-                          <div><span className="ws-data-label">Price</span><div className="ws-home-expand__val">{f.pricePerShare ? '$' + Number(f.pricePerShare).toFixed(2) : '—'}</div></div>
-                          <div><span className="ws-data-label">Sector</span><div className="ws-home-expand__val">{f.sector || '—'}</div></div>
-                          {su && <div><span className="ws-data-label">Filing</span><a href={su} target="_blank" rel="noopener noreferrer" className="ws-sec-link">SEC ↗</a></div>}
+                        <div className="ws-home-expand__inline">
+                          {f.title && <span className="ws-home-expand__tag">{f.title.split(' ').slice(0, 4).join(' ')}</span>}
+                          {f.shares && <span className="ws-home-expand__tag">{fmt.number(f.shares)} shares</span>}
+                          {f.pricePerShare && <span className="ws-home-expand__tag">@ ${Number(f.pricePerShare).toFixed(2)}</span>}
+                          {f.sector && <span className="ws-home-expand__tag">{f.sector}</span>}
+                          {su && <a href={su} target="_blank" rel="noopener noreferrer" className="ws-sec-link" style={{ fontSize: 10 }}>SEC ↗</a>}
                         </div>
-                        <div className="ws-home-expand__actions">
-                          <button className="ws-home-expand__more" onClick={() => onOpenDetail({ type: 'ticker', ticker: f.ticker, company: f.company })}>View {f.ticker} details →</button>
-                        </div>
+                        <button className="ws-home-expand__more" onClick={() => onSeeAll('dashboard', 'raw')}>View all {f.ticker} filings →</button>
                       </div>
                     )}
                   </div>
@@ -4377,18 +4374,13 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
                         </div>
                         {isExp && (
                           <div className="ws-home-expand" onClick={e => e.stopPropagation()}>
-                            <div className="ws-home-expand__grid">
-                              <div><span className="ws-data-label">Last trade</span><div className="ws-home-expand__val">{fmt.dateShort(s.lastTradeDate)}</div></div>
-                              <div><span className="ws-data-label">Net flow</span><div className={`ws-home-expand__val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div></div>
-                              <div><span className="ws-data-label">Insiders</span><div className="ws-home-expand__val">{s.insiderCount}</div></div>
-                              <div><span className="ws-data-label">Moves</span><div className="ws-home-expand__val">{totalMoves}</div></div>
-                              <div><span className="ws-data-label">Sector</span><div className="ws-home-expand__val">{s.sector || '—'}</div></div>
-                              <div><span className="ws-data-label">Conviction</span><div className="ws-home-expand__val">{Math.round(s.conviction)}</div></div>
-                              {s.avgReturn != null && <div><span className="ws-data-label">Since trade</span><div className={`ws-home-expand__val${s.avgReturn >= 0 ? ' val-buy' : ' val-sell'}`}>{s.avgReturn >= 0 ? '+' : ''}{s.avgReturn.toFixed(1)}%</div></div>}
+                            <div className="ws-home-expand__inline">
+                              {s.sector && <span className="ws-home-expand__tag">{s.sector}</span>}
+                              <span className="ws-home-expand__tag">{totalMoves} move{totalMoves !== 1 ? 's' : ''}</span>
+                              <span className="ws-home-expand__tag">{s.insiderCount} insider{s.insiderCount !== 1 ? 's' : ''}</span>
+                              {s.avgReturn != null && <span className={`ws-home-expand__tag${s.avgReturn >= 0 ? ' val-buy' : ' val-sell'}`}>{s.avgReturn >= 0 ? '+' : ''}{s.avgReturn.toFixed(1)}% since trade</span>}
                             </div>
-                            <div className="ws-home-expand__actions">
-                              <button className="ws-home-expand__more" onClick={() => { onSeeAll('dashboard'); }}>View on Data tab →</button>
-                            </div>
+                            <button className="ws-home-expand__more" onClick={() => onSeeAll('dashboard', 'signals')}>View {s.ticker} signals →</button>
                           </div>
                         )}
                       </div>
@@ -4446,12 +4438,12 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
 }
 
 
-function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist, user, onUpgrade }) {
+function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist, user, onUpgrade, initialTab }) {
   const { pro } = useBilling();
   const isMobile = useIsMobile();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState('signals');
+  const [tab, setTab] = useState(initialTab || 'signals');
   const [days, setDays] = useState(7);
   const [sourceF, setSourceF] = useState('');
   const [sectorF, setSectorF] = useState('');
@@ -11677,8 +11669,9 @@ function AppInner() {
   // person never actually came from, so plain navTo() always clears it.
   // Only seeAllFromHome (used by Home's own "See all →" links) sets it.
   const [cameFromHome, setCameFromHome] = useState(false);
-  function navTo(p) { setPage(p); setDetail(null); setDetailStack([]); setDetailFull(false); setSelSig(null); setHlTick(null); setCameFromHome(false); }
-  function seeAllFromHome(p) { setPage(p); setDetail(null); setDetailStack([]); setDetailFull(false); setSelSig(null); setHlTick(null); setCameFromHome(false); }
+  const [dashboardInitTab, setDashboardInitTab] = useState(null);
+  function navTo(p) { setPage(p); setDetail(null); setDetailStack([]); setDetailFull(false); setSelSig(null); setHlTick(null); setCameFromHome(false); setDashboardInitTab(null); }
+  function seeAllFromHome(p, tab) { setDashboardInitTab(tab || null); setPage(p); setDetail(null); setDetailStack([]); setDetailFull(false); setSelSig(null); setHlTick(null); setCameFromHome(false); }
 
   // Sort state for the shared full-drawer explorer — independent from
   // InsightsPage's own internal sort state, since this instance is opened
@@ -11767,7 +11760,7 @@ function AppInner() {
                 <WhileAwayBanner trades={whileAway.missedTrades} onDismiss={whileAway.dismiss} onUpgrade={() => setShowUpgradeModal('notifications')} onOpenDetail={openDetail} />
               )}
               {page === 'home' && <HomePage filings={filings} loading={loading} watchlist={watchlist} user={user} onOpenDetail={openDetail} onSeeAll={seeAllFromHome} />}
-              {page === 'dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f) => setShowUpgradeModal(f || 'default')} />}
+              {page === 'dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={drillSignal} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={(f) => setShowUpgradeModal(f || 'default')} initialTab={dashboardInitTab} />}
               {page === 'signals' && <InsightsPage filings={filings} loading={loading} highlightTicker={hlTicker} setHighlightTicker={setHlTick} onSelectSignal={selectSignal} selectedSignal={selSignal} onOpenDetail={openDetail} onCloseDetail={closeDetail} user={user} ensureFilingsWindow={ensureFilingsWindow} watchlist={watchlist} onUpgrade={(f) => setShowUpgradeModal(f || 'default')} />}
               {page === 'data' && <DataPage onOpenDetail={openDetail} portfolioTickers={portfolioTickers} user={user} onUpgrade={(f) => setShowUpgradeModal(f || 'data_export')} />}
               {page === 'settings' && <SettingsPage user={user} onUpgrade={(f) => setShowUpgradeModal(f || 'default')} />}
