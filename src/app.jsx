@@ -1486,9 +1486,16 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
             <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="topnav__wordmark">Seli</span>
           </div>
-          {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}><span className="topnav__upgrade-label">Upgrade</span><span className="topnav__upgrade-price">{PRO_PRICE_LABEL}</span></button>}
+          {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}><IconLock style={{ width: 11, height: 11 }} /><span className="topnav__upgrade-label">Upgrade — {PRO_PRICE_LABEL}</span></button>}
         </div>
-        <div className="topnav__center">
+        <nav className="topnav__links">
+          {NAV_LINKS.map(n => (
+            <button key={n.id} className={`topnav__link${page === n.id ? ' topnav__link--active' : ''}`} onClick={() => setPage(n.id)}>
+              <n.Icon style={{ width: 14, height: 14 }} />{n.label}
+            </button>
+          ))}
+        </nav>
+        <div className="topnav__right">
           {lastFilingDate && (
             <span className={`topnav__freshness${isDataStale ? ' topnav__freshness--stale' : ''}`} title={`Data through ${lastFilingDate}`}>
               <span className="topnav__dot" style={isDataStale ? { background: 'var(--amber-600)' } : {}} />
@@ -1496,13 +1503,6 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
             </span>
           )}
           {loading && !lastFilingDate && <span className="topnav__freshness"><span className="topnav__dot" />Syncing…</span>}
-        </div>
-        <div className="topnav__right">
-          <FeedbackButton page={page} />
-          <GuideStatusBarButton />
-          <button className="topnav__icon-btn" onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'}>
-            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
-          </button>
           <button className={`topnav__icon-btn${page === 'settings' ? ' topnav__icon-btn--active' : ''}`} onClick={() => setPage('settings')} title="Settings">
             <IconSettings style={{ width: 15, height: 15 }} />
           </button>
@@ -1512,14 +1512,13 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
           <SignedOut><SignInButton mode="modal"><button className="topnav__upgrade">Sign in</button></SignInButton></SignedOut>
         </div>
       </header>
-      <nav className="sidenav-stack">
-        {NAV_LINKS.map(n => (
-          <button key={n.id} className={`sidenav-stack__btn${page === n.id ? ' sidenav-stack__btn--active' : ''}`} onClick={() => setPage(n.id)} title={n.label}>
-            <n.Icon style={{ width: 18, height: 18 }} />
-            <span className="sidenav-stack__label">{n.label}</span>
-          </button>
-        ))}
-      </nav>
+      <div className="utility-stack">
+        <button className="utility-stack__btn" onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'}>
+          {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
+        </button>
+        <FeedbackButton page={page} />
+        <GuideStatusBarButton />
+      </div>
     </>
   );
 }
