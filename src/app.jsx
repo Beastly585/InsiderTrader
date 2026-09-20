@@ -347,25 +347,37 @@ function UpgradeModal({ feature, pro, onClose }) {
   if (feature === 'data_export') {
     return (
       <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
-        <div className="upgrade-modal upgrade-modal--export">
+        <div className="upgrade-modal upgrade-modal--narrative">
           <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{ width: 12, height: 12 }} /></button>
-          <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-          <div className="upgrade-modal__title">Buy full data export</div>
-          <div className="upgrade-modal__subtitle">A one-time pull of everything currently in the database, delivered as CSV — no subscription required.</div>
-          <div className="export-price-card">
-            <div className="export-price-card__row">
-              <span className="export-price-card__label">Data export <span className="upgrade-plan-card__badge">One-time</span></span>
-              <span className="export-price-card__price">$39.99</span>
-            </div>
-            <ul className="export-price-card__features">
-              <li><IconCheck style={{ width: 12, height: 12 }} />Every filing currently on record</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />Delivered as CSV, ready to download</li>
-              <li><IconCheck style={{ width: 12, height: 12 }} />Re-purchase anytime for a fresh pull</li>
-            </ul>
+
+          <div className="upgrade-narrative__header">
+            <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <h2 className="upgrade-narrative__title">Download the full dataset</h2>
+            <p className="upgrade-narrative__sub">Every Form 4 filing on record, delivered as a CSV you can open anywhere. One-time purchase — no subscription required.</p>
           </div>
-          <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('data_export')}>Buy Export — $39.99</button>
+
+          <div className="upgrade-narrative__outcomes">
+            <div className="upgrade-narrative__outcome">
+              <span className="upgrade-narrative__step-num">1</span>
+              <span className="upgrade-narrative__outcome-text">Every insider filing currently in the database</span>
+            </div>
+            <div className="upgrade-narrative__outcome">
+              <span className="upgrade-narrative__step-num">2</span>
+              <span className="upgrade-narrative__outcome-text">Delivered as CSV — open in Excel, Sheets, or Python</span>
+            </div>
+            <div className="upgrade-narrative__outcome">
+              <span className="upgrade-narrative__step-num">3</span>
+              <span className="upgrade-narrative__outcome-text">Re-purchase anytime for a fresh pull of the latest data</span>
+            </div>
+          </div>
+
+          <div className="upgrade-narrative__cta-section">
+            <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('data_export')}>Buy Export — $39.99</button>
+          </div>
+
           <div className="upgrade-modal__trust">
             <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Secure checkout via Stripe</span>
+            <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />One-time payment</span>
           </div>
         </div>
       </div>
@@ -401,18 +413,14 @@ function UpgradeModal({ feature, pro, onClose }) {
           </button>
         </div>
 
-        {/* Data export — compact inline option */}
-        <div className="upgrade-narrative__alt-option" onClick={() => setCheckoutProduct('data_export')}>
-          <span className="upgrade-narrative__alt-text">Just need the raw data?</span>
-          <button className="upgrade-narrative__alt-btn" onClick={e => { e.stopPropagation(); setCheckoutProduct('data_export'); }}>
-            Download dataset — $39.99 one-time →
-          </button>
-        </div>
-
         <div className="upgrade-modal__trust">
           <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Secure checkout via Stripe</span>
           <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Cancel anytime</span>
         </div>
+
+        <button className="upgrade-narrative__alt-link" onClick={() => setCheckoutProduct('data_export')}>
+          Or just the dataset — $39.99 one-time →
+        </button>
       </div>
     </div>
   );
@@ -1440,7 +1448,6 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
           <div className="topnav__logo" onClick={() => setPage('home')}>
             <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="topnav__wordmark">Seli</span>
-            <span className="topnav__beta">BETA</span>
           </div>
           <div className="topnav__right">
             {lastFilingDate && (
@@ -1472,42 +1479,48 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
     );
   }
   return (
-    <header className="topnav">
-      <div className="topnav__logo" onClick={() => setPage('home')}>
-        <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-        <span className="topnav__wordmark">Seli</span>
-        <span className="topnav__beta">BETA</span>
-      </div>
-      <nav className="topnav__links">
+    <>
+      <header className="topnav">
+        <div className="topnav__left">
+          <div className="topnav__logo" onClick={() => setPage('home')}>
+            <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <span className="topnav__wordmark">Seli</span>
+          </div>
+          {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}><span className="topnav__upgrade-label">Upgrade</span><span className="topnav__upgrade-price">{PRO_PRICE_LABEL}</span></button>}
+        </div>
+        <div className="topnav__center">
+          {lastFilingDate && (
+            <span className={`topnav__freshness${isDataStale ? ' topnav__freshness--stale' : ''}`} title={`Data through ${lastFilingDate}`}>
+              <span className="topnav__dot" style={isDataStale ? { background: 'var(--amber-600)' } : {}} />
+              {isDataStale ? `Stale · ${fmt.dateShort(lastFilingDate)}` : `Through ${fmt.dateShort(lastFilingDate)}`}
+            </span>
+          )}
+          {loading && !lastFilingDate && <span className="topnav__freshness"><span className="topnav__dot" />Syncing…</span>}
+        </div>
+        <div className="topnav__right">
+          <FeedbackButton page={page} />
+          <GuideStatusBarButton />
+          <button className="topnav__icon-btn" onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'}>
+            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
+          </button>
+          <button className={`topnav__icon-btn${page === 'settings' ? ' topnav__icon-btn--active' : ''}`} onClick={() => setPage('settings')} title="Settings">
+            <IconSettings style={{ width: 15, height: 15 }} />
+          </button>
+          <SignedIn>
+            <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'clerk-avatar', userButtonTrigger: 'clerk-avatar-trigger', userButtonAvatarBox: 'clerk-avatar-box' } }} />
+          </SignedIn>
+          <SignedOut><SignInButton mode="modal"><button className="topnav__upgrade">Sign in</button></SignInButton></SignedOut>
+        </div>
+      </header>
+      <nav className="sidenav-stack">
         {NAV_LINKS.map(n => (
-          <button key={n.id} className={`topnav__link${page === n.id ? ' topnav__link--active' : ''}`} onClick={() => setPage(n.id)}>
-            <n.Icon style={{ width: 14, height: 14 }} />{n.label}
+          <button key={n.id} className={`sidenav-stack__btn${page === n.id ? ' sidenav-stack__btn--active' : ''}`} onClick={() => setPage(n.id)} title={n.label}>
+            <n.Icon style={{ width: 18, height: 18 }} />
+            <span className="sidenav-stack__label">{n.label}</span>
           </button>
         ))}
       </nav>
-      <div className="topnav__right">
-        {lastFilingDate && (
-          <span className={`topnav__freshness${isDataStale ? ' topnav__freshness--stale' : ''}`} title={`Data through ${lastFilingDate}`}>
-            <span className="topnav__dot" style={isDataStale ? { background: 'var(--amber-600)' } : {}} />
-            {isDataStale ? `Stale · ${fmt.dateShort(lastFilingDate)}` : `Through ${fmt.dateShort(lastFilingDate)}`}
-          </span>
-        )}
-        {loading && !lastFilingDate && <span className="topnav__freshness"><span className="topnav__dot" />Syncing…</span>}
-        <FeedbackButton page={page} />
-        <GuideStatusBarButton />
-        <button className="topnav__icon-btn" onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'}>
-          {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
-        </button>
-        {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}>Upgrade → $6.99</button>}
-        <SignedIn>
-          <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'clerk-avatar', userButtonTrigger: 'clerk-avatar-trigger', userButtonAvatarBox: 'clerk-avatar-box' } }} />
-        </SignedIn>
-        <SignedOut><SignInButton mode="modal"><button className="topnav__upgrade">Sign in</button></SignInButton></SignedOut>
-      </div>
-      <button className={`topnav__settings-fab${page === 'settings' ? ' topnav__settings-fab--active' : ''}`} onClick={() => setPage('settings')} title="Settings" aria-label="Settings">
-        <IconSettings style={{ width: 16, height: 16 }} />
-      </button>
-    </header>
+    </>
   );
 }
 
@@ -4525,7 +4538,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <h1 className="ws-page-title">Market Data</h1>
           <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
         </div>
-        <button className="data-export-tile" onClick={() => onUpgrade('data_export_direct')}>Download the Dataset</button>
+        <button className="data-export-btn" onClick={() => onUpgrade('data_export_direct')}><IconData style={{ width: 13, height: 13 }} /> Download Dataset</button>
       </div>
 
       {/* Stat strip */}
