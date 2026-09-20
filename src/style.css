@@ -2117,7 +2117,7 @@ td { padding:7px 11px; vertical-align:middle; }
   display: flex; align-items: center; gap: 8px;
   padding: 6px 12px; font-size: 0.625rem; color: var(--text-3);
 }
-.ins-lb-col-hdr__spacer { width: 18px; flex-shrink: 0; } /* aligns under the rank number */
+.ins-lb-col-hdr__spacer { display: none; }
 .ins-lb-col-hdr__name { flex: 1; font-weight: 600; }
 .ins-lb-col-hdr__sort {
   background: none; border: none; cursor: pointer; padding: 0;
@@ -2128,15 +2128,12 @@ td { padding:7px 11px; vertical-align:middle; }
 .ins-lb-list { display: flex; flex-direction: column; }
 .ins-lb-card {
   display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px; border-bottom: 0.5px solid var(--border);
-  cursor: pointer; transition: background .07s;
+  padding: 8px 12px; border-bottom: 0.5px solid var(--border);
+  border-left: 3px solid transparent;
+  cursor: pointer; transition: background .07s, border-color .1s;
 }
 .ins-lb-card:last-child { border-bottom: none; }
-.ins-lb-card:hover { background: var(--surface-2); }
-.ins-lb-card__rank {
-  font-size: 0.6875rem; color: var(--text-3); font-family: var(--font-mono);
-  width: 14px; flex-shrink: 0; text-align: center;
-}
+.ins-lb-card:hover { background: var(--surface-2); border-left-color: var(--accent); }
 .ins-lb-card__body { flex: 1; min-width: 0; }
 .ins-lb-card__name { font-size: 0.75rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ins-lb-card__meta { display: flex; align-items: center; gap: 5px; margin-top: 2px; flex-wrap: wrap; }
@@ -7129,22 +7126,15 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
   gap: 8px;
   padding: 9px 12px;
   border-bottom: 0.5px solid var(--border);
+  border-left: 3px solid transparent;
   cursor: pointer;
-  transition: background .07s;
+  transition: background .07s, border-color .1s;
 }
 .ip-rail-row:last-child { border-bottom: none; }
-.ip-rail-row:hover { background: var(--surface-2); }
+.ip-rail-row:hover { background: var(--surface-2); border-left-color: var(--accent); }
 .ip-rail-row--active {
   background: var(--accent-50);
-  border-left: 3px solid var(--accent);
-}
-.ip-rail-row__rank {
-  font-size: 11px;
-  color: var(--text-3);
-  font-weight: 600;
-  min-width: 18px;
-  text-align: right;
-  flex-shrink: 0;
+  border-left-color: var(--accent-strong);
 }
 .ip-rail-row__info { flex: 1; min-width: 0; }
 

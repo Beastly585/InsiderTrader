@@ -352,32 +352,32 @@ function UpgradeModal({ feature, pro, onClose }) {
 
           <div className="upgrade-narrative__header">
             <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <h2 className="upgrade-narrative__title">Download the full dataset</h2>
-            <p className="upgrade-narrative__sub">Every Form 4 filing on record, delivered as a CSV you can open anywhere. One-time purchase — no subscription required.</p>
+            <h2 className="upgrade-narrative__title">Own the data</h2>
+            <p className="upgrade-narrative__sub">The only place to get every SEC Form 4 filing in one clean CSV. No scraping, no cleaning, no API — just download and go.</p>
           </div>
 
           <div className="upgrade-narrative__outcomes">
             <div className="upgrade-narrative__outcome">
               <span className="upgrade-narrative__step-num">1</span>
-              <span className="upgrade-narrative__outcome-text">Every insider filing currently in the database</span>
+              <span className="upgrade-narrative__outcome-text">Every insider filing on record — one click, one file</span>
             </div>
             <div className="upgrade-narrative__outcome">
               <span className="upgrade-narrative__step-num">2</span>
-              <span className="upgrade-narrative__outcome-text">Delivered as CSV — open in Excel, Sheets, or Python</span>
+              <span className="upgrade-narrative__outcome-text">Opens in Excel, Google Sheets, Python, R — whatever you use</span>
             </div>
             <div className="upgrade-narrative__outcome">
               <span className="upgrade-narrative__step-num">3</span>
-              <span className="upgrade-narrative__outcome-text">Re-purchase anytime for a fresh pull of the latest data</span>
+              <span className="upgrade-narrative__outcome-text">Buy again anytime for a fresh pull with the latest filings</span>
             </div>
           </div>
 
           <div className="upgrade-narrative__cta-section">
-            <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('data_export')}>Buy Export — $39.99</button>
+            <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('data_export')}>Download — $39.99 one-time</button>
           </div>
 
           <div className="upgrade-modal__trust">
             <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Secure checkout via Stripe</span>
-            <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />One-time payment</span>
+            <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />No subscription</span>
           </div>
         </div>
       </div>
@@ -1402,6 +1402,7 @@ function IconSettings(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy
 // doesn't fit in the 2-icon mobile bar (Dashboard/Insights/Data/Watchlist/
 // Settings). Standard horizontal-ellipsis "more" glyph.
 function IconMore(p) { return <svg {...ICON_PROPS} {...p}><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg>; }
+function IconDownload(p) { return <svg {...ICON_PROPS} {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>; }
 function IconHelp(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>; }
 function IconSun(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>; }
 function IconMoon(p) { return <svg {...ICON_PROPS} {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>; }
@@ -1486,7 +1487,7 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
             <div className="topnav__mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <span className="topnav__wordmark">Seli</span>
           </div>
-          {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}><IconLock style={{ width: 11, height: 11 }} /><span className="topnav__upgrade-label">Upgrade — {PRO_PRICE_LABEL}</span></button>}
+          {!pro && <button className="topnav__upgrade" onClick={() => onUpgrade('default')}><IconZap style={{ width: 12, height: 12, fill: 'currentColor', strokeWidth: 0 }} /><span className="topnav__upgrade-label">Upgrade — {PRO_PRICE_LABEL}</span></button>}
         </div>
         <nav className="topnav__links">
           {NAV_LINKS.map(n => (
@@ -4537,7 +4538,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           <h1 className="ws-page-title">Market Data</h1>
           <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
         </div>
-        <button className="data-export-btn" onClick={() => onUpgrade('data_export_direct')}><IconData style={{ width: 13, height: 13 }} /> Download Dataset</button>
+        <button className="data-export-btn" onClick={() => onUpgrade('data_export_direct')}><IconDownload style={{ width: 13, height: 13 }} /> Download Dataset</button>
       </div>
 
       {/* Stat strip */}
@@ -5455,7 +5456,6 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                           <div
                             className={`ip-rail-row${isActive ? ' ip-rail-row--active' : ''}`}
                             onClick={() => { setSelected(isActive && isMobile ? null : r); setTxExpanded(new Set()); }}>
-                            <span className="ip-rail-row__rank">{i + 1}</span>
                             <div className="ip-rail-row__info">
                               <div className="ip-rail-row__name">{r.insider_name}</div>
                               <div className="ip-rail-row__meta">
@@ -6775,7 +6775,6 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
                       if (isMobile) { setExpandedKey(k => k === r.insider_name ? null : r.insider_name); return; }
                       onOpenDetail && onOpenDetail({ type: 'trader', name: r.insider_name, title: r.insider_title });
                     }}>
-                    <div className="ins-lb-card__rank">{i + 1}</div>
                     <div className="ins-lb-card__body">
                       <div className="ins-lb-card__name dp-clickable">{r.insider_name}</div>
                       <div className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.insider_title || 'Unknown'}</div>
