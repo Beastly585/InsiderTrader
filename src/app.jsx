@@ -198,13 +198,8 @@ function WhileAwayBanner({ trades, onDismiss, onUpgrade, onOpenDetail }) {
 }
 
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
-// Beta pricing flag — flip to false when you're ready to end the founding
-// member rate. Beta is indefinite — no user cap.
-// update STRIPE_PRICE_PRO in your worker secrets to the $13.99 Price ID.
-const BETA_ACTIVE = true;
-const PRO_PRICE_DISPLAY = BETA_ACTIVE ? '$6.99' : '$13.99';
-const PRO_PRICE_LABEL = BETA_ACTIVE ? '$6.99/mo' : '$13.99/mo';
-const PRO_PRICE_FULL = '$13.99';
+const PRO_PRICE_DISPLAY = '$6.99';
+const PRO_PRICE_LABEL = '$6.99/mo';
 
 // Shown when a free user tries to use a Pro feature.
 // Comparison-table style, matching the reference layout's structure:
@@ -255,9 +250,9 @@ function UpgradeModal({ feature, pro, onClose }) {
   const subtitle = FEATURE_MESSAGES[feature] || FEATURE_MESSAGES.default;
 
   const OUTCOMES = [
-    { icon: '⭐', text: 'Pick the stocks, insiders, or politicians you care about' },
-    { icon: '📡', text: 'Seli monitors every SEC Form 4 filing — 24/7, automatically' },
-    { icon: '🔔', text: 'Get alerted the moment something happens — before the market reacts' },
+    { step: '1', text: 'Pick the stocks, insiders, or politicians you care about' },
+    { step: '2', text: 'Seli monitors every SEC Form 4 filing — 24/7, automatically' },
+    { step: '3', text: 'Get alerted the moment something happens — before the market reacts' },
   ];
 
   if (processing) {
@@ -347,15 +342,15 @@ function UpgradeModal({ feature, pro, onClose }) {
         {/* Narrative header */}
         <div className="upgrade-narrative__header">
           <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-          <h2 className="upgrade-narrative__title">Stop checking. Start knowing.</h2>
+          <h2 className="upgrade-narrative__title">Never miss a trade again</h2>
           <p className="upgrade-narrative__sub">{subtitle}</p>
         </div>
 
-        {/* Three outcome rows */}
+        {/* Three steps */}
         <div className="upgrade-narrative__outcomes">
           {OUTCOMES.map((o, i) => (
             <div className="upgrade-narrative__outcome" key={i}>
-              <span className="upgrade-narrative__outcome-icon">{o.icon}</span>
+              <span className="upgrade-narrative__step-num">{o.step}</span>
               <span className="upgrade-narrative__outcome-text">{o.text}</span>
             </div>
           ))}
@@ -363,36 +358,17 @@ function UpgradeModal({ feature, pro, onClose }) {
 
         {/* Price + CTA */}
         <div className="upgrade-narrative__cta-section">
-          <div className="upgrade-narrative__price-row">
-            {BETA_ACTIVE && <span className="upgrade-narrative__badge">Half off — forever</span>}
-            <span className="upgrade-narrative__price">
-              {BETA_ACTIVE && <span className="upgrade-hero__strike">{PRO_PRICE_FULL}</span>}
-              {PRO_PRICE_DISPLAY}<span className="upgrade-hero__per">/mo</span>
-            </span>
-          </div>
           <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('pro')}>
             Start watching — {PRO_PRICE_LABEL}
           </button>
         </div>
 
-        {/* Data export — horizontal tile (kept) */}
-        <div className="upgrade-hero__export-tile" onClick={() => setCheckoutProduct('data_export')}>
-          <div className="upgrade-hero__export-tile-left">
-            <span className="upgrade-hero__export-tile-label">Data Export</span>
-            <span className="upgrade-hero__export-tile-desc">Just need the dataset? Download and own it — no subscription.</span>
-            <ul className="upgrade-hero__export-tile-features">
-              <li><IconCheck style={{ width: 11, height: 11 }} />Complete Form 4 dataset</li>
-              <li><IconCheck style={{ width: 11, height: 11 }} />2010→present</li>
-              <li><IconCheck style={{ width: 11, height: 11 }} />CSV, instant download</li>
-            </ul>
-          </div>
-          <div className="upgrade-hero__export-tile-right">
-            <span className="upgrade-hero__export-tile-price">$39.99</span>
-            <span className="upgrade-hero__export-tile-per">one-time</span>
-            <button className="upgrade-hero__export-tile-btn" onClick={e => { e.stopPropagation(); setCheckoutProduct('data_export'); }}>
-              Download dataset →
-            </button>
-          </div>
+        {/* Data export — compact inline option */}
+        <div className="upgrade-narrative__alt-option" onClick={() => setCheckoutProduct('data_export')}>
+          <span className="upgrade-narrative__alt-text">Just need the raw data?</span>
+          <button className="upgrade-narrative__alt-btn" onClick={e => { e.stopPropagation(); setCheckoutProduct('data_export'); }}>
+            Download dataset — $39.99 one-time →
+          </button>
         </div>
 
         <div className="upgrade-modal__trust">
@@ -418,9 +394,7 @@ function getStripePromise() {
 const PRODUCT_COPY = {
   pro: {
     title: 'Upgrade to Pro', price: `${PRO_PRICE_DISPLAY}/month`, endpoint: '/billing/create-subscription',
-    subtitle: BETA_ACTIVE
-      ? `Lock in the founding member rate — ${PRO_PRICE_DISPLAY}/mo, half off forever.`
-      : 'Full insider data, real-time alerts, and your own portfolio — in one view.',
+    subtitle: 'Full insider data, real-time alerts, and your own watchlist — in one view.',
     features: ['Full historical data', 'Portfolio linking', 'Instant alerts'],
   },
   data_export: {
@@ -1403,6 +1377,7 @@ function IconZap(p) { return <svg {...ICON_PROPS} {...p}><polygon points="13 2 3
 // icon is the only real way to tell sections apart.
 function IconList(p) { return <svg {...ICON_PROPS} {...p}><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>; }
 function IconCompass(p) { return <svg {...ICON_PROPS} {...p}><circle cx="12" cy="12" r="10" /><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" /></svg>; }
+function IconLock(p) { return <svg {...ICON_PROPS} {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>; }
 
 const NAV = [
   { id: 'dashboard', Icon: IconHome, label: 'Dashboard' },
@@ -4103,7 +4078,7 @@ function NewsDrawer({ watchlist, filings, onClose }) {
             >
               <input type="checkbox" checked={myNewsOn && pro}
                 onChange={() => pro ? setMyNewsOn(v => !v) : watchlist?.setShowUpgrade?.('watchlist_ticker')} />
-              My news{!pro && <span className="settings-pro-badge" style={{ marginLeft: 5 }}>Pro</span>}
+              My news{!pro && <IconLock style={{ width: 10, height: 10, marginLeft: 5, verticalAlign: '-1px', opacity: 0.5 }} />}
             </label>
             <button className="btn btn--ghost btn--icon" onClick={onClose}><IconClose style={{ width: 12, height: 12 }} /></button>
           </div>
@@ -4359,10 +4334,10 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
               <div className="ws-pills">
                 <button className={`ws-pill ws-pill--sm${!myNews ? ' ws-pill--active' : ''}`}
                   onClick={() => setMyNews(false)}>All</button>
-                <button className={`ws-pill ws-pill--sm${myNews ? ' ws-pill--active' : ''}`}
-                  onClick={() => pro ? setMyNews(true) : null}
+                <button className={`ws-pill ws-pill--sm${myNews && pro ? ' ws-pill--active' : ''}${!pro ? ' ws-pill--locked' : ''}`}
+                  onClick={() => pro ? setMyNews(true) : onUpgrade('watchlist_ticker')}
                   title={pro ? 'News for your watchlist tickers and followed insiders' : 'Pro feature'}>
-                  {pro ? 'My news' : 'My news ✦'}
+                  {pro ? 'My news' : <><IconLock style={{ width: 10, height: 10, marginRight: 3, verticalAlign: '-1px' }} />My news</>}
                 </button>
               </div>
             </div>
@@ -4573,7 +4548,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                       if (!pro && (o.v === null || o.v > 7)) return null;
                       return <button key={o.l} className={`ws-pill${days === o.v ? ' ws-pill--active' : ''}`} onClick={() => setDays(o.v)}>{o.l}</button>;
                     })}
-                    {!pro && <button className="ws-pill ws-pill--locked" onClick={() => onUpgrade('full_history')}>More ↑</button>}
+                    {!pro && <button className="ws-pill ws-pill--locked" onClick={() => onUpgrade('full_history')}><IconLock style={{ width: 10, height: 10, marginRight: 3, verticalAlign: '-1px' }} />More</button>}
                   </div>
                 </div>
                 <div className="ws-filter-group">
@@ -7689,7 +7664,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
                     onClick={() => { setDPreset(p.d); setDateFrom(''); setDateTo(''); }}>{p.l}</button>
                 );
               })}
-              {!pro && <button className="dash-tile-pill dash-tile-pill--locked" onClick={() => onUpgrade && onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{ marginLeft: 3, fontSize: '0.5rem' }}>Pro</span></button>}
+              {!pro && <button className="dash-tile-pill dash-tile-pill--locked" onClick={() => onUpgrade && onUpgrade('full_history')}><IconLock style={{ width: 10, height: 10, marginRight: 3, verticalAlign: '-1px' }} />All</button>}
             </div>
           </div>
           <div className="drawer__toolbar-divider" />
@@ -7962,7 +7937,7 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
                 </button>
               );
             })}
-            {!pro && <button className="pill dash-tile-pill--locked" onClick={() => onUpgrade('full_history')}>All <span className="settings-pro-badge" style={{ marginLeft: 3, fontSize: '0.5rem' }}>Pro</span></button>}
+            {!pro && <button className="pill dash-tile-pill--locked" onClick={() => onUpgrade('full_history')}><IconLock style={{ width: 10, height: 10, marginRight: 3, verticalAlign: '-1px' }} />All</button>}
           </div>
           {!isMobile && (
             <>
@@ -8432,52 +8407,133 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   const emptyNow = tab === 'tickers' ? watchedTickers.length === 0 : watchedInsiders.length === 0;
   const allEmpty = watchedTickers.length === 0 && watchedInsiders.length === 0;
 
-  // FREE USER — limited watchlist with upgrade nudge
+  // FREE USER — shows the same layout as Pro but with locked sections
   if (!pro) return (
     <div className="ws-page">
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 20 }}>
         <h1 className="ws-page-title">Watchlist</h1>
-        <p className="ws-page-sub">Track stocks you own or want to own. Star any ticker from the dashboard to add it here.</p>
+        <div className="wl-free-slots" style={{ marginTop: 8 }}>
+          <span className="wl-free-slots__count">{watchedTickers.length}/{FREE_WATCHLIST_LIMIT} free slots used</span>
+          {watchedTickers.length >= FREE_WATCHLIST_LIMIT && (
+            <button className="wl-free-slots__upgrade" onClick={() => watchlist.setShowUpgrade('watchlist_ticker')}>
+              Unlock unlimited →
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Free slots indicator */}
-      <div className="wl-free-slots">
-        <span className="wl-free-slots__count">{watchedTickers.length}/{FREE_WATCHLIST_LIMIT} free slots used</span>
-        {watchedTickers.length >= FREE_WATCHLIST_LIMIT && (
-          <button className="wl-free-slots__upgrade" onClick={() => watchlist.setShowUpgrade('watchlist_ticker')}>
-            Unlock unlimited →
-          </button>
-        )}
+      {/* Portfolio tile — locked/greyed */}
+      <div className="ws-tile wl-locked-tile" style={{ marginBottom: 16 }} onClick={() => watchlist.setShowUpgrade('portfolio')}>
+        <div className="wl-locked-overlay">
+          <IconLock style={{ width: 16, height: 16, marginBottom: 4 }} />
+          <span>Portfolio linking</span>
+          <span className="wl-locked-overlay__sub">Connect your brokerage to see insider trades on stocks you own</span>
+        </div>
+        <div className="wl-locked-placeholder" style={{ height: 140 }} />
       </div>
 
-      {/* Show watched tickers with activity data */}
-      {watchedTickers.length > 0 ? (
-        <div className="ws-tile" style={{ marginTop: 12 }}>
+      {/* Ticker table + Recent activity — same layout as Pro */}
+      <div className="ws-wl-bottom" style={{ marginBottom: 16 }}>
+        {/* Left: ticker table — functional for watched tickers */}
+        <div className="ws-tile wl-list-tile">
           <div className="ws-tile__hdr">
-            <div className="ws-tile__hdr-left">
-              <span className="ws-tile__title">Your watched tickers</span>
+            <div className="ws-pills" style={{ gap: 0 }}>
+              <button className="ws-pill ws-pill--tab ws-pill--active">
+                Tickers{watchedTickers.length > 0 && <span className="ws-tile__count" style={{ marginLeft: 5 }}>{watchedTickers.length}</span>}
+              </button>
+              <button className="ws-pill ws-pill--tab ws-pill--locked" onClick={() => watchlist.setShowUpgrade('watchlist_insider')}>
+                <IconLock style={{ width: 9, height: 9, marginRight: 3 }} />Insiders
+              </button>
             </div>
           </div>
-          <div style={{ padding: '12px 16px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {watchedTickers.map(t => (
-              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'var(--surface-2)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--border)' }}>
-                <span className="ticker">{t}</span>
-                <StarBtn ticker={t} watchlist={watchlist} />
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="wl-empty-free">
-          <p className="wl-empty-free__text">Star any stock from the dashboard to start watching it. You'll see it here with recent insider activity.</p>
-        </div>
-      )}
 
-      {/* Pro upsell — compact, not a wall */}
-      <div className="wl-upsell-compact">
+          {watchedTickers.length === 0 ? (
+            <div className="ws-empty">Star any ticker from the dashboard to start tracking it here.</div>
+          ) : (
+            <>
+              <div className="ws-col-hdrs ws-col-hdrs--wl">
+                <button className="ws-col-sort">Ticker · Company</button>
+                <button className="ws-col-sort">Last activity</button>
+                <button className="ws-col-sort ws-col-sort--right">Net flow</button>
+              </div>
+              <div>
+                {sortedTickerRows.map(s => {
+                  const lastType = s.lastTradeType;
+                  return (
+                    <div key={s.ticker} className="ws-data-row ws-data-row--clickable"
+                      onClick={() => onOpenDetail({ type: 'ticker', ticker: s.ticker, company: s.company, expand: true })}>
+                      <div className="ws-data-row__main ws-row__main--wl">
+                        <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
+                            <StarBtn ticker={s.ticker} watchlist={watchlist} />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <span className="ticker">{s.ticker}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.company}</div>
+                          </div>
+                        </div>
+                        <div className="ws-data-row__cell">
+                          {s.lastTradeDate ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{fmt.ago(s.lastTradeDate)}</span>
+                              {lastType && <span className={`wl-feed__badge wl-feed__badge--${lastType === 'buy' ? 'buy' : 'sell'}`}>{lastType === 'buy' ? 'Buy' : 'Sell'}</span>}
+                            </div>
+                          ) : <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{loading ? 'Loading…' : '—'}</span>}
+                        </div>
+                        <div className="ws-data-row__cell ws-data-row__cell--right">
+                          <span className={`ws-data-mono${s.netValue >= 0 ? ' val-buy' : ' val-sell'}`} style={{ fontSize: 12 }}>
+                            {s.netValue >= 0 ? '+' : ''}{fmt.money(s.netValue)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Right: Recent activity — locked/greyed */}
+        <div className="ws-tile wl-locked-tile" onClick={() => watchlist.setShowUpgrade('notifications')}>
+          <div className="wl-locked-overlay">
+            <IconLock style={{ width: 14, height: 14, marginBottom: 4 }} />
+            <span>Recent activity feed</span>
+          </div>
+          <div className="ws-tile__hdr" style={{ opacity: 0.3, pointerEvents: 'none' }}>
+            <div className="ws-tile__hdr-left">
+              <span className="ws-tile__title">Recent activity</span>
+            </div>
+          </div>
+          <div className="wl-locked-placeholder" style={{ height: 180 }} />
+        </div>
+      </div>
+
+      {/* Alert settings — locked/greyed */}
+      <div style={{ marginTop: 16 }}>
+        <div className="ws-tile wl-locked-tile" onClick={() => watchlist.setShowUpgrade('notifications')}>
+          <div className="wl-locked-overlay">
+            <IconLock style={{ width: 14, height: 14, marginBottom: 4 }} />
+            <span>Alert settings</span>
+            <span className="wl-locked-overlay__sub">Email digests and instant alerts when insiders trade your watched stocks</span>
+          </div>
+          <div className="ws-tile__hdr" style={{ opacity: 0.3, pointerEvents: 'none' }}>
+            <div className="ws-tile__hdr-left">
+              <span className="ws-tile__title">Alert settings</span>
+              <span className="ws-tile__sub">Email alerts for your watchlist</span>
+            </div>
+          </div>
+          <div className="wl-locked-placeholder" style={{ height: 100 }} />
+        </div>
+      </div>
+
+      {/* Compact Pro upsell */}
+      <div className="wl-upsell-compact" style={{ marginTop: 16 }}>
         <div className="wl-upsell-compact__content">
-          <span className="wl-upsell-compact__title">Want more?</span>
-          <span className="wl-upsell-compact__sub">Pro: unlimited tickers, instant alerts, portfolio linking, and full insider deep-dives.</span>
+          <span className="wl-upsell-compact__title">Unlock the full watchlist</span>
+          <span className="wl-upsell-compact__sub">Unlimited tickers, insider following, portfolio linking, instant alerts, and full history.</span>
         </div>
         <button className="wl-upsell-compact__cta" onClick={() => watchlist.setShowUpgrade('watchlist_ticker')}>
           Go Pro — {PRO_PRICE_LABEL}
@@ -9073,7 +9129,7 @@ const HELP_SECTIONS = [
     render: () => (
       <>
         <h3>What does Pro include?</h3>
-        <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests{BETA_ACTIVE ? `, for ${PRO_PRICE_DISPLAY} per month (founding member rate — normally ${PRO_PRICE_FULL}/mo)` : `, for ${PRO_PRICE_FULL} per month`}.</p>
+        <p>Full historical data (not just the last 7 days), watchlists, portfolio linking, and instant alerts or email digests, for {PRO_PRICE_DISPLAY} per month.</p>
         <h3>What's the Full Data Export?</h3>
         <p>A separate, one-time $39.99 purchase: a complete pull of the database as a spreadsheet, independent of a Pro subscription. Each purchase includes one download. If you need it again later, use Re-download in Settings &gt; Billing at no extra charge (this pulls current data, not a frozen copy from your original purchase date).</p>
         <h3>How do I cancel Pro?</h3>
