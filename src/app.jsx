@@ -4178,6 +4178,8 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
   const [sigDir, setSigDir] = useState(-1);
   const [filSort, setFilSort] = useState('date');
   const [filDir, setFilDir] = useState(-1);
+  const [expandedFil, setExpandedFil] = useState(null); // index of expanded filing row
+  const [expandedSig, setExpandedSig] = useState(null); // ticker of expanded signal row
 
   const cutoff = useMemo(() => {
     const d = new Date(); d.setDate(d.getDate() - sigDays);
@@ -4278,16 +4280,36 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
             <div style={{ maxHeight: 240, overflowY: 'auto', overflowX: 'hidden' }}>
               {loading ? <SkeletonRows count={5} /> : recentFilings.map((f, i) => {
                 const isBuy = f.transactionType === 'buy';
+                const isExp = expandedFil === i;
+                const su = secFilingUrl(f.accessionNumber, f.cikIssuer);
                 return (
-                  <div key={i} className="ws-fil-compact-row" onClick={() => onOpenDetail({ type: 'ticker', ticker: f.ticker, company: f.company })}
+                  <div key={i} className={`ws-fil-compact-row${isExp ? ' ws-fil-compact-row--open' : ''}`}
                     style={{ borderLeft: `3px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
-                    <div className="ws-fil-compact-row__ticker">
-                      <span className="ticker">{f.ticker}</span>
+                    <div className="ws-fil-compact-row__main" onClick={() => setExpandedFil(isExp ? null : i)}>
+                      <div className="ws-fil-compact-row__ticker">
+                        <span className="ws-row__chevron" style={{ fontSize: 9, marginRight: 3 }}>{isExp ? '▾' : '▸'}</span>
+                        <span className="ticker">{f.ticker}</span>
+                      </div>
+                      <div className="ws-fil-compact-row__insider">{f.insiderName?.split(' ').slice(0, 2).join(' ')}</div>
+                      <div className="ws-fil-compact-row__date">{fmt.dateShort(f.transactionDate || f.date)}</div>
+                      <div className="ws-fil-compact-row__type"><span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span></div>
+                      <div className="ws-fil-compact-row__val"><span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</span></div>
                     </div>
-                    <div className="ws-fil-compact-row__insider">{f.insiderName?.split(' ').slice(0, 2).join(' ')}</div>
-                    <div className="ws-fil-compact-row__date">{fmt.dateShort(f.transactionDate || f.date)}</div>
-                    <div className="ws-fil-compact-row__type"><span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span></div>
-                    <div className="ws-fil-compact-row__val"><span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</span></div>
+                    {isExp && (
+                      <div className="ws-home-expand" onClick={e => e.stopPropagation()}>
+                        <div className="ws-home-expand__grid">
+                          <div><span className="ws-data-label">Insider</span><div className="ws-home-expand__val">{f.insiderName}</div></div>
+                          <div><span className="ws-data-label">Title</span><div className="ws-home-expand__val">{f.title || '—'}</div></div>
+                          <div><span className="ws-data-label">Shares</span><div className="ws-home-expand__val">{f.shares ? fmt.number(f.shares) : '—'}</div></div>
+                          <div><span className="ws-data-label">Price</span><div className="ws-home-expand__val">{f.pricePerShare ? '$' + Number(f.pricePerShare).toFixed(2) : '—'}</div></div>
+                          <div><span className="ws-data-label">Sector</span><div className="ws-home-expand__val">{f.sector || '—'}</div></div>
+                          {su && <div><span className="ws-data-label">Filing</span><a href={su} target="_blank" rel="noopener noreferrer" className="ws-sec-link">SEC ↗</a></div>}
+                        </div>
+                        <div className="ws-home-expand__actions">
+                          <button className="ws-home-expand__more" onClick={() => onOpenDetail({ type: 'ticker', ticker: f.ticker, company: f.company })}>View {f.ticker} details →</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -4330,25 +4352,45 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
                     const isBuy = s.direction !== 'sell';
                     const hasRev = detectReversalForTicker(s.ticker, filings);
                     const totalMoves = (s.buys || 0) + (s.sells || 0);
+                    const isExp = expandedSig === s.ticker;
                     return (
-                      <div key={s.ticker} className="ws-sig-compact-row" onClick={() => onOpenDetail({ type: 'signal', ...s })}
+                      <div key={s.ticker} className={`ws-sig-compact-row${isExp ? ' ws-sig-compact-row--open' : ''}`}
                         style={{ borderLeft: `3px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
-                        <div className="ws-sig-compact-row__left">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 2 }}>
-                            <span className="ticker">{s.ticker}</span>
-                            {hasRev && <span className="reversal-badge" style={{ fontSize: 9 }}><IconReversal className="reversal-badge__icon" />rev</span>}
-                            <StarBtn ticker={s.ticker} watchlist={watchlist} />
+                        <div className="ws-sig-compact-row__main" onClick={() => setExpandedSig(isExp ? null : s.ticker)}>
+                          <div className="ws-sig-compact-row__left">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 2 }}>
+                              <span className="ws-row__chevron" style={{ fontSize: 9 }}>{isExp ? '▾' : '▸'}</span>
+                              <span className="ticker">{s.ticker}</span>
+                              {hasRev && <span className="reversal-badge" style={{ fontSize: 9 }}><IconReversal className="reversal-badge__icon" />rev</span>}
+                              <div onClick={e => e.stopPropagation()}><StarBtn ticker={s.ticker} watchlist={watchlist} /></div>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 18 }}>{s.company}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 18 }}>
+                              {!isMobile && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{totalMoves} move{totalMoves !== 1 ? 's' : ''} · {s.insiderCount} insider{s.insiderCount !== 1 ? 's' : ''}</span>}
+                              <ConvictionBar score={s.conviction} max={100} showLabel />
+                            </div>
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.company}</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {!isMobile && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{totalMoves} move{totalMoves !== 1 ? 's' : ''} · {s.insiderCount} insider{s.insiderCount !== 1 ? 's' : ''}</span>}
-                            <ConvictionBar score={s.conviction} max={100} showLabel />
+                          <div className="ws-sig-compact-row__right">
+                            <div className={`ws-sig-row__val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{fmt.ago(s.lastTradeDate)}</div>
                           </div>
                         </div>
-                        <div className="ws-sig-compact-row__right">
-                          <div className={`ws-sig-row__val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div>
-                          <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{fmt.ago(s.lastTradeDate)}</div>
-                        </div>
+                        {isExp && (
+                          <div className="ws-home-expand" onClick={e => e.stopPropagation()}>
+                            <div className="ws-home-expand__grid">
+                              <div><span className="ws-data-label">Last trade</span><div className="ws-home-expand__val">{fmt.dateShort(s.lastTradeDate)}</div></div>
+                              <div><span className="ws-data-label">Net flow</span><div className={`ws-home-expand__val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div></div>
+                              <div><span className="ws-data-label">Insiders</span><div className="ws-home-expand__val">{s.insiderCount}</div></div>
+                              <div><span className="ws-data-label">Moves</span><div className="ws-home-expand__val">{totalMoves}</div></div>
+                              <div><span className="ws-data-label">Sector</span><div className="ws-home-expand__val">{s.sector || '—'}</div></div>
+                              <div><span className="ws-data-label">Conviction</span><div className="ws-home-expand__val">{Math.round(s.conviction)}</div></div>
+                              {s.avgReturn != null && <div><span className="ws-data-label">Since trade</span><div className={`ws-home-expand__val${s.avgReturn >= 0 ? ' val-buy' : ' val-sell'}`}>{s.avgReturn >= 0 ? '+' : ''}{s.avgReturn.toFixed(1)}%</div></div>}
+                            </div>
+                            <div className="ws-home-expand__actions">
+                              <button className="ws-home-expand__more" onClick={() => { onSeeAll('dashboard'); }}>View on Data tab →</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
