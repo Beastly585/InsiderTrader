@@ -2149,6 +2149,16 @@ td { padding:7px 11px; vertical-align:middle; }
   .ins-lb-card .ins-sig-row__expanded { flex: 1 1 100%; }
 }
 
+/* Insider leaderboard upgrade nudge */
+.ins-lb-upgrade-nudge {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; padding: 10px 0; margin-top: 4px;
+  background: none; border: 1px dashed var(--border-md); border-radius: var(--radius);
+  font: inherit; font-size: 0.75rem; font-weight: 600; color: var(--text-3);
+  cursor: pointer; transition: color 0.12s, border-color 0.12s;
+}
+.ins-lb-upgrade-nudge:hover { color: var(--accent-strong); border-color: var(--accent-strong); }
+
 /* Sector squares chart */
 .ins-sector-chart {
   background: var(--surface); border: 0.5px solid var(--border);

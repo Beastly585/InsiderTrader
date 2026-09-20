@@ -1670,6 +1670,26 @@ async function handleQuery(request, env, origin) {
       query = query.replace(/>=\s*'(\d{4}-\d{2}-\d{2})'/g, (match, dateStr) => {
         return dateStr < floorStr ? `>= '${floorStr}'` : match;
       });
+
+      // Also catch `CURRENT_DATE - INTERVAL 'N years/months/days'` expressions.
+      // The leaderboard query uses this syntax instead of literal dates, so the
+      // regex above misses it. Clamp any interval older than 1 year to 1 year.
+      query = query.replace(
+        /CURRENT_DATE\s*-\s*INTERVAL\s*'(\d+)\s*(year|month|day|week)s?'/gi,
+        (match, amount, unit) => {
+          const n = parseInt(amount, 10);
+          const unitLower = unit.toLowerCase();
+          // Convert everything to approximate days for comparison
+          const days = unitLower === 'year' ? n * 365
+            : unitLower === 'month' ? n * 30
+            : unitLower === 'week' ? n * 7
+            : n; // day
+          if (days > 365) {
+            return `CURRENT_DATE - INTERVAL '365 days'`;
+          }
+          return match;
+        }
+      );
     }
   }
 

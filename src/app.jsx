@@ -249,11 +249,48 @@ function UpgradeModal({ feature, pro, onClose }) {
   };
   const subtitle = FEATURE_MESSAGES[feature] || FEATURE_MESSAGES.default;
 
-  const OUTCOMES = [
-    { step: '1', text: 'Pick the stocks, insiders, or politicians you care about' },
-    { step: '2', text: 'Seli monitors every SEC Form 4 filing — 24/7, automatically' },
-    { step: '3', text: 'Get alerted the moment something happens — before the market reacts' },
-  ];
+  // Modal variants — same shell, different narrative based on what triggered it.
+  // "Never miss a trade" for watchlist/alert triggers, "See the full picture"
+  // for data/history triggers, "Make it yours" for portfolio/personalization.
+  const MODAL_VARIANTS = {
+    alert: {
+      title: 'Never miss a trade again',
+      outcomes: [
+        { step: '1', text: 'Pick the stocks, insiders, or politicians you care about' },
+        { step: '2', text: 'Seli monitors every SEC Form 4 filing — 24/7, automatically' },
+        { step: '3', text: 'Get alerted the moment something happens — before the market reacts' },
+      ],
+      cta: 'Start watching',
+    },
+    data: {
+      title: 'See the full picture',
+      outcomes: [
+        { step: '1', text: 'Free shows 12 months of filings — Pro unlocks data back to 2010' },
+        { step: '2', text: 'Filter by insider, sector, trade size, and conviction score' },
+        { step: '3', text: 'Spot the patterns that only show up over years, not weeks' },
+      ],
+      cta: 'Unlock full data',
+    },
+    personalize: {
+      title: 'Make it yours',
+      outcomes: [
+        { step: '1', text: 'Link your brokerage — Seli watches every stock you already own' },
+        { step: '2', text: 'Follow specific insiders and get notified when they file' },
+        { step: '3', text: 'Your watchlist, your alerts, your edge — all in one view' },
+      ],
+      cta: 'Personalize Seli',
+    },
+  };
+
+  // Map each feature key to the right variant
+  const FEATURE_TO_VARIANT = {
+    watchlist_ticker: 'alert', watchlist_insider: 'alert', notifications: 'alert', alerts: 'alert', default: 'alert',
+    full_history: 'data', data_explorer: 'data', insider_detail: 'data',
+    portfolio: 'personalize', watchlist_limit: 'personalize',
+  };
+
+  const variant = MODAL_VARIANTS[FEATURE_TO_VARIANT[feature] || 'alert'];
+  const OUTCOMES = variant.outcomes;
 
   if (processing) {
     return <ProcessingModal text={progressText || (checkoutProduct === 'pro' ? 'Setting up your subscription…' : 'Finalizing your purchase…')} />;
@@ -342,7 +379,7 @@ function UpgradeModal({ feature, pro, onClose }) {
         {/* Narrative header */}
         <div className="upgrade-narrative__header">
           <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-          <h2 className="upgrade-narrative__title">Never miss a trade again</h2>
+          <h2 className="upgrade-narrative__title">{variant.title}</h2>
           <p className="upgrade-narrative__sub">{subtitle}</p>
         </div>
 
@@ -359,7 +396,7 @@ function UpgradeModal({ feature, pro, onClose }) {
         {/* Price + CTA */}
         <div className="upgrade-narrative__cta-section">
           <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('pro')}>
-            Start watching — {PRO_PRICE_LABEL}
+            {variant.cta} — {PRO_PRICE_LABEL}
           </button>
         </div>
 
@@ -5273,13 +5310,13 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
       <div className="ws-tile" style={{ marginBottom: 16 }}>
         <div className="ws-filter-bar">
           <div className="ws-filter-bar__row">
-            <div className="ws-search-wrap" style={{ maxWidth: 200 }}>
+            {pro ? <div className="ws-search-wrap" style={{ maxWidth: 200 }}>
               <span className="ws-search-icon">⌕</span>
               <input className="ws-search-input" value={search}
                 onChange={e => setSearch(e.target.value)} placeholder="Search…" />
               {search && <button className="ws-search-clear" onClick={() => setSearch('')}>×</button>}
-            </div>
-            <div className="ws-filter-group">
+            </div> : <div style={{ fontSize: 11, color: 'var(--text-3)', padding: '4px 0' }}>Showing top 10 · <button className="free-tier-note__link" onClick={() => { if (window.__seliUpgrade) window.__seliUpgrade('insider_detail'); }}>Upgrade</button> for full leaderboard with filters</div>}
+            {pro && <div className="ws-filter-group">
               <span className="ws-filter-label">Window</span>
               <div className="ws-pills" style={{ gap: 3 }}>
                 {[{ v: 1, l: '1yr' }, { v: 2, l: '2yr' }, { v: 5, l: '5yr' }, { v: null, l: 'All' }].map(o => (
@@ -5287,8 +5324,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     onClick={() => setYearsBack(o.v)}>{o.l}</button>
                 ))}
               </div>
-            </div>
-            <div className="ws-filter-group">
+            </div>}
+            {pro && <div className="ws-filter-group">
               <span className="ws-filter-label">Source</span>
               <div className="ws-pills" style={{ gap: 3 }}>
                 {[[null, 'All'], ['corporate', 'Corp'], ['congress', 'Cong']].map(([v, l]) => (
@@ -5296,8 +5333,8 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     onClick={() => setLbSource(v)}>{l}</button>
                 ))}
               </div>
-            </div>
-            <div className="ws-filter-group">
+            </div>}
+            {pro && <div className="ws-filter-group">
               <span className="ws-filter-label">Role</span>
               <div className="ws-pills" style={{ gap: 3 }}>
                 {[['', 'All'], ['strong', 'C-Suite'], ['medium', 'Officer']].map(([v, l]) => (
@@ -5305,12 +5342,12 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                     onClick={() => setRoleFilter(v)}>{l}</button>
                 ))}
               </div>
-            </div>
-            <button className="ip-rail__filter-more" onClick={() => setFiltersOpen(f => !f)}>
+            </div>}
+            {pro && <button className="ip-rail__filter-more" onClick={() => setFiltersOpen(f => !f)}>
               {filtersOpen ? 'Less ▴' : 'More ▾'}
-            </button>
+            </button>}
           </div>
-          {filtersOpen && <div className="ws-filter-bar__row">
+          {pro && filtersOpen && <div className="ws-filter-bar__row">
             <div className="ws-filter-group" style={{ borderLeft: 'none', paddingLeft: 0 }}>
               <span className="ws-filter-label">Direction</span>
               <div className="ws-pills" style={{ gap: 3 }}>
@@ -5379,7 +5416,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
               : rows === null ? <SkeletonRows count={15} />
                 : lbLoading && sorted.length === 0 ? <SkeletonRows count={8} />
                   : sorted.length === 0 ? <div className="ws-empty" style={{ fontSize: 11 }}>No results{search ? ' for "' + search + '"' : ''}.</div>
-                    : sorted.map((r, i) => {
+                    : (pro ? sorted : sorted.slice(0, 10)).map((r, i) => {
                       const isActive = selected?.insider_name === r.insider_name;
                       const role = insiderRoleLabel(r);
                       // Show the metric matching the current sort column
@@ -5462,6 +5499,11 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
                         </div>
                       );
                     })}
+                    {!pro && sorted.length > 10 && (
+                      <button className="ins-lb-upgrade-nudge" onClick={() => { if (window.__seliUpgrade) window.__seliUpgrade('insider_detail'); }}>
+                        <IconLock style={{ width: 11, height: 11, marginRight: 4, verticalAlign: '-1px' }} />See all {sorted.length} insiders
+                      </button>
+                    )}
           </div>
         </div>
 
@@ -5927,7 +5969,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
                   <button key={o.l} className={`dash-tile-pill${daysBack === o.v ? ' dash-tile-pill--active' : ''}`}
                     onClick={() => { setDaysBack(o.v); ensureFilingsWindow && ensureFilingsWindow(o.v); }}>{o.l}</button>
                 )) : (
-                  <button className="dash-tile-pill dash-tile-pill--locked" onClick={() => { }}>More <span className="settings-pro-badge" style={{ marginLeft: 3, fontSize: '0.5rem' }}>Pro</span></button>
+                  <button className="dash-tile-pill dash-tile-pill--locked" onClick={() => { if (window.__seliUpgrade) window.__seliUpgrade('full_history'); }}><IconLock style={{ width: 10, height: 10, marginRight: 3, verticalAlign: '-1px' }} />More</button>
                 )}
               </div>
             </div>
@@ -6671,7 +6713,7 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
     return [...rows].sort((a, b) => {
       const av = a[sort] ?? -Infinity, bv = b[sort] ?? -Infinity;
       return dir > 0 ? av - bv : bv - av;
-    }).slice(0, 20); // sidebar preview — only show top 20
+    }).slice(0, pro ? 20 : 10); // sidebar: top 20 for Pro, top 10 for free
   }, [rows, sort, dir]);
   function onSortClick(col) { if (sort === col) setDir(d => -d); else { setSort(col); setDir(-1); } }
   const isMobile = useIsMobile();
@@ -6748,6 +6790,11 @@ function InsiderLeaderboardSidebar({ onOpenDetail, watchlist, pro, expandedHome 
                   </div>
                 );
               })}
+              {!pro && sorted.length >= 10 && (
+                <button className="ins-lb-upgrade-nudge" onClick={() => { if (window.__seliUpgrade) window.__seliUpgrade('insider_detail'); }}>
+                  <IconLock style={{ width: 11, height: 11, marginRight: 4, verticalAlign: '-1px' }} />See full leaderboard
+                </button>
+              )}
             </div>}
     </div>
   );
