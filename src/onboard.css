@@ -255,7 +255,16 @@
 .ob-welcome__headline--glow {
   background:
     radial-gradient(circle 140px at var(--mx) var(--my),
-      var(--accent) 0%, var(--aqua) 35%, transparent 70%),
+      var(--aqua) 0%, var(--green-600) 35%, transparent 70%),
+    var(--text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+:root[data-theme="light"] .ob-welcome__headline--glow {
+  background:
+    radial-gradient(circle 140px at var(--mx) var(--my),
+      var(--accent) 0%, #8B5CF6 35%, transparent 70%),
     var(--text);
   -webkit-background-clip: text;
   background-clip: text;
@@ -632,6 +641,32 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Detail panel (shared explanation below the filing card) */
+.ob-filing__detail {
+  margin-top: 16px;
+  padding: 16px 20px;
+  min-height: 56px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+}
+.ob-filing__detail p {
+  font: 400 13px/1.55 var(--font);
+  color: var(--text-3);
+  margin: 0;
+  animation: ob-detail-fade 0.25s ease;
+}
+.ob-filing__detail--active p {
+  color: var(--text-2);
+}
+
+@keyframes ob-detail-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Score builder panel */
 .ob-score-builder {
   background: var(--surface);
@@ -798,43 +833,46 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   STEP 5 — Data Map
+   STEP 5 — Data Map (nav-style list)
    ═══════════════════════════════════════════════════════════════════════════════ */
-.ob-datamap__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-@media (max-width: 520px) {
-  .ob-datamap__grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.ob-datamap__card {
+.ob-datamap__nav {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  padding: 22px 24px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  padding: 6px;
+  gap: 2px;
+}
+
+.ob-datamap__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s;
+  transition: background 0.15s;
   color: var(--text);
   font-family: var(--font);
 }
-.ob-datamap__card:hover {
-  border-color: var(--border-md);
+.ob-datamap__item:hover {
   background: var(--surface-2);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
-.ob-datamap__card--active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(124, 111, 255, 0.1);
+.ob-datamap__item--active {
+  background: var(--accent-50);
+}
+.ob-datamap__item--active .ob-datamap__icon {
+  background: var(--accent);
+  color: #fff;
+}
+.ob-datamap__item--active .ob-datamap__arrow {
+  color: var(--accent);
+  transform: translateX(2px);
 }
 
 .ob-datamap__icon {
@@ -846,35 +884,52 @@
   border-radius: 10px;
   background: var(--accent-50);
   color: var(--accent);
-  margin-bottom: 12px;
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s;
+}
+
+.ob-datamap__item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .ob-datamap__title {
-  font: 600 14px/1 var(--font);
+  font: 600 14px/1.2 var(--font);
   color: var(--text);
 }
 
 .ob-datamap__tagline {
   font: 400 12px/1.4 var(--font);
   color: var(--text-3);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
-.ob-datamap__desc {
-  font: 400 13px/1.5 var(--font);
-  color: var(--text-2);
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  margin-top: 0;
-  transition: max-height 0.35s cubic-bezier(0.22, 1, 0.36, 1),
-              opacity 0.25s ease 0.05s,
-              margin-top 0.25s ease;
+.ob-datamap__arrow {
+  color: var(--text-3);
+  flex-shrink: 0;
+  transition: color 0.15s, transform 0.15s;
 }
-.ob-datamap__card--active .ob-datamap__desc {
-  max-height: 120px;
-  opacity: 1;
-  margin-top: 10px;
+
+.ob-datamap__detail {
+  margin-top: 16px;
+  padding: 16px 20px;
+  min-height: 56px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+}
+.ob-datamap__detail p {
+  font: 400 13px/1.55 var(--font);
+  color: var(--text-3);
+  margin: 0;
+  animation: ob-detail-fade 0.25s ease;
+}
+.ob-datamap__detail--active p {
+  color: var(--text-2);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════

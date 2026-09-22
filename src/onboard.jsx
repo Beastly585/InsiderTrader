@@ -392,12 +392,6 @@ function StepReadingFiling({ onNext }) {
                       )}
                     </span>
                   </div>
-                  {isNextUp && !isActive && revealedFactors.size === 0 && (
-                    <span className="ob-hotspot__hint">Click to explore</span>
-                  )}
-                  {isActive && (
-                    <div className="ob-hotspot__tooltip">{hs.tooltip}</div>
-                  )}
                 </button>
               );
             })}
@@ -422,6 +416,16 @@ function StepReadingFiling({ onNext }) {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className={`ob-filing__detail${activeHotspot ? ' ob-filing__detail--active' : ''}`}>
+        <p key={activeHotspot || 'empty'}>
+          {activeHotspot
+            ? hotspots.find(h => h.id === activeHotspot)?.tooltip
+            : revealedFactors.size === hotspots.length
+            ? 'All factors revealed — every data point feeds the conviction score.'
+            : 'Click a field above to see how it affects the score'}
+        </p>
       </div>
 
       <button className="ob-cta" onClick={onNext}>
@@ -522,21 +526,33 @@ function StepDataMap({ onNext }) {
         <h2 className="ob-step__title">Where the data lives</h2>
         <p className="ob-step__subtitle">Four sections, each with a different job. Hover or tap to preview.</p>
       </div>
-      <div className="ob-datamap__grid">
-        {sections.map(sec => (
-          <button
-            key={sec.id}
-            className={`ob-datamap__card${activeSection === sec.id ? ' ob-datamap__card--active' : ''}`}
-            onClick={() => setActiveSection(activeSection === sec.id ? null : sec.id)}
-            onMouseEnter={() => setActiveSection(sec.id)}
-            onMouseLeave={() => setActiveSection(null)}
-          >
-            <span className="ob-datamap__icon"><sec.Icon size={20} /></span>
-            <span className="ob-datamap__title">{sec.title}</span>
-            <span className="ob-datamap__tagline">{sec.tagline}</span>
-            <p className="ob-datamap__desc">{sec.description}</p>
-          </button>
-        ))}
+      <div className="ob-datamap__nav">
+        {sections.map(sec => {
+          const isActive = activeSection === sec.id;
+          return (
+            <button
+              key={sec.id}
+              className={`ob-datamap__item${isActive ? ' ob-datamap__item--active' : ''}`}
+              onClick={() => setActiveSection(isActive ? null : sec.id)}
+              onMouseEnter={() => setActiveSection(sec.id)}
+              onMouseLeave={() => setActiveSection(null)}
+            >
+              <span className="ob-datamap__icon"><sec.Icon size={20} /></span>
+              <span className="ob-datamap__item-text">
+                <span className="ob-datamap__title">{sec.title}</span>
+                <span className="ob-datamap__tagline">{sec.tagline}</span>
+              </span>
+              <IconChevronRight size={14} className="ob-datamap__arrow" />
+            </button>
+          );
+        })}
+      </div>
+      <div className={`ob-datamap__detail${activeSection ? ' ob-datamap__detail--active' : ''}`}>
+        <p key={activeSection || 'empty'}>
+          {activeSection
+            ? sections.find(s => s.id === activeSection)?.description
+            : 'Hover or tap a section to preview'}
+        </p>
       </div>
       <button className="ob-cta" onClick={onNext}>
         Next: Build your watchlist <IconArrowRight size={16} />
