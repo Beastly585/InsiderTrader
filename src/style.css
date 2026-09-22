@@ -7864,22 +7864,23 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
   margin: 0 0 16px;
   max-width: 600px;
   letter-spacing: -0.02em;
-  /* Gradient text sweep on hover */
-  background: linear-gradient(
-    135deg,
-    var(--text) 0%, var(--text) 33%,
-    var(--accent) 40%, var(--aqua) 55%, var(--green-600) 70%,
-    var(--text) 77%, var(--text) 100%
-  );
-  background-size: 300% 100%;
-  background-position: 100% 0%;
+  /* Mouse-following radial gradient — JS sets --mx, --my */
+  --mx: -200px;
+  --my: -200px;
+  color: var(--text);
+  background: var(--text);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  transition: background-position 0.8s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.ob-welcome__headline:hover {
-  background-position: 0% 0%;
+.ob-welcome__headline--glow {
+  background:
+    radial-gradient(circle 140px at var(--mx) var(--my),
+      var(--accent) 0%, var(--aqua) 35%, transparent 70%),
+    var(--text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .ob-welcome__sub {
@@ -7946,8 +7947,13 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 }
 .ob-insider-card--open {
   border-color: var(--accent);
-  background: var(--surface);
-  box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(124, 111, 255, 0.1);
+  background: var(--accent-50);
+  box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(124, 111, 255, 0.12);
+  transform: translateY(-2px);
+}
+.ob-insider-card--open:hover {
+  background: var(--accent-50);
+  transform: translateY(-2px);
 }
 
 .ob-insider-card__top {
@@ -8380,8 +8386,13 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
 }
 
 .ob-conviction__tier--active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(124, 111, 255, 0.1);
+  border-color: var(--tier-color, var(--accent));
+  background: var(--tier-bg, var(--surface));
+  box-shadow: 0 0 0 1px var(--tier-color, var(--accent)), 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+.ob-conviction__tier--active:hover {
+  transform: translateY(-2px);
 }
 
 .ob-conviction__desc {

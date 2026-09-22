@@ -192,10 +192,22 @@ function ThemeToggle() {
 
 // ── Step 1: Welcome ─────────────────────────────────────────────────────────
 function StepWelcome({ stats, onNext }) {
+  function onHeadlineMove(e) {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', `${e.clientX - r.left}px`);
+    el.style.setProperty('--my', `${e.clientY - r.top}px`);
+  }
+
   return (
     <div className="ob-step ob-step--welcome">
       <div className="ob-welcome__content">
-        <h1 className="ob-welcome__headline">
+        <h1
+          className="ob-welcome__headline"
+          onMouseMove={onHeadlineMove}
+          onMouseEnter={e => e.currentTarget.classList.add('ob-welcome__headline--glow')}
+          onMouseLeave={e => e.currentTarget.classList.remove('ob-welcome__headline--glow')}
+        >
           Every time a CEO, director, or member of Congress buys or sells stock, it becomes public record.
         </h1>
         <p className="ob-welcome__sub">
@@ -442,6 +454,7 @@ function StepConviction({ onNext }) {
           <div
             key={tier.id}
             className={`ob-conviction__tier${activeTier === tier.id ? ' ob-conviction__tier--active' : ''}`}
+            style={{ '--tier-color': tier.color, '--tier-bg': tier.bg }}
             onMouseEnter={() => setActiveTier(tier.id)}
             onMouseLeave={() => setActiveTier(null)}
             onClick={() => setActiveTier(activeTier === tier.id ? null : tier.id)}
