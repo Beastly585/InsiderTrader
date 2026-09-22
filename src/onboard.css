@@ -41,20 +41,21 @@
   top: 16px;
   left: 24px;
   z-index: 9010;
-  background: none;
-  border: none;
-  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
   cursor: pointer;
-  padding: 8px;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s, background 0.15s;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .ob__theme-toggle:hover {
-  color: var(--text-2);
-  background: var(--surface-2);
+  color: var(--text);
+  background: var(--surface-3);
+  border-color: var(--border-md);
 }
 
 /* ── Skip button ────────────────────────────────────────────────────────────── */
@@ -78,12 +79,42 @@
 }
 
 /* ── Dots (step indicator) ──────────────────────────────────────────────────── */
-.ob__dots {
+.ob__dots-nav {
   position: fixed;
   bottom: 28px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9010;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ob__dots-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, color 0.15s, transform 0.15s, opacity 0.2s;
+}
+.ob__dots-arrow:hover {
+  background: var(--surface-3);
+  color: var(--text);
+  transform: scale(1.1);
+}
+.ob__dots-arrow--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ob__dots {
   display: flex;
   gap: 8px;
 }
@@ -165,7 +196,7 @@
   font: 600 15px/1 var(--font);
   cursor: pointer;
   transition: background 0.15s, transform 0.1s, box-shadow 0.2s;
-  align-self: flex-start;
+  align-self: center;
 }
 .ob-cta:hover {
   filter: brightness(1.12);
@@ -315,17 +346,10 @@
   margin-top: 3px;
 }
 
-.ob-insider-card__chevron {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-3);
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), color 0.15s;
-  flex-shrink: 0;
-}
-.ob-insider-card__chevron--open {
-  transform: rotate(180deg);
-  color: var(--accent);
+.ob-insider-card__tagline {
+  font: 400 13px/1.5 var(--font);
+  color: var(--text-2);
+  margin-top: 10px;
 }
 
 .ob-insider-card__body {
@@ -449,6 +473,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  min-height: 62px;
   padding: 12px 14px;
   background: var(--surface-2);
   border: 1px solid transparent;
@@ -459,6 +484,7 @@
   color: var(--text);
   font-family: var(--font);
   position: relative;
+  justify-content: center;
 }
 .ob-hotspot:hover {
   border-color: var(--accent);
@@ -539,15 +565,17 @@
 }
 
 .ob-hotspot__label {
+  display: block;
   font: 500 11px/1 var(--font);
   color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 3px;
+  margin-bottom: 6px;
   transition: color 0.15s;
 }
 
 .ob-hotspot__field {
+  display: block;
   font: 600 14px/1.2 var(--font);
   color: var(--text);
 }
@@ -660,7 +688,8 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
 .ob-conviction__tier:hover {
   transform: translateY(-2px);
@@ -688,9 +717,22 @@
   margin-bottom: 4px;
 }
 
+.ob-conviction__tagline {
+  font: 400 13px/1.4 var(--font);
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.ob-conviction__tier--active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(124, 111, 255, 0.1);
+}
+
 .ob-conviction__desc {
   font: 400 13px/1.5 var(--font);
   color: var(--text-2);
+  margin-top: 8px;
+  animation: ob-tooltip-reveal 0.25s ease;
 }
 
 .ob-conviction__note {
@@ -754,6 +796,12 @@
 .ob-datamap__title {
   font: 600 14px/1 var(--font);
   color: var(--text);
+}
+
+.ob-datamap__tagline {
+  font: 400 12px/1.4 var(--font);
+  color: var(--text-3);
+  margin-top: 4px;
 }
 
 .ob-datamap__desc {

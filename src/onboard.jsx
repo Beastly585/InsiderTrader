@@ -145,6 +145,14 @@ function IconMoon({ size = 16, ...props }) {
   );
 }
 
+function IconChevronLeft({ size = 16, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+
 function IconChevronRight({ size = 16, ...props }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -177,7 +185,7 @@ function ThemeToggle() {
 
   return (
     <button className="ob__theme-toggle" onClick={toggle} title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
-      {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
+      {dark ? <IconSun size={20} /> : <IconMoon size={20} />}
     </button>
   );
 }
@@ -223,56 +231,53 @@ function StepWelcome({ stats, onNext }) {
 
 // ── Step 2: Who Are Insiders? ────────────────────────────────────────────────
 function StepInsiderTypes({ sampleFilings, onNext }) {
-  const [expanded, setExpanded] = useState(new Set());
+  const [activeCard, setActiveCard] = useState(null);
 
   const categories = [
     {
       id: 'corporate',
       title: 'Corporate Executives',
       tier: 'Strong signal',
-      description: 'CEOs, CFOs, directors, and 10% owners. They file SEC Form 4 within 2 business days of any trade. Their access to material non-public information makes their trades the most informative.',
+      tagline: 'CEOs, CFOs, directors, and 10% owners filing SEC Form 4.',
+      description: 'They file within 2 business days of any trade. Their access to material non-public information makes their trades the most informative.',
       Icon: IconBuilding,
     },
     {
       id: 'congress',
       title: 'Members of Congress',
       tier: 'Strong signal',
-      description: 'Representatives and Senators required to disclose trades under the STOCK Act. House filings appear near-realtime; Senate disclosures often lag 30–45 days.',
+      tagline: 'Representatives and Senators disclosing under the STOCK Act.',
+      description: 'House filings appear near-realtime; Senate disclosures often lag 30–45 days. Committee assignments can reveal sector-specific insight.',
       Icon: IconLandmark,
     },
     {
       id: 'officers',
       title: 'Other Officers',
       tier: 'Medium signal',
-      description: 'VPs, SVPs, and other titled insiders. Still legally required to disclose, but their trades carry less weight in the conviction score — they\'re typically further from strategic decisions.',
+      tagline: 'VPs, SVPs, and other titled insiders required to disclose.',
+      description: 'Their trades carry less weight in the conviction score — they\'re typically further from strategic decisions, but cluster patterns still matter.',
       Icon: IconUserCheck,
     },
   ];
-
-  function toggleCard(id) {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
 
   return (
     <div className="ob-step ob-step--insiders">
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">The data sources</span>
         <h2 className="ob-step__title">Who are "insiders"?</h2>
-        <p className="ob-step__subtitle">Seli tracks three categories of people whose trades become public record. Tap each to learn more.</p>
+        <p className="ob-step__subtitle">Seli tracks three categories of people whose trades become public record. Hover or tap for details.</p>
       </div>
       <div className="ob-insiders__grid">
         {categories.map(cat => {
-          const isOpen = expanded.has(cat.id);
+          const isOpen = activeCard === cat.id;
           const sample = sampleFilings[cat.id];
           return (
             <button
               key={cat.id}
               className={`ob-insider-card${isOpen ? ' ob-insider-card--open' : ''}`}
-              onClick={() => toggleCard(cat.id)}
+              onClick={() => setActiveCard(isOpen ? null : cat.id)}
+              onMouseEnter={() => setActiveCard(cat.id)}
+              onMouseLeave={() => setActiveCard(null)}
             >
               <div className="ob-insider-card__top">
                 <span className="ob-insider-card__icon"><cat.Icon size={20} /></span>
@@ -280,10 +285,8 @@ function StepInsiderTypes({ sampleFilings, onNext }) {
                   <div className="ob-insider-card__title">{cat.title}</div>
                   <div className="ob-insider-card__tier">{cat.tier}</div>
                 </div>
-                <span className={`ob-insider-card__chevron${isOpen ? ' ob-insider-card__chevron--open' : ''}`}>
-                  <IconChevronDown size={16} />
-                </span>
               </div>
+              <div className="ob-insider-card__tagline">{cat.tagline}</div>
               {isOpen && (
                 <div className="ob-insider-card__body">
                   <p>{cat.description}</p>
@@ -420,11 +423,13 @@ function StepReadingFiling({ onNext }) {
 
 // ── Step 4: Signal Score Breakdown ───────────────────────────────────────────
 function StepConviction({ onNext }) {
+  const [activeTier, setActiveTier] = useState(null);
+
   const tiers = [
-    { range: '10–14', label: 'High Conviction', color: 'var(--green-600)', bg: 'var(--green-50)', description: 'C-suite or congressional, non-routine, open-market, large value. Rare and worth immediate attention.' },
-    { range: '6–9', label: 'Medium Conviction', color: 'var(--blue-600)', bg: 'var(--blue-50)', description: 'Meaningful trades that clear multiple signal filters. Worth monitoring.' },
-    { range: '3–5', label: 'Low Conviction', color: 'var(--amber-600)', bg: 'var(--amber-50)', description: 'Some signal but may be routine, small, or from lower-ranked insiders.' },
-    { range: '0–2', label: 'Noise', color: 'var(--text-3)', bg: 'var(--surface-2)', description: 'Likely routine grants, small dispositions, or weak-relationship insiders.' },
+    { id: 'high', range: '10–14', label: 'High Conviction', color: 'var(--green-600)', bg: 'var(--green-50)', tagline: 'Rare, high-confidence insider trades', description: 'C-suite or congressional, non-routine, open-market, large value. Rare and worth immediate attention.' },
+    { id: 'medium', range: '6–9', label: 'Medium Conviction', color: 'var(--blue-600)', bg: 'var(--blue-50)', tagline: 'Multiple signal filters cleared', description: 'Meaningful trades that clear multiple signal filters. Worth monitoring and investigating further.' },
+    { id: 'low', range: '3–5', label: 'Low Conviction', color: 'var(--amber-600)', bg: 'var(--amber-50)', tagline: 'Some signal, possibly routine', description: 'Some signal but may be routine, small, or from lower-ranked insiders. Useful for pattern-tracking.' },
+    { id: 'noise', range: '0–2', label: 'Noise', color: 'var(--text-3)', bg: 'var(--surface-2)', tagline: 'Likely routine or automatic', description: 'Likely routine grants, small dispositions, or weak-relationship insiders. Seli still tracks them so you can filter them out.' },
   ];
 
   return (
@@ -432,17 +437,26 @@ function StepConviction({ onNext }) {
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">The scoring system</span>
         <h2 className="ob-step__title">Conviction levels</h2>
-        <p className="ob-step__subtitle">Every filing gets a score from 0 to 14. Here's what each range means.</p>
+        <p className="ob-step__subtitle">Every filing gets a score from 0 to 14. Hover or tap each level to learn more.</p>
       </div>
       <div className="ob-conviction__scale">
-        {tiers.map((tier, i) => (
-          <div key={i} className="ob-conviction__tier">
+        {tiers.map(tier => (
+          <div
+            key={tier.id}
+            className={`ob-conviction__tier${activeTier === tier.id ? ' ob-conviction__tier--active' : ''}`}
+            onMouseEnter={() => setActiveTier(tier.id)}
+            onMouseLeave={() => setActiveTier(null)}
+            onClick={() => setActiveTier(activeTier === tier.id ? null : tier.id)}
+          >
             <div className="ob-conviction__badge" style={{ background: tier.bg, color: tier.color }}>
               {tier.range}
             </div>
             <div className="ob-conviction__info">
               <div className="ob-conviction__label" style={{ color: tier.color }}>{tier.label}</div>
-              <div className="ob-conviction__desc">{tier.description}</div>
+              <div className="ob-conviction__tagline">{tier.tagline}</div>
+              {activeTier === tier.id && (
+                <div className="ob-conviction__desc">{tier.description}</div>
+              )}
             </div>
           </div>
         ))}
@@ -466,25 +480,29 @@ function StepDataMap({ onNext }) {
       id: 'filings',
       title: 'All Filings',
       Icon: IconBarChart,
-      description: 'Every filing, filterable by date, conviction, transaction type, source, and sector. The firehose — when you want to scan everything.',
+      tagline: 'Every filing, filterable by date and conviction',
+      description: 'The firehose — filter by conviction, transaction type, source, and sector. Scan everything or zero in on what matters.',
     },
     {
       id: 'insiders',
       title: 'Insiders',
       Icon: IconUsers,
-      description: 'Ranked leaderboard of insiders by track record. Click any name to see their complete trading history and conviction trend.',
+      tagline: 'Ranked leaderboard by track record',
+      description: 'Click any name to see their complete trading history and conviction trend over time.',
     },
     {
       id: 'watchlist',
       title: 'Your Watchlist',
       Icon: IconStar,
-      description: 'Filings filtered to only the tickers you follow. This is where most users should spend their time. You\'ll set yours up next.',
+      tagline: 'Activity for just the tickers you follow',
+      description: 'This is where most users should spend their time. You\'ll set yours up next.',
     },
     {
       id: 'settings',
       title: 'Settings & Alerts',
       Icon: IconSettings,
-      description: 'Notification preferences, portfolio linking, account management. Control how and when Seli reaches you.',
+      tagline: 'Notifications, portfolio, and account',
+      description: 'Control how and when Seli reaches you — digest emails, real-time alerts, and more.',
     },
   ];
 
@@ -493,7 +511,7 @@ function StepDataMap({ onNext }) {
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">Navigating the app</span>
         <h2 className="ob-step__title">Where the data lives</h2>
-        <p className="ob-step__subtitle">Four sections, each with a different job. Tap to preview.</p>
+        <p className="ob-step__subtitle">Four sections, each with a different job. Hover or tap to preview.</p>
       </div>
       <div className="ob-datamap__grid">
         {sections.map(sec => (
@@ -501,9 +519,12 @@ function StepDataMap({ onNext }) {
             key={sec.id}
             className={`ob-datamap__card${activeSection === sec.id ? ' ob-datamap__card--active' : ''}`}
             onClick={() => setActiveSection(activeSection === sec.id ? null : sec.id)}
+            onMouseEnter={() => setActiveSection(sec.id)}
+            onMouseLeave={() => setActiveSection(null)}
           >
             <span className="ob-datamap__icon"><sec.Icon size={20} /></span>
             <span className="ob-datamap__title">{sec.title}</span>
+            <span className="ob-datamap__tagline">{sec.tagline}</span>
             {activeSection === sec.id && (
               <p className="ob-datamap__desc">{sec.description}</p>
             )}
@@ -931,16 +952,32 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
         Skip to dashboard →
       </button>
 
-      {/* Step dots */}
-      <div className="ob__dots">
-        {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-          <button
-            key={i}
-            className={`ob__dot${i === step ? ' ob__dot--active' : ''}${i < step ? ' ob__dot--done' : ''}`}
-            onClick={() => i <= step && setStep(i)}
-            aria-label={`Step ${i + 1}`}
-          />
-        ))}
+      {/* Step dots with prev/next arrows */}
+      <div className="ob__dots-nav">
+        <button
+          className={`ob__dots-arrow${step === 0 ? ' ob__dots-arrow--hidden' : ''}`}
+          onClick={() => step > 0 && setStep(step - 1)}
+          aria-label="Previous step"
+        >
+          <IconChevronLeft size={16} />
+        </button>
+        <div className="ob__dots">
+          {Array.from({ length: TOTAL_STEPS }, (_, i) => (
+            <button
+              key={i}
+              className={`ob__dot${i === step ? ' ob__dot--active' : ''}${i < step ? ' ob__dot--done' : ''}`}
+              onClick={() => i <= step && setStep(i)}
+              aria-label={`Step ${i + 1}`}
+            />
+          ))}
+        </div>
+        <button
+          className={`ob__dots-arrow${step === TOTAL_STEPS - 1 ? ' ob__dots-arrow--hidden' : ''}`}
+          onClick={() => step < TOTAL_STEPS - 1 && goNext()}
+          aria-label="Next step"
+        >
+          <IconChevronRight size={16} />
+        </button>
       </div>
 
       {/* Steps */}
