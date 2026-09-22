@@ -7893,6 +7893,13 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
   -webkit-text-fill-color: transparent;
 }
 
+.ob-welcome__greeting {
+  font: 500 14px/1.5 var(--font);
+  color: var(--text-3);
+  margin: 0 0 12px;
+  letter-spacing: 0.01em;
+}
+
 .ob-welcome__sub {
   font: 400 17px/1.5 var(--font);
   color: var(--text-2);

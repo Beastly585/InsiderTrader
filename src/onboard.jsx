@@ -21,7 +21,7 @@ const SIGNAL_FACTORS = [
   { id: 'role',      label: 'C-suite or congressional',   points: 2, description: 'CEO, CFO, President, or member of Congress. These insiders have the deepest view into the company.' },
   { id: 'routine',   label: 'Non-routine trade',          points: 3, description: 'Not on a pre-set 10b5-1 plan. The insider made a deliberate, discretionary decision to trade.' },
   { id: 'value',     label: 'Trade value ≥ $1M',          points: 3, description: 'Large dollar amount — the insider is putting serious capital behind their conviction.' },
-  { id: 'direction', label: 'Purchase (not a sale)',       points: 1, description: 'Buys are more informative than sells. Insiders sell for many reasons, but they buy for one: they think the stock is going up.' },
+  { id: 'direction', label: 'Purchase (not a sale)',       points: 1, description: 'Sells are excluded from conviction scoring entirely — insiders sell for many reasons. A buy means the insider is putting their own money behind the stock.' },
 ];
 
 // ── Icons (inline SVG to avoid import dependencies) ─────────────────────────
@@ -210,6 +210,7 @@ function StepWelcome({ stats, onNext }) {
   return (
     <div className="ob-step ob-step--welcome">
       <div className="ob-welcome__content">
+        <p className="ob-welcome__greeting">Welcome to Seli — let's walk you through the basics.</p>
         <h1
           className="ob-welcome__headline"
           onMouseMove={onHeadlineMove}
@@ -344,9 +345,9 @@ function StepReadingFiling({ onNext }) {
   const hotspots = [
     { id: 'name', label: 'Insider Name & Title', field: 'Jane Smith, CEO', factorId: 'role', points: 2, tooltip: 'C-suite trades carry the most weight. Their title determines relationship strength in the conviction score.' },
     { id: 'type', label: 'Transaction Type', field: 'Open-Market Purchase', factorId: 'market', points: 2, tooltip: 'Open-market buys are the most informative signal. Grants, exercises, and auto-plan trades are usually routine.' },
-    { id: 'value', label: 'Value', field: '$2,450,000', factorId: 'value', points: 3, tooltip: 'The dollar amount of the trade. $1M+ trades get the highest value boost in the scoring algorithm.' },
+    { id: 'value', label: 'Value', field: '$2,450,000', factorId: 'value', points: 3, tooltip: 'The dollar amount of the trade. $1M+ trades get the highest value boost. Seli also shows % of position — how much of the insider\'s own holdings this trade represents.' },
     { id: 'routine', label: 'Routine Flag', field: 'Non-routine', factorId: 'routine', points: 3, tooltip: 'This trade is NOT on a pre-set 10b5-1 plan. The insider made a deliberate decision — this gets a +3 boost.' },
-    { id: 'direction', label: 'Direction', field: 'Purchase', factorId: 'direction', points: 1, tooltip: 'Buys are more informative than sells. Insiders sell for many reasons — they buy for only one.' },
+    { id: 'direction', label: 'Direction', field: 'Purchase', factorId: 'direction', points: 1, tooltip: 'Sells are excluded from conviction scoring entirely. A purchase means the insider is betting their own money — the only reason to buy.' },
   ];
 
   function toggleHotspot(hs) {
@@ -378,7 +379,8 @@ function StepReadingFiling({ onNext }) {
           {hotspots.map((hs, idx) => {
             const isActive = activeHotspot === hs.id;
             const isRevealed = revealedFactors.has(hs.factorId);
-            const isNextUp = !isRevealed && hotspots.findIndex(h => !revealedFactors.has(h.factorId)) === idx;
+            // Only pulse the next-up hint after the user has clicked at least once
+            const isNextUp = revealedFactors.size > 0 && !isRevealed && hotspots.findIndex(h => !revealedFactors.has(h.factorId)) === idx;
             return (
               <button
                 key={hs.id}
@@ -497,7 +499,7 @@ function StepDataMap({ onNext }) {
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', Icon: IconHome },
-    { id: 'filings', label: 'Filings', Icon: IconBarChart },
+    { id: 'data', label: 'Data', Icon: IconBarChart },
     { id: 'insiders', label: 'Insiders', Icon: IconUsers },
     { id: 'watchlist', label: 'Watchlist', Icon: IconStar },
     { id: 'settings', label: 'Settings', Icon: IconSettings },
@@ -520,26 +522,26 @@ function StepDataMap({ onNext }) {
         </div>
       ),
     },
-    filings: {
-      description: 'The firehose — every SEC filing, filterable by conviction, type, sector, and date.',
+    data: {
+      description: 'Two views in one — scored signals grouped by conviction, and raw filings straight from the SEC. Filter by sector, source, date, and more.',
       preview: (
-        <div className="ob-preview ob-preview--filings">
+        <div className="ob-preview ob-preview--data">
           <div className="ob-preview__filters">
-            <span className="ob-preview__chip ob-preview__chip--active">All Types</span>
-            <span className="ob-preview__chip">Buys Only</span>
+            <span className="ob-preview__chip ob-preview__chip--active">Signals</span>
+            <span className="ob-preview__chip">Raw Filings</span>
             <span className="ob-preview__chip">High Conviction</span>
           </div>
           <div className="ob-preview__table">
             <div className="ob-preview__table-head"><span>Ticker</span><span>Insider</span><span>Type</span><span>Score</span></div>
-            <div className="ob-preview__table-row"><span className="ob-preview__ticker">MSFT</span><span>Satya Nadella</span><span>Purchase</span><span className="ob-preview__score">12/14</span></div>
-            <div className="ob-preview__table-row"><span className="ob-preview__ticker">GOOGL</span><span>Sundar Pichai</span><span>Purchase</span><span className="ob-preview__score">9/14</span></div>
-            <div className="ob-preview__table-row"><span className="ob-preview__ticker">META</span><span>Mark Zuckerberg</span><span>Sale</span><span className="ob-preview__score ob-preview__score--low">4/14</span></div>
+            <div className="ob-preview__table-row"><span className="ob-preview__ticker">MSFT</span><span>Satya Nadella</span><span>Purchase</span><span className="ob-preview__score">92</span></div>
+            <div className="ob-preview__table-row"><span className="ob-preview__ticker">GOOGL</span><span>Sundar Pichai</span><span>Purchase</span><span className="ob-preview__score">74</span></div>
+            <div className="ob-preview__table-row"><span className="ob-preview__ticker">META</span><span>Mark Zuckerberg</span><span>Sale</span><span className="ob-preview__score ob-preview__score--low">—</span></div>
           </div>
         </div>
       ),
     },
     insiders: {
-      description: 'Ranked leaderboard of insiders by track record. Click any name for their full history.',
+      description: 'Ranked leaderboard of insiders by track record and conviction accuracy. Click any name for their full trading history and trend.',
       preview: (
         <div className="ob-preview ob-preview--insiders">
           <div className="ob-preview__leaderboard">
@@ -797,8 +799,40 @@ function StepWatchlist({ watchlist, onNext }) {
 }
 
 // ── Step 7: Notifications ────────────────────────────────────────────────────
-function StepNotifications({ pro, onNext }) {
+function StepNotifications({ user, pro, onNext }) {
   const [digestOn, setDigestOn] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Persist the weekly digest preference to the real user_preferences table
+  async function toggleDigest(enabled) {
+    setDigestOn(enabled);
+    if (!user?.id) return;
+    setSaving(true);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (window.__clerkGetToken) {
+        try {
+          const token = await window.__clerkGetToken();
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+        } catch {}
+      }
+      // Load existing prefs, merge, and save
+      let existing = {};
+      try {
+        const cached = localStorage.getItem(`seli_prefs_${user.id}`);
+        if (cached) existing = JSON.parse(cached);
+      } catch {}
+      const updated = { ...existing, weekly_digest: enabled };
+      localStorage.setItem(`seli_prefs_${user.id}`, JSON.stringify(updated));
+      await fetch(`${cfg.NEON_PROXY_URL}/prefs`, {
+        method: 'POST', headers, body: JSON.stringify(updated),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {}
+    setSaving(false);
+  }
 
   const proAlerts = [
     { id: 'watchlist', label: 'Watchlist ticker activity', description: 'Get notified when any insider trades a stock you follow.' },
@@ -824,9 +858,11 @@ function StepNotifications({ pro, onNext }) {
           </div>
           <p className="ob-notif__tier-desc">A weekly email summarizing the top insider activity across your watchlist. Every Sunday evening.</p>
           <label className="ob-notif__toggle">
-            <input type="checkbox" checked={digestOn} onChange={e => setDigestOn(e.target.checked)} />
+            <input type="checkbox" checked={digestOn} onChange={e => toggleDigest(e.target.checked)} disabled={saving} />
             <span className="ob-notif__toggle-track" />
-            <span className="ob-notif__toggle-label">{digestOn ? 'Enabled' : 'Disabled'}</span>
+            <span className="ob-notif__toggle-label">
+              {saving ? 'Saving…' : saved ? 'Saved ✓' : digestOn ? 'Enabled' : 'Disabled'}
+            </span>
           </label>
         </div>
 
@@ -1067,7 +1103,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
       {step === 3 && <StepConviction onNext={goNext} />}
       {step === 4 && <StepDataMap onNext={goNext} />}
       {step === 5 && <StepWatchlist watchlist={watchlist} onNext={goNext} />}
-      {step === 6 && <StepNotifications pro={pro} onNext={goNext} />}
+      {step === 6 && <StepNotifications user={user} pro={pro} onNext={goNext} />}
       {step === 7 && <StepReady watchlist={watchlist} onComplete={handleComplete} />}
     </div>
   );
