@@ -7619,3 +7619,1052 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
   .blog-card h2 { font-size: 17px; }
   .blog-cta { padding: 0 16px; }
 }
+/* onboard.css — Styles for seli.app/onboard immersive flow
+   Uses existing Seli design tokens from style.css.
+   All classes prefixed ob- to avoid collisions with the main app. */
+
+/* ── Container ──────────────────────────────────────────────────────────────── */
+.ob {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ── Progress bar ───────────────────────────────────────────────────────────── */
+.ob__progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--surface-2);
+  z-index: 9010;
+}
+
+.ob__progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  border-radius: 0 2px 2px 0;
+}
+
+/* ── Skip button ────────────────────────────────────────────────────────────── */
+.ob__skip {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  z-index: 9010;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font: 500 13px/1 var(--font);
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background 0.15s;
+}
+.ob__skip:hover {
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+/* ── Dots (step indicator) ──────────────────────────────────────────────────── */
+.ob__dots {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9010;
+  display: flex;
+  gap: 8px;
+}
+
+.ob__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: var(--surface-3);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+.ob__dot--active {
+  background: var(--accent);
+  transform: scale(1.3);
+}
+.ob__dot--done {
+  background: var(--accent-50);
+  cursor: pointer;
+}
+.ob__dot--done:hover {
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+/* ── Common step layout ─────────────────────────────────────────────────────── */
+.ob-step {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 80px 24px 100px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.ob-step__header {
+  margin-bottom: 32px;
+}
+
+.ob-step__eyebrow {
+  display: block;
+  font: 600 11px/1 var(--font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.ob-step__title {
+  font: 700 28px/1.2 var(--font);
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
+.ob-step__subtitle {
+  font: 400 15px/1.5 var(--font);
+  color: var(--text-2);
+  margin: 0;
+  max-width: 520px;
+}
+
+/* ── CTA button (used on every step) ────────────────────────────────────────── */
+.ob-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 32px;
+  padding: 14px 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: #fff;
+  font: 600 15px/1 var(--font);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  align-self: flex-start;
+}
+.ob-cta:hover {
+  filter: brightness(1.12);
+}
+.ob-cta:active {
+  transform: scale(0.97);
+}
+.ob-cta--primary {
+  padding: 16px 36px;
+  font-size: 16px;
+  background: var(--green-600);
+}
+.ob-cta--primary:hover {
+  filter: brightness(1.12);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STEP 1 — Welcome
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.ob-step--welcome {
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+}
+
+.ob-welcome__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ob-welcome__headline {
+  font: 700 32px/1.25 var(--font);
+  color: var(--text);
+  margin: 0 0 16px;
+  max-width: 600px;
+}
+
+.ob-welcome__sub {
+  font: 400 17px/1.5 var(--font);
+  color: var(--text-2);
+  margin: 0 0 36px;
+  max-width: 460px;
+}
+
+.ob-welcome__stats {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.ob-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.ob-stat__number {
+  font: 700 28px/1 var(--font);
+  color: var(--accent);
+}
+
+.ob-stat__label {
+  font: 500 12px/1 var(--font);
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STEP 2 — Insider Types
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.ob-insiders__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ob-insider-card {
+  display: block;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  color: var(--text);
+  font-family: var(--font);
+}
+.ob-insider-card:hover {
+  border-color: var(--border-md);
+  background: var(--surface-2);
+}
+.ob-insider-card--open {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.ob-insider-card__top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ob-insider-card__icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.ob-insider-card__title {
+  font: 600 15px/1.2 var(--font);
+  color: var(--text);
+}
+
+.ob-insider-card__tier {
+  font: 500 12px/1 var(--font);
+  color: var(--green-600);
+  margin-top: 3px;
+}
+
+.ob-insider-card__body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.ob-insider-card__body p {
+  font: 400 14px/1.55 var(--font);
+  color: var(--text-2);
+  margin: 0;
+}
+
+.ob-insider-card__sample {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+
+.ob-insider-card__sample-label {
+  font: 500 11px/1 var(--font);
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.ob-insider-card__sample-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ob-sample__name {
+  font: 500 13px/1 var(--font);
+  color: var(--text);
+}
+
+.ob-sample__type {
+  font: 600 11px/1 var(--font);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ob-sample__type--buy {
+  background: var(--green-50);
+  color: var(--green-600);
+}
+.ob-sample__type--sell {
+  background: var(--red-50);
+  color: var(--red-600);
+}
+
+.ob-sample__ticker {
+  font: 600 13px/1 var(--font-mono);
+  color: var(--accent);
+}
+
+.ob-sample__value {
+  font: 500 13px/1 var(--font-mono);
+  color: var(--text-2);
+  margin-left: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STEP 3 — Reading a Filing
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.ob-filing__layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .ob-filing__layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ob-filing__card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+}
+
+.ob-filing__card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.ob-filing__card-badge {
+  font: 600 11px/1 var(--font);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-50);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ob-filing__card-date {
+  font: 400 12px/1 var(--font);
+  color: var(--text-3);
+}
+
+.ob-filing__hotspots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ob-hotspot {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  color: var(--text);
+  font-family: var(--font);
+  position: relative;
+}
+.ob-hotspot:hover {
+  border-color: var(--border-md);
+}
+.ob-hotspot--active {
+  border-color: var(--accent);
+  background: var(--accent-50);
+}
+.ob-hotspot--revealed {
+  border-left: 3px solid var(--green-600);
+}
+
+.ob-hotspot__label {
+  font: 500 11px/1 var(--font);
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
+.ob-hotspot__field {
+  font: 600 14px/1.2 var(--font);
+  color: var(--text);
+}
+
+.ob-hotspot__tooltip {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font: 400 13px/1.5 var(--font);
+  color: var(--text-2);
+}
+
+/* Score builder panel */
+.ob-score-builder {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.ob-score-builder__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.ob-score-builder__label {
+  font: 600 14px/1 var(--font);
+  color: var(--text);
+}
+
+.ob-score-builder__value {
+  font: 700 28px/1 var(--font);
+  color: var(--accent);
+}
+
+.ob-score-builder__max {
+  font: 500 16px/1 var(--font);
+  color: var(--text-3);
+}
+
+.ob-score-builder__bar {
+  height: 6px;
+  background: var(--surface-3);
+  border-radius: 3px;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.ob-score-builder__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--green-600));
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ob-score-builder__factors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ob-factor {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: background 0.2s, opacity 0.2s;
+  opacity: 0.45;
+}
+.ob-factor--active {
+  opacity: 1;
+  background: var(--green-50);
+}
+
+.ob-factor__label {
+  font: 500 13px/1 var(--font);
+  color: var(--text);
+}
+
+.ob-factor__points {
+  font: 600 13px/1 var(--font-mono);
+  color: var(--green-600);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STEP 4 — Conviction
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.ob-conviction__scale {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ob-conviction__tier {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.ob-conviction__badge {
+  flex-shrink: 0;
+  font: 700 14px/1 var(--font-mono);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+}
+
+.ob-conviction__info {
+  flex: 1;
+}
+
+.ob-conviction__label {
+  font: 600 15px/1 var(--font);
+  margin-bottom: 4px;
+}
+
+.ob-conviction__desc {
+  font: 400 13px/1.5 var(--font);
+  color: var(--text-2);
+}
+
+.ob-conviction__note {
+  font: 400 13px/1.5 var(--font);
+  color: var(--text-3);
+  margin-top: 16px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STEP 5 — Data Map
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.ob-datamap__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 520px) {
+  .ob-datamap__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ob-datamap__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  color: var(--text);
+  font-family: var(--font);
+}
+.ob-datamap__card:hover {
+  border-color: var(--border-md);
+  background: var(--surface-2);
+}
+.ob-datamap__card--active {
+  border-color: var(--accent);
+}
+
+.ob-datamap__icon {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.ob-datamap__title {
+  font: 600 14px/1 var(--font);
+  color: var(--text);
+}
+
+.ob-datamap__desc {
+  font: 400 13px/1.5 var(--font);
+  color: var(--text-2);
+  margin-top: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STEP 6 — Watchlist Builder
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Search */
+.ob-watchlist__search-wrap {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.ob-watchlist__search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.ob-watchlist__search {
+  width: 100%;
+  padding: 12px 14px 12px 40px;
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: 400 14px/1 var(--font);
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.ob-watchlist__search:focus {
+  border-color: var(--accent);
+}
+.ob-watchlist__search::placeholder {
+  color: var(--text-3);
+}
+
+.ob-watchlist__search-spinner {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--surface-3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ob-spin 0.6s linear infinite;
+}
+
+@keyframes ob-spin {
+  to { transform: translateY(-50%) rotate(360deg); }
+}
+
+/* Search results dropdown */
+.ob-watchlist__results {
+  background: var(--surface);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.ob-watchlist__result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+  color: var(--text);
+  font-family: var(--font);
+}
+.ob-watchlist__result:hover {
+  background: var(--surface-2);
+}
+.ob-watchlist__result--added {
+  opacity: 0.5;
+  cursor: default;
+}
+.ob-watchlist__result + .ob-watchlist__result {
+  border-top: 1px solid var(--border);
+}
+
+.ob-watchlist__result-ticker {
+  font: 600 13px/1 var(--font-mono);
+  color: var(--accent);
+  min-width: 54px;
+}
+
+.ob-watchlist__result-name {
+  font: 400 13px/1 var(--font);
+  color: var(--text-2);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-watchlist__result-check {
+  color: var(--green-600);
+}
+
+/* Popular tickers */
+.ob-watchlist__popular {
+  margin-bottom: 20px;
+}
+
+.ob-watchlist__popular-label {
+  font: 500 12px/1 var(--font);
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+
+.ob-watchlist__popular-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ob-watchlist__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: 600 12px/1 var(--font-mono);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ob-watchlist__chip:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.ob-watchlist__chip--added {
+  border-color: var(--green-600);
+  background: var(--green-50);
+  color: var(--green-600);
+}
+
+/* Current watchlist display */
+.ob-watchlist__current {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  margin-bottom: 8px;
+}
+
+.ob-watchlist__current-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ob-watchlist__current-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 14px/1 var(--font);
+  color: var(--gold-star);
+}
+
+.ob-watchlist__recent-count {
+  font: 500 12px/1 var(--font);
+  color: var(--text-3);
+}
+
+.ob-watchlist__current-tickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ob-watchlist__current-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: var(--accent-50);
+  border-radius: var(--radius-sm);
+  font: 600 12px/1 var(--font-mono);
+  color: var(--accent);
+}
+
+.ob-watchlist__current-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 0.1s, background 0.1s;
+}
+.ob-watchlist__current-remove:hover {
+  color: var(--red-600);
+  background: var(--red-50);
+}
+
+.ob-watchlist__nudge {
+  font: 400 13px/1 var(--font);
+  color: var(--text-3);
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STEP 7 — Notifications
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.ob-notif__tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ob-notif__tier {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.ob-notif__tier--locked {
+  opacity: 0.7;
+  position: relative;
+}
+
+.ob-notif__tier-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ob-notif__tier-badge {
+  font: 600 11px/1 var(--font);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ob-notif__tier-badge--pro {
+  background: var(--accent-50);
+  color: var(--accent);
+}
+
+.ob-notif__tier-title {
+  font: 600 16px/1 var(--font);
+  color: var(--text);
+}
+
+.ob-notif__tier-desc {
+  font: 400 14px/1.5 var(--font);
+  color: var(--text-2);
+  margin: 0 0 14px;
+}
+
+/* Toggle switch */
+.ob-notif__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font: 500 13px/1 var(--font);
+  color: var(--text-2);
+}
+.ob-notif__toggle input {
+  display: none;
+}
+
+.ob-notif__toggle-track {
+  width: 40px;
+  height: 22px;
+  background: var(--surface-3);
+  border-radius: 11px;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.ob-notif__toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-3);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+.ob-notif__toggle input:checked + .ob-notif__toggle-track {
+  background: var(--accent);
+}
+.ob-notif__toggle input:checked + .ob-notif__toggle-track::after {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+.ob-notif__toggle-label {
+  font: 500 13px/1 var(--font);
+  color: var(--text-2);
+}
+
+/* Alert list for pro */
+.ob-notif__alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ob-notif__alert-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--text-3);
+}
+.ob-notif__alert-item svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ob-notif__alert-label {
+  font: 500 13px/1 var(--font);
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.ob-notif__alert-desc {
+  font: 400 12px/1.4 var(--font);
+  color: var(--text-3);
+}
+
+.ob-notif__pro-cta {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font: 500 13px/1 var(--font);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STEP 8 — Ready
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.ob-step--ready {
+  text-align: center;
+  align-items: center;
+}
+
+.ob-ready__title {
+  font-size: 32px !important;
+}
+
+.ob-ready__tips {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 480px;
+  text-align: left;
+}
+
+.ob-ready__tip {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.ob-ready__tip-num {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-50);
+  color: var(--accent);
+  font: 700 13px/1 var(--font);
+}
+
+.ob-ready__tip-title {
+  font: 600 14px/1 var(--font);
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.ob-ready__tip-desc {
+  font: 400 13px/1.4 var(--font);
+  color: var(--text-2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .ob-step {
+    padding: 64px 16px 100px;
+  }
+  .ob-welcome__headline {
+    font-size: 24px;
+  }
+  .ob-welcome__stats {
+    gap: 20px;
+  }
+  .ob-stat__number {
+    font-size: 22px;
+  }
+  .ob-step__title {
+    font-size: 22px;
+  }
+  .ob-conviction__tier {
+    flex-direction: column;
+    gap: 10px;
+  }
+}

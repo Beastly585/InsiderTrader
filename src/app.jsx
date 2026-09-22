@@ -10,6 +10,7 @@ import XLSX from 'xlsx-js-style'; // npm install xlsx-js-style — same API as p
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
 import cfg from './config.js';
 import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
+import OnboardingFlow from './onboard.jsx';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
@@ -1519,6 +1520,9 @@ function TopNav({ page, setPage, dark, setDark, user, onUpgrade, lastFilingDate,
           {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
         </button>
         <FeedbackButton page={page} />
+        <button className="utility-stack__btn" onClick={() => navigateTo('/onboard')} title="Onboarding guide">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </button>
         <GuideStatusBarButton />
       </div>
     </>
@@ -11489,7 +11493,7 @@ function AppInner() {
     // reverts to the dashboard a moment later": the URL got silently
     // overwritten, and the early-return check above reads the URL fresh
     // on every render, so it stopped matching once that happened.
-    if (['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/blog'].includes(window.location.pathname) || window.location.pathname.startsWith('/blog/')) return;
+    if (['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/blog', '/onboard'].includes(window.location.pathname) || window.location.pathname.startsWith('/blog/')) return;
     const path = pathFromAppState(page, detail);
     if (window.location.pathname !== path) {
       window.history.pushState({ page, detail }, '', path);
@@ -11708,6 +11712,21 @@ function AppInner() {
 
   if (showLanding || isAboutPath) return <LandingPage onEnter={enterApp} dark={dark} setDark={setDark} isLoaded={isLoaded} />;
 
+  // ── Onboarding flow ──────────────────────────────────────────────────────
+  // Full-screen immersive — requires auth but bypasses the main shell.
+  // Users reach this via /onboard (or the Guide button in the utility stack).
+  if (path === '/onboard') {
+    return (
+      <OnboardingFlow
+        user={user}
+        watchlist={watchlist}
+        pro={billingPro}
+        onComplete={() => navigateTo('/home')}
+        onSkip={() => navigateTo('/home')}
+      />
+    );
+  }
+
   return (
     <>
       {isDataStale && !error && (
@@ -11883,6 +11902,7 @@ const SEO_TITLES = {
   '/insights': 'Top Insider Traders Ranked by Performance | Leaderboard — Seli',
   '/home': 'Seli — Know When Insiders Move | SEC Form 4 & Congressional Stock Trades',
   '/blog': 'Seli Blog — Insider Trading Intelligence, SEC Form 4 Analysis & Market Signals',
+  '/onboard': 'Get Started — Seli',
 };
 const SEO_DESCRIPTIONS = {
   '/': 'Track SEC Form 4 insider trades and congressional stock disclosures in real time. Scored by conviction, with instant alerts and portfolio integration. Free to start.',
@@ -11891,6 +11911,7 @@ const SEO_DESCRIPTIONS = {
   '/data': 'Live feed of SEC Form 4 insider trades scored by conviction. Filter by sector, type, role, and date. Export to CSV.',
   '/insiders': 'See which corporate insiders have the best track records. Ranked by hit rate, average return, and proxy score across 10+ years of open-market trades.',
   '/blog': 'Research, analysis, and strategy for tracking SEC Form 4 insider trades. Conviction scoring, cluster detection, congressional trade tracking, and dataset guides.',
+  '/onboard': 'Interactive onboarding guide for Seli. Learn how insider trading signals work, build your watchlist, and set up alerts.',
 };
 
 function useSEO() {
