@@ -45,8 +45,10 @@
   border: 1px solid var(--border);
   color: var(--text-2);
   cursor: pointer;
-  padding: 10px;
-  border-radius: var(--radius-md);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
   display: flex;
   align-items: center;
@@ -238,10 +240,25 @@
 
 .ob-welcome__headline {
   font: 700 36px/1.2 var(--font);
-  color: var(--text);
   margin: 0 0 16px;
   max-width: 600px;
   letter-spacing: -0.02em;
+  /* Gradient text sweep on hover */
+  background: linear-gradient(
+    135deg,
+    var(--text) 0%, var(--text) 33%,
+    var(--accent) 40%, var(--aqua) 55%, var(--green-600) 70%,
+    var(--text) 77%, var(--text) 100%
+  );
+  background-size: 300% 100%;
+  background-position: 100% 0%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  transition: background-position 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ob-welcome__headline:hover {
+  background-position: 0% 0%;
 }
 
 .ob-welcome__sub {
@@ -353,9 +370,24 @@
 }
 
 .ob-insider-card__body {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 1px solid transparent;
+  transition: max-height 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.3s ease 0.05s,
+              margin-top 0.3s ease,
+              padding-top 0.3s ease,
+              border-color 0.3s ease;
+}
+.ob-insider-card--open .ob-insider-card__body {
+  max-height: 250px;
+  opacity: 1;
   margin-top: 14px;
   padding-top: 14px;
-  border-top: 1px solid var(--border);
+  border-top-color: var(--border);
 }
 .ob-insider-card__body p {
   font: 400 14px/1.55 var(--font);
@@ -423,8 +455,8 @@
 .ob-filing__layout {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  align-items: start;
+  gap: 16px;
+  align-items: stretch;
 }
 
 @media (max-width: 640px) {
@@ -465,7 +497,7 @@
 .ob-filing__hotspots {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* ── Hotspot (interactive row) ─────────────────────────────────────────────── */
@@ -600,6 +632,9 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .ob-score-builder__header {
@@ -731,8 +766,18 @@
 .ob-conviction__desc {
   font: 400 13px/1.5 var(--font);
   color: var(--text-2);
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin-top: 0;
+  transition: max-height 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.25s ease 0.05s,
+              margin-top 0.25s ease;
+}
+.ob-conviction__tier--active .ob-conviction__desc {
+  max-height: 100px;
+  opacity: 1;
   margin-top: 8px;
-  animation: ob-tooltip-reveal 0.25s ease;
 }
 
 .ob-conviction__note {
@@ -807,8 +852,18 @@
 .ob-datamap__desc {
   font: 400 13px/1.5 var(--font);
   color: var(--text-2);
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin-top: 0;
+  transition: max-height 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.25s ease 0.05s,
+              margin-top 0.25s ease;
+}
+.ob-datamap__card--active .ob-datamap__desc {
+  max-height: 120px;
+  opacity: 1;
   margin-top: 10px;
-  animation: ob-tooltip-reveal 0.25s ease;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -1267,7 +1322,9 @@
     gap: 10px;
   }
   .ob__theme-toggle {
-    left: 16px;
+    left: 12px;
+    width: 30px;
+    height: 30px;
   }
   .ob__skip {
     right: 16px;

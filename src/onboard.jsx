@@ -185,7 +185,7 @@ function ThemeToggle() {
 
   return (
     <button className="ob__theme-toggle" onClick={toggle} title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
-      {dark ? <IconSun size={20} /> : <IconMoon size={20} />}
+      {dark ? <IconSun size={18} /> : <IconMoon size={18} />}
     </button>
   );
 }
@@ -287,26 +287,24 @@ function StepInsiderTypes({ sampleFilings, onNext }) {
                 </div>
               </div>
               <div className="ob-insider-card__tagline">{cat.tagline}</div>
-              {isOpen && (
-                <div className="ob-insider-card__body">
-                  <p>{cat.description}</p>
-                  {sample && (
-                    <div className="ob-insider-card__sample">
-                      <div className="ob-insider-card__sample-label">Recent filing:</div>
-                      <div className="ob-insider-card__sample-row">
-                        <span className="ob-sample__name">{sample.insiderName}</span>
-                        <span className={`ob-sample__type ob-sample__type--${sample.transactionType}`}>
-                          {sample.transactionType === 'buy' ? 'Buy' : 'Sell'}
-                        </span>
-                        <span className="ob-sample__ticker">{sample.ticker}</span>
-                        {sample.value && (
-                          <span className="ob-sample__value">${(sample.value / 1000).toFixed(0)}k</span>
-                        )}
-                      </div>
+              <div className="ob-insider-card__body">
+                <p>{cat.description}</p>
+                {sample && (
+                  <div className="ob-insider-card__sample">
+                    <div className="ob-insider-card__sample-label">Recent filing:</div>
+                    <div className="ob-insider-card__sample-row">
+                      <span className="ob-sample__name">{sample.insiderName}</span>
+                      <span className={`ob-sample__type ob-sample__type--${sample.transactionType}`}>
+                        {sample.transactionType === 'buy' ? 'Buy' : 'Sell'}
+                      </span>
+                      <span className="ob-sample__ticker">{sample.ticker}</span>
+                      {sample.value && (
+                        <span className="ob-sample__value">${(sample.value / 1000).toFixed(0)}k</span>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </button>
           );
         })}
@@ -454,9 +452,7 @@ function StepConviction({ onNext }) {
             <div className="ob-conviction__info">
               <div className="ob-conviction__label" style={{ color: tier.color }}>{tier.label}</div>
               <div className="ob-conviction__tagline">{tier.tagline}</div>
-              {activeTier === tier.id && (
-                <div className="ob-conviction__desc">{tier.description}</div>
-              )}
+              <div className="ob-conviction__desc">{tier.description}</div>
             </div>
           </div>
         ))}
@@ -525,9 +521,7 @@ function StepDataMap({ onNext }) {
             <span className="ob-datamap__icon"><sec.Icon size={20} /></span>
             <span className="ob-datamap__title">{sec.title}</span>
             <span className="ob-datamap__tagline">{sec.tagline}</span>
-            {activeSection === sec.id && (
-              <p className="ob-datamap__desc">{sec.description}</p>
-            )}
+            <p className="ob-datamap__desc">{sec.description}</p>
           </button>
         ))}
       </div>
