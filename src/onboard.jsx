@@ -81,6 +81,107 @@ function IconSearch({ size = 16, ...props }) {
   );
 }
 
+function IconBuilding({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="4" y="2" width="16" height="20" rx="2" /><path d="M9 22v-4h6v4" /><path d="M8 6h.01M16 6h.01M12 6h.01M8 10h.01M16 10h.01M12 10h.01M8 14h.01M16 14h.01M12 14h.01" />
+    </svg>
+  );
+}
+
+function IconLandmark({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="3" y1="22" x2="21" y2="22" /><line x1="6" y1="18" x2="6" y2="11" /><line x1="10" y1="18" x2="10" y2="11" /><line x1="14" y1="18" x2="14" y2="11" /><line x1="18" y1="18" x2="18" y2="11" /><polygon points="12 2 20 7 4 7" /><line x1="2" y1="18" x2="22" y2="18" />
+    </svg>
+  );
+}
+
+function IconUserCheck({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><polyline points="16 11 18 13 22 9" />
+    </svg>
+  );
+}
+
+function IconBarChart({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" />
+    </svg>
+  );
+}
+
+function IconUsers({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function IconSettings({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function IconSun({ size = 16, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  );
+}
+
+function IconMoon({ size = 16, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
+
+function IconChevronRight({ size = 16, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function IconChevronDown({ size = 16, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+// ── Theme toggle (reads/writes same localStorage key as app.jsx useTheme) ───
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => {
+    try { const s = localStorage.getItem('theme'); if (s) return s === 'dark'; } catch (_) {}
+    return true; // default dark, matches app.jsx
+  });
+
+  function toggle() {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light');
+    try { localStorage.setItem('theme', next ? 'dark' : 'light'); } catch (_) {}
+  }
+
+  return (
+    <button className="ob__theme-toggle" onClick={toggle} title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
+      {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
+    </button>
+  );
+}
+
 // ── Step 1: Welcome ─────────────────────────────────────────────────────────
 function StepWelcome({ stats, onNext }) {
   return (
@@ -130,21 +231,21 @@ function StepInsiderTypes({ sampleFilings, onNext }) {
       title: 'Corporate Executives',
       tier: 'Strong signal',
       description: 'CEOs, CFOs, directors, and 10% owners. They file SEC Form 4 within 2 business days of any trade. Their access to material non-public information makes their trades the most informative.',
-      icon: '🏢',
+      Icon: IconBuilding,
     },
     {
       id: 'congress',
       title: 'Members of Congress',
       tier: 'Strong signal',
       description: 'Representatives and Senators required to disclose trades under the STOCK Act. House filings appear near-realtime; Senate disclosures often lag 30–45 days.',
-      icon: '🏛️',
+      Icon: IconLandmark,
     },
     {
       id: 'officers',
       title: 'Other Officers',
       tier: 'Medium signal',
       description: 'VPs, SVPs, and other titled insiders. Still legally required to disclose, but their trades carry less weight in the conviction score — they\'re typically further from strategic decisions.',
-      icon: '📋',
+      Icon: IconUserCheck,
     },
   ];
 
@@ -174,11 +275,14 @@ function StepInsiderTypes({ sampleFilings, onNext }) {
               onClick={() => toggleCard(cat.id)}
             >
               <div className="ob-insider-card__top">
-                <span className="ob-insider-card__icon">{cat.icon}</span>
-                <div>
+                <span className="ob-insider-card__icon"><cat.Icon size={20} /></span>
+                <div className="ob-insider-card__text">
                   <div className="ob-insider-card__title">{cat.title}</div>
                   <div className="ob-insider-card__tier">{cat.tier}</div>
                 </div>
+                <span className={`ob-insider-card__chevron${isOpen ? ' ob-insider-card__chevron--open' : ''}`}>
+                  <IconChevronDown size={16} />
+                </span>
               </div>
               {isOpen && (
                 <div className="ob-insider-card__body">
@@ -240,7 +344,7 @@ function StepReadingFiling({ onNext }) {
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">Understanding the data</span>
         <h2 className="ob-step__title">Reading a filing</h2>
-        <p className="ob-step__subtitle">Tap each part of this filing to see what it means and how it contributes to the conviction score.</p>
+        <p className="ob-step__subtitle">Click each row below to build the conviction score.</p>
       </div>
 
       <div className="ob-filing__layout">
@@ -251,19 +355,39 @@ function StepReadingFiling({ onNext }) {
             <span className="ob-filing__card-date">Filed Sep 19, 2026</span>
           </div>
           <div className="ob-filing__hotspots">
-            {hotspots.map(hs => (
-              <button
-                key={hs.id}
-                className={`ob-hotspot${activeHotspot === hs.id ? ' ob-hotspot--active' : ''}${revealedFactors.has(hs.factorId) ? ' ob-hotspot--revealed' : ''}`}
-                onClick={() => revealHotspot(hs)}
-              >
-                <span className="ob-hotspot__label">{hs.label}</span>
-                <span className="ob-hotspot__field">{hs.field}</span>
-                {activeHotspot === hs.id && (
-                  <div className="ob-hotspot__tooltip">{hs.tooltip}</div>
-                )}
-              </button>
-            ))}
+            {hotspots.map((hs, idx) => {
+              const isActive = activeHotspot === hs.id;
+              const isRevealed = revealedFactors.has(hs.factorId);
+              // First un-revealed hotspot gets the pulse indicator
+              const isNextUp = !isRevealed && hotspots.findIndex(h => !revealedFactors.has(h.factorId)) === idx;
+              return (
+                <button
+                  key={hs.id}
+                  className={`ob-hotspot${isActive ? ' ob-hotspot--active' : ''}${isRevealed ? ' ob-hotspot--revealed' : ''}${isNextUp ? ' ob-hotspot--next' : ''}`}
+                  onClick={() => revealHotspot(hs)}
+                >
+                  <div className="ob-hotspot__row">
+                    <div className="ob-hotspot__content">
+                      <span className="ob-hotspot__label">{hs.label}</span>
+                      <span className="ob-hotspot__field">{hs.field}</span>
+                    </div>
+                    <span className="ob-hotspot__indicator">
+                      {isRevealed ? (
+                        <IconCheck size={14} className="ob-hotspot__check" />
+                      ) : (
+                        <IconChevronRight size={14} className="ob-hotspot__chevron" />
+                      )}
+                    </span>
+                  </div>
+                  {isNextUp && !isActive && revealedFactors.size === 0 && (
+                    <span className="ob-hotspot__hint">Click to explore</span>
+                  )}
+                  {isActive && (
+                    <div className="ob-hotspot__tooltip">{hs.tooltip}</div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -341,25 +465,25 @@ function StepDataMap({ onNext }) {
     {
       id: 'filings',
       title: 'All Filings',
-      icon: '📊',
+      Icon: IconBarChart,
       description: 'Every filing, filterable by date, conviction, transaction type, source, and sector. The firehose — when you want to scan everything.',
     },
     {
       id: 'insiders',
       title: 'Insiders',
-      icon: '👤',
+      Icon: IconUsers,
       description: 'Ranked leaderboard of insiders by track record. Click any name to see their complete trading history and conviction trend.',
     },
     {
       id: 'watchlist',
       title: 'Your Watchlist',
-      icon: '⭐',
+      Icon: IconStar,
       description: 'Filings filtered to only the tickers you follow. This is where most users should spend their time. You\'ll set yours up next.',
     },
     {
       id: 'settings',
       title: 'Settings & Alerts',
-      icon: '⚙️',
+      Icon: IconSettings,
       description: 'Notification preferences, portfolio linking, account management. Control how and when Seli reaches you.',
     },
   ];
@@ -378,7 +502,7 @@ function StepDataMap({ onNext }) {
             className={`ob-datamap__card${activeSection === sec.id ? ' ob-datamap__card--active' : ''}`}
             onClick={() => setActiveSection(activeSection === sec.id ? null : sec.id)}
           >
-            <span className="ob-datamap__icon">{sec.icon}</span>
+            <span className="ob-datamap__icon"><sec.Icon size={20} /></span>
             <span className="ob-datamap__title">{sec.title}</span>
             {activeSection === sec.id && (
               <p className="ob-datamap__desc">{sec.description}</p>
@@ -798,6 +922,9 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
       <div className="ob__progress">
         <div className="ob__progress-fill" style={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%` }} />
       </div>
+
+      {/* Theme toggle */}
+      <ThemeToggle />
 
       {/* Skip button */}
       <button className="ob__skip" onClick={handleSkip}>
