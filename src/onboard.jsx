@@ -145,6 +145,14 @@ function IconMoon({ size = 16, ...props }) {
   );
 }
 
+function IconHome({ size = 16, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  );
+}
+
 function IconChevronLeft({ size = 16, ...props }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -334,15 +342,15 @@ function StepReadingFiling({ onNext }) {
   const [activeHotspot, setActiveHotspot] = useState(null);
 
   const hotspots = [
-    { id: 'name', label: 'Insider Name & Title', field: 'Jane Smith, CEO', factorId: 'role', tooltip: 'This is who made the trade. Their title determines relationship strength — C-suite trades carry the most weight.' },
-    { id: 'type', label: 'Transaction Type', field: 'Open-Market Purchase', factorId: 'market', tooltip: 'Open-market buys are the most informative signal. Grants, exercises, and auto-plan trades are usually routine.' },
-    { id: 'value', label: 'Value', field: '$2,450,000', factorId: 'value', tooltip: 'The dollar amount of the trade. $1M+ trades get the highest value boost in the scoring algorithm.' },
-    { id: 'routine', label: 'Routine Flag', field: 'Non-routine', factorId: 'routine', tooltip: 'This trade is NOT on a pre-set 10b5-1 plan. The insider made a deliberate decision — this gets a +3 boost.' },
-    { id: 'direction', label: 'Direction', field: 'Purchase', factorId: 'direction', tooltip: 'Buys are more informative than sells. Insiders sell for many reasons — they buy for only one.' },
+    { id: 'name', label: 'Insider Name & Title', field: 'Jane Smith, CEO', factorId: 'role', points: 2, tooltip: 'C-suite trades carry the most weight. Their title determines relationship strength in the conviction score.' },
+    { id: 'type', label: 'Transaction Type', field: 'Open-Market Purchase', factorId: 'market', points: 2, tooltip: 'Open-market buys are the most informative signal. Grants, exercises, and auto-plan trades are usually routine.' },
+    { id: 'value', label: 'Value', field: '$2,450,000', factorId: 'value', points: 3, tooltip: 'The dollar amount of the trade. $1M+ trades get the highest value boost in the scoring algorithm.' },
+    { id: 'routine', label: 'Routine Flag', field: 'Non-routine', factorId: 'routine', points: 3, tooltip: 'This trade is NOT on a pre-set 10b5-1 plan. The insider made a deliberate decision — this gets a +3 boost.' },
+    { id: 'direction', label: 'Direction', field: 'Purchase', factorId: 'direction', points: 1, tooltip: 'Buys are more informative than sells. Insiders sell for many reasons — they buy for only one.' },
   ];
 
-  function revealHotspot(hs) {
-    setActiveHotspot(hs.id);
+  function toggleHotspot(hs) {
+    setActiveHotspot(prev => prev === hs.id ? null : hs.id);
     setRevealedFactors(prev => {
       const next = new Set(prev);
       next.add(hs.factorId);
@@ -351,81 +359,80 @@ function StepReadingFiling({ onNext }) {
   }
 
   const currentScore = SIGNAL_FACTORS.filter(f => revealedFactors.has(f.id)).reduce((sum, f) => sum + f.points, 0);
+  const allRevealed = revealedFactors.size === hotspots.length;
 
   return (
     <div className="ob-step ob-step--filing">
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">Understanding the data</span>
         <h2 className="ob-step__title">Reading a filing</h2>
-        <p className="ob-step__subtitle">Click each row below to build the conviction score.</p>
+        <p className="ob-step__subtitle">Click each row to see what it means — and watch the score build.</p>
       </div>
 
-      <div className="ob-filing__layout">
-        {/* The mock filing card */}
-        <div className="ob-filing__card">
-          <div className="ob-filing__card-header">
-            <span className="ob-filing__card-badge">SEC Form 4</span>
-            <span className="ob-filing__card-date">Filed Sep 19, 2026</span>
-          </div>
-          <div className="ob-filing__hotspots">
-            {hotspots.map((hs, idx) => {
-              const isActive = activeHotspot === hs.id;
-              const isRevealed = revealedFactors.has(hs.factorId);
-              // First un-revealed hotspot gets the pulse indicator
-              const isNextUp = !isRevealed && hotspots.findIndex(h => !revealedFactors.has(h.factorId)) === idx;
-              return (
-                <button
-                  key={hs.id}
-                  className={`ob-hotspot${isActive ? ' ob-hotspot--active' : ''}${isRevealed ? ' ob-hotspot--revealed' : ''}${isNextUp ? ' ob-hotspot--next' : ''}`}
-                  onClick={() => revealHotspot(hs)}
-                >
-                  <div className="ob-hotspot__row">
-                    <div className="ob-hotspot__content">
-                      <span className="ob-hotspot__label">{hs.label}</span>
-                      <span className="ob-hotspot__field">{hs.field}</span>
-                    </div>
-                    <span className="ob-hotspot__indicator">
-                      {isRevealed ? (
-                        <IconCheck size={14} className="ob-hotspot__check" />
-                      ) : (
-                        <IconChevronRight size={14} className="ob-hotspot__chevron" />
-                      )}
-                    </span>
+      <div className="ob-filing__card">
+        <div className="ob-filing__card-header">
+          <span className="ob-filing__card-badge">SEC Form 4</span>
+          <span className="ob-filing__card-date">Filed Sep 19, 2026</span>
+        </div>
+        <div className="ob-filing__hotspots">
+          {hotspots.map((hs, idx) => {
+            const isActive = activeHotspot === hs.id;
+            const isRevealed = revealedFactors.has(hs.factorId);
+            const isNextUp = !isRevealed && hotspots.findIndex(h => !revealedFactors.has(h.factorId)) === idx;
+            return (
+              <button
+                key={hs.id}
+                className={`ob-hotspot${isActive ? ' ob-hotspot--active' : ''}${isRevealed ? ' ob-hotspot--revealed' : ''}${isNextUp ? ' ob-hotspot--next' : ''}`}
+                onClick={() => toggleHotspot(hs)}
+              >
+                <div className="ob-hotspot__row">
+                  <div className="ob-hotspot__content">
+                    <span className="ob-hotspot__label">{hs.label}</span>
+                    <span className="ob-hotspot__field">{hs.field}</span>
                   </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Signal score builder */}
-        <div className="ob-score-builder">
-          <div className="ob-score-builder__header">
-            <span className="ob-score-builder__label">Conviction Score</span>
-            <span className="ob-score-builder__value">{currentScore}<span className="ob-score-builder__max">/14</span></span>
-          </div>
-          <div className="ob-score-builder__bar">
-            <div className="ob-score-builder__fill" style={{ width: `${(currentScore / 14) * 100}%` }} />
-          </div>
-          <div className="ob-score-builder__factors">
-            {SIGNAL_FACTORS.map(f => (
-              <div key={f.id} className={`ob-factor${revealedFactors.has(f.id) ? ' ob-factor--active' : ''}`}>
-                <span className="ob-factor__label">{f.label}</span>
-                <span className="ob-factor__points">+{f.points}</span>
-              </div>
-            ))}
-          </div>
+                  <span className="ob-hotspot__indicator">
+                    {isRevealed ? (
+                      <IconCheck size={14} className="ob-hotspot__check" />
+                    ) : (
+                      <IconChevronRight size={14} className="ob-hotspot__chevron" />
+                    )}
+                  </span>
+                </div>
+                {/* Inline explanation — always in DOM, revealed via CSS transition */}
+                <div className={`ob-hotspot__explain${isActive ? ' ob-hotspot__explain--open' : ''}`}>
+                  <p>{hs.tooltip}</p>
+                  <span className="ob-hotspot__points-tag">+{hs.points} conviction</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className={`ob-filing__detail${activeHotspot ? ' ob-filing__detail--active' : ''}`}>
-        <p key={activeHotspot || 'empty'}>
-          {activeHotspot
-            ? hotspots.find(h => h.id === activeHotspot)?.tooltip
-            : revealedFactors.size === hotspots.length
-            ? 'All factors revealed — every data point feeds the conviction score.'
-            : 'Click a field above to see how it affects the score'}
-        </p>
+      {/* Standalone conviction score bar */}
+      <div className={`ob-score-bar${allRevealed ? ' ob-score-bar--complete' : ''}`}>
+        <div className="ob-score-bar__top">
+          <span className="ob-score-bar__label">Conviction Score</span>
+          <span className="ob-score-bar__value" key={currentScore}>
+            {currentScore}<span className="ob-score-bar__max"> / 14</span>
+          </span>
+        </div>
+        <div className="ob-score-bar__track">
+          <div
+            className="ob-score-bar__fill"
+            style={{ width: `${(currentScore / 14) * 100}%` }}
+          />
+          {/* Threshold markers */}
+          <span className="ob-score-bar__marker" style={{ left: '35.7%' }} title="Moderate (5)" />
+          <span className="ob-score-bar__marker" style={{ left: '64.3%' }} title="Strong (9)" />
+        </div>
+        <div className="ob-score-bar__factors">
+          {SIGNAL_FACTORS.map(f => (
+            <span key={f.id} className={`ob-score-bar__chip${revealedFactors.has(f.id) ? ' ob-score-bar__chip--active' : ''}`}>
+              {f.label} <strong>+{f.points}</strong>
+            </span>
+          ))}
+        </div>
       </div>
 
       <button className="ob-cta" onClick={onNext}>
@@ -486,74 +493,124 @@ function StepConviction({ onNext }) {
 
 // ── Step 5: Where Data Lives ─────────────────────────────────────────────────
 function StepDataMap({ onNext }) {
-  const [activeSection, setActiveSection] = useState(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
 
-  const sections = [
-    {
-      id: 'filings',
-      title: 'All Filings',
-      Icon: IconBarChart,
-      tagline: 'Every filing, filterable by date and conviction',
-      description: 'The firehose — filter by conviction, transaction type, source, and sector. Scan everything or zero in on what matters.',
-    },
-    {
-      id: 'insiders',
-      title: 'Insiders',
-      Icon: IconUsers,
-      tagline: 'Ranked leaderboard by track record',
-      description: 'Click any name to see their complete trading history and conviction trend over time.',
-    },
-    {
-      id: 'watchlist',
-      title: 'Your Watchlist',
-      Icon: IconStar,
-      tagline: 'Activity for just the tickers you follow',
-      description: 'This is where most users should spend their time. You\'ll set yours up next.',
-    },
-    {
-      id: 'settings',
-      title: 'Settings & Alerts',
-      Icon: IconSettings,
-      tagline: 'Notifications, portfolio, and account',
-      description: 'Control how and when Seli reaches you — digest emails, real-time alerts, and more.',
-    },
+  const tabs = [
+    { id: 'dashboard', label: 'Dashboard', Icon: IconHome },
+    { id: 'filings', label: 'Filings', Icon: IconBarChart },
+    { id: 'insiders', label: 'Insiders', Icon: IconUsers },
+    { id: 'watchlist', label: 'Watchlist', Icon: IconStar },
+    { id: 'settings', label: 'Settings', Icon: IconSettings },
   ];
+
+  const tabContent = {
+    dashboard: {
+      description: 'Your home base — a live snapshot of the most important insider activity right now.',
+      preview: (
+        <div className="ob-preview ob-preview--dashboard">
+          <div className="ob-preview__stats">
+            <div className="ob-preview__stat"><span className="ob-preview__stat-val">847</span><span className="ob-preview__stat-lbl">Filings today</span></div>
+            <div className="ob-preview__stat"><span className="ob-preview__stat-val ob-preview__stat-val--green">23</span><span className="ob-preview__stat-lbl">High conviction</span></div>
+            <div className="ob-preview__stat"><span className="ob-preview__stat-val">$42M</span><span className="ob-preview__stat-lbl">Total value</span></div>
+          </div>
+          <div className="ob-preview__feed">
+            <div className="ob-preview__feed-row"><span className="ob-preview__ticker">NVDA</span><span className="ob-preview__name">Jensen Huang</span><span className="ob-preview__badge ob-preview__badge--buy">Buy</span><span className="ob-preview__amt">$12.4M</span></div>
+            <div className="ob-preview__feed-row"><span className="ob-preview__ticker">AAPL</span><span className="ob-preview__name">Tim Cook</span><span className="ob-preview__badge ob-preview__badge--sell">Sell</span><span className="ob-preview__amt">$8.1M</span></div>
+          </div>
+        </div>
+      ),
+    },
+    filings: {
+      description: 'The firehose — every SEC filing, filterable by conviction, type, sector, and date.',
+      preview: (
+        <div className="ob-preview ob-preview--filings">
+          <div className="ob-preview__filters">
+            <span className="ob-preview__chip ob-preview__chip--active">All Types</span>
+            <span className="ob-preview__chip">Buys Only</span>
+            <span className="ob-preview__chip">High Conviction</span>
+          </div>
+          <div className="ob-preview__table">
+            <div className="ob-preview__table-head"><span>Ticker</span><span>Insider</span><span>Type</span><span>Score</span></div>
+            <div className="ob-preview__table-row"><span className="ob-preview__ticker">MSFT</span><span>Satya Nadella</span><span>Purchase</span><span className="ob-preview__score">12/14</span></div>
+            <div className="ob-preview__table-row"><span className="ob-preview__ticker">GOOGL</span><span>Sundar Pichai</span><span>Purchase</span><span className="ob-preview__score">9/14</span></div>
+            <div className="ob-preview__table-row"><span className="ob-preview__ticker">META</span><span>Mark Zuckerberg</span><span>Sale</span><span className="ob-preview__score ob-preview__score--low">4/14</span></div>
+          </div>
+        </div>
+      ),
+    },
+    insiders: {
+      description: 'Ranked leaderboard of insiders by track record. Click any name for their full history.',
+      preview: (
+        <div className="ob-preview ob-preview--insiders">
+          <div className="ob-preview__leaderboard">
+            <div className="ob-preview__leader"><span className="ob-preview__rank">#1</span><span className="ob-preview__leader-name">Mark Cuban</span><span className="ob-preview__leader-title">Director</span><span className="ob-preview__accuracy">89%</span></div>
+            <div className="ob-preview__leader"><span className="ob-preview__rank">#2</span><span className="ob-preview__leader-name">Lisa Su</span><span className="ob-preview__leader-title">CEO</span><span className="ob-preview__accuracy">84%</span></div>
+            <div className="ob-preview__leader"><span className="ob-preview__rank">#3</span><span className="ob-preview__leader-name">Jamie Dimon</span><span className="ob-preview__leader-title">CEO</span><span className="ob-preview__accuracy">81%</span></div>
+          </div>
+        </div>
+      ),
+    },
+    watchlist: {
+      description: 'Activity for just the tickers you care about. You\'ll build yours in the next step.',
+      preview: (
+        <div className="ob-preview ob-preview--watchlist">
+          <div className="ob-preview__tickers">
+            <span className="ob-preview__ticker-chip">AAPL</span>
+            <span className="ob-preview__ticker-chip">NVDA</span>
+            <span className="ob-preview__ticker-chip">TSLA</span>
+            <span className="ob-preview__ticker-chip ob-preview__ticker-chip--add">+ Add</span>
+          </div>
+          <div className="ob-preview__feed">
+            <div className="ob-preview__feed-row"><span className="ob-preview__ticker">AAPL</span><span className="ob-preview__name">Jeff Williams</span><span className="ob-preview__badge ob-preview__badge--buy">Buy</span><span className="ob-preview__amt">$2.1M</span></div>
+            <div className="ob-preview__feed-row"><span className="ob-preview__ticker">TSLA</span><span className="ob-preview__name">Robyn Denholm</span><span className="ob-preview__badge ob-preview__badge--sell">Sell</span><span className="ob-preview__amt">$5.8M</span></div>
+          </div>
+        </div>
+      ),
+    },
+    settings: {
+      description: 'Control how and when Seli reaches you — digest emails, real-time alerts, and more.',
+      preview: (
+        <div className="ob-preview ob-preview--settings">
+          <div className="ob-preview__toggles">
+            <div className="ob-preview__toggle-row"><span>Daily digest email</span><span className="ob-preview__switch ob-preview__switch--on" /></div>
+            <div className="ob-preview__toggle-row"><span>High-conviction alerts</span><span className="ob-preview__switch ob-preview__switch--on" /></div>
+            <div className="ob-preview__toggle-row"><span>Congressional trade alerts</span><span className="ob-preview__switch" /></div>
+          </div>
+        </div>
+      ),
+    },
+  };
 
   return (
     <div className="ob-step ob-step--datamap">
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">Navigating the app</span>
         <h2 className="ob-step__title">Where the data lives</h2>
-        <p className="ob-step__subtitle">Four sections, each with a different job. Hover or tap to preview.</p>
+        <p className="ob-step__subtitle">Five pages, each with a different job. Tap to preview.</p>
       </div>
-      <div className="ob-datamap__nav">
-        {sections.map(sec => {
-          const isActive = activeSection === sec.id;
-          return (
-            <button
-              key={sec.id}
-              className={`ob-datamap__item${isActive ? ' ob-datamap__item--active' : ''}`}
-              onClick={() => setActiveSection(isActive ? null : sec.id)}
-              onMouseEnter={() => setActiveSection(sec.id)}
-              onMouseLeave={() => setActiveSection(null)}
-            >
-              <span className="ob-datamap__icon"><sec.Icon size={20} /></span>
-              <span className="ob-datamap__item-text">
-                <span className="ob-datamap__title">{sec.title}</span>
-                <span className="ob-datamap__tagline">{sec.tagline}</span>
-              </span>
-              <IconChevronRight size={14} className="ob-datamap__arrow" />
-            </button>
-          );
-        })}
+
+      {/* Tab bar */}
+      <div className="ob-tabs">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            className={`ob-tabs__tab${activeTab === tab.id ? ' ob-tabs__tab--active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            <tab.Icon size={18} />
+            <span className="ob-tabs__label">{tab.label}</span>
+          </button>
+        ))}
       </div>
-      <div className={`ob-datamap__detail${activeSection ? ' ob-datamap__detail--active' : ''}`}>
-        <p key={activeSection || 'empty'}>
-          {activeSection
-            ? sections.find(s => s.id === activeSection)?.description
-            : 'Hover or tap a section to preview'}
-        </p>
+
+      {/* Preview panel */}
+      <div className="ob-tabs__panel">
+        <div className="ob-tabs__preview" key={activeTab}>
+          {tabContent[activeTab].preview}
+        </div>
+        <p className="ob-tabs__desc">{tabContent[activeTab].description}</p>
       </div>
+
       <button className="ob-cta" onClick={onNext}>
         Next: Build your watchlist <IconArrowRight size={16} />
       </button>
