@@ -351,12 +351,20 @@ function StepReadingFiling({ onNext }) {
   ];
 
   function toggleHotspot(hs) {
-    setActiveHotspot(prev => prev === hs.id ? null : hs.id);
+    const wasRevealed = revealedFactors.has(hs.factorId);
+    // Toggle the factor on/off
     setRevealedFactors(prev => {
       const next = new Set(prev);
-      next.add(hs.factorId);
+      if (wasRevealed) next.delete(hs.factorId);
+      else next.add(hs.factorId);
       return next;
     });
+    // Show explanation when turning ON, close when turning OFF or re-clicking active
+    if (wasRevealed || activeHotspot === hs.id) {
+      setActiveHotspot(null);
+    } else {
+      setActiveHotspot(hs.id);
+    }
   }
 
   const currentScore = SIGNAL_FACTORS.filter(f => revealedFactors.has(f.id)).reduce((sum, f) => sum + f.points, 0);
@@ -366,8 +374,8 @@ function StepReadingFiling({ onNext }) {
     <div className="ob-step ob-step--filing">
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">Understanding the data</span>
-        <h2 className="ob-step__title">Reading a filing</h2>
-        <p className="ob-step__subtitle">Click each row to see what it means — and watch the score build.</p>
+        <h2 className="ob-step__title">How signals are scored</h2>
+        <p className="ob-step__subtitle">Toggle each factor on and off to see how it affects conviction.</p>
       </div>
 
       <div className="ob-filing__card">
@@ -884,6 +892,9 @@ function StepNotifications({ user, pro, onNext }) {
               </div>
             ))}
           </div>
+          <div className="ob-notif__portfolio-note">
+            Link your brokerage portfolio in Settings to get notified whenever insiders trade your held stocks.
+          </div>
           {!pro && (
             <div className="ob-notif__pro-cta">
               Upgrade to Pro for $6.99/mo to unlock instant alerts →
@@ -899,40 +910,35 @@ function StepNotifications({ user, pro, onNext }) {
   );
 }
 
-// ── Step 8: Your Dashboard Is Ready ─────────────────────────────────────────
+// ── Step 8: You're All Set ──────────────────────────────────────────────────
 function StepReady({ watchlist, onComplete }) {
-  const tips = [
-    { title: 'Filter by conviction', description: 'Use the conviction filter on any view to show only the trades that matter to you.' },
-    { title: 'Click any insider', description: 'Tap an insider\'s name to see their complete trading history and conviction trend.' },
-    { title: 'Revisit this guide', description: 'You can always come back here from the Guide button in the navigation.' },
-  ];
-
   return (
     <div className="ob-step ob-step--ready">
       <div className="ob-step__header">
-        <h2 className="ob-step__title ob-ready__title">Your dashboard is ready</h2>
+        <h2 className="ob-step__title ob-ready__title">You're all set</h2>
         <p className="ob-step__subtitle">
           {watchlist.tickers.length > 0
-            ? `You're following ${watchlist.tickers.length} ticker${watchlist.tickers.length !== 1 ? 's' : ''}. Here's what insiders have been doing with them.`
-            : 'You haven\'t added any tickers yet — you can always add them later from the Watchlist page.'
+            ? `You're following ${watchlist.tickers.length} ticker${watchlist.tickers.length !== 1 ? 's' : ''}.`
+            : 'You can add tickers anytime from the Watchlist page.'
           }
         </p>
       </div>
 
-      <div className="ob-ready__tips">
-        {tips.map((tip, i) => (
-          <div key={i} className="ob-ready__tip">
-            <div className="ob-ready__tip-num">{i + 1}</div>
-            <div>
-              <div className="ob-ready__tip-title">{tip.title}</div>
-              <div className="ob-ready__tip-desc">{tip.description}</div>
-            </div>
-          </div>
-        ))}
-      </div>
+      {watchlist.tickers.length > 0 && (
+        <div className="ob-ready__tickers">
+          {watchlist.tickers.map(t => (
+            <span key={t} className="ob-ready__ticker">{t}</span>
+          ))}
+        </div>
+      )}
+
+      <p className="ob-ready__guide-note">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px', marginRight: '6px', opacity: 0.5 }}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        You can revisit this guide anytime from the navigation.
+      </p>
 
       <button className="ob-cta ob-cta--primary" onClick={onComplete}>
-        Go to your dashboard <IconArrowRight size={16} />
+        Get started with Seli <IconArrowRight size={16} />
       </button>
     </div>
   );
