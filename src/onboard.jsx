@@ -807,38 +807,42 @@ function StepWatchlist({ watchlist, onNext }) {
 }
 
 // ── Step 7: Notifications ────────────────────────────────────────────────────
-function StepNotifications({ user, pro, onNext }) {
-  const [digestOn, setDigestOn] = useState(true);
+function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, onDigestChange }) {
+  const [digestOn, setDigestOn] = useState(digestOnProp);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
 
-  // Persist the weekly digest preference to the real user_preferences table
+  // Persist the weekly digest choice. /prefs/digest works for free users and
+  // only touches weekly_digest. The old version POSTed a localStorage-merged
+  // body to /prefs, which 403s for free users (Pro-only route) and, for Pro
+  // users with an empty cache, overwrote every other setting with FALSE.
+  // It also never checked the response, so it showed "Saved" either way.
   async function toggleDigest(enabled) {
+    const prev = digestOn;
     setDigestOn(enabled);
+    onDigestChange?.(enabled);
     if (!user?.id) return;
-    setSaving(true);
+    setSaving(true); setSaveError(false);
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (window.__clerkGetToken) {
-        try {
-          const token = await window.__clerkGetToken();
-          if (token) headers['Authorization'] = `Bearer ${token}`;
-        } catch {}
+        try { const token = await window.__clerkGetToken(); if (token) headers['Authorization'] = `Bearer ${token}`; } catch {}
       }
-      // Load existing prefs, merge, and save
-      let existing = {};
-      try {
-        const cached = localStorage.getItem(`seli_prefs_${user.id}`);
-        if (cached) existing = JSON.parse(cached);
-      } catch {}
-      const updated = { ...existing, weekly_digest: enabled };
-      localStorage.setItem(`seli_prefs_${user.id}`, JSON.stringify(updated));
-      await fetch(`${cfg.NEON_PROXY_URL}/prefs`, {
-        method: 'POST', headers, body: JSON.stringify(updated),
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/prefs/digest`, {
+        method: 'POST', headers, body: JSON.stringify({ weekly_digest: enabled }),
       });
+      if (!res.ok) throw new Error(`prefs/digest ${res.status}`);
+      try {
+        const key = `seli_prefs_${user.id}`;
+        const cached = JSON.parse(localStorage.getItem(key) || '{}');
+        localStorage.setItem(key, JSON.stringify({ ...cached, weekly_digest: enabled }));
+      } catch {}
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch {}
+    } catch {
+      setDigestOn(prev); onDigestChange?.(prev); setSaveError(true);
+    }
     setSaving(false);
   }
 
@@ -864,12 +868,12 @@ function StepNotifications({ user, pro, onNext }) {
             <span className="ob-notif__tier-badge">Free</span>
             <span className="ob-notif__tier-title">Weekly Digest</span>
           </div>
-          <p className="ob-notif__tier-desc">A weekly email summarizing the top insider activity across your watchlist. Every Sunday evening.</p>
+          <p className="ob-notif__tier-desc">One email every Sunday evening: what insiders did with your watchlist stocks (even in quiet weeks), plus the strongest insider buying of the week and why it stands out.</p>
           <label className="ob-notif__toggle">
             <input type="checkbox" checked={digestOn} onChange={e => toggleDigest(e.target.checked)} disabled={saving} />
             <span className="ob-notif__toggle-track" />
             <span className="ob-notif__toggle-label">
-              {saving ? 'Saving…' : saved ? 'Saved ✓' : digestOn ? 'Enabled' : 'Disabled'}
+              {saving ? 'Saving…' : saveError ? "Couldn't save, try again" : saved ? 'Saved ✓' : digestOn ? 'Enabled' : 'Disabled'}
             </span>
           </label>
         </div>
@@ -957,7 +961,26 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
   });
   const [stats, setStats] = useState({});
   const [sampleFilings, setSampleFilings] = useState({});
+  const [digestOn, setDigestOn] = useState(true);
   const containerRef = useRef(null);
+
+  // Tell the Worker onboarding is done (or skipped) and what the digest
+  // toggle ended up as. This is what makes sure a prefs row exists with a
+  // real email even if the Clerk webhook didn't fire, and it's the
+  // onboarded_at the welcome email uses to pick "/watchlist" vs "/onboard".
+  // Fire-and-forget with keepalive so navigating away doesn't cancel it.
+  async function reportOnboardDone(skipped) {
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (window.__clerkGetToken) {
+        try { const token = await window.__clerkGetToken(); if (token) headers['Authorization'] = `Bearer ${token}`; } catch {}
+      }
+      fetch(`${cfg.NEON_PROXY_URL}/onboard/complete`, {
+        method: 'POST', headers, keepalive: true,
+        body: JSON.stringify({ skipped, weekly_digest: digestOn }),
+      }).catch(() => {});
+    } catch {}
+  }
 
   // Persist current step
   useEffect(() => {
@@ -1040,6 +1063,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
   }
 
   function handleComplete() {
+    reportOnboardDone(false);
     try { localStorage.removeItem('seli_onboard_step'); } catch {}
     try {
       if (window.posthog) {
@@ -1050,6 +1074,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
   }
 
   function handleSkip() {
+    reportOnboardDone(true);
     try { localStorage.removeItem('seli_onboard_step'); } catch {}
     try {
       if (window.posthog) {
@@ -1109,7 +1134,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
       {step === 3 && <StepConviction onNext={goNext} />}
       {step === 4 && <StepDataMap onNext={goNext} />}
       {step === 5 && <StepWatchlist watchlist={watchlist} onNext={goNext} />}
-      {step === 6 && <StepNotifications user={user} pro={pro} onNext={goNext} />}
+      {step === 6 && <StepNotifications user={user} pro={pro} onNext={goNext} digestOn={digestOn} onDigestChange={setDigestOn} />}
       {step === 7 && <StepReady watchlist={watchlist} onComplete={handleComplete} />}
     </div>
   );

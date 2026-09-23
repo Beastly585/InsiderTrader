@@ -1051,23 +1051,37 @@ const FREE_WATCHLIST_LIMIT = 3;
 
 function useWatchlist(user) {
   const { pro } = useBilling();
-  // Free users can watch up to FREE_WATCHLIST_LIMIT tickers (localStorage only).
-  // Pro users get unlimited tickers synced to Neon.
+  // Free users can watch up to FREE_WATCHLIST_LIMIT tickers, Pro unlimited.
+  // Both sync to Neon (the Worker enforces the free cap).
   const [tickers, setTickers] = useState(() => wlGet(WL_KEY));
   const [insiders, setInsiders] = useState(() => pro ? wlGet(WL_INSIDER_KEY) : []);
   const [showUpgrade, setShowUpgrade] = useState(null); // null | 'watchlist_ticker' | 'watchlist_insider'
 
-  // Load from Neon on mount for Pro users
+  // Load from Neon on mount for everyone. Free watchlists used to be
+  // localStorage-only, so the server (and every email) never knew what a
+  // free user was watching. If the server has no tickers yet but this
+  // browser does (anyone who built a list before this change), push the
+  // local list up once, capped at the free limit for free users.
+  // Waits for billingStatus (the server's answer) so a Pro user whose Clerk
+  // metadata is stale is never treated as free here. Never trims the local
+  // list either: a free user who somehow has more than 3 locally just gets
+  // the first 3 pushed; nothing is deleted.
+  const { billingStatus } = useBilling();
+  const billingKnown = billingStatus !== null;
   useEffect(() => {
-    if (!pro || !user) return;
+    if (!user || !billingKnown) return;
     neonWatchlistLoad().then(items => {
       if (!items) return;
       const t = items.filter(i => i.item_type === 'ticker').map(i => i.item_value);
       const ins = items.filter(i => i.item_type === 'insider').map(i => i.item_value);
       if (t.length) { wlSet(t, WL_KEY); setTickers(t); }
-      if (ins.length) { wlSet(ins, WL_INSIDER_KEY); setInsiders(ins); }
+      else {
+        const local = wlGet(WL_KEY);
+        (pro ? local : local.slice(0, FREE_WATCHLIST_LIMIT)).forEach(tk => neonWatchlistMutate('ticker', tk, 'add'));
+      }
+      if (pro && ins.length) { wlSet(ins, WL_INSIDER_KEY); setInsiders(ins); }
     });
-  }, [pro, user?.id]);
+  }, [pro, user?.id, billingKnown]);
 
   // Toggle ticker — free users get up to FREE_WATCHLIST_LIMIT tickers
   const toggleTicker = useCallback((ticker) => {
@@ -1077,7 +1091,7 @@ function useWatchlist(user) {
       if (isRemoving) {
         const next = prev.filter(t => t !== ticker);
         wlSet(next, WL_KEY);
-        if (pro) neonWatchlistMutate('ticker', ticker, 'remove');
+        neonWatchlistMutate('ticker', ticker, 'remove');
         return next;
       }
       // Adding — free users hit the wall at the limit
@@ -1087,7 +1101,7 @@ function useWatchlist(user) {
       }
       const next = [...prev, ticker];
       wlSet(next, WL_KEY);
-      if (pro) neonWatchlistMutate('ticker', ticker, 'add');
+      neonWatchlistMutate('ticker', ticker, 'add'); // free users too (server caps at 3)
       return next;
     });
   }, [pro]);
@@ -10084,7 +10098,9 @@ function useNotificationPrefs(userId, pro) {
     // the real network request is in flight.
     const cached = localStorage.getItem(`seli_prefs_${userId}`);
     if (cached) { try { setPrefs({ ...DEFAULT_PREFS, ...JSON.parse(cached) }); } catch { } }
-    if (!cfg.NEON_PROXY_URL || !pro) { setPrefs(p => p || { ...DEFAULT_PREFS }); return; }
+    // Free users load too: they need the real weekly_digest value. GET /prefs
+    // was never Pro-gated server-side, only this early return was.
+    if (!cfg.NEON_PROXY_URL) { setPrefs(p => p || { ...DEFAULT_PREFS }); return; }
 
     (async () => {
       try {
@@ -10235,6 +10251,30 @@ function SettingsPage({ user, onUpgrade }) {
 
   function upd(key, val) { setLocal(p => ({ ...p, [key]: val })); }
 
+  // Free users can turn the weekly digest on/off (it's the free-tier email).
+  // Saves immediately through /prefs/digest; the full /prefs save stays Pro.
+  const [freeDigestState, setFreeDigestState] = useState(null); // null | 'saving' | 'saved' | error string
+  async function toggleFreeWeekly(enabled) {
+    const prev = local?.weekly_digest;
+    upd('weekly_digest', enabled);
+    setFreeDigestState('saving');
+    try {
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/prefs/digest`, { method: 'POST', headers, body: JSON.stringify({ weekly_digest: enabled }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      try {
+        const key = `seli_prefs_${user?.id}`;
+        localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) || '{}'), weekly_digest: enabled }));
+      } catch { }
+      setFreeDigestState('saved');
+      setTimeout(() => setFreeDigestState(null), 2500);
+    } catch (e) {
+      upd('weekly_digest', prev);
+      setFreeDigestState(e.message || 'Save failed');
+    }
+  }
+
   async function sendTestEmail() {
     setTestState('sending');
     try {
@@ -10325,7 +10365,7 @@ function SettingsPage({ user, onUpgrade }) {
               <div className="ws-tile__body">
                 {!pro && (
                   <div className="ws-settings-upgrade-banner">
-                    Scheduled digests are a Pro feature. Upgrade to get daily or weekly summaries delivered to your inbox.
+                    The weekly digest is free. Pro adds a daily digest, custom filters, and instant alerts.
                     <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Go Pro →</button>
                   </div>
                 )}
@@ -10336,7 +10376,9 @@ function SettingsPage({ user, onUpgrade }) {
                   <div className="ws-settings-group">
                     <div className="ws-settings-group__label">Frequency</div>
                     <SettingsToggle label="Daily digest" sub="Every weekday morning at 8am ET" checked={local.daily_digest} onChange={e => upd('daily_digest', e.target.checked)} pro={pro} />
-                    <SettingsToggle label="Weekly digest" sub="Every Monday morning at 8am ET" checked={local.weekly_digest} onChange={e => upd('weekly_digest', e.target.checked)} pro={pro} />
+                    {/* pro={true} unlocks this one toggle for free users; for them it saves on its own */}
+                    <SettingsToggle label="Weekly digest" sub={!pro && freeDigestState && freeDigestState !== 'saving' && freeDigestState !== 'saved' ? freeDigestState : 'Sunday evenings: your watchlist plus the week\'s strongest insider buying'} checked={local.weekly_digest}
+                      onChange={e => pro ? upd('weekly_digest', e.target.checked) : toggleFreeWeekly(e.target.checked)} pro={true} disabled={!pro && freeDigestState === 'saving'} />
                   </div>
 
                   <div className={`ws-settings-group${((!local.daily_digest && !local.weekly_digest) || !pro) ? ' ws-settings-group--dimmed' : ''}`}>

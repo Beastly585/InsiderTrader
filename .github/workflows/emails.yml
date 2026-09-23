@@ -1,0 +1,68 @@
+# .github/workflows/emails.yml
+# Welcome email (daily), weekly digest (Sunday evening), daily digest (Pro, weekdays).
+# Cron is UTC. Times below are for EDT (UTC-4); in winter (EST) they land an hour earlier.
+name: emails
+
+on:
+  schedule:
+    - cron: "0 13 * * *"     # welcome      09:00 ET daily
+    - cron: "0 22 * * 0"     # weekly       18:00 ET Sunday
+    - cron: "0 12 * * 1-5"   # daily (Pro)  08:00 ET weekdays
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "welcome | weekly | daily"
+        required: true
+        default: weekly
+      only_email:
+        description: "Send only to this address (testing)"
+        required: false
+      dry_run:
+        description: "true = build but don't send"
+        required: false
+        default: "false"
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: db
+    env:
+      DATABASE_URL:       ${{ secrets.DATABASE_URL }}
+      RESEND_API_KEY:     ${{ secrets.RESEND_API_KEY }}
+      EMAIL_LINK_SECRET:  ${{ secrets.EMAIL_LINK_SECRET }}
+      WORKER_API_KEY:     ${{ secrets.WORKER_API_KEY }}
+      NEON_PROXY_URL:     https://neon-proxy.beastly-insider-trades.workers.dev
+      APP_URL:            https://seli.app
+      ALERTS_FROM_EMAIL:  alerts@mail.seli.app
+      WELCOME_REPLY_TO:   ${{ secrets.WELCOME_REPLY_TO }}
+      MAILING_ADDRESS:    ${{ secrets.MAILING_ADDRESS }}
+      ONLY_EMAIL:         ${{ github.event.inputs.only_email }}
+      DRY_RUN:            ${{ github.event.inputs.dry_run || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install "psycopg[binary]" requests python-dotenv
+      - name: Pick job
+        id: pick
+        run: |
+          JOB="${{ github.event.inputs.job }}"
+          if [ -z "$JOB" ]; then
+            case "${{ github.event.schedule }}" in
+              "0 13 * * *")   JOB=welcome ;;
+              "0 22 * * 0")   JOB=weekly ;;
+              "0 12 * * 1-5") JOB=daily ;;
+            esac
+          fi
+          echo "job=$JOB" >> "$GITHUB_OUTPUT"
+      - if: steps.pick.outputs.job == 'welcome'
+        run: python send_welcome.py
+      - if: steps.pick.outputs.job == 'weekly'
+        run: python send_digests.py
+        env: { DIGEST_TYPE: weekly }
+      - if: steps.pick.outputs.job == 'daily'
+        run: python send_digests.py
+        env: { DIGEST_TYPE: daily }

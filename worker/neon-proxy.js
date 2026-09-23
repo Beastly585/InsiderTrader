@@ -410,6 +410,15 @@ async function handleFetchInner(request, env, origin) {
       return handleClerkWebhook(request, env);
     }
 
+    // ── Email unsubscribe. Public on purpose: it's hit from inbox links
+    // (GET, shows a confirm page) and from Gmail/Yahoo's one-click
+    // List-Unsubscribe-Post (POST, no Origin, no JWT). The HMAC token in
+    // the query string IS the auth. Has to sit above the origin check and
+    // the JWT check below, same reasoning as the two webhooks above.
+    if (url.pathname === '/email/unsubscribe') {
+      return handleEmailUnsubscribe(request, env, url);
+    }
+
     // Allow GET and POST
     if (request.method !== 'POST' && request.method !== 'GET') {
       return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
@@ -544,6 +553,15 @@ async function handleFetchInner(request, env, origin) {
     }
     if (url.pathname === '/prefs/test-email') {
       return handleTestEmail(request, env, origin);
+    }
+    // Weekly digest on/off for ANY signed-in user (free included). The full
+    // /prefs POST stays Pro-only; this only ever touches weekly_digest.
+    if (url.pathname === '/prefs/digest') {
+      return handleDigestToggle(request, env, origin);
+    }
+    // Marks onboarding done (or skipped) and records the digest choice.
+    if (url.pathname === '/onboard/complete') {
+      return handleOnboardComplete(request, env, origin);
     }
 
     // ── SnapTrade — real per-user portfolio linking ──────────────────────
@@ -2255,7 +2273,13 @@ async function handlePrefs(request, env, origin) {
     try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
 
     const b = (v) => v ? 'TRUE' : 'FALSE';
-    const conviction = ['any','medium','high'].includes(body.digest_min_conviction) ? body.digest_min_conviction : 'any';
+    // Settings sends the real 0-100 scale (0/25/40/60/75). This used to only
+    // accept 'any'|'medium'|'high', so every numeric save fell through to
+    // 'any' and the filter never did anything. Stored as text (column type
+    // unchanged), legacy words mapped for old clients.
+    const LEGACY_CONV = { any: 0, medium: 40, high: 60 };
+    const convRaw = body.digest_min_conviction in LEGACY_CONV ? LEGACY_CONV[body.digest_min_conviction] : Number(body.digest_min_conviction);
+    const conviction = String(Number.isFinite(convRaw) ? Math.min(100, Math.max(0, Math.round(convRaw))) : 0);
     // Numeric fields — clamp to sane non-negative values rather than trust the client outright.
     const n = (v, fallback=0) => { const num = Number(v); return Number.isFinite(num) && num >= 0 ? num : fallback; };
     const maxSignals   = n(body.digest_max_signals, 10);
@@ -2316,6 +2340,8 @@ async function handlePrefs(request, env, origin) {
           instant_reversal                   = EXCLUDED.instant_reversal,
           instant_min_value                  = EXCLUDED.instant_min_value,
           instant_high_conviction_threshold  = EXCLUDED.instant_high_conviction_threshold,
+          email_unsubscribed_at              = CASE WHEN EXCLUDED.daily_digest OR EXCLUDED.weekly_digest
+                                                    THEN NULL ELSE public.user_preferences.email_unsubscribed_at END,
           updated_at                         = now()
       `);
       return corsResponse({ ok: true }, 200, origin, env);
@@ -2423,6 +2449,194 @@ async function handleTestEmail(request, env, origin) {
   }
 }
 
+// ── Email lifecycle helpers ──────────────────────────────────────────────────
+// Everything below backs the welcome email + free-tier weekly digest
+// (db/send_welcome.py, db/send_digests.py).
+
+// Primary email + first name + signup time straight from Clerk. Same lookup
+// handlePrefs already does, pulled out so the new routes don't copy it again.
+async function clerkProfile(env, clerkUserId) {
+  if (!env.CLERK_SECRET_KEY) return null;
+  const r = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, {
+    headers: { 'Authorization': `Bearer ${env.CLERK_SECRET_KEY}` },
+  });
+  if (!r.ok) return null;
+  const u = await r.json();
+  const email = u.email_addresses?.find(e => e.id === u.primary_email_address_id)?.email_address
+             || u.email_addresses?.[0]?.email_address || null;
+  if (!email) return null;
+  return { email, firstName: (u.first_name || '').trim().slice(0, 60) || null, createdMs: Number(u.created_at) || Date.now() };
+}
+
+// Insert a row with sane digest defaults if none exists; otherwise just
+// refresh email/name and backfill signed_up_at. Never touches an existing
+// user's digest or alert settings. Every column /prefs writes is set
+// explicitly on insert so this can't trip a NOT NULL without a default.
+async function ensurePrefsRow(env, clerkUserId, email, firstName, signedUpMs) {
+  const ms = Number.isFinite(signedUpMs) ? Math.floor(signedUpMs) : Date.now();
+  await neonFetch(env, `
+    INSERT INTO public.user_preferences
+      (clerk_user_id, email, first_name, signed_up_at,
+       daily_digest, weekly_digest,
+       digest_top_signals, digest_congressional, digest_corporate,
+       digest_watchlist_only, digest_min_conviction, digest_max_signals, digest_min_value,
+       instant_watchlist_ticker, instant_followed_insider,
+       instant_high_conviction, instant_reversal,
+       instant_min_value, instant_high_conviction_threshold, updated_at)
+    VALUES (
+      ${sqlVal(clerkUserId)}, ${sqlVal(email)}, ${sqlVal(firstName)}, to_timestamp(${ms} / 1000.0),
+      FALSE, TRUE,
+      TRUE, TRUE, TRUE,
+      FALSE, '0', 10, 0,
+      FALSE, FALSE, FALSE, FALSE,
+      0, 1000000, now()
+    )
+    ON CONFLICT (clerk_user_id) DO UPDATE SET
+      email        = EXCLUDED.email,
+      first_name   = COALESCE(EXCLUDED.first_name, public.user_preferences.first_name),
+      signed_up_at = COALESCE(public.user_preferences.signed_up_at, EXCLUDED.signed_up_at),
+      updated_at   = now()
+  `);
+}
+
+// POST { weekly_digest: bool } for any signed-in user.
+async function handleDigestToggle(request, env, origin) {
+  if (request.method !== 'POST') return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+  let body;
+  try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
+  if (typeof body.weekly_digest !== 'boolean') return corsResponse({ error: 'weekly_digest must be true or false' }, 400, origin, env);
+  try {
+    const p = await clerkProfile(env, clerkUserId);
+    if (!p) return corsResponse({ error: 'Could not verify your account email, try again' }, 500, origin, env);
+    await ensurePrefsRow(env, clerkUserId, p.email, p.firstName, p.createdMs);
+    await neonFetch(env, `
+      UPDATE public.user_preferences
+         SET weekly_digest = ${body.weekly_digest ? 'TRUE' : 'FALSE'},
+             email_unsubscribed_at = ${body.weekly_digest ? 'NULL' : 'email_unsubscribed_at'},
+             updated_at = now()
+       WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+    `);
+    return corsResponse({ ok: true, weekly_digest: body.weekly_digest }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] /prefs/digest failed:', e.message);
+    return corsResponse({ error: 'Something went wrong, try again' }, 500, origin, env);
+  }
+}
+
+// POST { weekly_digest?: bool, skipped?: bool } when onboarding finishes or
+// is skipped. Records onboarded_at once (first completion wins) and makes
+// sure the row exists even if the Clerk user.created webhook never fired.
+async function handleOnboardComplete(request, env, origin) {
+  if (request.method !== 'POST') return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+  let body = {};
+  try { body = await request.json(); } catch {}
+  try {
+    const p = await clerkProfile(env, clerkUserId);
+    if (!p) return corsResponse({ error: 'Could not verify your account email, try again' }, 500, origin, env);
+    await ensurePrefsRow(env, clerkUserId, p.email, p.firstName, p.createdMs);
+    const digestSet = typeof body.weekly_digest === 'boolean'
+      ? `, weekly_digest = ${body.weekly_digest ? 'TRUE' : 'FALSE'}${body.weekly_digest ? ', email_unsubscribed_at = NULL' : ''}`
+      : '';
+    await neonFetch(env, `
+      UPDATE public.user_preferences
+         SET onboarded_at = COALESCE(onboarded_at, now())${digestSet}, updated_at = now()
+       WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+    `);
+    return corsResponse({ ok: true }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] /onboard/complete failed:', e.message);
+    return corsResponse({ error: 'Something went wrong, try again' }, 500, origin, env);
+  }
+}
+
+// HMAC-SHA256(EMAIL_LINK_SECRET, "<kind>:<clerk_user_id>"), base64url, no
+// padding. db/email_kit.py computes the exact same thing. Wrangler secret:
+//   wrangler secret put EMAIL_LINK_SECRET   (any long random string; same
+//   value goes in the GitHub Actions secret the Python scripts read)
+async function emailLinkSig(env, kind, clerkUserId) {
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(env.EMAIL_LINK_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  );
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${kind}:${clerkUserId}`));
+  return btoa(String.fromCharCode(...new Uint8Array(mac))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function unsubPage(title, bodyHtml) {
+  return new Response(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>${title} · Seli</title></head>
+<body style="margin:0;background:#F3F4F6;font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111827;">
+<div style="max-width:440px;margin:48px auto;padding:0 16px;">
+<div style="background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+<div style="height:4px;background:linear-gradient(90deg,#5A4FE8,#4338C9 60%,#3FBFA0);"></div>
+<div style="padding:28px 26px;">
+<div style="font-weight:800;font-size:18px;letter-spacing:-.3px;margin-bottom:18px;">Seli</div>
+${bodyHtml}
+</div></div></div></body></html>`, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+
+// GET  /email/unsubscribe?u=<uid>&k=<digest|alerts>&t=<sig>  -> confirm page
+// POST same URL                                             -> do it
+//   (form post from the confirm page, or RFC 8058 one-click from the inbox)
+// POST with action=resubscribe                              -> undo
+// GET never changes anything: corporate link scanners (Outlook Safe Links
+// etc.) prefetch every URL in an email, and a GET that unsubscribed would
+// silently opt people out.
+async function handleEmailUnsubscribe(request, env, url) {
+  const uid = url.searchParams.get('u') || '';
+  const kind = url.searchParams.get('k') === 'alerts' ? 'alerts' : 'digest';
+  const sig = url.searchParams.get('t') || '';
+  const bad = () => unsubPage('Link expired', `<p style="font-size:14px;line-height:1.6;margin:0;">That link doesn't look right. You can turn emails off any time in <a href="https://seli.app/settings?section=notifications" style="color:#5A4FE8;">Settings</a>.</p>`);
+  if (!env.EMAIL_LINK_SECRET || !/^user_[A-Za-z0-9]+$/.test(uid)) return bad();
+  const expected = await emailLinkSig(env, kind, uid);
+  let diff = expected.length !== sig.length ? 1 : 0;
+  for (let i = 0; i < Math.max(expected.length, sig.length); i++) diff |= (expected.charCodeAt(i) || 0) ^ (sig.charCodeAt(i) || 0);
+  if (diff !== 0) return bad();
+
+  const what = kind === 'alerts' ? 'instant alerts' : 'the weekly digest and other Seli emails';
+  const self = `${url.pathname}?${url.searchParams.toString()}`;
+  const btn = (label, action, primary) => `<form method="POST" action="${self}" style="margin:18px 0 0;">
+<input type="hidden" name="action" value="${action}">
+<button type="submit" style="font:600 14px Inter,Arial,sans-serif;padding:11px 20px;border-radius:8px;border:${primary ? '0' : '1px solid #E5E7EB'};background:${primary ? '#5A4FE8' : '#fff'};color:${primary ? '#fff' : '#111827'};cursor:pointer;">${label}</button></form>`;
+
+  if (request.method === 'GET') {
+    return unsubPage('Unsubscribe', `<p style="font-size:15px;line-height:1.6;margin:0;">Stop getting ${what}?</p>${btn('Unsubscribe', 'unsubscribe', true)}`);
+  }
+  if (request.method !== 'POST') return unsubPage('Unsubscribe', '<p>Method not allowed.</p>');
+
+  let action = 'unsubscribe';
+  try {
+    const form = await request.formData();
+    if (form.get('action') === 'resubscribe') action = 'resubscribe';
+  } catch {} // one-click posts are form-encoded too; anything unparseable = unsubscribe
+
+  try {
+    if (kind === 'alerts') {
+      await neonFetch(env, action === 'resubscribe'
+        ? `UPDATE public.user_preferences SET instant_watchlist_ticker = TRUE, updated_at = now() WHERE clerk_user_id = ${sqlVal(uid)}`
+        : `UPDATE public.user_preferences SET instant_watchlist_ticker = FALSE, instant_followed_insider = FALSE, instant_high_conviction = FALSE, instant_reversal = FALSE, updated_at = now() WHERE clerk_user_id = ${sqlVal(uid)}`);
+    } else {
+      await neonFetch(env, action === 'resubscribe'
+        ? `UPDATE public.user_preferences SET weekly_digest = TRUE, email_unsubscribed_at = NULL, updated_at = now() WHERE clerk_user_id = ${sqlVal(uid)}`
+        : `UPDATE public.user_preferences SET weekly_digest = FALSE, daily_digest = FALSE, email_unsubscribed_at = now(), updated_at = now() WHERE clerk_user_id = ${sqlVal(uid)}`);
+    }
+  } catch (e) {
+    console.error('[Worker] unsubscribe failed:', e.message);
+    return unsubPage('Something broke', `<p style="font-size:14px;line-height:1.6;margin:0;">Couldn't save that. Try again in a minute, or turn emails off in <a href="https://seli.app/settings?section=notifications" style="color:#5A4FE8;">Settings</a>.</p>`);
+  }
+
+  if (action === 'resubscribe') {
+    return unsubPage('Back on', `<p style="font-size:15px;line-height:1.6;margin:0;">You're back on. ${kind === 'alerts' ? 'Watchlist alerts are on again. Fine-tune the rest in Settings.' : 'Next digest lands Sunday evening.'}</p>`);
+  }
+  return unsubPage('Unsubscribed', `<p style="font-size:15px;line-height:1.6;margin:0 0 4px;">Done. No more ${what}.</p>
+<p style="font-size:13px;line-height:1.6;color:#6B7280;margin:0;">Your account and watchlist aren't touched.</p>${btn('Actually, turn it back on', 'resubscribe', false)}`);
+}
+
 async function handleWatchlist(request, env, origin) {
   // Now uses the same verified-JWT check as billing/prefs — this previously
   // used a plain unverified decode, flagged early on but never fixed until now.
@@ -2452,10 +2666,23 @@ async function handleWatchlist(request, env, origin) {
     // ungated: removing something should always be allowed regardless of
     // plan (it shrinks usage, not grows it), so a downgraded user isn't
     // trapped unable to clean up their own list.
-    if (action==='add' && !(await isProServerSide(env, userId))) {
-      return corsResponse({ error: 'Watchlist is a Pro feature' }, 403, origin, env);
-    }
     if (!['ticker','insider'].includes(item_type)) return corsResponse({ error: 'Invalid item_type' }, 400, origin, env);
+    // Free tier: up to FREE_WATCHLIST_LIMIT tickers, stored server-side like
+    // Pro. This used to be Pro-only, which meant free watchlists lived only
+    // in localStorage and every email script saw free users as having an
+    // empty watchlist. Following insiders stays Pro. The cap is enforced
+    // here, not just in the UI.
+    if (action==='add' && !(await isProServerSide(env, userId))) {
+      if (item_type !== 'ticker') {
+        return corsResponse({ error: 'Following insiders is a Pro feature' }, 403, origin, env);
+      }
+      const FREE_WATCHLIST_LIMIT = 3;
+      const cnt = await neonFetch(env,
+        `SELECT COUNT(*)::int AS n FROM public.user_watchlist WHERE clerk_user_id=${sqlVal(userId)} AND item_type='ticker' AND item_value <> ${sqlVal(item_value.slice(0,200))}`);
+      if ((cnt.rows?.[0]?.n ?? 0) >= FREE_WATCHLIST_LIMIT) {
+        return corsResponse({ error: 'Free watchlist is full (3 tickers)', limit: FREE_WATCHLIST_LIMIT }, 403, origin, env);
+      }
+    }
     if (!item_value || typeof item_value !== 'string') return corsResponse({ error: 'Missing item_value' }, 400, origin, env);
 
     const val = item_value.slice(0,200);
@@ -3518,11 +3745,43 @@ async function handleClerkWebhook(request, env) {
     return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400 });
   }
 
+  // user.created / user.updated: make sure every account has a
+  // user_preferences row with a real email. Before this, only Pro users who
+  // saved Settings had a row, so free users were invisible to every email
+  // script. Requires subscribing the Clerk webhook endpoint to user.created
+  // and user.updated in the Clerk dashboard (it's currently user.deleted only).
+  if (event.type === 'user.created' || event.type === 'user.updated') {
+    const d = event.data || {};
+    const uid = d.id;
+    if (!uid || !/^user_[A-Za-z0-9]+$/.test(uid)) {
+      return new Response(JSON.stringify({ error: 'Malformed user id' }), { status: 400 });
+    }
+    const email = d.email_addresses?.find(e => e.id === d.primary_email_address_id)?.email_address
+               || d.email_addresses?.[0]?.email_address || null;
+    if (!email) return new Response(JSON.stringify({ received: true, skipped: 'no email' }), { status: 200 });
+    const firstName = (d.first_name || '').trim().slice(0, 60) || null;
+    try {
+      if (event.type === 'user.created') {
+        const createdMs = Number(d.created_at);
+        await ensurePrefsRow(env, uid, email, firstName, Number.isFinite(createdMs) ? createdMs : Date.now());
+      } else {
+        await neonFetch(env, `
+          UPDATE public.user_preferences
+             SET email = ${sqlVal(email)}, first_name = COALESCE(${sqlVal(firstName)}, first_name), updated_at = now()
+           WHERE clerk_user_id = ${sqlVal(uid)}
+        `);
+      }
+      return new Response(JSON.stringify({ received: true }), { status: 200 });
+    } catch (e) {
+      console.error(`[Worker] Clerk ${event.type} prefs upsert failed:`, e.message);
+      return new Response(JSON.stringify({ error: 'Webhook processing failed' }), { status: 500 });
+    }
+  }
+
   if (event.type !== 'user.deleted') {
-    // Only user.deleted triggers a cascade — every other Clerk event
-    // (user.created, session events, etc.) is a no-op here on purpose,
-    // acknowledged with 200 so Clerk doesn't retry something we're not
-    // handling anyway.
+    // Only user.created/updated (above) and user.deleted (below) do
+    // anything. Every other Clerk event is acknowledged with 200 so Clerk
+    // doesn't retry something we're not handling anyway.
     return new Response(JSON.stringify({ received: true }), { status: 200 });
   }
 
