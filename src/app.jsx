@@ -2738,10 +2738,16 @@ function CompanyDescExpanded({ desc }) {
 function StarBtn({ ticker, watchlist }) {
   const isWatched = watchlist.has(ticker);
   const isPro = watchlist.pro;
+  // Free users get FREE_WATCHLIST_LIMIT real slots; only look locked once they're full.
+  const full = !isPro && !isWatched && watchlist.freeSlotsLeft === 0;
+  const title = isWatched ? 'Remove from watchlist'
+    : isPro ? 'Add to watchlist'
+    : full ? `Free watchlist is full (${watchlist.freeLimit}). Pro makes it unlimited.`
+    : `Add to watchlist (${watchlist.freeSlotsLeft} of ${watchlist.freeLimit} free slots left)`;
   return (
     <button
-      className={`star-btn${isWatched ? ' star-btn--active' : ''}${!isPro ? ' star-btn--locked' : ''}`}
-      title={isPro ? (isWatched ? 'Remove from watchlist' : 'Add to watchlist') : 'Pro feature — upgrade to track tickers'}
+      className={`star-btn${isWatched ? ' star-btn--active' : ''}${full ? ' star-btn--locked' : ''}`}
+      title={title}
       onClick={e => { e.stopPropagation(); watchlist.toggle(ticker); }}>
       <svg viewBox="0 0 24 24" fill={isWatched ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -10135,7 +10141,17 @@ function useNotificationPrefs(userId, pro) {
     setSaving(false);
   }
 
-  return { prefs, saving, saved, error, save };
+  // For saves that bypass save() (the free weekly toggle): update the
+  // last-saved baseline so the page doesn't think there's an unsaved change.
+  function markSaved(partial) {
+    setPrefs(p => {
+      const next = { ...DEFAULT_PREFS, ...(p || {}), ...partial };
+      try { localStorage.setItem(`seli_prefs_${userId}`, JSON.stringify(next)); } catch { }
+      return next;
+    });
+  }
+
+  return { prefs, saving, saved, error, save, markSaved };
 }
 
 // ── Settings toggle row ────────────────────────────────────────────────────────
@@ -10236,7 +10252,7 @@ function useSnapTrade(pro) {
 
 function SettingsPage({ user, onUpgrade }) {
   const { pro } = useBilling();
-  const { prefs, saving, saved, error, save } = useNotificationPrefs(user?.id, pro);
+  const { prefs, saving, saved, error, save, markSaved } = useNotificationPrefs(user?.id, pro);
   const snaptrade = useSnapTrade(pro);
   const portfolio = usePortfolio(pro);
   const [section, setSection] = useState(() => {
@@ -10247,7 +10263,8 @@ function SettingsPage({ user, onUpgrade }) {
   const [testState, setTestState] = useState(null);
 
   useEffect(() => { if (prefs) setLocal(p => ({ ...DEFAULT_PREFS, ...prefs })); }, [prefs]);
-  const hasUnsavedSettings = local && prefs && JSON.stringify(local) !== JSON.stringify({ ...DEFAULT_PREFS, ...prefs });
+  // Free users have nothing that uses the Save button, so never show them "unsaved".
+  const hasUnsavedSettings = pro && local && prefs && JSON.stringify(local) !== JSON.stringify({ ...DEFAULT_PREFS, ...prefs });
 
   function upd(key, val) { setLocal(p => ({ ...p, [key]: val })); }
 
@@ -10263,10 +10280,7 @@ function SettingsPage({ user, onUpgrade }) {
       const res = await fetch(`${cfg.NEON_PROXY_URL}/prefs/digest`, { method: 'POST', headers, body: JSON.stringify({ weekly_digest: enabled }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Save failed');
-      try {
-        const key = `seli_prefs_${user?.id}`;
-        localStorage.setItem(key, JSON.stringify({ ...JSON.parse(localStorage.getItem(key) || '{}'), weekly_digest: enabled }));
-      } catch { }
+      markSaved({ weekly_digest: enabled });
       setFreeDigestState('saved');
       setTimeout(() => setFreeDigestState(null), 2500);
     } catch (e) {
@@ -10346,10 +10360,6 @@ function SettingsPage({ user, onUpgrade }) {
             </div>
             <div className="ws-toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {hasUnsavedSettings && <span className="ws-unsaved-badge">Unsaved changes</span>}
-              {!pro && <>
-                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Pro required · </span>
-                <button className="ws-tile__action" style={{ fontSize: 11 }} onClick={() => onUpgrade('default')}>Go Pro →</button>
-              </>}
             </div>
           </div>
 
@@ -10359,30 +10369,40 @@ function SettingsPage({ user, onUpgrade }) {
               <div className="ws-tile__hdr">
                 <div className="ws-tile__hdr-left">
                   <span className="ws-tile__title">Email digests</span>
-                  {!pro && <span className="settings-pro-badge" style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: 'var(--accent-50)', color: 'var(--accent)' }}>Pro</span>}
                 </div>
               </div>
               <div className="ws-tile__body">
-                {!pro && (
-                  <div className="ws-settings-upgrade-banner">
-                    The weekly digest is free. Pro adds a daily digest, custom filters, and instant alerts.
-                    <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Go Pro →</button>
-                  </div>
-                )}
-
                 {!local ? (
                   <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}><Spinner /></div>
                 ) : (<>
+                  {/* Free for everyone. Free users save instantly via /prefs/digest;
+                      Pro users save with the button at the bottom like everything else. */}
                   <div className="ws-settings-group">
-                    <div className="ws-settings-group__label">Frequency</div>
+                    <div className="ws-settings-group__label">Weekly digest</div>
+                    <SettingsToggle label="Weekly digest"
+                      sub={!pro && freeDigestState === 'saving' ? 'Saving…'
+                        : !pro && freeDigestState === 'saved' ? <span style={{ color: 'var(--green-600)' }}>✓ Saved</span>
+                        : !pro && freeDigestState ? <span style={{ color: 'var(--red-600)' }}>{freeDigestState}</span>
+                        : 'Sunday evenings: your watchlist plus the week\'s notable insider buying'}
+                      checked={local.weekly_digest}
+                      onChange={e => pro ? upd('weekly_digest', e.target.checked) : toggleFreeWeekly(e.target.checked)}
+                      pro={true} disabled={!pro && freeDigestState === 'saving'} />
+                  </div>
+
+                  {!pro && (
+                    <div className="ws-settings-upgrade-banner">
+                      Daily digests, digest filters and instant alerts come with Pro.
+                      <button className="ws-tile__action" style={{ marginLeft: 10 }} onClick={() => onUpgrade('default')}>Go Pro →</button>
+                    </div>
+                  )}
+
+                  <div className={`ws-settings-group${!pro ? ' ws-settings-group--dimmed' : ''}`}>
+                    <div className="ws-settings-group__label">Daily digest{!pro && <span className="settings-pro-badge" style={{ marginLeft: 6 }}>Pro</span>}</div>
                     <SettingsToggle label="Daily digest" sub="Every weekday morning at 8am ET" checked={local.daily_digest} onChange={e => upd('daily_digest', e.target.checked)} pro={pro} />
-                    {/* pro={true} unlocks this one toggle for free users; for them it saves on its own */}
-                    <SettingsToggle label="Weekly digest" sub={!pro && freeDigestState && freeDigestState !== 'saving' && freeDigestState !== 'saved' ? freeDigestState : 'Sunday evenings: your watchlist plus the week\'s strongest insider buying'} checked={local.weekly_digest}
-                      onChange={e => pro ? upd('weekly_digest', e.target.checked) : toggleFreeWeekly(e.target.checked)} pro={true} disabled={!pro && freeDigestState === 'saving'} />
                   </div>
 
                   <div className={`ws-settings-group${((!local.daily_digest && !local.weekly_digest) || !pro) ? ' ws-settings-group--dimmed' : ''}`}>
-                    <div className="ws-settings-group__label">Include in digests</div>
+                    <div className="ws-settings-group__label">Include in digests{!pro && <span className="settings-pro-badge" style={{ marginLeft: 6 }}>Pro</span>}</div>
                     <SettingsToggle label="Top insider signals" sub="Highest-scoring buys from the selected window" checked={local.digest_top_signals} onChange={e => upd('digest_top_signals', e.target.checked)} pro={pro} disabled={!local.daily_digest && !local.weekly_digest} />
                     <SettingsToggle label="Corporate trades (Form 4)" sub="C-suite and officer open-market transactions" checked={local.digest_corporate} onChange={e => upd('digest_corporate', e.target.checked)} pro={pro} disabled={!local.daily_digest && !local.weekly_digest} />
                     <SettingsToggle label="Congressional trades (STOCK Act)" sub="Senator and representative disclosures" checked={local.digest_congressional} onChange={e => upd('digest_congressional', e.target.checked)} pro={pro} disabled={!local.daily_digest && !local.weekly_digest} />
@@ -10390,7 +10410,7 @@ function SettingsPage({ user, onUpgrade }) {
                   </div>
 
                   <div className={`ws-settings-group${((!local.daily_digest && !local.weekly_digest) || !pro) ? ' ws-settings-group--dimmed' : ''}`}>
-                    <div className="ws-settings-group__label">Filters</div>
+                    <div className="ws-settings-group__label">Filters{!pro && <span className="settings-pro-badge" style={{ marginLeft: 6 }}>Pro</span>}</div>
                     <div className="ws-settings-row">
                       <div style={{ flex: 1 }}>
                         <div className="ws-settings-row__label">Minimum conviction score</div>
@@ -10419,16 +10439,19 @@ function SettingsPage({ user, onUpgrade }) {
                     </div>
                   </div>
 
-                  <div className="ws-settings-save-row">
-                    <button className="btn btn--primary" onClick={() => save(local)} disabled={saving || !pro}>
-                      {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save digest settings'}
-                    </button>
-                    {pro && <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState === 'sending'}>{testState === 'sending' ? 'Sending…' : 'Send test email'}</button>}
-                    {saved && <span className="ws-settings-saved"><IconCheck style={{ width: 11, height: 11, marginRight: 3 }} />Saved</span>}
-                    {testState === 'sent' && <span className="ws-settings-saved"><IconCheck style={{ width: 11, height: 11, marginRight: 3 }} />Test sent</span>}
-                    {testState && testState !== 'sending' && testState !== 'sent' && <span className="ws-settings-saved" style={{ color: 'var(--red-600)' }}>{testState}</span>}
-                    {error && <span className="ws-settings-saved" style={{ color: 'var(--red-600)' }}>{error}</span>}
-                  </div>
+                  {/* Save row is Pro-only: free users' one setting saves on its own */}
+                  {pro && (
+                    <div className="ws-settings-save-row">
+                      <button className="btn btn--primary" onClick={() => save(local)} disabled={saving}>
+                        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save digest settings'}
+                      </button>
+                      <button className="btn btn--ghost" onClick={sendTestEmail} disabled={testState === 'sending'}>{testState === 'sending' ? 'Sending…' : 'Send test email'}</button>
+                      {saved && <span className="ws-settings-saved"><IconCheck style={{ width: 11, height: 11, marginRight: 3 }} />Saved</span>}
+                      {testState === 'sent' && <span className="ws-settings-saved"><IconCheck style={{ width: 11, height: 11, marginRight: 3 }} />Test sent</span>}
+                      {testState && testState !== 'sending' && testState !== 'sent' && <span className="ws-settings-saved" style={{ color: 'var(--red-600)' }}>{testState}</span>}
+                      {error && <span className="ws-settings-saved" style={{ color: 'var(--red-600)' }}>{error}</span>}
+                    </div>
+                  )}
                 </>)}
               </div>
             </div>
@@ -10440,7 +10463,7 @@ function SettingsPage({ user, onUpgrade }) {
               <div className="ws-tile__hdr">
                 <div className="ws-tile__hdr-left">
                   <span className="ws-tile__title">Instant alerts</span>
-                  {!pro && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: 'var(--accent-50)', color: 'var(--accent)', marginLeft: 8 }}>Pro</span>}
+                  {!pro && <span className="settings-pro-badge" style={{ marginLeft: 8 }}>Pro</span>}
                 </div>
               </div>
               <div className="ws-tile__body">
