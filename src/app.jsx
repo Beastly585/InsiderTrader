@@ -11752,6 +11752,45 @@ function AppInner() {
   const watchlist = useWatchlist(user);
   const whileAway = useWhileYouWereAway(filings, billingPro);
 
+  // ── First-run onboarding redirect ─────────────────────────────────────
+  // Nothing used to send new signups to /onboard; they landed straight in the
+  // app. Redirect once for accounts created in the last 7 days that haven't
+  // finished or skipped onboarding. "Done" is remembered two ways so it
+  // doesn't nag: a per-user localStorage flag (instant, this browser) and
+  // onboarded_at from GET /prefs (every other device). Any doubt, e.g. the
+  // prefs request fails, means no redirect, so this can never trap anyone
+  // in a loop. Checkout, legal and other standalone pages are left alone.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !user?.id) return;
+    const p = window.location.pathname;
+    if (p === '/onboard' || window.location.search.includes('purchase=')) return;
+    if (['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/about'].includes(p) || p.startsWith('/blog')) return;
+    const flag = `seli_onboarded_${user.id}`;
+    try { if (localStorage.getItem(flag)) return; } catch { }
+    const created = user.createdAt ? new Date(user.createdAt).getTime() : 0;
+    if (!created || Date.now() - created > 7 * 24 * 3600 * 1000) {
+      try { localStorage.setItem(flag, '1'); } catch { }
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`${cfg.NEON_PROXY_URL}/prefs`, { headers });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.prefs?.onboarded_at) { try { localStorage.setItem(flag, '1'); } catch { } return; }
+        navigateTo('/onboard');
+      } catch { }
+    })();
+    return () => { cancelled = true; };
+  }, [isLoaded, isSignedIn, user?.id]);
+  function finishOnboarding() {
+    try { if (user?.id) localStorage.setItem(`seli_onboarded_${user.id}`, '1'); } catch { }
+    navigateTo('/home');
+  }
+
   // ── Landing page gate ──────────────────────────────────────────────────────
   // ── Simple client-side routing for legal pages ────────────────────────────
   const path = window.location.pathname.replace(/\/$/, '') || '/';
@@ -11786,8 +11825,8 @@ function AppInner() {
         user={user}
         watchlist={watchlist}
         pro={billingPro}
-        onComplete={() => navigateTo('/home')}
-        onSkip={() => navigateTo('/home')}
+        onComplete={finishOnboarding}
+        onSkip={finishOnboarding}
       />
     );
   }

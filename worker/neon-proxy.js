@@ -2254,7 +2254,8 @@ async function handlePrefs(request, env, origin) {
                digest_max_signals, digest_min_value,
                instant_watchlist_ticker, instant_followed_insider,
                instant_high_conviction, instant_reversal,
-               instant_min_value, instant_high_conviction_threshold
+               instant_min_value, instant_high_conviction_threshold,
+               onboarded_at
         FROM public.user_preferences
         WHERE clerk_user_id = ${sqlVal(clerkUserId)}
       `);
