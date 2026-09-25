@@ -95,6 +95,28 @@ def money(v) -> str:
     return f"{sign}${v:,.0f}"
 
 
+# STOCK Act disclosures report a range, not an amount. The database stores
+# one number (the range midpoint), so map it back to the range instead of
+# showing a made-up exact figure.
+_CONGRESS_RANGES = [(1_000, 15_000), (15_000, 50_000), (50_000, 100_000), (100_000, 250_000),
+                    (250_000, 500_000), (500_000, 1_000_000), (1_000_000, 5_000_000),
+                    (5_000_000, 25_000_000), (25_000_000, 50_000_000)]
+
+
+def congress_range(v) -> str:
+    if v is None:
+        return "an undisclosed amount"
+    v = float(v)
+    for lo, hi in _CONGRESS_RANGES:
+        if v <= hi:
+            return f"{money(lo)} to {money(hi)}"
+    return "over $50M"
+
+
+def amount(v, congress: bool = False) -> str:
+    return congress_range(v) if congress else money(v)
+
+
 def as_date(d) -> date | None:
     if d is None:
         return None
@@ -164,44 +186,81 @@ def _titlecase_word(w: str) -> str:
     return w.capitalize()
 
 
+# Brand spellings title-casing can't guess. Keyed on the all-caps token.
+_BRAND_CASE = {
+    "RENAISSANCERE": "RenaissanceRe", "PAYPAL": "PayPal", "EBAY": "eBay", "IROBOT": "iRobot",
+    "JPMORGAN": "JPMorgan", "ABBVIE": "AbbVie", "BLACKROCK": "BlackRock", "FEDEX": "FedEx",
+    "GODADDY": "GoDaddy", "HUBSPOT": "HubSpot", "CROWDSTRIKE": "CrowdStrike", "DOORDASH": "DoorDash",
+    "LINKEDIN": "LinkedIn", "MONGODB": "MongoDB", "NETAPP": "NetApp", "PEPSICO": "PepsiCo",
+    "SERVICENOW": "ServiceNow", "AUTOZONE": "AutoZone", "CARMAX": "CarMax", "DEXCOM": "DexCom",
+    "HEALTHCARE": "HealthCare", "JETBLUE": "JetBlue", "SOLAREDGE": "SolarEdge", "DRAFTKINGS": "DraftKings",
+    "NVIDIA": "NVIDIA", "YOUTUBE": "YouTube", "EXXONMOBIL": "ExxonMobil", "GLAXOSMITHKLINE": "GlaxoSmithKline",
+    "ASTRAZENECA": "AstraZeneca", "BIONTECH": "BioNTech", "ZOOMINFO": "ZoomInfo", "MCKESSON": "McKesson",
+}
+# Corporate suffixes, normalized whatever case they arrive in.
+_SUFFIX_CASE = {"INC": "Inc", "INC.": "Inc", "CORP": "Corp", "CORP.": "Corp", "CO": "Co", "CO.": "Co",
+                "LTD": "Ltd", "LTD.": "Ltd", "PLC": "plc", "LLC": "LLC", "LP": "LP", "L.P.": "LP",
+                "N.V.": "NV", "NV": "NV", "S.A.": "SA", "SA": "SA", "AG": "AG", "SE": "SE",
+                "CORPORATION": "Corporation", "HOLDINGS": "Holdings", "GROUP": "Group",
+                "COMPANY": "Company", "INCORPORATED": "Incorporated"}
+
+
 def pretty_company(name) -> str:
-    """EDGAR issuer names are ALL CAPS ('NVIDIA CORP'). Title-case them, but
-    leave 2-3 letter tokens alone (IBM, AMD, 3M, AT&T) and anything that's
-    already mixed case."""
+    """Issuer names arrive in every style ('NVIDIA CORP', 'HOME DEPOT, INC.',
+    'Alphabet Inc.'). Normalize suffixes everywhere, title-case all-caps names
+    (leaving short tokens like IBM, AMD, 3M alone), and fix known brand
+    spellings (RenaissanceRe, PayPal)."""
     if not name:
         return ""
-    s = str(name).strip()
-    if s != s.upper():
-        return s
+    s = " ".join(str(name).split())
+    all_caps = s == s.upper()
     out = []
     for i, w in enumerate(s.split()):
-        if i and w.lower() in _SMALL:
-            out.append(w.lower())
-        elif len(w.strip(".,")) <= 3 and w.upper() not in {"INC", "CO", "LTD", "THE", "NEW", "ONE", "CORP"}:
-            out.append(w)
+        core, comma = (w[:-1], ",") if w.endswith(",") else (w, "")
+        up = core.upper()
+        if i and up in _SUFFIX_CASE:
+            word = _SUFFIX_CASE[up]
+        elif up in _BRAND_CASE:
+            word = _BRAND_CASE[up]
+        elif not all_caps:
+            word = core
+        elif i and core.lower() in _SMALL:
+            word = core.lower()
+        elif len(core.strip(".")) <= 3:
+            word = core
         else:
-            out.append(_titlecase_word(w))
-    return " ".join(out).replace(" Inc.", " Inc").replace(" Co.", " Co")
+            word = _titlecase_word(core)
+        out.append(word + comma)
+    return " ".join(out)
+
+
+_PARTICLES = {"van", "von", "de", "der", "den", "del", "della", "da", "di", "du", "la", "le", "st", "st.", "bin", "al", "el", "ten", "ter"}
 
 
 def pretty_person(name, is_congress: bool = False) -> str:
-    """EDGAR reporting-owner names come as 'LAST FIRST MIDDLE' in caps
-    ('HUANG JEN HSUN'). Flip to 'Jen Hsun Huang'. Entities (funds, trusts,
-    LLCs) and congressional names (already 'First Last') are only
-    re-cased, never reordered."""
+    """SEC Form 4 reporting-owner names are always 'Last First Middle',
+    in caps OR mixed case ('HUANG JEN HSUN', 'Klehm Henry III'). Flip to
+    'Jen Hsun Huang' / 'Henry Klehm III'. Suffixes stay at the end and
+    multi-word last names stay together ('Van Der Berg John' ->
+    'John Van Der Berg'). Entities (funds, trusts, LLCs) and congressional
+    names (already 'First Last') are only re-cased, never reordered."""
     if not name:
         return ""
     s = " ".join(str(name).replace(",", " ").split())
-    if s != s.upper():
-        return s
+    all_caps = s == s.upper()
     words = s.split()
-    if is_congress or _ENTITY_RE.search(s) or not (2 <= len(words) <= 5):
-        return " ".join(_titlecase_word(w) for w in words)
-    suffix = [w for w in words if w.strip(".") in _SUFFIXES]
-    core = [w for w in words if w.strip(".") not in _SUFFIXES]
+    fix = _titlecase_word if all_caps else (lambda w: w)
+    if is_congress or _ENTITY_RE.search(s) or not (2 <= len(words) <= 6):
+        return " ".join(fix(w) for w in words)
+    suffix = [w for w in words if w.strip(".").upper() in _SUFFIXES]
+    core = [w for w in words if w.strip(".").upper() not in _SUFFIXES]
     if len(core) >= 2:
-        core = core[1:] + core[:1]
-    return " ".join(_titlecase_word(w) for w in core + suffix)
+        n = 0
+        while n < len(core) - 1 and core[n].lower() in _PARTICLES:
+            n += 1
+        if core[n + 1:]:
+            core = core[n + 1:] + core[:n + 1]
+    return " ".join(fix(w) for w in core + suffix)
 
 
 _ROLE_PATTERNS = [
@@ -361,7 +420,8 @@ def footer(*, reason: str, clerk_user_id: str, manage: bool = True) -> str:
     links = [a(unsub, "Unsubscribe", MUTED, 500)]
     if manage:
         links.append(a(track("/settings?section=notifications", "footer"), "Email settings", MUTED, 500))
-    addr = p(esc(MAILING_ADDRESS), 11, FAINT, "6px 0 0") if MAILING_ADDRESS else ""
+    # Zero-width spaces break Gmail/iOS address detection, so it stays plain grey text.
+    addr = p(esc(MAILING_ADDRESS).replace(" ", " &#8203;"), 11, FAINT, "6px 0 0") if MAILING_ADDRESS else ""
     return (divider("0 0 16px")
             + p(esc(reason) + " " + DISCLAIMER, 11, FAINT, "0 0 8px")
             + p(" &nbsp;·&nbsp; ".join(links), 11, FAINT, "0")
@@ -377,7 +437,7 @@ def html_to_text(html_doc: str) -> str:
     s = re.sub(r"(?i)<br\s*/?>", "\n", s)
     s = re.sub(r"(?i)</(p|div|tr|h\d|li|table)>", "\n", s)
     s = re.sub(r"<[^>]+>", "", s)
-    s = _html.unescape(s).replace("‌", "").replace("\xa0", " ")
+    s = _html.unescape(s).replace("‌", "").replace("​", "").replace("\xa0", " ")
     lines = [" ".join(line.split()) for line in s.splitlines()]
     out, blank = [], 0
     for line in lines:
@@ -408,7 +468,8 @@ def send(*, to_email: str, subject: str, html_doc: str, from_name: str, clerk_us
         log.error("RESEND_API_KEY missing"); return False
     unsub = unsubscribe_url(clerk_user_id)
     payload = {
-        "from": f"{from_name} <{from_email or FROM_EMAIL}>",
+        # Quoted display name: some clients drop an unquoted one and show the bare address.
+        "from": f'"{from_name}" <{from_email or FROM_EMAIL}>',
         "to": [to_email],
         "subject": subject,
         "html": html_doc,

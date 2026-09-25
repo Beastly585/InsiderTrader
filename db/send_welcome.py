@@ -45,7 +45,10 @@ ONLY_EMAIL       = os.environ.get("ONLY_EMAIL", "").strip().lower()
 BACKFILL         = os.environ.get("BACKFILL", "false").lower() == "true"
 SYNC_FROM_CLERK  = os.environ.get("SYNC_FROM_CLERK", "false").lower() == "true"
 CLERK_SECRET_KEY = os.environ.get("CLERK_SECRET_KEY", "")
-FROM_EMAIL       = os.environ.get("WELCOME_FROM_EMAIL") or ek.FROM_EMAIL
+# From a person, not "alerts@": founder welcomes get more replies and are less
+# likely to land in Promotions. Any address on the verified Resend domain works
+# without a real mailbox behind it; replies go to WELCOME_REPLY_TO.
+FROM_EMAIL       = os.environ.get("WELCOME_FROM_EMAIL") or ("kevin@" + ek.FROM_EMAIL.split("@", 1)[1])
 REPLY_TO         = os.environ.get("WELCOME_REPLY_TO") or None
 MIN_AGE_HOURS    = int(os.environ.get("WELCOME_MIN_AGE_HOURS", "10"))
 MEDIUM           = "welcome"
@@ -109,21 +112,39 @@ def block(kicker: str, title: str, inner: str, first: bool = False) -> str:
 
 
 def follow_row(s: dict) -> str:
-    """One ticker, one line of plain fact."""
+    """One ticker, up to three lines of plain fact, most meaningful first.
+    Corporate insiders (exact amounts) lead; Congress (ranges) gets its own line.
+    Tiny or stale buys never headline a ticker that has real selling or buying."""
     href = ek.track(ek.ticker_path(s["ticker"]), MEDIUM, "following")
-    lb, ys = s["last_buy"], s["yr_sells"]
+    yb, ys, lb, rb, yc = s["yr_buys"], s["yr_sells"], s["last_buy"], s["recent_buys"], s["yr_congress"]
+    lines = []
     if not s["known"]:
-        line = "No insider filings on record yet."
-    elif lb:
-        line = f"Last insider buy: {lb['name']} ({lb['role']}), {ek.money(lb['value'])}, {ek.ago(lb['date'])}."
-    elif ys["n"]:
-        line = f"No insider buys on record. {ek.plural(ys['n'], 'insider sale')} in the last 12 months."
+        lines.append("No insider filings on record yet.")
     else:
-        line = "No open-market insider trades on record."
+        if rb["n"]:
+            lines.append(f"Insiders bought {ek.money(rb['v'])} in the last 90 days "
+                         f"({ek.plural(rb['n'], 'buy')}, {ek.plural(rb['insiders'], 'insider')}).")
+        elif yb["n"] and yb["v"] >= 100_000:
+            lines.append(f"Insiders bought {ek.money(yb['v'])} over the last 12 months ({ek.plural(yb['n'], 'buy')}).")
+        if ys["n"]:
+            no_buys = "" if yb["n"] else " No open-market buys."
+            lines.append(f"Insiders sold {ek.money(ys['v'])} over the last 12 months ({ek.plural(ys['n'], 'sale')}).{no_buys}")
+        if not lines:
+            lines.append("No open-market insider trades in the last 12 months.")
+        if lb and not rb["n"]:
+            lines.append(f"Last insider buy: {lb['name']} ({lb['role']}), {ek.money(lb['value'])}, {ek.ago(lb['date'])}.")
+        elif not lb:
+            lines.append("No open-market insider buys on record.")
+        if yc["n"]:
+            c = yc["latest"]
+            verb = "bought" if c["type"] == "buy" else "sold"
+            more = f" ({ek.plural(yc['n'], 'trade')} in 12 months)" if yc["n"] > 1 else ""
+            lines.append(f"Congress: {c['name']} {verb} {ek.congress_range(c['value'])}, {ek.ago(c['date'])}{more}.")
     return (f'<tr><td style="padding:10px 0;border-top:1px solid {ek.BORDER};">'
             f'{ek.ticker_tag(s["ticker"], href)}'
             f'<span style="font-family:{ek.FONT};font-size:13px;color:{ek.MUTED};margin-left:8px;">{ek.esc(s["company"])}</span>'
-            f'{ek.p(ek.esc(line), 13, ek.TEXT_2, "6px 0 0")}</td></tr>')
+            + "".join(ek.p(ek.esc(l), 13, ek.TEXT_2 if n == 0 else ek.MUTED, "6px 0 0") for n, l in enumerate(lines))
+            + "</td></tr>")
 
 
 def email_plan(u: dict) -> list[str]:

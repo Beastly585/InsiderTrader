@@ -104,6 +104,10 @@ def pulse_block(pulse: dict | None, period_word: str) -> str:
     return grid + (ek.p(ek.esc(line), 13, ek.MUTED, "10px 0 0") if line else "")
 
 
+def rc_n(s: dict) -> int:
+    return (s.get("recent_congress") or {"n": 0})["n"]
+
+
 def status_row(s: dict, href: str, *, sells_note: bool, portfolio: bool = False) -> tuple[str, bool]:
     """(html, used_sells_note). One ticker, one to two lines, always says something."""
     rb, rs, lb = s["recent_buys"], s["recent_sells"], s["last_buy"]
@@ -120,7 +124,7 @@ def status_row(s: dict, href: str, *, sells_note: bool, portfolio: bool = False)
         if not rb["n"] and sells_note:
             lines.append("Insiders sell for many reasons, including taxes, diversification and pre-scheduled trading plans.")
             used_note = True
-    if not rb["n"] and not rs["n"]:
+    if not rb["n"] and not rs["n"] and not rc_n(s):
         chips.append(ek.chip("Quiet", "neutral"))
         if not s["known"]:
             lines.append("No insider filings on record for this ticker yet.")
@@ -132,6 +136,12 @@ def status_row(s: dict, href: str, *, sells_note: bool, portfolio: bool = False)
         if ys["n"] and s["known"]:
             yb_n = s["yr_buys"]["n"]
             lines.append(f"Last 12 months: {ek.plural(yb_n, 'buy') if yb_n else 'no buys'}, {ek.plural(ys['n'], 'sale')} ({ek.money(ys['v'])}).")
+    rc = s.get("recent_congress") or {"n": 0}
+    if rc["n"]:
+        c = rc["latest"]
+        chips.append(ek.chip("Congress", "accent"))
+        lines.append(f"Congress: {c['name']} {'bought' if c['type'] == 'buy' else 'sold'} {ek.congress_range(c['value'])} "
+                     f"(disclosed ranges, often filed weeks after the trade).")
     held = ek.chip("You hold this", "accent") if portfolio else ""
     html = (f'<tr><td style="padding:12px 0;border-top:1px solid {ek.BORDER};">'
             f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
@@ -230,7 +240,7 @@ def compose(u: dict, *, weekly: bool, statuses: dict, clusters_by_key: dict, pul
     # active tickers first (buys, then sales), quiet ones after
     w_status = sorted([statuses[t] for t in watch if t in statuses],
                       key=lambda s: (-s["recent_buys"]["v"], -s["recent_sells"]["v"], s["ticker"]))
-    w_active = [s for s in w_status if s["recent_buys"]["n"] or s["recent_sells"]["n"]]
+    w_active = [s for s in w_status if s["recent_buys"]["n"] or s["recent_sells"]["n"] or rc_n(s)]
     w_buying = sorted([s for s in w_status if s["recent_buys"]["n"]], key=lambda s: s["recent_buys"]["v"], reverse=True)
 
     show_market = not (pro and u.get("digest_watchlist_only")) and (u.get("digest_top_signals") is not False or not pro)
@@ -243,7 +253,7 @@ def compose(u: dict, *, weekly: bool, statuses: dict, clusters_by_key: dict, pul
     else:
         cap = FREE_MARKET_ITEMS
     # watchlist tickers already get their own row; don't repeat them below
-    market = [c for c in clusters if c["ticker"] not in set(watch)][:cap]
+    market = [c for c in clusters if c["ticker"] not in set(watch) and not c["congress"]][:cap]
     congress_pick = None
     if show_market and key[1]:
         congress_pick = next((c for c in clusters_by_key.get((False, True), [])
@@ -326,7 +336,7 @@ def compose(u: dict, *, weekly: bool, statuses: dict, clusters_by_key: dict, pul
     if congress_pick:
         b = congress_pick["buyers"][0]
         market_html += ek.section("From Congress", ek.p(
-            f'{ek.esc(b["name"])} bought {ek.money(congress_pick["total"])} of '
+            f'{ek.esc(b["name"])} bought {ek.congress_range(b["value"])} of '
             f'{ek.ticker_tag(congress_pick["ticker"], ek.track(ek.ticker_path(congress_pick["ticker"]), medium, "congress", campaign))} '
             f'({ek.esc(congress_pick["company"])}). Congressional disclosures are often filed weeks after the trade date.', 14, ek.TEXT_2, "0"), pad_top=24)
 

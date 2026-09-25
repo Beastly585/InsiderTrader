@@ -323,6 +323,9 @@ SELECT DISTINCT ON (f.ticker)
  WHERE f.ticker = ANY(%(tickers)s)
    AND f.is_open_market = true AND f.transaction_type = 'buy'
    AND COALESCE(f.transaction_date, f.filing_date) <= CURRENT_DATE
+   -- corporate insiders only; Congress trades are reported separately (as ranges)
+   AND COALESCE(f.relationship, '') <> 'congress'
+   AND COALESCE(f.transaction_code, '') NOT ILIKE 'CONGRESS%%'
  ORDER BY f.ticker, COALESCE(f.transaction_date, f.filing_date) DESC, f.value DESC NULLS LAST
 """
 
@@ -372,25 +375,37 @@ def ticker_status(conn, tickers: list[str], window_days: int = 7, today: date | 
     for r in rows:
         by_t[r["ticker"]].append(r)
 
+    def congress_view(rs):
+        rs = sorted(rs, key=lambda r: as_date(r["trade_date"]) or date.min, reverse=True)
+        return {"n": len(rs), "latest": None if not rs else {
+            "name": pretty_person(rs[0]["insider_name"], True), "type": rs[0]["transaction_type"],
+            "value": rs[0].get("value"), "date": as_date(rs[0]["trade_date"])}}
+
     out = {}
     for t in tickers:
         rs = by_t.get(t, [])
-        recent = [r for r in rs if as_date(r["filing_date"]) and (today - as_date(r["filing_date"])).days < window_days]
-        yr = [r for r in rs if as_date(r["trade_date"]) and (today - as_date(r["trade_date"])).days <= 365]
+        corp = [r for r in rs if not is_congress(r)]
+        cong = [r for r in rs if is_congress(r)]
+        is_recent = lambda r: as_date(r["filing_date"]) and (today - as_date(r["filing_date"])).days < window_days
+        in_year = lambda r: as_date(r["trade_date"]) and (today - as_date(r["trade_date"])).days <= 365
         lb = last_buys.get(t)
         out[t] = {
             "ticker": t,
             "company": pretty_company(names.get(t) or (lb or {}).get("company_name")) or t,
             "known": bool(names.get(t)),
-            "recent_buys": _agg([r for r in recent if r["transaction_type"] == "buy"]),
-            "recent_sells": _agg([r for r in recent if r["transaction_type"] == "sell"]),
-            "yr_buys": _agg([r for r in yr if r["transaction_type"] == "buy"]),
-            "yr_sells": _agg([r for r in yr if r["transaction_type"] == "sell"]),
+            # Corporate insiders (Form 4). Exact dollar amounts.
+            "recent_buys": _agg([r for r in corp if is_recent(r) and r["transaction_type"] == "buy"]),
+            "recent_sells": _agg([r for r in corp if is_recent(r) and r["transaction_type"] == "sell"]),
+            "yr_buys": _agg([r for r in corp if in_year(r) and r["transaction_type"] == "buy"]),
+            "yr_sells": _agg([r for r in corp if in_year(r) and r["transaction_type"] == "sell"]),
             "last_buy": None if not lb else {
-                "raw": lb["insider_name"], "name": pretty_person(lb["insider_name"], is_congress(lb)),
-                "role": short_role(lb.get("insider_title"), "congress" if is_congress(lb) else lb.get("relationship")),
+                "raw": lb["insider_name"], "name": pretty_person(lb["insider_name"], False),
+                "role": short_role(lb.get("insider_title"), lb.get("relationship")),
                 "value": lb.get("value"), "date": as_date(lb["trade_date"]),
             },
+            # Congress (STOCK Act). Amounts are ranges; shown separately.
+            "recent_congress": congress_view([r for r in cong if is_recent(r)]),
+            "yr_congress": congress_view([r for r in cong if in_year(r)]),
         }
     return out
 
