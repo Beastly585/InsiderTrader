@@ -9286,3 +9286,167 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
     right: 16px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Onboarding: top bar + mobile layout
+   Must come AFTER the rest of the ob-* rules (it overrides them).
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Theme toggle + skip share one bar. On desktop it's invisible (transparent,
+   clicks pass through except on the two buttons), so the look is unchanged. */
+.ob__topbar {
+  position: fixed;
+  top: 3px;               /* just under the progress bar */
+  left: 0;
+  right: 0;
+  height: 64px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 9010;
+  pointer-events: none;
+}
+.ob__topbar > * { pointer-events: auto; }
+.ob__topbar .ob__theme-toggle,
+.ob__topbar .ob__skip {
+  position: static;
+}
+
+/* Desktop: the floating dots get a solid pill so they stay readable when a
+   tall step (Notifications) scrolls content underneath them. */
+.ob__dots-nav {
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+.ob-step { padding-bottom: 120px; }
+
+/* Center short steps, but never push a tall step's top above the screen.
+   justify-content:center on an overflowing flex column cuts the top off
+   (the Notifications step lost its heading); auto margins don't. */
+.ob-step,
+.ob-step--welcome { justify-content: flex-start; }
+.ob-step > :first-child { margin-top: auto; }
+.ob-step > :last-child { margin-bottom: auto; }
+
+@media (max-width: 640px) {
+  /* Solid bars top and bottom so content scrolls under them instead of
+     showing through (the overlap in the screenshots). */
+  .ob__topbar {
+    height: 52px;
+    padding: 0 12px 0 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .ob__theme-toggle { width: 32px; height: 32px; }
+  .ob__skip { padding: 8px 6px; font-size: 13px; }
+
+  .ob__dots-nav {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: none;
+    justify-content: center;
+    gap: 16px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+  }
+  .ob__dots-arrow { width: 36px; height: 36px; }      /* thumb-sized */
+  .ob__dots { gap: 7px; }
+
+  /* Steps: top-aligned and clear of both bars. Vertical centering on a
+     short phone screen just pushes the heading under the top bar. */
+  .ob-step {
+    min-height: auto;
+    justify-content: flex-start;
+    padding: 76px 16px calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+  .ob-step--welcome {
+    min-height: 100dvh;
+    justify-content: center;
+  }
+  .ob-step__header { margin-bottom: 20px; }
+  .ob-step__eyebrow { margin-bottom: 8px; font-size: 11px; }
+  .ob-step__title { font-size: 24px; }
+  .ob-step__subtitle { font-size: 14px; }
+
+  /* Primary button: full width, easy to hit */
+  .ob-cta {
+    align-self: stretch;
+    justify-content: center;
+    margin-top: 24px;
+    padding: 15px 20px;
+  }
+
+  /* Step 1: welcome */
+  .ob-welcome__greeting { font-size: 13px; }
+  .ob-welcome__headline { font-size: 26px; line-height: 1.25; }
+  .ob-welcome__sub { font-size: 15px; margin-bottom: 28px; }
+  .ob-welcome__stats { gap: 18px; margin-bottom: 28px; }
+  .ob-stat__number { font-size: 22px; }
+  .ob-stat__label { font-size: 10px; }
+
+  /* Step 2: insider cards */
+  .ob-insider-card { padding: 16px; }
+  .ob-insider-card--open { transform: none; }
+  .ob-insider-card--open .ob-insider-card__body { max-height: 420px; }
+  .ob-sample__value { margin-left: 0; }
+
+  /* Step 3: filing + score */
+  .ob-filing__card { padding: 16px; }
+  .ob-hotspot { padding: 11px 12px; }
+  .ob-hotspot__explain--open { max-height: 220px; }
+  .ob-score-bar { padding: 16px; }
+  .ob-score-bar__value { font-size: 26px; }
+  .ob-score-bar__chip { font-size: 11px; padding: 4px 8px; }
+
+  /* Step 4: conviction tiers */
+  .ob-conviction__tier { padding: 14px 16px; }
+  .ob-conviction__tier--active { transform: none; }
+  .ob-conviction__tier--active .ob-conviction__desc { max-height: 200px; }
+
+  /* Step 5: tabs + previews (five tabs across a phone) */
+  .ob-tabs { padding: 3px; }
+  .ob-tabs__tab { padding: 8px 2px; gap: 3px; }
+  .ob-tabs__label { font-size: 10px; }
+  .ob-tabs__panel { padding: 14px; }
+  .ob-preview__stats { gap: 6px; }
+  .ob-preview__stat { padding: 10px 4px; }
+  .ob-preview__stat-val { font-size: 16px; }
+  .ob-preview__stat-lbl { font-size: 10px; }
+  .ob-preview__feed-row { padding: 8px 10px; gap: 8px; }
+  .ob-preview__table-head,
+  .ob-preview__table-row {
+    grid-template-columns: 48px minmax(0, 1fr) 62px 30px;
+    gap: 6px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .ob-preview__table-row { font-size: 12px; }
+  .ob-preview__table-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ob-preview__leader { padding: 10px 12px; }
+  .ob-preview__leader-title { display: none; }
+  .ob-preview__filters { flex-wrap: wrap; }
+
+  /* Step 6: watchlist builder */
+  .ob-watchlist__search { font-size: 16px; }            /* 16px stops iOS zooming on focus */
+  .ob-watchlist__results { max-height: 220px; }
+  .ob-watchlist__chip { padding: 8px 12px; }             /* bigger tap targets */
+  .ob-watchlist__current { padding: 14px; }
+
+  /* Step 7: notifications */
+  .ob-notif__tier { padding: 18px 16px; }
+  .ob-notif__tier-header { flex-wrap: wrap; }
+
+  /* Step 8: ready */
+  .ob-ready__title { font-size: 26px !important; }
+}

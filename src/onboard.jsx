@@ -17,11 +17,11 @@ const POPULAR_TICKERS = [
 
 // Signal scoring breakdown for the interactive builder (step 3)
 const SIGNAL_FACTORS = [
-  { id: 'market',    label: 'Open-market trade',          points: 2, description: 'Not a grant, option exercise, or automatic plan — the insider chose to buy or sell on the open market.' },
+  { id: 'market',    label: 'Open-market trade',          points: 2, description: 'Not a grant, option exercise, or automatic plan. The insider chose to buy or sell on the open market.' },
   { id: 'role',      label: 'C-suite or congressional',   points: 2, description: 'CEO, CFO, President, or member of Congress. These insiders have the deepest view into the company.' },
   { id: 'routine',   label: 'Non-routine trade',          points: 3, description: 'Not on a pre-set 10b5-1 plan. The insider made a deliberate, discretionary decision to trade.' },
-  { id: 'value',     label: 'Trade value ≥ $1M',          points: 3, description: 'Large dollar amount — the insider is putting serious capital behind their conviction.' },
-  { id: 'direction', label: 'Purchase (not a sale)',       points: 1, description: 'Sells are excluded from conviction scoring entirely — insiders sell for many reasons. A buy means the insider is putting their own money behind the stock.' },
+  { id: 'value',     label: 'Trade value ≥ $1M',          points: 3, description: 'Large dollar amount. The insider is putting serious capital behind their conviction.' },
+  { id: 'direction', label: 'Purchase (not a sale)',       points: 1, description: 'Sells are excluded from conviction scoring entirely. Insiders sell for many reasons. A buy means the insider is putting their own money behind the stock.' },
 ];
 
 // ── Icons (inline SVG to avoid import dependencies) ─────────────────────────
@@ -177,6 +177,11 @@ function IconChevronDown({ size = 16, ...props }) {
   );
 }
 
+// Touch screens fire mouseenter on tap, right before click. Cards that open on
+// hover AND toggle on click would open then instantly close on a phone, so
+// hover handlers only attach on devices that can actually hover.
+const CAN_HOVER = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover)').matches;
+
 // ── Theme toggle (reads/writes same localStorage key as app.jsx useTheme) ───
 function ThemeToggle() {
   const [dark, setDark] = useState(() => {
@@ -210,7 +215,7 @@ function StepWelcome({ stats, onNext }) {
   return (
     <div className="ob-step ob-step--welcome">
       <div className="ob-welcome__content">
-        <p className="ob-welcome__greeting">Welcome to Seli — let's walk you through the basics.</p>
+        <p className="ob-welcome__greeting">Welcome to Seli. Let's walk you through the basics.</p>
         <h1
           className="ob-welcome__headline"
           onMouseMove={onHeadlineMove}
@@ -276,7 +281,7 @@ function StepInsiderTypes({ sampleFilings, onNext }) {
       title: 'Other Officers',
       tier: 'Medium signal',
       tagline: 'VPs, SVPs, and other titled insiders required to disclose.',
-      description: 'Their trades carry less weight in the conviction score — they\'re typically further from strategic decisions, but cluster patterns still matter.',
+      description: 'Their trades carry less weight in the conviction score. They\'re typically further from strategic decisions, but cluster patterns still matter.',
       Icon: IconUserCheck,
     },
   ];
@@ -286,7 +291,7 @@ function StepInsiderTypes({ sampleFilings, onNext }) {
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">The data sources</span>
         <h2 className="ob-step__title">Who are "insiders"?</h2>
-        <p className="ob-step__subtitle">Seli tracks three categories of people whose trades become public record. Hover or tap for details.</p>
+        <p className="ob-step__subtitle">Seli tracks three categories of people whose trades become public record. {CAN_HOVER ? 'Hover or tap' : 'Tap a card'} for details.</p>
       </div>
       <div className="ob-insiders__grid">
         {categories.map(cat => {
@@ -297,8 +302,8 @@ function StepInsiderTypes({ sampleFilings, onNext }) {
               key={cat.id}
               className={`ob-insider-card${isOpen ? ' ob-insider-card--open' : ''}`}
               onClick={() => setActiveCard(isOpen ? null : cat.id)}
-              onMouseEnter={() => setActiveCard(cat.id)}
-              onMouseLeave={() => setActiveCard(null)}
+              onMouseEnter={CAN_HOVER ? () => setActiveCard(cat.id) : undefined}
+              onMouseLeave={CAN_HOVER ? () => setActiveCard(null) : undefined}
             >
               <div className="ob-insider-card__top">
                 <span className="ob-insider-card__icon"><cat.Icon size={20} /></span>
@@ -345,9 +350,9 @@ function StepReadingFiling({ onNext }) {
   const hotspots = [
     { id: 'name', label: 'Insider Name & Title', field: 'Jane Smith, CEO', factorId: 'role', points: 2, tooltip: 'C-suite trades carry the most weight. Their title determines relationship strength in the conviction score.' },
     { id: 'type', label: 'Transaction Type', field: 'Open-Market Purchase', factorId: 'market', points: 2, tooltip: 'Open-market buys are the most informative signal. Grants, exercises, and auto-plan trades are usually routine.' },
-    { id: 'value', label: 'Value', field: '$2,450,000', factorId: 'value', points: 3, tooltip: 'The dollar amount of the trade. $1M+ trades get the highest value boost. Seli also shows % of position — how much of the insider\'s own holdings this trade represents.' },
-    { id: 'routine', label: 'Routine Flag', field: 'Non-routine', factorId: 'routine', points: 3, tooltip: 'This trade is NOT on a pre-set 10b5-1 plan. The insider made a deliberate decision — this gets a +3 boost.' },
-    { id: 'direction', label: 'Direction', field: 'Purchase', factorId: 'direction', points: 1, tooltip: 'Sells are excluded from conviction scoring entirely. A purchase means the insider is betting their own money — the only reason to buy.' },
+    { id: 'value', label: 'Value', field: '$2,450,000', factorId: 'value', points: 3, tooltip: 'The dollar amount of the trade. $1M+ trades get the highest value boost. Seli also shows % of position: how much of the insider\'s own holdings this trade represents.' },
+    { id: 'routine', label: 'Routine Flag', field: 'Non-routine', factorId: 'routine', points: 3, tooltip: 'This trade is NOT on a pre-set 10b5-1 plan. The insider made a deliberate decision, so this gets a +3 boost.' },
+    { id: 'direction', label: 'Direction', field: 'Purchase', factorId: 'direction', points: 1, tooltip: 'Sells are excluded from conviction scoring entirely. A purchase means the insider is betting their own money, and there\'s only one reason to do that.' },
   ];
 
   function toggleHotspot(hs) {
@@ -468,7 +473,7 @@ function StepConviction({ onNext }) {
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">The scoring system</span>
         <h2 className="ob-step__title">Conviction levels</h2>
-        <p className="ob-step__subtitle">Every filing gets a score from 0 to 14. Hover or tap each level to learn more.</p>
+        <p className="ob-step__subtitle">Every filing gets a score from 0 to 14. {CAN_HOVER ? 'Hover or tap' : 'Tap'} each level to learn more.</p>
       </div>
       <div className="ob-conviction__scale">
         {tiers.map(tier => (
@@ -476,8 +481,8 @@ function StepConviction({ onNext }) {
             key={tier.id}
             className={`ob-conviction__tier${activeTier === tier.id ? ' ob-conviction__tier--active' : ''}`}
             style={{ '--tier-color': tier.color, '--tier-bg': tier.bg }}
-            onMouseEnter={() => setActiveTier(tier.id)}
-            onMouseLeave={() => setActiveTier(null)}
+            onMouseEnter={CAN_HOVER ? () => setActiveTier(tier.id) : undefined}
+            onMouseLeave={CAN_HOVER ? () => setActiveTier(null) : undefined}
             onClick={() => setActiveTier(activeTier === tier.id ? null : tier.id)}
           >
             <div className="ob-conviction__badge" style={{ background: tier.bg, color: tier.color }}>
@@ -515,7 +520,7 @@ function StepDataMap({ onNext }) {
 
   const tabContent = {
     dashboard: {
-      description: 'Your home base — a live snapshot of the most important insider activity right now.',
+      description: 'Your home base: a live snapshot of the most important insider activity right now.',
       preview: (
         <div className="ob-preview ob-preview--dashboard">
           <div className="ob-preview__stats">
@@ -531,7 +536,7 @@ function StepDataMap({ onNext }) {
       ),
     },
     data: {
-      description: 'Two views in one — scored signals grouped by conviction, and raw filings straight from the SEC. Filter by sector, source, date, and more.',
+      description: 'Two views in one: scored signals grouped by conviction, and raw filings straight from the SEC. Filter by sector, source, date, and more.',
       preview: (
         <div className="ob-preview ob-preview--data">
           <div className="ob-preview__filters">
@@ -578,7 +583,7 @@ function StepDataMap({ onNext }) {
       ),
     },
     settings: {
-      description: 'Control how and when Seli reaches you — digest emails, real-time alerts, and more.',
+      description: 'Control how and when Seli reaches you: digest emails, real-time alerts, and more.',
       preview: (
         <div className="ob-preview ob-preview--settings">
           <div className="ob-preview__toggles">
@@ -751,7 +756,7 @@ function StepWatchlist({ watchlist, onNext }) {
 
       {/* Popular tickers grid */}
       <div className="ob-watchlist__popular">
-        <div className="ob-watchlist__popular-label">Popular tickers — tap to add</div>
+        <div className="ob-watchlist__popular-label">Popular tickers. Tap to add</div>
         <div className="ob-watchlist__popular-grid">
           {POPULAR_TICKERS.map(ticker => (
             <button
@@ -1091,13 +1096,13 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
         <div className="ob__progress-fill" style={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%` }} />
       </div>
 
-      {/* Theme toggle */}
-      <ThemeToggle />
-
-      {/* Skip button */}
-      <button className="ob__skip" onClick={handleSkip}>
-        Skip to dashboard →
-      </button>
+      {/* Top bar: theme toggle + skip. Transparent on desktop, solid on mobile. */}
+      <div className="ob__topbar">
+        <ThemeToggle />
+        <button className="ob__skip" onClick={handleSkip}>
+          Skip to dashboard →
+        </button>
+      </div>
 
       {/* Step dots with prev/next arrows */}
       <div className="ob__dots-nav">
