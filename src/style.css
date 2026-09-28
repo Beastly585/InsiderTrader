@@ -9450,3 +9450,41 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
   /* Step 8: ready */
   .ob-ready__title { font-size: 26px !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Mobile: list rows expand in place instead of opening the detail drawer
+   (Watchlist tickers / insiders / recent activity / portfolio).
+   Reuses the Data tab's .ws-row__detail look.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.ws-data-row--open,
+.ws-filing-row--open { background: var(--surface-2); }
+.ws-row__detail--mobile { padding: 12px 14px 4px; }
+.ws-row__detail--mobile .ws-row__detail-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+}
+.ws-row__detail--mobile .ws-row__detail-val { font-size: 12px; overflow-wrap: anywhere; }
+.ws-row__detail--mobile .ws-row__trade-line { gap: 8px; font-size: 11px; }
+.ws-row__detail--mobile .ws-row__trade-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-row__detail-empty { font-size: 11px; color: var(--text-3); padding: 2px 0 10px; }
+/* Inside a recent-activity row the detail sits under the text, not full-bleed */
+.ws-filing-row .ws-row__detail--mobile {
+  margin-top: 8px;
+  padding: 10px 0 0;
+  background: transparent;
+  border-top: 0.5px dashed var(--border);
+}
+.ws-filing-row .ws-row__detail--mobile .ws-row__detail-summary { border-bottom: 0; margin-bottom: 4px; }
+
+/* Insiders tab: the profile panel is desktop/tablet only. The earlier
+   640px hide rule was being overridden by a later .ip-profile-tile rule;
+   the component also no longer renders it on phones. */
+@media (max-width: 640px) {
+  .ip-profile-tile { display: none !important; }
+}
+/* Buy/sell colors inside expanded rows were being overridden to plain text
+   color by .ws-row__detail-val (same specificity, declared later). */
+.ws-row__detail-val.val-buy { color: var(--green-600); }
+.ws-row__detail-val.val-sell { color: var(--red-600); }

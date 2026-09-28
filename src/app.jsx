@@ -4595,7 +4595,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
       <div className="ws-page-hdr">
         <div style={{ flex: 1 }}>
           <h1 className="ws-page-title">Market Data</h1>
-          <p className="ws-page-sub">Click any row to see details inline. Use "Explore full view" for deep analysis.</p>
+          <p className="ws-page-sub">{isMobile ? 'Tap any row to see the details.' : 'Click any row to see details inline. Use "Explore full view" for deep analysis.'}</p>
         </div>
         <button className="data-export-btn" onClick={() => onUpgrade('data_export_direct')}><IconDownload style={{ width: 13, height: 13 }} /> Download Dataset</button>
       </div>
@@ -4827,11 +4827,14 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                             </div>
                           )}
 
-                          <div className="ws-row__detail-footer">
-                            <button className="ws-row__detail-cta" onClick={() => openSignalsDrawer(s)}>
-                              Open full ↗
-                            </button>
-                          </div>
+                          {/* Desktop only: phones get the inline expand and nothing else */}
+                          {!isMobile && (
+                            <div className="ws-row__detail-footer">
+                              <button className="ws-row__detail-cta" onClick={() => openSignalsDrawer(s)}>
+                                Open full ↗
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -4931,11 +4934,13 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                           )}
 
                           {/* Single CTA: opens raw explore with same filters + this ticker pre-selected */}
-                          <div className="ws-row__detail-footer">
-                            <button className="ws-row__detail-cta" onClick={() => openRawDrawer(f.ticker, f.company)}>
-                              Open full ↗
-                            </button>
-                          </div>
+                          {!isMobile && (
+                            <div className="ws-row__detail-footer">
+                              <button className="ws-row__detail-cta" onClick={() => openRawDrawer(f.ticker, f.company)}>
+                                Open full ↗
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -5243,7 +5248,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
     fetchLeaderboard(500, 2, yearsBack, lbSource)
       .then(r => {
         setRows(r);
-        setSelected(s => s ?? (r[0] || null));
+        // Desktop pre-selects the top insider for the profile panel. Phones
+        // have no panel (rows expand inline), so pre-selecting would just
+        // pop the first row open on load.
+        setSelected(s => s ?? (isMobileViewport() ? null : (r[0] || null)));
         setLbLoading(false);
       })
       .catch(e => { setLbError(e.message || 'Failed to load'); setRows(prev => prev || []); setLbLoading(false); });
@@ -5579,8 +5587,10 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
           </div>
         </div>
 
-        {/* Profile viewer — right column */}
-        <div className="ws-tile ip-profile-tile">
+        {/* Profile viewer — right column. Desktop/tablet only: on phones the
+            rail rows expand inline instead. (A CSS rule meant to hide this
+            at 640px was being overridden by a later .ip-profile-tile rule.) */}
+        {!isMobile && <div className="ws-tile ip-profile-tile">
           <ProfileCard
             r={selected}
             profileCompanies={profileCompanies}
@@ -5592,7 +5602,7 @@ function InsightsPage({ filings, loading, highlightTicker, setHighlightTicker, o
             loading={profileLoading}
             setInsiderDrawerDetail={setInsiderDrawerDetail}
           />
-        </div>
+        </div>}
 
       </div>
 
@@ -8269,7 +8279,64 @@ function DataPage({ onOpenDetail, portfolioTickers, user, onUpgrade }) {
 // ─── WatchlistPortfolioFull ───────────────────────────────────────────────────
 // Full-width portfolio tile: chart left, scrollable position list right.
 // Only rendered for pro users.
+// ── Mobile row expansion ─────────────────────────────────────────────────────
+// Phones don't open the full-screen drawer from list rows; the row expands in
+// place instead. Same visual language as the Data tab's expanded rows.
+function recentTradesFor(filings, pred, n = 5) {
+  return filings
+    .filter(f => f.isOpenMarket && pred(f))
+    .sort((a, b) => (b.transactionDate || b.date || '').localeCompare(a.transactionDate || a.date || ''))
+    .slice(0, n);
+}
+
+function MobileRowDetail({ summary = [], trades = null, tradesLabel = 'Recent trades', showTicker = false }) {
+  return (
+    <div className="ws-row__detail ws-row__detail--mobile" onClick={e => e.stopPropagation()}>
+      {summary.length > 0 && (
+        <div className="ws-row__detail-summary">
+          {summary.map(([label, val, cls]) => (
+            <div key={label}><span className="ws-data-label">{label}</span><div className={`ws-row__detail-val${cls ? ' ' + cls : ''}`}>{val}</div></div>
+          ))}
+        </div>
+      )}
+      {trades && (trades.length > 0 ? (
+        <div className="ws-row__detail-trades">
+          <div className="ws-row__detail-trades-hdr"><span className="ws-data-label">{tradesLabel}</span></div>
+          {trades.map((f, i) => {
+            const b = f.transactionType === 'buy';
+            const su = secFilingUrl(f.accessionNumber, f.cikIssuer);
+            return (
+              <div key={i} className="ws-row__trade-line">
+                <span className="ws-row__trade-date ws-data-label">{fmt.dateShort(f.transactionDate || f.date)}</span>
+                {showTicker
+                  ? <span className="ticker" style={{ fontSize: 11 }}>{f.ticker}</span>
+                  : <span className="ws-row__trade-who">{f.insiderName}</span>}
+                <span className={`ws-type-badge${b ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`} style={{ flexShrink: 0 }}>{b ? 'Buy' : 'Sell'}</span>
+                <span className={`ws-data-mono${b ? ' val-buy' : ' val-sell'}`} style={{ marginLeft: 'auto', flexShrink: 0 }}>{b ? '+' : '−'}{fmt.money(f.value)}</span>
+                {su && <a href={su} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗</a>}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="ws-row__detail-empty">No open-market trades loaded for this one yet.</div>
+      ))}
+    </div>
+  );
+}
+
+function tickerRowSummary(s) {
+  return [
+    ['Last trade', s.lastTradeDate ? fmt.dateShort(s.lastTradeDate) : '—'],
+    ['Net flow', `${s.netValue >= 0 ? '+' : ''}${fmt.money(s.netValue)}`, s.netValue >= 0 ? 'val-buy' : 'val-sell'],
+    ['Insiders', s.insiderCount || 0],
+    ['Conviction', Math.round(s.conviction || 0)],
+  ];
+}
+
 function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
+  const isMobile = useIsMobile();
+  const [openRow, setOpenRow] = useState(null);
   const pro = true;
   const { port, err, connected, refresh, refreshing, lastRefreshed, perf } = usePortfolio(pro);
 
@@ -8351,11 +8418,14 @@ function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
               const hasActivity = activeSignalTickers.has(p.symbol);
               const last = lastActivity[p.symbol];
               return (
-                <div key={i}
+                <React.Fragment key={i}>
+                <div
                   style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, alignItems: 'center', padding: '7px 14px', borderBottom: '0.5px solid var(--border)', cursor: 'pointer', transition: 'background .07s' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'}
                   onMouseLeave={e => e.currentTarget.style.background = ''}
-                  onClick={() => onOpenDetail && onOpenDetail({ type: 'ticker', ticker: p.symbol, company: p.company, expand: true })}>
+                  onClick={() => isMobile
+                    ? setOpenRow(k => k === p.symbol ? null : p.symbol)
+                    : onOpenDetail && onOpenDetail({ type: 'ticker', ticker: p.symbol, company: p.company, expand: true })}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
                     <span className="ticker" style={{ fontSize: 12 }}>{p.symbol}</span>
                     {hasActivity && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'var(--accent-50)', color: 'var(--accent)' }}>▲</span>}
@@ -8369,6 +8439,17 @@ function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
                     {p.openPnl != null ? (p.openPnl >= 0 ? '+' : '') + p.openPnlPct?.toFixed(1) + '%' : '—'}
                   </span>
                 </div>
+                {isMobile && openRow === p.symbol && (
+                  <MobileRowDetail
+                    summary={[
+                      ['Value', fmt.money(p.marketValue)],
+                      ['P&L', p.openPnl != null ? `${p.openPnl >= 0 ? '+' : ''}${p.openPnlPct?.toFixed(1)}%` : '—', p.openPnl != null ? (p.openPnl >= 0 ? 'val-buy' : 'val-sell') : ''],
+                      ['Last insider trade', last ? fmt.ago(last.d) : '—'],
+                    ]}
+                    trades={recentTradesFor(filings, f => f.ticker === p.symbol)}
+                    tradesLabel={`Recent insider trades · ${p.symbol}`} />
+                )}
+                </React.Fragment>
               );
             })}
           </div>
@@ -8386,6 +8467,12 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   const [sortDir, setSortDir] = useState(-1);
   const isMobile = useIsMobile();
   const [feedCollapsed, setFeedCollapsed] = useState(false);
+  // Phones: rows expand in place. Desktop: rows open the detail drawer.
+  const [openRow, setOpenRow] = useState(null);
+  function tapRow(key, detail) {
+    if (isMobile) setOpenRow(k => (k === key ? null : key));
+    else onOpenDetail(detail);
+  }
 
   // Alert prefs — load only for pro users
   const { prefs, saving, saved, save } = useNotificationPrefs(user?.id, pro);
@@ -8578,8 +8665,8 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                 {sortedTickerRows.map(s => {
                   const lastType = s.lastTradeType;
                   return (
-                    <div key={s.ticker} className="ws-data-row ws-data-row--clickable"
-                      onClick={() => onOpenDetail({ type: 'ticker', ticker: s.ticker, company: s.company, expand: true })}>
+                    <div key={s.ticker} className={`ws-data-row ws-data-row--clickable${openRow === 't:' + s.ticker ? ' ws-data-row--open' : ''}`}
+                      onClick={() => tapRow('t:' + s.ticker, { type: 'ticker', ticker: s.ticker, company: s.company, expand: true })}>
                       <div className="ws-data-row__main ws-row__main--wl">
                         <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>
@@ -8606,6 +8693,11 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                           </span>
                         </div>
                       </div>
+                      {isMobile && openRow === 't:' + s.ticker && (
+                        <MobileRowDetail summary={tickerRowSummary(s)}
+                          trades={recentTradesFor(filings, f => f.ticker === s.ticker)}
+                          tradesLabel={`Recent insider trades · ${s.ticker}`} />
+                      )}
                     </div>
                   );
                 })}
@@ -8724,8 +8816,8 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                 {tab === 'tickers' ? sortedTickerRows.map(s => {
                   const lastType = s.lastTradeType;
                   return (
-                    <div key={s.ticker} className="ws-data-row ws-data-row--clickable"
-                      onClick={() => onOpenDetail({ type: 'ticker', ticker: s.ticker, company: s.company, expand: true })}>
+                    <div key={s.ticker} className={`ws-data-row ws-data-row--clickable${openRow === 't:' + s.ticker ? ' ws-data-row--open' : ''}`}
+                      onClick={() => tapRow('t:' + s.ticker, { type: 'ticker', ticker: s.ticker, company: s.company, expand: true })}>
                       <div className="ws-data-row__main ws-row__main--wl">
                         {/* Ticker + company */}
                         <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -8755,11 +8847,16 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                           </span>
                         </div>
                       </div>
+                      {isMobile && openRow === 't:' + s.ticker && (
+                        <MobileRowDetail summary={tickerRowSummary(s)}
+                          trades={recentTradesFor(filings, f => f.ticker === s.ticker)}
+                          tradesLabel={`Recent insider trades · ${s.ticker}`} />
+                      )}
                     </div>
                   );
                 }) : sortedInsiderRows.map(r => (
-                  <div key={r.name} className="ws-data-row ws-data-row--clickable"
-                    onClick={() => onOpenDetail({ type: 'trader', name: r.name, title: r.title, expand: true })}>
+                  <div key={r.name} className={`ws-data-row ws-data-row--clickable${openRow === 'i:' + r.name ? ' ws-data-row--open' : ''}`}
+                    onClick={() => tapRow('i:' + r.name, { type: 'trader', name: r.name, title: r.title, expand: true })}>
                     <div className="ws-data-row__main ws-row__main--wl">
                       {/* Insider name + follow button */}
                       <div className="ws-data-row__cell" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -8785,6 +8882,16 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-2)' }}>{r.trades} trade{r.trades !== 1 ? 's' : ''}</span>
                       </div>
                     </div>
+                    {isMobile && openRow === 'i:' + r.name && (
+                      <MobileRowDetail
+                        summary={[
+                          ['Trades', r.trades],
+                          ['Net', `${r.netValue >= 0 ? '+' : ''}${fmt.money(r.netValue)}`, r.netValue >= 0 ? 'val-buy' : 'val-sell'],
+                          ['Last trade', r.lastDate ? fmt.dateShort(r.lastDate) : '—'],
+                        ]}
+                        trades={recentTradesFor(filings, f => f.insiderName === r.name)}
+                        tradesLabel="Recent trades" showTicker />
+                    )}
                   </div>
                 ))}
               </div>
@@ -8806,8 +8913,8 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
           ) : (
             <div style={{ maxHeight: 420, overflowY: 'auto' }}>
               {recentActivity.map((f, i) => (
-                <div key={`${f.accessionNumber || i}`} className="ws-filing-row"
-                  onClick={() => onOpenDetail({ type: 'ticker', ticker: f.ticker, company: f.company, expand: true })}>
+                <div key={`${f.accessionNumber || i}`} className={`ws-filing-row${openRow === 'f:' + i ? ' ws-filing-row--open' : ''}`}
+                  onClick={() => tapRow('f:' + i, { type: 'ticker', ticker: f.ticker, company: f.company, expand: true })}>
                   <div className="ws-filing-row__bar" style={{ background: f.transactionType === 'buy' ? 'var(--green-600)' : 'var(--red-600)' }} />
                   <div className="ws-filing-row__body">
                     <div className="ws-filing-row__top">
@@ -8817,6 +8924,15 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
                       <span style={{ fontWeight: 600, fontSize: 11, minWidth: 52, textAlign: 'right' }}>{f.value ? fmt.money(f.value) : '—'}</span>
                     </div>
                     <div className="ws-filing-row__meta">{f.insiderName}</div>
+                    {isMobile && openRow === 'f:' + i && (
+                      <MobileRowDetail summary={[
+                        ['Title', f.title || '—'],
+                        ['Shares', f.shares ? fmt.number(f.shares) : '—'],
+                        ['Price', f.price ? fmt.price(f.price) : '—'],
+                        ['Filed', fmt.dateShort(f.date || f.transactionDate)],
+                        ...(secFilingUrl(f.accessionNumber, f.cikIssuer) ? [['Source', <a href={secFilingUrl(f.accessionNumber, f.cikIssuer)} target="_blank" rel="noopener noreferrer" className="ws-sec-link">↗ SEC filing</a>]] : []),
+                      ]} />
+                    )}
                   </div>
                 </div>
               ))}
