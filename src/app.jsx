@@ -4225,8 +4225,10 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
   }, [filings, cutoff]);
 
   const signals = useMemo(() => {
+    // 'moves' isn't a stored field: it's buys + sells
+    const val = (x) => sigSort === 'moves' ? (x.buys || 0) + (x.sells || 0) : x[sigSort];
     return [...allSignals].sort((a, b) => {
-      const av = a[sigSort] ?? -Infinity, bv = b[sigSort] ?? -Infinity;
+      const av = val(a) ?? -Infinity, bv = val(b) ?? -Infinity;
       const r = typeof av === 'number' ? (av < bv ? -1 : av > bv ? 1 : 0)
         : String(av).localeCompare(String(bv));
       return sigDir > 0 ? r : -r;
@@ -4359,7 +4361,7 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
             {/* Sortable column headers */}
             <div className="ws-home-sig-hdrs">
               <button className={`ws-col-sort ws-col-sort--sm${sigSort === 'ticker' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('ticker')}>Ticker{sigSort === 'ticker' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
-              {!isMobile && <button className={`ws-col-sort ws-col-sort--sm${sigSort === 'insiderCount' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('insiderCount')}>Moves{sigSort === 'insiderCount' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>}
+              {!isMobile && <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort === 'moves' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('moves')}>Moves{sigSort === 'moves' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>}
               <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort === 'netValue' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('netValue')}>Net value{sigSort === 'netValue' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
               <button className={`ws-col-sort ws-col-sort--sm ws-col-sort--right${sigSort === 'conviction' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('conviction')}>Conviction{sigSort === 'conviction' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
             </div>
@@ -4377,25 +4379,51 @@ function HomePage({ filings, loading, watchlist, user, onOpenDetail, onSeeAll })
                     return (
                       <div key={s.ticker} className={`ws-sig-compact-row${isExp ? ' ws-sig-compact-row--open' : ''}`}
                         style={{ borderLeft: `3px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
-                        <div className="ws-sig-compact-row__main" onClick={() => setExpandedSig(isExp ? null : s.ticker)}>
-                          <div className="ws-sig-compact-row__left">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 2 }}>
-                              <span className="ws-row__chevron" style={{ fontSize: 9 }}>{isExp ? '▾' : '▸'}</span>
-                              <span className="ticker">{s.ticker}</span>
-                              {hasRev && <span className="reversal-badge" style={{ fontSize: 9 }}><IconReversal className="reversal-badge__icon" />rev</span>}
-                              <div onClick={e => e.stopPropagation()}><StarBtn ticker={s.ticker} watchlist={watchlist} /></div>
+                        {!isMobile ? (
+                          /* Desktop: same 4-column grid as the headers above */
+                          <div className="ws-sig-compact-row__main ws-sig-compact-row__main--grid" onClick={() => setExpandedSig(isExp ? null : s.ticker)}>
+                            <div className="ws-sig-grid__cell ws-sig-grid__cell--ticker">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                                <span className="ws-row__chevron" style={{ fontSize: 9 }}>{isExp ? '▾' : '▸'}</span>
+                                <span className="ticker">{s.ticker}</span>
+                                {hasRev && <span className="reversal-badge" style={{ fontSize: 9 }}><IconReversal className="reversal-badge__icon" />rev</span>}
+                                <div onClick={e => e.stopPropagation()}><StarBtn ticker={s.ticker} watchlist={watchlist} /></div>
+                              </div>
+                              <div className="ws-sig-grid__sub">{s.company}</div>
                             </div>
-                            <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 18 }}>{s.company}</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 18 }}>
-                              {!isMobile && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{totalMoves} move{totalMoves !== 1 ? 's' : ''} · {s.insiderCount} insider{s.insiderCount !== 1 ? 's' : ''}</span>}
+                            <div className="ws-sig-grid__cell ws-sig-grid__cell--right">
+                              <div className="ws-sig-grid__num">{totalMoves}</div>
+                              <div className="ws-sig-grid__sub">{s.insiderCount} insider{s.insiderCount !== 1 ? 's' : ''}</div>
+                            </div>
+                            <div className="ws-sig-grid__cell ws-sig-grid__cell--right">
+                              <div className={`ws-sig-row__val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div>
+                              <div className="ws-sig-grid__sub">{fmt.ago(s.lastTradeDate)}</div>
+                            </div>
+                            <div className="ws-sig-grid__cell ws-sig-grid__cell--right ws-sig-grid__cell--conv">
                               <ConvictionBar score={s.conviction} max={100} showLabel />
                             </div>
                           </div>
-                          <div className="ws-sig-compact-row__right">
-                            <div className={`ws-sig-row__val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div>
-                            <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{fmt.ago(s.lastTradeDate)}</div>
+                        ) : (
+                          <div className="ws-sig-compact-row__main" onClick={() => setExpandedSig(isExp ? null : s.ticker)}>
+                            <div className="ws-sig-compact-row__left">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 2 }}>
+                                <span className="ws-row__chevron" style={{ fontSize: 9 }}>{isExp ? '▾' : '▸'}</span>
+                                <span className="ticker">{s.ticker}</span>
+                                {hasRev && <span className="reversal-badge" style={{ fontSize: 9 }}><IconReversal className="reversal-badge__icon" />rev</span>}
+                                <div onClick={e => e.stopPropagation()}><StarBtn ticker={s.ticker} watchlist={watchlist} /></div>
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 18 }}>{s.company}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 18 }}>
+                                {!isMobile && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{totalMoves} move{totalMoves !== 1 ? 's' : ''} · {s.insiderCount} insider{s.insiderCount !== 1 ? 's' : ''}</span>}
+                                <ConvictionBar score={s.conviction} max={100} showLabel />
+                              </div>
+                            </div>
+                            <div className="ws-sig-compact-row__right">
+                              <div className={`ws-sig-row__val${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : ''}{fmt.money(s.netValue)}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{fmt.ago(s.lastTradeDate)}</div>
+                            </div>
                           </div>
-                        </div>
+                        )}
                         {isExp && (
                           <div className="ws-home-expand" onClick={e => e.stopPropagation()}>
                             <div className="ws-home-expand__inline">
@@ -8325,6 +8353,16 @@ function MobileRowDetail({ summary = [], trades = null, tradesLabel = 'Recent tr
   );
 }
 
+// Desktop: open the FULL explore drawer, never the small side panel.
+// openDetail(d, opts) reads `expand` from its 2nd argument; these rows used
+// to put it inside the detail object, where it was ignored. A ticker also
+// needs dataFilters set, which is what routes it to the Raw Data drawer
+// (insiders route to the Insiders drawer by detail.type === 'trader').
+function fullDrawerArgs(detail) {
+  const { expand, ...d } = detail;
+  return [d.type === 'ticker' ? { ...d, dataFilters: d.dataFilters || {} } : d, { expand: true }];
+}
+
 function tickerRowSummary(s) {
   return [
     ['Last trade', s.lastTradeDate ? fmt.dateShort(s.lastTradeDate) : '—'],
@@ -8425,7 +8463,7 @@ function WatchlistPortfolioFull({ filings, cutoff, onOpenDetail }) {
                   onMouseLeave={e => e.currentTarget.style.background = ''}
                   onClick={() => isMobile
                     ? setOpenRow(k => k === p.symbol ? null : p.symbol)
-                    : onOpenDetail && onOpenDetail({ type: 'ticker', ticker: p.symbol, company: p.company, expand: true })}>
+                    : onOpenDetail && onOpenDetail(...fullDrawerArgs({ type: 'ticker', ticker: p.symbol, company: p.company }))}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
                     <span className="ticker" style={{ fontSize: 12 }}>{p.symbol}</span>
                     {hasActivity && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: 'var(--accent-50)', color: 'var(--accent)' }}>▲</span>}
@@ -8470,8 +8508,8 @@ function WatchlistPage({ filings, loading, onOpenDetail, watchlist, ensureFiling
   // Phones: rows expand in place. Desktop: rows open the detail drawer.
   const [openRow, setOpenRow] = useState(null);
   function tapRow(key, detail) {
-    if (isMobile) setOpenRow(k => (k === key ? null : key));
-    else onOpenDetail(detail);
+    if (isMobile) { setOpenRow(k => (k === key ? null : key)); return; }
+    onOpenDetail(...fullDrawerArgs(detail));
   }
 
   // Alert prefs — load only for pro users

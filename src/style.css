@@ -9488,3 +9488,57 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
    color by .ws-row__detail-val (same specificity, declared later). */
 .ws-row__detail-val.val-buy { color: var(--green-600); }
 .ws-row__detail-val.val-sell { color: var(--red-600); }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Home: Insider signals tile. Desktop rows now sit on the same grid as the
+   column headers (Ticker | Moves | Net value | Conviction). The headers
+   were a 4-col grid but rows were a 2-part flex layout, so nothing lined up.
+   Mobile keeps its stacked layout.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 641px) {
+  .ws-home-sig-hdrs {
+    grid-template-columns: minmax(0, 1fr) 76px 112px 132px;
+    padding-left: 3px;               /* rows have a 3px color bar on the left */
+  }
+  .ws-sig-compact-row__main--grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 76px 112px 132px;
+    align-items: center;
+    gap: 0;
+    padding: 9px 0;
+  }
+}
+.ws-sig-grid__cell { padding: 0 8px; min-width: 0; }
+.ws-sig-grid__cell--ticker { padding-left: 8px; }
+.ws-sig-grid__cell--right { text-align: right; }
+.ws-sig-grid__cell--conv { display: flex; justify-content: flex-end; }
+.ws-sig-grid__num { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
+.ws-sig-grid__sub {
+  font-size: 11px; color: var(--text-3); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ws-sig-grid__cell--ticker .ws-sig-grid__sub { padding-left: 14px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Explore drawers (Raw Data / Signals / Insiders): make both panes scroll.
+   .drawer__body is a grid with no row sizing, so its one row grew to the
+   content's height; the list and detail panes were never shorter than their
+   content, so overflow-y:auto never engaged and .drawer's overflow:hidden
+   just clipped everything. The inline detail panel was also forced to
+   height:auto, which disabled its own scroll area.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.drawer__body { grid-template-rows: minmax(0, 1fr); }
+.drawer__body > * { min-height: 0; }
+.drawer__body > .drawer__list { overflow-y: auto; }
+.drawer__body > .detail-panel--inline {
+  height: 100% !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.drawer__body > .detail-panel--inline > .detail-panel__header { flex-shrink: 0; }
+.drawer__body > .detail-panel--inline > .detail-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
