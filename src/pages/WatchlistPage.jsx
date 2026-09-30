@@ -12,18 +12,22 @@ import { SearchBox } from '../components/Search.jsx';
 export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgrade, alertsMasterOn }) {
   const h = (portfolioTickers || []).slice(0, 60).join(',');
   const { data: d, error, reload } = useApi(`/api/watchlist/summary${h ? `?h=${encodeURIComponent(h)}` : ''}`);
-  const key = `${watchlist.tickers.join(',')}|${watchlist.insiders.join(',')}`;
   useEffect(() => { document.title = 'Watchlist · Seli'; }, []);
-  useEffect(() => { if (d) reload(); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const used = watchlist.tickers.length + watchlist.insiders.length;
   const pro = watchlist.pro;
   // Rows follow the live watchlist immediately; details fill in when the summary lands.
   const byTicker = Object.fromEntries((d?.stocks || []).map(s => [s.ticker, s]));
   const byPerson = Object.fromEntries((d?.people || []).map(p => [p.raw, p]));
+  // Removing an item just drops its row. Only refetch when something was added
+  // that the last summary doesn't cover, and only once the add is saved (the
+  // summary reads the saved list), so a long Pro list isn't re-queried on
+  // every click and a fast add doesn't leave a row stuck loading.
+  const missing = d ? [...watchlist.tickers.filter(t => !byTicker[t]), ...watchlist.insiders.filter(n => !byPerson[n])].join('|') : '';
+  useEffect(() => { if (missing) reload(); }, [missing, watchlist.synced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="sx-page sx-page--narrow">
+    <div className="sx-page">
       <header className="sx-head sx-head--page">
         <div className="sx-head__main">
           <h1 className="sx-head__title">Watchlist</h1>

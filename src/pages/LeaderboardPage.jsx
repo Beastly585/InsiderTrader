@@ -55,7 +55,6 @@ export default function LeaderboardPage({ pro, onUpgrade }) {
             <table className="sx-table sx-table--lb">
               <thead>
                 <tr>
-                  <th className="sx-r">#</th>
                   <th>Insider</th>
                   <th className="sx-r">Hit rate</th>
                   <th className="sx-r sx-hide-sm">Avg since buy</th>
@@ -64,11 +63,10 @@ export default function LeaderboardPage({ pro, onUpgrade }) {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((r, i) => {
+                {visible.map(r => {
                   const ex = r.excess;
                   return (
                     <tr key={r.raw}>
-                      <td className="sx-r sx-muted sx-mono">{i + 1}</td>
                       <td className="sx-table__who">
                         <InsiderLink raw={r.raw}>{r.name}</InsiderLink>
                         <span className="sx-table__role">

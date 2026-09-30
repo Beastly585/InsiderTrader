@@ -403,3 +403,6 @@
    step under them, like the old .topnav did, or it hides the drawer's own
    tabs and close button. */
 body.drawer-open .sx-nav { z-index: 94; }
+/* Leaderboard has no rank column, so the name sits on the card's inner edge. */
+.sx-table--lb th:first-child, .sx-table--lb td:first-child { padding-left: 16px; }
+.sx-table--lb th:last-child, .sx-table--lb td:last-child { padding-right: 16px; }

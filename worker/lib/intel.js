@@ -319,6 +319,8 @@ function agg(rows) {
   return { n: new Set(rows.map(r => r.accession_number)).size, v: rows.reduce((s, r) => s + (Number(r.value) || 0), 0), insiders: people.length, people };
 }
 
+const totalsOf = x => ({ n: Number(x?.n) || 0, v: Number(x?.v) || 0, insiders: 0, people: [] });
+
 function congressView(rs) {
   rs = [...rs].sort((a, b) => (asDate(b.trade_date) || '').localeCompare(asDate(a.trade_date) || ''));
   return { n: rs.length, latest: rs.length ? { raw: rs[0].insider_name, name: prettyPerson(rs[0].insider_name, true), type: rs[0].transaction_type, value: rs[0].value, date: asDate(rs[0].trade_date) } : null };
@@ -327,7 +329,10 @@ function congressView(rs) {
 // rows: open-market buy/sell rows for these tickers in the last ~380 days.
 // lastBuys: {ticker: row} most recent corporate open-market buy ever.
 // names: {ticker: company_name}
-export function tickerStatus(tickers, rows, lastBuys, names, windowDays, today = todayStr()) {
+// yearTotals (optional): {ticker: {buy: {n, v}, sell: {n, v}}} precomputed in
+// SQL. When given, rows only need the recent window (plus Congress for the
+// year), which keeps big watchlists from pulling a year of rows per ticker.
+export function tickerStatus(tickers, rows, lastBuys, names, windowDays, today = todayStr(), yearTotals = null) {
   const byT = new Map();
   for (const r of rows) { if (!byT.has(r.ticker)) byT.set(r.ticker, []); byT.get(r.ticker).push(r); }
   const out = {};
@@ -344,8 +349,8 @@ export function tickerStatus(tickers, rows, lastBuys, names, windowDays, today =
       known: !!names[t],
       recent_buys: agg(corp.filter(r => isRecent(r) && r.transaction_type === 'buy')),
       recent_sells: agg(corp.filter(r => isRecent(r) && r.transaction_type === 'sell')),
-      yr_buys: agg(corp.filter(r => inYear(r) && r.transaction_type === 'buy')),
-      yr_sells: agg(corp.filter(r => inYear(r) && r.transaction_type === 'sell')),
+      yr_buys: yearTotals ? totalsOf(yearTotals[t]?.buy) : agg(corp.filter(r => inYear(r) && r.transaction_type === 'buy')),
+      yr_sells: yearTotals ? totalsOf(yearTotals[t]?.sell) : agg(corp.filter(r => inYear(r) && r.transaction_type === 'sell')),
       last_buy: lb ? { raw: lb.insider_name, name: prettyPerson(lb.insider_name, false), role: shortRole(lb.insider_title, lb.relationship), value: lb.value, date: asDate(lb.trade_date) } : null,
       recent_congress: congressView(cong.filter(isRecent)),
       yr_congress: congressView(cong.filter(inYear)),

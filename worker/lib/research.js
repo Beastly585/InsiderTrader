@@ -9,6 +9,9 @@
 //   GET /api/insider/:rawName            insider page
 //   GET /api/feed?h=AAPL,MSFT            home feed (h = linked-portfolio tickers)
 //   GET /api/watchlist/summary?h=...     watchlist page
+//   GET /api/leaderboard, /api/latest     leaderboard page, freshness
+//   Data page endpoints live in ./data.js (filings, trades, price, leaders,
+//   sectors, explore, samples).
 //
 // Free vs Pro: every page is open to every signed-in user. Free accounts see
 // the last 12 months of individual trades; summaries (track record, 12-month
@@ -16,8 +19,9 @@
 // because that's what makes a page worth coming back to.
 
 import {
-  tickerStatus, buildClusters, clusterOut, prettyPerson, prettyCompany, shortRole, isCongress, asDate, todayStr,
+  tickerStatus, buildClusters, clusterOut, prettyPerson, prettyCompany, shortRole, isCongress, asDate, todayStr, isEntityName,
 } from './intel.js';
+import { DATA_ROUTES } from './data.js';
 
 const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,9}$/;
 const FREE_DAYS = 365;
@@ -27,8 +31,10 @@ export async function handleResearch(request, env, origin, url, deps) {
   if (request.method !== 'GET') return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
   const userId = await verifiedUserId(request, env);
   if (!userId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
-  const pro = await isProServerSide(env, userId).catch(() => false);
-  const ctx = { env, userId, pro, deps, db: q => deps.neonFetch(env, q).then(r => r.rows || []) };
+  // Plan lookup starts now but isn't awaited here, so it overlaps with each
+  // endpoint's own queries instead of adding a round trip in front of them.
+  const proP = isProServerSide(env, userId).catch(() => false);
+  const ctx = { env, userId, deps, isPro: () => proP, db: q => deps.neonFetch(env, q).then(r => r.rows || []) };
   const parts = url.pathname.split('/').filter(Boolean); // ['api', 'stock', 'NVDA']
   try {
     let body;
@@ -37,6 +43,9 @@ export async function handleResearch(request, env, origin, url, deps) {
     else if (parts[1] === 'insider' && parts[2]) body = await insider(ctx, decodeURIComponent(parts.slice(2).join('/')));
     else if (parts[1] === 'feed') body = await feed(ctx, holdingsParam(url));
     else if (parts[1] === 'watchlist' && parts[2] === 'summary') body = await watchlistSummary(ctx, holdingsParam(url));
+    else if (parts[1] === 'leaderboard') body = await leaderboard(ctx, url);
+    else if (parts[1] === 'latest') body = await latest(ctx);
+    else if (Object.hasOwn(DATA_ROUTES, parts[1]) && !parts[2]) body = await DATA_ROUTES[parts[1]](ctx, url);
     else return corsResponse({ error: 'Not found' }, 404, origin, env);
     if (body && body.__status) return corsResponse({ error: body.error }, body.__status, origin, env);
     return corsResponse(body, 200, origin, env);
@@ -156,9 +165,12 @@ async function stock(ctx, ticker) {
   const { sqlVal } = ctx.deps;
   if (!TICKER_RE.test(ticker)) return { __status: 400, error: 'That doesn\'t look like a ticker' };
   const T = sqlVal(ticker);
-  const days = ctx.pro ? 3650 : FREE_DAYS;
   const date = 'COALESCE(f.transaction_date, f.filing_date)';
-  const [meta, trades, older, people, prices, status] = await Promise.all([
+  const in1y = `${date} >= CURRENT_DATE - ${FREE_DAYS}`;
+  // Everything runs in parallel, including the plan check. Queries fetch the
+  // Pro-sized window and the free window is applied afterwards in JS.
+  const [pro, meta, trades, older, people, prices, status] = await Promise.all([
+    ctx.isPro(),
     ctx.db(`SELECT company_name, sector, cik_issuer FROM public.filings f WHERE ticker = ${T} ORDER BY filing_date DESC LIMIT 1`),
     ctx.db(`
       SELECT f.accession_number, f.cik_issuer, f.insider_name, f.insider_title, f.relationship, f.transaction_code,
@@ -166,9 +178,9 @@ async function stock(ctx, ticker) {
              f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
              f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date
         FROM public.filings f
-       WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} >= CURRENT_DATE - ${days}
+       WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} >= CURRENT_DATE - 3650
        ORDER BY ${date} DESC, f.value DESC NULLS LAST LIMIT 400`),
-    ctx.pro ? Promise.resolve([{ n: 0 }]) : ctx.db(`
+    ctx.db(`
       SELECT COUNT(*)::int AS n FROM public.filings f
        WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} < CURRENT_DATE - ${FREE_DAYS}`),
     ctx.db(`
@@ -176,37 +188,52 @@ async function stock(ctx, ticker) {
              MODE() WITHIN GROUP (ORDER BY f.insider_title) AS title,
              MODE() WITHIN GROUP (ORDER BY f.relationship) AS relationship,
              BOOL_OR(f.relationship = 'congress' OR f.transaction_code LIKE 'CONGRESS%') AS congress,
+             (ARRAY_AGG(f.shares_owned_after::float ORDER BY ${date} DESC) FILTER (WHERE f.shares_owned_after IS NOT NULL))[1] AS owned,
+             -- 3-year window (Pro)
              COUNT(*) FILTER (WHERE f.transaction_type = 'buy' AND f.is_open_market)::int AS buys,
              COALESCE(SUM(f.value) FILTER (WHERE f.transaction_type = 'buy' AND f.is_open_market), 0)::float AS buy_v,
              COUNT(*) FILTER (WHERE f.transaction_type = 'sell' AND f.is_open_market)::int AS sells,
              COALESCE(SUM(f.value) FILTER (WHERE f.transaction_type = 'sell' AND f.is_open_market), 0)::float AS sell_v,
              COUNT(*) FILTER (WHERE NOT COALESCE(f.is_open_market, false))::int AS other,
              MAX(${date}) AS last,
-             (ARRAY_AGG(f.shares_owned_after::float ORDER BY ${date} DESC) FILTER (WHERE f.shares_owned_after IS NOT NULL))[1] AS owned
+             -- 12-month window (free)
+             COUNT(*) FILTER (WHERE ${in1y})::int AS n1,
+             COUNT(*) FILTER (WHERE ${in1y} AND f.transaction_type = 'buy' AND f.is_open_market)::int AS buys1,
+             COALESCE(SUM(f.value) FILTER (WHERE ${in1y} AND f.transaction_type = 'buy' AND f.is_open_market), 0)::float AS buy_v1,
+             COUNT(*) FILTER (WHERE ${in1y} AND f.transaction_type = 'sell' AND f.is_open_market)::int AS sells1,
+             COALESCE(SUM(f.value) FILTER (WHERE ${in1y} AND f.transaction_type = 'sell' AND f.is_open_market), 0)::float AS sell_v1,
+             COUNT(*) FILTER (WHERE ${in1y} AND NOT COALESCE(f.is_open_market, false))::int AS other1,
+             MAX(${date}) FILTER (WHERE ${in1y}) AS last1
         FROM public.filings f
-       WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} >= CURRENT_DATE - ${Math.min(days, 1095)}
+       WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} >= CURRENT_DATE - 1095
        GROUP BY f.insider_name
-       ORDER BY MAX(${date}) DESC LIMIT 40`),
+       ORDER BY MAX(${date}) DESC LIMIT 60`),
     ctx.db(`SELECT date, close::float AS close FROM public.prices_history WHERE ticker = ${T} AND date >= CURRENT_DATE - 1095 ORDER BY date`)
       .catch(() => []),
     statusFor(ctx, [ticker], 90),
   ]);
-  if (!meta.length) return { ticker, known: false, pro: ctx.pro };
+  if (!meta.length) return { ticker, known: false, pro };
+  const cutoff = new Date(Date.now() - FREE_DAYS * 86400000).toISOString().slice(0, 10);
+  const visibleTrades = pro ? trades : trades.filter(r => (asDate(r.trade_date) || '') >= cutoff);
+  const insiders = (pro ? people : people.filter(p => num(p.n1) > 0)).slice(0, 40).map(p => {
+    const k = pro ? '' : '1';
+    return {
+      raw: p.insider_name, name: prettyPerson(p.insider_name, !!p.congress), title: p.title || '',
+      role: shortRole(p.title, p.congress ? 'congress' : p.relationship), congress: !!p.congress,
+      buys: num(p['buys' + k]), buy_v: num(p['buy_v' + k]), sells: num(p['sells' + k]), sell_v: num(p['sell_v' + k]),
+      other: num(p['other' + k]), last: asDate(p['last' + k]), owned: num(p.owned),
+    };
+  });
   const last = prices[prices.length - 1];
   const s = status[ticker];
   return {
-    ticker, known: true, pro: ctx.pro, window_days: days, older_count: num(older[0]?.n) || 0,
+    ticker, known: true, pro, window_days: pro ? 3650 : FREE_DAYS, older_count: pro ? 0 : num(older[0]?.n) || 0,
     company: prettyCompany(meta[0].company_name) || ticker, sector: meta[0].sector || null, cik: meta[0].cik_issuer || null,
     price: last ? { close: num(last.close), date: asDate(last.date) } : null,
     prices: prices.map(p => [asDate(p.date), num(p.close)]),
     summary: s ? statusOut(s) : null,
-    insiders: people.map(p => ({
-      raw: p.insider_name, name: prettyPerson(p.insider_name, !!p.congress), title: p.title || '',
-      role: shortRole(p.title, p.congress ? 'congress' : p.relationship), congress: !!p.congress,
-      buys: num(p.buys), buy_v: num(p.buy_v), sells: num(p.sells), sell_v: num(p.sell_v), other: num(p.other),
-      last: asDate(p.last), owned: num(p.owned),
-    })),
-    trades: trades.map(r => tradeOut(r)),
+    insiders,
+    trades: visibleTrades.map(r => tradeOut(r)),
   };
 }
 
@@ -237,7 +264,8 @@ async function insider(ctx, raw) {
       FROM public.filings f
      WHERE f.insider_name = ${N} AND f.transaction_type IN ('buy','sell')
      ORDER BY ${date} DESC LIMIT 800`);
-  if (!rows.length) return { raw, known: false, pro: ctx.pro };
+  const pro = await ctx.isPro();
+  if (!rows.length) return { raw, known: false, pro };
 
   const tickers = [...new Set(rows.map(r => r.ticker).filter(t => t && TICKER_RE.test(t)))];
   const buys = rows.filter(r => r.is_open_market && r.transaction_type === 'buy' && r.price > 0);
@@ -312,13 +340,13 @@ async function insider(ctx, raw) {
 
   const cg = rows.some(isCongress);
   const cutoff = new Date(Date.now() - FREE_DAYS * 86400000).toISOString().slice(0, 10);
-  const visible = ctx.pro ? rows : rows.filter(r => asDate(r.trade_date) >= cutoff);
+  const visible = pro ? rows : rows.filter(r => asDate(r.trade_date) >= cutoff);
   const dates = rows.map(r => asDate(r.trade_date)).filter(Boolean).sort();
   return {
-    raw, known: true, pro: ctx.pro, congress: cg, name: prettyPerson(raw, cg),
+    raw, known: true, pro, congress: cg, name: prettyPerson(raw, cg),
     title: companies[0]?.title || '', role: companies[0]?.role || (cg ? 'Congress' : 'Insider'),
     first_trade: dates[0], last_trade: dates[dates.length - 1], total_rows: rows.length, capped: rows.length >= 800,
-    older_count: rows.length - visible.length, window_days: ctx.pro ? null : FREE_DAYS,
+    older_count: rows.length - visible.length, window_days: pro ? null : FREE_DAYS,
     record: {
       buys_scored: retN, priced, wins, hit_rate: priced >= 1 ? Math.round(wins / priced * 100) : null,
       avg_return: retN ? retSum / retN : null,
@@ -384,7 +412,7 @@ async function watchlistSummary(ctx, holdings) {
   ]);
   const alertsOf = (type, v) => items.find(i => i.item_type === type && i.item_value === v)?.alerts !== false;
   return {
-    pro: ctx.pro,
+    pro: await ctx.isPro(),
     stocks: tickers.map(t => ({ ...(status[t] ? statusOut(status[t]) : { ticker: t, company: t, lines: [] }), alerts: alertsOf('ticker', t), held: holdings.includes(t) })),
     people: people.map(p => ({ ...p, alerts: alertsOf('insider', p.raw) })),
     holdings: heldOnly.map(t => (status[t] ? statusOut(status[t]) : { ticker: t, company: t, lines: [] })),
@@ -493,9 +521,131 @@ async function feed(ctx, holdings) {
     .map(s => ({ ...statusOut(s), held: holdings.includes(s.ticker), watched: tickers.includes(s.ticker) }))
     .sort((a, b) => (b.active - a.active) || ((b.recent_buys.v + b.recent_sells.v) - (a.recent_buys.v + a.recent_sells.v)));
   return {
-    pro: ctx.pro,
+    pro: await ctx.isPro(),
     today: todayStr(),
     yours: { stocks: yours, people, watching: tickers.length + names.length, holdings: holdings.length },
     ...market,
   };
+}
+
+// ── Leaderboard ──────────────────────────────────────────────────────────────
+// Used to be a heavy aggregation sent from the browser (POST, so never cached)
+// with three per-row LATERAL lookups. Now: one pass with the latest close per
+// ticker computed once, the S&P lookup only for priced buys, ranking done here,
+// and the result cached per window/source for 30 minutes per Worker isolate.
+//
+// Ranking rules (shown to users under the table):
+const LB_MIN_SCORED = 3;        // scored buys needed to be ranked
+const LB_MIN_AVG_BUY = 25_000;  // average open-market buy size
+const LB_SHRINK = 10;           // small samples pulled toward zero: n / (n + 10)
+const LB_TTL_MS = 30 * 60 * 1000;
+const lbCache = new Map();
+
+async function leaderboard(ctx, url) {
+  const pro = await ctx.isPro();
+  const yearsReq = Number(url.searchParams.get('years')) || 1;
+  const years = pro ? ([1, 2, 5].includes(yearsReq) ? yearsReq : 2) : 1;
+  const sourceReq = url.searchParams.get('source');
+  const source = ['corporate', 'congress'].includes(sourceReq) ? sourceReq : 'all';
+  const key = `${years}|${source}`;
+  const hit = lbCache.get(key);
+  let data;
+  if (hit && Date.now() - hit.at < LB_TTL_MS) data = hit.data;
+  else if (hit?.promise) data = await hit.promise;
+  else {
+    const promise = buildLeaderboard(ctx, years, source);
+    lbCache.set(key, { at: 0, promise });
+    try { data = await promise; lbCache.set(key, { at: Date.now(), data }); }
+    catch (e) { lbCache.delete(key); throw e; }
+  }
+  const FREE_ROWS = 10;
+  return {
+    pro, years, source, generated_at: data.generated_at,
+    rules: { min_scored: LB_MIN_SCORED, min_avg_buy: LB_MIN_AVG_BUY },
+    total: data.ranked.length,
+    // Free: top 10 of each list. Pro: top 200.
+    ranked: data.ranked.slice(0, pro ? 200 : FREE_ROWS),
+    by_hit: data.by_hit.slice(0, pro ? 200 : FREE_ROWS),
+    by_return: data.by_return.slice(0, pro ? 200 : FREE_ROWS),
+    by_buying: data.by_buying.slice(0, pro ? 200 : FREE_ROWS),
+  };
+}
+
+async function buildLeaderboard(ctx, years, source) {
+  const sourceClause = source === 'congress' ? `AND f.transaction_code LIKE 'CONGRESS%'`
+    : source === 'corporate' ? `AND (f.transaction_code IS NULL OR f.transaction_code NOT LIKE 'CONGRESS%')` : '';
+  const buy = `f.transaction_type = 'buy' AND f.is_open_market`;
+  const priced = `${buy} AND f.price_per_share > 0 AND l.close IS NOT NULL AND ABS((l.close - f.price_per_share) / f.price_per_share) < 3`;
+  const rows = await ctx.db(`
+    WITH latest AS (
+      SELECT DISTINCT ON (ticker) ticker, close::float AS close
+        FROM public.prices_history ORDER BY ticker, date DESC
+    ), spy_now AS (
+      SELECT close::float AS close FROM public.benchmark_prices WHERE symbol = 'SPY' ORDER BY date DESC LIMIT 1
+    )
+    SELECT f.insider_name,
+           MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
+           BOOL_OR(f.transaction_code LIKE 'CONGRESS%' OR f.relationship = 'congress') AS is_congress,
+           COUNT(*) FILTER (WHERE ${buy})::int AS om_buys,
+           COALESCE(SUM(f.value) FILTER (WHERE ${buy} AND f.value < 50000000000), 0)::float AS bought_value,
+           (ARRAY_AGG(DISTINCT f.ticker) FILTER (WHERE f.ticker IS NOT NULL))[1:3] AS tickers,
+           COUNT(*) FILTER (WHERE ${priced} AND ABS((l.close - f.price_per_share) / f.price_per_share) >= 0.05)::int AS priced,
+           COUNT(*) FILTER (WHERE ${priced} AND l.close >= f.price_per_share * 1.05)::int AS wins,
+           COUNT(*) FILTER (WHERE ${priced})::int AS scored,
+           AVG((l.close - f.price_per_share) / f.price_per_share * 100) FILTER (WHERE ${priced}) AS avg_return,
+           AVG((sn.close - st.close) / st.close * 100) FILTER (WHERE ${priced} AND st.close IS NOT NULL) AS avg_spy,
+           AVG((l.close - f.price_per_share) / f.price_per_share * 100) FILTER (WHERE ${priced} AND st.close IS NOT NULL) AS avg_return_matched
+      FROM public.filings f
+      LEFT JOIN latest l ON l.ticker = f.ticker
+      CROSS JOIN spy_now sn
+      -- One-time filter: this lookup only runs for open-market buys.
+      LEFT JOIN LATERAL (
+        SELECT close::float AS close FROM public.benchmark_prices
+         WHERE f.transaction_type = 'buy' AND f.is_open_market AND symbol = 'SPY'
+           AND date <= COALESCE(f.transaction_date, f.filing_date)
+         ORDER BY date DESC LIMIT 1
+      ) st ON true
+     WHERE f.insider_name IS NOT NULL
+       AND f.transaction_type IN ('buy', 'sell')
+       AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - ${Number(years) * 365}
+       ${sourceClause}
+     GROUP BY f.insider_name
+    HAVING COUNT(*) FILTER (WHERE ${buy}) >= 2`);
+
+  const all = rows.map(r => {
+    const scored = num(r.scored) || 0;
+    const avgRet = r.avg_return == null ? null : num(r.avg_return);
+    const spy = r.avg_spy == null ? null : num(r.avg_spy);
+    const matched = r.avg_return_matched == null ? null : num(r.avg_return_matched);
+    const excess = spy != null && matched != null ? matched - spy : null;
+    const omBuys = num(r.om_buys) || 0;
+    return {
+      raw: r.insider_name, name: prettyPerson(r.insider_name, !!r.is_congress),
+      title: /^unknown$/i.test(r.insider_title || '') ? '' : (r.insider_title || ''), congress: !!r.is_congress,
+      tickers: r.tickers || [], om_buys: omBuys, bought: num(r.bought_value) || 0,
+      scored, priced: num(r.priced) || 0, hit_rate: num(r.priced) ? Math.round(num(r.wins) / num(r.priced) * 100) : null,
+      avg_return: avgRet, avg_spy: spy, excess,
+      rank: excess == null ? null : excess * (scored / (scored + LB_SHRINK)),
+      entity: !r.is_congress && isEntityName(r.insider_name),
+    };
+  }).filter(r => !r.entity);
+  const eligible = all.filter(r => r.scored >= LB_MIN_SCORED && (r.congress || r.bought / Math.max(1, r.om_buys) >= LB_MIN_AVG_BUY));
+  const strip = r => { const { entity, ...rest } = r; return rest; };
+  const desc = f => (a, b) => f(b) - f(a);
+  return {
+    generated_at: new Date().toISOString(),
+    ranked: eligible.filter(r => r.rank != null).sort(desc(r => r.rank)).slice(0, 500).map(strip),
+    by_hit: eligible.filter(r => r.hit_rate != null).sort(desc(r => r.hit_rate * 1000 + r.priced)).slice(0, 500).map(strip),
+    by_return: eligible.filter(r => r.avg_return != null).sort(desc(r => r.avg_return * r.scored / (r.scored + LB_SHRINK))).slice(0, 500).map(strip),
+    by_buying: all.sort(desc(r => r.bought)).slice(0, 500).map(strip),
+  };
+}
+
+// ── Freshness (newest filing date, for the account menu / stale warning) ─────
+let latestCache = { at: 0, value: null };
+async function latest(ctx) {
+  if (latestCache.value && Date.now() - latestCache.at < 10 * 60 * 1000) return latestCache.value;
+  const rows = await ctx.db(`SELECT MAX(filing_date) AS d FROM public.filings WHERE filing_date <= CURRENT_DATE`);
+  latestCache = { at: Date.now(), value: { latest_filing: asDate(rows[0]?.d) } };
+  return latestCache.value;
 }

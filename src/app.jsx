@@ -1036,6 +1036,9 @@ function useWatchlist(user) {
   const [insiders, setInsiders] = useState(() => wlGet(WL_INSIDER_KEY));
   const [alerts, setAlertsMap] = useState({}); // "ticker:NVDA" -> false when muted
   const [showUpgrade, setShowUpgrade] = useState(null); // null | 'watchlist_ticker' | 'watchlist_insider'
+  // Bumps each time an add is confirmed saved, so pages that summarize the
+  // list server-side know when it's safe to refetch.
+  const [synced, setSynced] = useState(0);
 
   // Waits for billingStatus so a Pro user with stale Clerk metadata isn't
   // treated as free. If the server has nothing but this browser does (lists
@@ -1077,7 +1080,7 @@ function useWatchlist(user) {
     ref.current = next; set(next); wlSet(next, key);
     // The Worker has the final say (free cap, auth). Undo the add if it refuses.
     neonWatchlistMutate(type, value, 'add').then(r => {
-      if (r?.ok !== false) return;
+      if (r?.ok !== false) { setSynced(n => n + 1); return; }
       const back = ref.current.filter(v => v !== value);
       ref.current = back; set(back); wlSet(back, key);
       if (r.status === 403) setShowUpgrade(upgradeKey);
@@ -1109,7 +1112,7 @@ function useWatchlist(user) {
     tickers, insiders, toggle: toggleTicker, has: hasTicker,
     toggleTicker, toggleInsider, hasTicker, hasInsider,
     alertsOn, setAlerts,
-    showUpgrade, setShowUpgrade, pro,
+    showUpgrade, setShowUpgrade, pro, synced,
     freeLimit: FREE_WATCHLIST_LIMIT,
     freeSlotsLeft: pro ? Infinity : Math.max(0, FREE_WATCHLIST_LIMIT - count),
   };
