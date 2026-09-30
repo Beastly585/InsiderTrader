@@ -3,10 +3,21 @@
 // no second profile viewer: click a name, you're on their page.
 import React, { useEffect, useMemo, useState } from 'react';
 import { InsiderLink, StockLink } from '../lib/nav.jsx';
-import { money, pct, plural, prettyPerson } from '../lib/text.js';
+import { money, pct, plural, prettyPerson, isEntityName } from '../lib/text.js';
 import { Card, Segmented, Skeleton, ErrorNote, Gate, Chip } from '../components/ui.jsx';
 
 const FREE_ROWS = 10;
+// Ranking rules. A leaderboard is only worth trusting if the top isn't
+// people with three lucky buys or companies buying their own stock.
+const MIN_SCORED = 3;          // scored buys needed to be ranked at all
+const MIN_AVG_BUY = 25_000;    // average open-market buy size; filters token buys
+const SHRINK = 10;             // pulls small samples toward zero: n / (n + SHRINK)
+
+const spyOf = r => { const v = r.avg_spy_return ?? r.avg_spy_return_pct; return v == null ? null : Number(v); };
+const excessOf = r => (r.avg_return != null && spyOf(r) != null ? r.avg_return - spyOf(r) : null);
+// Excess return over the S&P, discounted by sample size. 8 buys at +40 pts
+// beats 3 buys at +60 pts; 30 buys at +25 pts beats both.
+const rankScore = r => { const e = excessOf(r); const n = r.priced || 0; return e == null ? -Infinity : e * (n / (n + SHRINK)); };
 
 export default function LeaderboardPage({ fetchLeaderboard, pro, onUpgrade }) {
   const [years, setYears] = useState(pro ? 2 : 1);
@@ -28,14 +39,19 @@ export default function LeaderboardPage({ fetchLeaderboard, pro, onUpgrade }) {
 
   const sorted = useMemo(() => {
     if (!rows) return null;
-    const scored = rows.filter(r => (r.priced ?? 0) >= 3 || sort === 'buys');
+    const eligible = rows.filter(r => {
+      if (!r.is_congress && isEntityName(r.insider_name)) return false;
+      if (sort === 'buys') return true;
+      const avgBuy = (Number(r.bought_value) || 0) / Math.max(1, r.om_buys || 0);
+      return (r.priced ?? 0) >= MIN_SCORED && (r.is_congress || avgBuy >= MIN_AVG_BUY);
+    });
     const key = {
-      rank: r => r.proxy_score ?? 0,
-      hit: r => r.hit_rate ?? -1,
-      ret: r => r.avg_return ?? -999,
+      rank: rankScore,
+      hit: r => (r.hit_rate ?? -1) * 1000 + (r.priced || 0),   // ties broken by sample size
+      ret: r => (r.avg_return ?? -999) * (r.priced || 0) / ((r.priced || 0) + SHRINK),
       buys: r => Number(r.bought_value) || 0,
     }[sort];
-    return [...scored].sort((a, b) => key(b) - key(a));
+    return [...eligible].sort((a, b) => key(b) - key(a));
   }, [rows, sort]);
 
   const visible = sorted ? (pro ? sorted.slice(0, 200) : sorted.slice(0, FREE_ROWS)) : null;
@@ -75,13 +91,14 @@ export default function LeaderboardPage({ fetchLeaderboard, pro, onUpgrade }) {
                   <th>Insider</th>
                   <th className="sx-r">Hit rate</th>
                   <th className="sx-r">Avg since buy</th>
-                  <th className="sx-r sx-hide-sm">S&amp;P, same periods</th>
+                  <th className="sx-r">vs S&amp;P</th>
                   <th className="sx-r sx-hide-sm">Bought</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((r, i) => {
-                  const spy = r.avg_spy_return ?? r.avg_spy_return_pct;
+                  const spy = spyOf(r);
+                  const ex = excessOf(r);
                   const tickers = (r.tickers || []).slice(0, 2);
                   return (
                     <tr key={r.insider_name}>
@@ -95,7 +112,10 @@ export default function LeaderboardPage({ fetchLeaderboard, pro, onUpgrade }) {
                       </td>
                       <td className="sx-r sx-mono">{r.hit_rate != null ? `${r.hit_rate}%` : '—'}<span className="sx-n">{r.priced ? plural(r.priced, 'buy') : ''}</span></td>
                       <td className={`sx-r sx-mono ${r.avg_return >= 0 ? 'sx-up' : 'sx-down'}`}>{r.avg_return != null ? pct(r.avg_return, 1) : '—'}</td>
-                      <td className="sx-r sx-mono sx-hide-sm sx-muted">{spy != null ? pct(Number(spy), 1) : '—'}</td>
+                      <td className={`sx-r sx-mono ${ex == null ? 'sx-muted' : ex >= 0 ? 'sx-up' : 'sx-down'}`}>
+                        {ex != null ? `${ex >= 0 ? '+' : ''}${ex.toFixed(1)} pts` : '—'}
+                        <span className="sx-n">{spy != null ? `S&P ${pct(spy, 1)}` : ''}</span>
+                      </td>
                       <td className="sx-r sx-mono sx-hide-sm">{money(r.bought_value)}<span className="sx-n">{plural(r.om_buys || 0, 'buy')}</span></td>
                     </tr>
                   );
@@ -108,7 +128,11 @@ export default function LeaderboardPage({ fetchLeaderboard, pro, onUpgrade }) {
           <Gate onUpgrade={onUpgrade} feature="insider_detail">Showing the top {FREE_ROWS} of {sorted.length}. Every insider page stays open on the free plan; Pro unlocks the full ranking and longer windows.</Gate>
         )}
       </Card>
-      <p className="sx-note sx-note--center">Hit rate: share of open-market buys where the stock is now 5%+ higher (buys within 5% either way are left out). Needs at least 3 scored buys to be ranked.</p>
+      <p className="sx-note sx-note--center">
+        Track record ranks by how far someone's buys beat the S&amp;P 500 over the same periods, discounted when there are only a few buys.
+        Hit rate is the share of buys now 5%+ higher (buys within 5% either way are left out).
+        To be ranked: at least {MIN_SCORED} scored buys averaging {money(MIN_AVG_BUY)}+, and a person rather than a company or fund.
+      </p>
     </div>
   );
 }

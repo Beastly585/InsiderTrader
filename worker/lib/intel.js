@@ -61,7 +61,8 @@ function titleWord(w) {
   if (w.includes('&') && w.length <= 5) return w.toUpperCase();
   if (w.includes('-')) return w.split('-').map(titleWord).join('-');
   if (w.toUpperCase().startsWith('MC') && w.length > 3) return 'Mc' + cap(w.slice(2));
-  if (w.includes("'")) return w.split("'").map(cap).join("'");
+  // O'REILLY -> O'Reilly, but DICK'S -> Dick's (a lone letter after ' is a suffix, not a name)
+  if (w.includes("'")) return w.split("'").map((p, i) => (i > 0 && p.length <= 1 ? p.toLowerCase() : cap(p))).join("'");
   return cap(w);
 }
 const BRAND_CASE = {
@@ -173,9 +174,16 @@ function rankScore(c) {
   return Math.max(0, Math.min(100, s));
 }
 
+// Closed-end funds and similar vehicles file Form 4s too, but a fund
+// director topping up an income fund isn't what people come here for.
+// Only used for the market-wide lists; stock pages still show everything.
+const FUND_RE = /\bFUNDS?\b|\b(INCOME|MUNICIPAL|MUNI|CREDIT|BOND|OPPORTUNITIES|DIVIDEND|STRATEGIES|STRATEGIC)\s+(TRUST|SECURITIES|PORTFOLIO)\b|\bINVESTORS\s+CO\b/i;
+export const isFundName = name => FUND_RE.test(name || '');
+
 export function buildClusters(buys, { includeCorporate = true, includeCongress = true } = {}) {
   const byTicker = new Map();
   for (const r of buys) {
+    if (isFundName(r.company_name)) continue;
     const cg = isCongress(r);
     if ((cg && !includeCongress) || (!cg && !includeCorporate)) continue;
     if (!byTicker.has(r.ticker)) byTicker.set(r.ticker, []);
@@ -240,8 +248,12 @@ export function clusterFacts(c) {
     const g = c.first_buy[0].gap_years;
     f.push([g ? `First buy in ${Math.round(g)} yrs` : 'First buy on record', 'accent']);
   }
+  // Same person the lead sentence is about, so the chip and the sentence agree.
+  // If the top buyer has no stake figure, name whose stake it is.
+  const top = c.buyers[0];
   const stakes = c.buyers.filter(b => b.stake);
-  if (stakes.length) f.push([stakes.reduce((a, b) => ((b.pct || 0) > (a.pct || 0) ? b : a)).stake, 'neutral']);
+  if (top.stake) f.push([top.stake, 'neutral']);
+  else if (stakes.length) { const s = stakes.reduce((a, b) => ((b.pct || 0) > (a.pct || 0) ? b : a)); f.push([`${s.stake} (${s.role})`, 'neutral']); }
   if (c.nonroutine) f.push(['Non-routine', 'neutral']);
   return f.slice(0, 5);
 }

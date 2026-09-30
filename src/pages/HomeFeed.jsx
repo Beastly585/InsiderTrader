@@ -101,10 +101,12 @@ function Yours({ d, watchlist }) {
   }
   const active = y.stocks.filter(s => s.active);
   const quiet = y.stocks.filter(s => !s.active);
+  const activePeople = y.people.filter(p => p.recent.length);
+  const quietPeople = y.people.filter(p => !p.recent.length);
   return (
     <Card title="Your stocks and people" sub="Last 14 days" className="sx-yours"
       action={<Link to="/watchlist" className="sx-link">Watchlist <Icon name="arrow" size={12} /></Link>}>
-      {!active.length && !y.people.length && <p className="sx-lead">Quiet two weeks: no insider trades on anything you watch.</p>}
+      {!active.length && !activePeople.length && <p className="sx-lead">Nothing new in the last two weeks. Here's where each one stands.</p>}
       <ul className="sx-yours__list">
         {active.map(s => (
           <li key={s.ticker} className="sx-yours__item">
@@ -118,7 +120,7 @@ function Yours({ d, watchlist }) {
             {s.lines.slice(0, 2).map((l, i) => <p key={i} className={i === 0 ? 'sx-yours__line' : 'sx-yours__line sx-muted'}>{l}</p>)}
           </li>
         ))}
-        {y.people.map(p => (
+        {activePeople.map(p => (
           <li key={p.raw} className="sx-yours__item">
             <div className="sx-yours__head">
               <InsiderLink raw={p.raw} className="sx-strong">{p.name}</InsiderLink>
@@ -132,10 +134,33 @@ function Yours({ d, watchlist }) {
           </li>
         ))}
       </ul>
-      {quiet.length > 0 && (
-        <p className="sx-yours__quiet">
-          <span className="sx-muted">Quiet:</span> {quiet.map((s, i) => <React.Fragment key={s.ticker}>{i > 0 && ', '}<StockLink ticker={s.ticker} /></React.Fragment>)}
-        </p>
+      {/* Quiet ones still say something: 12-month picture and the last insider buy. */}
+      {(quiet.length > 0 || quietPeople.length > 0) && (
+        <ul className={`sx-yours__list${active.length || activePeople.length ? ' sx-yours__list--quiet' : ''}`}>
+          {quiet.map(s => (
+            <li key={s.ticker} className="sx-yours__item sx-yours__item--quiet">
+              <div className="sx-yours__head">
+                <StockLink ticker={s.ticker} />
+                <span className="sx-yours__co">{s.company}</span>
+                {s.held && <Chip tone="accent">You hold this</Chip>}
+                <Chip>No trades in 14 days</Chip>
+              </div>
+              {s.lines.slice(0, 2).map((l, i) => <p key={i} className={`sx-yours__line${i ? ' sx-muted' : ''}`}>{l}</p>)}
+            </li>
+          ))}
+          {quietPeople.map(p => (
+            <li key={p.raw} className="sx-yours__item sx-yours__item--quiet">
+              <div className="sx-yours__head">
+                <InsiderLink raw={p.raw} className="sx-strong">{p.name}</InsiderLink>
+                {p.role && <span className="sx-yours__co">{p.role}</span>}
+                <Chip>No trades in 14 days</Chip>
+              </div>
+              <p className="sx-yours__line sx-muted">
+                {p.last ? <>Last trade: {p.last.type === 'buy' ? 'bought' : 'sold'} {money(p.last.value)} of <StockLink ticker={p.last.ticker} /> {ago(p.last.date)}.</> : 'No open-market trades on record.'}
+              </p>
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   );

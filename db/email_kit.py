@@ -182,7 +182,8 @@ def _titlecase_word(w: str) -> str:
     if w.startswith("MC") and len(w) > 3:
         return "Mc" + w[2:].capitalize()
     if "'" in w:
-        return "'".join(p.capitalize() for p in w.split("'"))
+        # O'REILLY -> O'Reilly, but DICK'S -> Dick's (a lone letter after ' is a suffix)
+        return "'".join(p.lower() if i and len(p) <= 1 else p.capitalize() for i, p in enumerate(w.split("'")))
     return w.capitalize()
 
 

@@ -495,7 +495,7 @@ async function feed(ctx, holdings) {
   return {
     pro: ctx.pro,
     today: todayStr(),
-    yours: { stocks: yours, people: people.filter(p => p.recent.length), watching: tickers.length + names.length, holdings: holdings.length },
+    yours: { stocks: yours, people, watching: tickers.length + names.length, holdings: holdings.length },
     ...market,
   };
 }

@@ -116,7 +116,8 @@ function titleWord(w) {
   if (w.includes('&') && w.length <= 5) return w.toUpperCase();
   if (w.includes('-')) return w.split('-').map(titleWord).join('-');
   if (w.toUpperCase().startsWith('MC') && w.length > 3) return 'Mc' + cap(w.slice(2));
-  if (w.includes("'")) return w.split("'").map(cap).join("'");
+  // O'REILLY -> O'Reilly, but DICK'S -> Dick's (a lone letter after ' is a suffix, not a name)
+  if (w.includes("'")) return w.split("'").map((p, i) => (i > 0 && p.length <= 1 ? p.toLowerCase() : cap(p))).join("'");
   return cap(w);
 }
 const BRAND_CASE = {
@@ -172,3 +173,6 @@ export function prettyPerson(name, isCongress = false) {
   return [...core, ...suffix].map(fix).join(' ');
 }
 
+
+// Companies, funds and trusts that file as 'insiders' (e.g. 10% owners).
+export const isEntityName = name => ENTITY_RE.test(name || '');

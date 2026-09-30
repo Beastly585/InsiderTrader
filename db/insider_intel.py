@@ -119,9 +119,20 @@ def rank_score(c: dict) -> float:
     return max(0.0, min(100.0, s))
 
 
+# Closed-end funds and similar vehicles file Form 4s too; keep them out of the
+# market-wide "insider buying" lists. Same pattern as worker/lib/intel.js.
+_FUND_RE = re.compile(r"\bFUNDS?\b|\b(INCOME|MUNICIPAL|MUNI|CREDIT|BOND|OPPORTUNITIES|DIVIDEND|STRATEGIES|STRATEGIC)\s+(TRUST|SECURITIES|PORTFOLIO)\b|\bINVESTORS\s+CO\b", re.I)
+
+
+def is_fund_name(name) -> bool:
+    return bool(_FUND_RE.search(name or ""))
+
+
 def build_clusters(buys: list[dict], *, include_corporate: bool = True, include_congress: bool = True) -> list[dict]:
     by_ticker: dict[str, list[dict]] = defaultdict(list)
     for r in buys:
+        if is_fund_name(r.get("company_name")):
+            continue
         cg = is_congress(r)
         if (cg and not include_congress) or (not cg and not include_corporate):
             continue
@@ -203,10 +214,14 @@ def cluster_facts(c: dict) -> list[tuple[str, str]]:
     if fb:
         g = fb[0]["gap_years"]
         f.append((f"First buy in {round(g)} yrs" if g else "First buy on record", "accent"))
+    # Same person the lead sentence is about, so the chip and the sentence agree.
+    lead = c["buyers"][0]
     stakes = [b for b in c["buyers"] if b["stake"]]
-    if stakes:
+    if lead["stake"]:
+        f.append((lead["stake"], "neutral"))
+    elif stakes:
         top = max(stakes, key=lambda b: (b["pct"] or 0))
-        f.append((top["stake"], "neutral"))
+        f.append((f'{top["stake"]} ({top["role"]})', "neutral"))
     if c["nonroutine"]:
         f.append(("Non-routine", "neutral"))
     f.append((f"{money(c['total'])} total", "neutral"))
