@@ -43,7 +43,13 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msg = res.status === 401 ? 'Your session needs a refresh. Reload the page.' : (data.error || 'Something went wrong. Try again in a moment.');
+    // "Missing query" / "Not found" mean the Worker predates this endpoint
+    // (app deployed before the Worker). Log it for us, keep it readable for users.
+    const stale = data.error === 'Missing query' || res.status === 404;
+    if (stale) console.error(`[api] ${path} returned ${res.status} "${data.error}". Is the Worker deployed with worker/lib/research.js?`);
+    const msg = res.status === 401 ? 'Your session needs a refresh. Reload the page.'
+      : stale ? 'This part of Seli is being updated. Try again in a few minutes.'
+        : (data.error || 'Something went wrong. Try again in a moment.');
     throw new ApiError(msg, res.status);
   }
   return data;

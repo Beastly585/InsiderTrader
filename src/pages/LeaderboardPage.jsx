@@ -89,7 +89,7 @@ export default function LeaderboardPage({ fetchLeaderboard, pro, onUpgrade }) {
                       <td className="sx-table__who">
                         <InsiderLink raw={r.insider_name}>{prettyPerson(r.insider_name, r.is_congress)}</InsiderLink>
                         <span className="sx-table__role">
-                          {r.is_congress ? <Chip tone="accent">Congress</Chip> : (r.insider_title || '')}
+                          {r.is_congress ? <Chip tone="accent">Congress</Chip> : (/^unknown$/i.test(r.insider_title || '') ? '' : (r.insider_title || ''))}
                           {tickers.map(t => <StockLink key={t} ticker={t} className="sx-ml" />)}
                         </span>
                       </td>

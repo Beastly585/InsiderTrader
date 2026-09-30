@@ -1448,8 +1448,10 @@ function TopNav({ page, user, dark, setDark, lastFilingDate, isDataStale }) {
             onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(n.path); }}>{n.label}</a>
         ))}
       </nav>
-      <div className="sx-nav__search"><SearchBox hotkey /></div>
-      <div className="sx-nav__right">{menu}</div>
+      <div className="sx-nav__end">
+        <div className="sx-nav__search"><SearchBox hotkey /></div>
+        <div className="sx-nav__right">{menu}</div>
+      </div>
     </header>
   );
 }
