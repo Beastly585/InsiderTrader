@@ -52,6 +52,8 @@ export function ago(d, today = todayStr()) {
 }
 
 const ENTITY_RE = /\b(INC|LLC|L\.?P\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|PARTNERS|HOLDINGS|MANAGEMENT|ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER)\b/i;
+// Companies, funds and trusts that file as 'insiders' (e.g. 10% owners).
+export const isEntityName = name => ENTITY_RE.test(name || '');
 const SUFFIXES = new Set(['JR', 'SR', 'II', 'III', 'IV', 'MD', 'PHD']);
 const SMALL = new Set(['of', 'and', 'the', 'for', '&']);
 const KEEP_UPPER = new Set(['LLC', 'LP', 'GP', 'PLC', 'USA', 'US', 'NV', 'SA', 'AG', 'REIT', 'ETF', 'II', 'III', 'IV', 'AT&T']);

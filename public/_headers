@@ -1,0 +1,12 @@
+# Security headers for the static site (Cloudflare Pages / Netlify read this file).
+# No Content-Security-Policy yet: Clerk, Stripe, PostHog and Sentry each need
+# their own allowances, so add one in report-only mode first if you want it.
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(self "https://js.stripe.com")
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

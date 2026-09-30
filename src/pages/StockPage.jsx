@@ -171,7 +171,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
             <th className="sx-r sx-hide-sm">Price</th>
             <th className="sx-r">Value</th>
             {showNow ? <th className="sx-r">Since</th> : <th className="sx-r sx-hide-sm">Stake</th>}
-            <th aria-label="SEC filing" />
+            <th className="sx-hide-sm" aria-label="SEC filing" />
           </tr>
         </thead>
         <tbody>
@@ -195,7 +195,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
                 {showNow
                   ? <td className={`sx-r sx-mono ${since == null ? 'sx-muted' : since >= 0 ? 'sx-up' : 'sx-down'}`}>{since == null ? '—' : pct(since)}</td>
                   : <td className="sx-r sx-mono sx-hide-sm">{t.pct != null && t.type === 'buy' ? pct(t.pct) : '—'}</td>}
-                <td className="sx-r">{url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" title="Open the SEC filing"><Icon name="external" size={12} /></a>}</td>
+                <td className="sx-r sx-hide-sm">{url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" title="Open the SEC filing"><Icon name="external" size={12} /></a>}</td>
               </tr>
             );
           })}

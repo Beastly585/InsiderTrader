@@ -290,6 +290,9 @@ const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ]);
+// Cloudflare Pages preview builds (<hash>.seli-dgu.pages.dev) count as ours too,
+// so a preview deploy can sign in without being added here by hand.
+const isAllowedOrigin = o => !!o && (ALLOWED_ORIGINS.has(o) || /^https:\/\/[a-z0-9-]+\.seli-dgu\.pages\.dev$/.test(o));
 
 const workerHandler = {
   // Runs on a frequent cron schedule (needs [triggers] crons in
@@ -386,7 +389,7 @@ const workerHandler = {
     // This guarantees a real, readable JSON error instead, regardless of
     // where in the pipeline the actual problem turns out to be.
     try {
-      return await handleFetchInner(request, env, origin);
+      return await handleFetchInner(request, env, origin, ctx);
     } catch (e) {
       console.error('[Worker] UNCAUGHT top-level exception:', e.message, e.stack?.slice(0, 800));
       // Never leak internal error details to the client — log the real
@@ -396,7 +399,7 @@ const workerHandler = {
   },
 };
 
-async function handleFetchInner(request, env, origin) {
+async function handleFetchInner(request, env, origin, ctx) {
     // CORS preflight
     if (request.method === 'OPTIONS') {
       return corsResponse(null, 204, origin, env);
@@ -436,7 +439,7 @@ async function handleFetchInner(request, env, origin) {
 
     // Origin check — only in prod (when secrets are set)
     const isProd = !!(env.NEON_API_KEY || env.NEON_CONNECTION_STRING);
-    if (isProd && origin && !ALLOWED_ORIGINS.has(origin)) {
+    if (isProd && origin && !isAllowedOrigin(origin)) {
       return corsResponse({ error: 'Origin not allowed' }, 403, origin, env);
     }
 
@@ -727,6 +730,15 @@ async function handleFetchInner(request, env, origin) {
       return handleResearch(request, env, origin, url, { corsResponse, verifiedUserId, isProServerSide, neonFetch, sqlVal });
     }
 
+    // ── Legacy raw-SQL passthrough ───────────────────────────────────────
+    // The app no longer sends SQL (every read goes through /api/*), so this is
+    // off by default. It stays in the file only so you can flip it back on
+    // during a deploy: set the ALLOW_RAW_SQL secret to 1, deploy the Worker,
+    // deploy the site, then delete the secret. With it off, nobody can send
+    // their own queries (skipping the free-plan window or running heavy scans).
+    if (env.ALLOW_RAW_SQL !== '1') {
+      return corsResponse({ error: 'Seli was just updated. Reload the page to get the latest version.' }, 410, origin, env);
+    }
     return handleQuery(request, env, origin);
 }
 
@@ -999,7 +1011,7 @@ async function buildExportCSV(env) {
         const bufObj = await env.EXPORT_SNAPSHOTS.get(saved.bufferKey);
         buffer = bufObj ? new Uint8Array(await bufObj.arrayBuffer()) : new Uint8Array(0);
       } else if (saved.bufferB64) {
-        buffer = Buffer.from(saved.bufferB64, 'base64');
+        buffer = Uint8Array.from(atob(saved.bufferB64), c => c.charCodeAt(0));
       } else {
         buffer = new Uint8Array(0);
       }
@@ -1017,7 +1029,7 @@ async function buildExportCSV(env) {
       if (ch.pendingLines.length === 0) return;
       const chunkText = ch.pendingLines.join('\n') + '\n';
       ch.pendingLines = [];
-      ch.buffer = Buffer.concat([ch.buffer, encoder.encode(chunkText)]);
+      ch.buffer = concatBytes(ch.buffer, encoder.encode(chunkText));
     }
 
     async function flushFullParts(ch) {
@@ -4299,11 +4311,17 @@ async function handleBillingStatus(request, env, origin) {
   }
 }
 
+// Plain Uint8Array concat (Buffer only exists with the nodejs_compat flag).
+function concatBytes(a, b) { const out = new Uint8Array(a.length + b.length); out.set(a, 0); out.set(b, a.length); return out; }
+
 function corsHeaders(origin, env) {
   const isProd = !!(env.NEON_API_KEY || env.NEON_CONNECTION_STRING);
-  const allowed = (!isProd || ALLOWED_ORIGINS.has(origin)) ? origin : '';
+  const allowed = (!isProd || isAllowedOrigin(origin)) ? origin : '';
+  // Unknown origins get the canonical origin back (so the browser blocks the
+  // read) instead of '*', which allowed any site to read responses.
   return {
-    'Access-Control-Allow-Origin':  allowed || '*',
+    'Access-Control-Allow-Origin':  allowed || 'https://seli.app',
+    'Vary':                         'Origin',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization',
     'Access-Control-Max-Age':       '86400',
@@ -4320,7 +4338,34 @@ function corsResponse(body, status, origin, env) {
 // ── Clerk JWT verification ────────────────────────────────────────────────────
 // Verifies a Clerk-issued JWT against the JWKS endpoint.
 // Called only when CLERK_JWKS_URL secret is set.
+// Every authenticated request used to verify the token twice (the auth gate
+// and verifiedUserId), and each time fetched the JWKS and re-imported the key.
+// These module-level caches live as long as the Worker isolate:
+//   - JWKS for 1 hour (refetched early if a token arrives with an unknown kid)
+//   - imported CryptoKeys by kid
+//   - verified payloads by token until the token's own expiry (Clerk session
+//     tokens live ~60s), so the second check in the same request is free
+let _jwks = { at: 0, keys: null };
+const _cryptoKeys = new Map();
+const _verified = new Map();
+
+async function getJwk(jwksUrl, kid) {
+  const fresh = _jwks.keys && Date.now() - _jwks.at < 3600_000;
+  let jwk = fresh ? _jwks.keys.find(k => k.kid === kid) : null;
+  if (!jwk) {
+    const resp = await fetch(jwksUrl, { cf: { cacheTtl: 3600, cacheEverything: true } });
+    const { keys } = await resp.json();
+    _jwks = { at: Date.now(), keys: keys || [] };
+    jwk = _jwks.keys.find(k => k.kid === kid);
+  }
+  return jwk;
+}
+
 async function verifyClerkJWT(token, jwksUrl) {
+  const now = Date.now() / 1000;
+  const hit = _verified.get(token);
+  if (hit && hit.exp > now) return hit;
+
   const parts = token.split('.');
   if (parts.length !== 3) throw new Error('Invalid JWT format');
 
@@ -4328,27 +4373,32 @@ async function verifyClerkJWT(token, jwksUrl) {
   const header  = JSON.parse(b64(parts[0]));
   const payload = JSON.parse(b64(parts[1]));
 
-  // Check expiry first — fast fail
-  if (payload.exp && Date.now() / 1000 > payload.exp) throw new Error('JWT expired');
+  if (header.alg !== 'RS256') throw new Error('Unexpected JWT algorithm');
+  // Expiry and not-before, with 5s of clock-skew allowance.
+  if (!payload.exp || now > payload.exp + 5) throw new Error('JWT expired');
+  if (payload.nbf && now < payload.nbf - 5) throw new Error('JWT not yet valid');
+  // Clerk sets azp to the origin the token was minted for. Reject tokens
+  // minted for some other site that happens to share this Clerk instance.
+  if (payload.azp && !isAllowedOrigin(payload.azp)) throw new Error('JWT issued for another origin');
 
-  // Fetch JWKS — cached by Cloudflare for 1 hour
-  const jwksResp = await fetch(jwksUrl, {
-    cf: { cacheTtl: 3600, cacheEverything: true },
-  });
-  const { keys } = await jwksResp.json();
-  const jwk = keys.find(k => k.kid === header.kid);
+  const jwk = await getJwk(jwksUrl, header.kid);
   if (!jwk) throw new Error('No matching key');
 
-  // Verify signature
-  const cryptoKey = await crypto.subtle.importKey(
-    'jwk', jwk,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false, ['verify']
-  );
+  let cryptoKey = _cryptoKeys.get(header.kid);
+  if (!cryptoKey) {
+    cryptoKey = await crypto.subtle.importKey(
+      'jwk', jwk,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false, ['verify']
+    );
+    _cryptoKeys.set(header.kid, cryptoKey);
+  }
   const sigBytes  = Uint8Array.from(b64(parts[2]), c => c.charCodeAt(0));
   const dataBytes = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
   const valid     = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, sigBytes, dataBytes);
   if (!valid) throw new Error('Invalid signature');
 
+  if (_verified.size > 2000) { for (const [k, v] of _verified) if (v.exp <= now) _verified.delete(k); if (_verified.size > 2000) _verified.clear(); }
+  _verified.set(token, payload);
   return payload;
 }

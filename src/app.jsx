@@ -12,7 +12,7 @@ import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
 import OnboardingFlow from './onboard.jsx';
 import './research.css';
 import { go, stockPath, insiderPath } from './lib/nav.jsx';
-import { clearApiCache } from './lib/api.js';
+import { clearApiCache, api } from './lib/api.js';
 import { SearchBox, SearchOverlay } from './components/Search.jsx';
 import { Icon, Card } from './components/ui.jsx';
 import StockPage from './pages/StockPage.jsx';
@@ -1441,17 +1441,19 @@ function TopNav({ page, user, dark, setDark, lastFilingDate, isDataStale }) {
   return (
     <header className="sx-nav">
       {logo}
-      <nav className="sx-nav__links" aria-label="Main">
-        {NAV_LINKS.map(n => (
-          <a key={n.id} href={n.path} aria-current={page === n.id ? 'page' : undefined}
-            className={`sx-nav__link${page === n.id ? ' sx-nav__link--on' : ''}`}
-            onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(n.path); }}>{n.label}</a>
-        ))}
-      </nav>
-      <div className="sx-nav__end">
+      {/* Middle column is the same width as the page content, so the links
+          start where content starts and search ends where content ends. */}
+      <div className="sx-nav__mid">
+        <nav className="sx-nav__links" aria-label="Main">
+          {NAV_LINKS.map(n => (
+            <a key={n.id} href={n.path} aria-current={page === n.id ? 'page' : undefined}
+              className={`sx-nav__link${page === n.id ? ' sx-nav__link--on' : ''}`}
+              onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(n.path); }}>{n.label}</a>
+          ))}
+        </nav>
         <div className="sx-nav__search"><SearchBox hotkey /></div>
-        <div className="sx-nav__right">{menu}</div>
       </div>
+      <div className="sx-nav__right">{menu}</div>
     </header>
   );
 }
@@ -1523,20 +1525,6 @@ async function getAuthHeaders() {
     } catch { }
   }
   return {};
-}
-
-async function queryNeon(sql) {
-  const r = await fetch(cfg.NEON_PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
-    body: JSON.stringify({ query: sql }),
-  });
-  if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
-  if (r.status === 403) throw new Error('You don\'t have access to this — check your plan in Account');
-  if (!r.ok) throw new Error('Something went wrong loading this — try again in a moment');
-  const d = await r.json();
-  if (d.error) throw new Error(d.error);
-  return d.rows || [];
 }
 
 // Bundle consecutive same-direction trades by the same insider+ticker within
@@ -1809,6 +1797,9 @@ function FeedbackModal({ page, onClose }) {
 // ─── Company profile card ─────────────────────────────────────────────────────
 // Shown at the top of the ticker detail panel. Pulls Finnhub profile (market cap,
 // industry, exchange, logo) and EDGAR description (Item 1 business summary).
+// Only link out to real web addresses (a javascript: URL from a data feed would run on click).
+const safeWebUrl = u => { try { const v = String(u || '').trim(); const x = new URL(/^[a-z][a-z0-9+.-]*:/i.test(v) ? v : `https://${v}`); return /^https?:$/.test(x.protocol) ? x.href : null; } catch { return null; } };
+
 function CompanyProfileCard({ ticker, cik, company }) {
   const { profile, metrics, desc, loading } = useCompanyProfile(ticker, cik);
 
@@ -1834,7 +1825,7 @@ function CompanyProfileCard({ ticker, cik, company }) {
             {[profile?.exchange, profile?.finnhubIndustry, profile?.country].filter(Boolean).join(' · ')}
           </div>
         </div>
-        {profile?.weburl && <a href={profile.weburl} target="_blank" rel="noreferrer" className="co-profile-card__web">↗</a>}
+        {safeWebUrl(profile?.weburl) && <a href={safeWebUrl(profile.weburl)} target="_blank" rel="noreferrer" className="co-profile-card__web">↗</a>}
       </div>
 
       {/* Key stats row */}
@@ -1975,8 +1966,8 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   useEffect(() => {
     if (d.type !== 'signal' || !d.ticker) return;
     setSignalPrice(null);
-    queryNeon(`SELECT close::float AS current_price FROM public.prices_history WHERE ticker='${(d.ticker || '').replace(/'/g, "''")}' ORDER BY date DESC LIMIT 1`)
-      .then(r => setSignalPrice(r?.[0]?.current_price ?? null))
+    api(`/api/price?t=${encodeURIComponent(d.ticker)}`)
+      .then(r => setSignalPrice(r?.close ?? null))
       .catch(() => setSignalPrice(null));
   }, [d.type, d.ticker]);
   // When the current detail originated from the Data page (it has
@@ -2190,49 +2181,13 @@ function DetailPanel({ detail, filings, onClose, onNavigate, onBack, canGoBack, 
   useEffect(() => {
     if (d.type !== 'trader') return;
     setTraderRows(null); setBusy(true);
-    queryNeon(`
-      SELECT f.accession_number,f.cik_issuer,
-             f.transaction_date,f.filing_date,f.ticker,f.company_name,
-             f.transaction_type,f.transaction_code,f.is_open_market,f.is_derivative,
-             f.shares::float,f.price_per_share::float AS price,
-             f.value::float,f.pct_owned_change::float,
-             f.relationship,f.insider_title AS title,f.sector,f.is_entity_owner,
-             f.filing_lag_days,f.shares_owned_after::float,
-             ph.close::float AS current_price
-      FROM public.filings f
-      LEFT JOIN LATERAL (
-        SELECT close FROM public.prices_history
-        WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
-      ) ph ON true
-      WHERE f.insider_name='${d.name.replace(/'/g, "''")}'
-        AND f.transaction_type IN ('buy','sell')
-      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r => { setTraderRows(r); setBusy(false); }).catch(() => { setTraderRows([]); setBusy(false); });
+    api(`/api/trades?insider=${encodeURIComponent(d.name)}`).then(r => r.rows).then(r => { setTraderRows(r); setBusy(false); }).catch(() => { setTraderRows([]); setBusy(false); });
   }, [d.type, d.name]);
 
   useEffect(() => {
     if (d.type !== 'ticker') return;
     setTickerRows(null); setBusy(true);
-    queryNeon(`
-      SELECT f.accession_number,f.transaction_date,f.filing_date,f.insider_name,
-             f.insider_title AS title,f.relationship,
-             f.transaction_type,f.transaction_code,f.is_open_market,
-             f.shares::float,f.price_per_share::float AS price,
-             f.value::float,f.pct_owned_change::float,f.sector,
-             f.cik_issuer,
-             ph.close::float AS current_price,
-             CASE WHEN f.price_per_share>0 AND ph.close IS NOT NULL
-               AND ABS((ph.close-f.price_per_share)/f.price_per_share)>=3.0
-               THEN true ELSE false END AS is_foreign_price
-      FROM public.filings f
-      LEFT JOIN LATERAL (
-        SELECT close FROM public.prices_history
-        WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
-      ) ph ON true
-      WHERE f.ticker='${(d.ticker || '').replace(/'/g, "''")}'
-        AND f.transaction_type IN ('buy','sell')
-      ORDER BY COALESCE(f.transaction_date,f.filing_date) DESC LIMIT 200
-    `).then(r => { setTickerRows(r); setBusy(false); }).catch(() => { setTickerRows([]); setBusy(false); });
+    api(`/api/trades?ticker=${encodeURIComponent(d.ticker || '')}`).then(r => r.rows).then(r => { setTickerRows(r); setBusy(false); }).catch(() => { setTickerRows([]); setBusy(false); });
   }, [d.type, d.ticker]);
 
   const traderStats = useMemo(() => {
@@ -3372,24 +3327,12 @@ function InsiderProfileDrawer({ name, title, filings, watchlist, lbRows, onOpenD
     let cancelled = false;
     setTradesLoading(true);
     setProfileTrades([]);
-    const escaped = (name || '').replace(/'/g, "''");
-    queryNeon(`
-      SELECT accession_number, cik_issuer, transaction_date, filing_date AS date,
-             ticker, company_name AS company, insider_name, insider_title AS title,
-             transaction_type, transaction_code, is_open_market, is_officer,
-             shares::float, price_per_share::float AS price, value::float,
-             shares_owned_after::float, pct_owned_change::float, sector, relationship
-      FROM public.filings
-      WHERE LOWER(insider_name) = LOWER('${escaped}')
-        AND is_open_market = true
-      ORDER BY COALESCE(transaction_date, filing_date) DESC
-      LIMIT 200
-    `).then(rows => {
+    api(`/api/trades?insider=${encodeURIComponent(name || '')}&om=1`).then(r => r.rows).then(rows => {
       if (cancelled) return;
       setProfileTrades((rows || []).map(row => ({
         accessionNumber: row.accession_number, cikIssuer: row.cik_issuer,
-        transactionDate: row.transaction_date, date: row.date,
-        ticker: row.ticker, company: row.company, insiderName: row.insider_name,
+        transactionDate: row.transaction_date, date: row.filing_date,
+        ticker: row.ticker, company: row.company_name, insiderName: row.insider_name,
         title: row.title, transactionType: row.transaction_type,
         transactionCode: row.transaction_code, isOpenMarket: row.is_open_market,
         shares: row.shares, price: row.price, value: row.value,
@@ -4003,177 +3946,14 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
 // ─── SIGNALS environment (existing table logic, now scoped as a sub-view) ─────
 
 // ─── INSIDER LEADERBOARD environment ───────────────────────────────────────────
-// Aggregate query: ranks insiders by a simplified, query-computable proxy for
-// trust score (priced-trade hit rate + OM discipline + volume), since running
-// the full per-insider trustScore() pipeline for every insider in the DB isn't
-// practical in one query. This is consistent with the same approximation used
-// for "Related Insiders" on the trader profile.
-function LEADERBOARD_QUERY(limit = 50, sectorFilter = null, minTrades = 5, yearsBack = 2, sourceFilter = null, nameFilter = null) {
-  const sectorClause = sectorFilter ? `AND f.sector = '${sectorFilter.replace(/'/g, "''")}'` : '';
-  // Server-side name search — highly selective, so the LATERAL JOINs only
-  // run over the handful of matching rows instead of the full table.
-  const nameClause = nameFilter ? `AND f.insider_name ILIKE '%${nameFilter.replace(/'/g, "''")}%'` : '';
-  // Date window is now a real parameter rather than hardcoded — yearsBack=null
-  // means no date filter at all (true all-time), used by the unsortable
-  // preview tiles (Dashboard, Insights side panel) where "all-time" is the
-  // more honest ranking than an arbitrary 2-year cutoff nobody chose.
-  const dateClause = yearsBack != null
-    ? `AND COALESCE(f.transaction_date, f.filing_date) >= (CURRENT_DATE - INTERVAL '${Number(yearsBack)} years')`
-    : '';
-  // Corporate vs congressional — congressional trades are the only ones
-  // whose transaction_code starts with 'CONGRESS' (set at ingestion).
-  const sourceClause = sourceFilter === 'congress' ? `AND f.transaction_code LIKE 'CONGRESS%'`
-    : sourceFilter === 'corporate' ? `AND (f.transaction_code IS NULL OR f.transaction_code NOT LIKE 'CONGRESS%')`
-      : '';
-  // Win/loss now requires a MEANINGFUL margin (5%+) rather than the old
-  // razor-thin `close >= buy price`, where a stock up $0.01 counted as a
-  // full win identically to one up 400%. Trades that are roughly flat
-  // (within ±5%) are excluded from `priced` entirely rather than forced
-  // into a binary — a "push" shouldn't count as evidence of skill either way.
-  //
-  // Known limitation, not yet fixed here: this still compares against a
-  // snapshot of the CURRENT price, not the market's own move over the same
-  // window — so a rising market can inflate everyone's hit rate regardless
-  // of actual stock-picking skill. A true fix needs a benchmark (e.g. SPY)
-  // with full historical daily closes to compare each trade's date against,
-  // which public.prices_history doesn't have yet — it only maintains a
-  // rolling recent snapshot per ticker, not a multi-year series. That's a
-  // separate backfill task, not a query change alone.
-  // Approach 5 from the earlier brainstorm: show the market's own return as
-  // context alongside the existing hit-rate number, without redefining
-  // "win" or touching the existing scoring formula at all. Deliberately the
-  // cheapest, lowest-risk of the options discussed — no new judgment call
-  // about what counts as a win, just an honest second number sitting next
-  // to the first one. Known limitation, stated plainly rather than hidden:
-  // the comparison window still varies per trade (transaction date to
-  // today), so a 2020 trade and a trade from last week aren't measured over
-  // equal spans — a fixed-horizon or calendar-year version would be more
-  // rigorous, but needs a full per-ticker historical price backfill, a
-  // materially bigger project than this.
-  return `
-    SELECT agg.*,
-      -- Proxy rank, mirroring processLeaderboardRows' own weights (hit rate,
-      -- return magnitude, relationship tier, trade volume) — used ONLY to
-      -- order rows before LIMIT is applied. This is the actual fix: without
-      -- this, the query had no ORDER BY at all, so LIMIT cut off whatever
-      -- arbitrary subset Postgres happened to return first (which read as
-      -- roughly alphabetical) — the true top performers by any real
-      -- criterion could easily have been excluded before ever reaching the
-      -- frontend's own scoring. The frontend still computes its own
-      -- authoritative proxy_score for display; this is purely to make sure
-      -- the right rows survive the LIMIT in the first place.
-      --
-      -- Subquery, not a WITH CTE: the Worker's query endpoint only allows
-      -- requests starting with the literal word SELECT (a real, deliberate
-      -- security guard, not something to route around) — a CTE starting
-      -- with WITH failed that check and 403'd, which is what actually
-      -- caused this to look like a Pro-access problem for every user
-      -- regardless of plan. Same query logic, just restructured to start
-      -- with SELECT instead.
-      (
-        CASE WHEN agg.priced>=5 AND agg.wins::float/NULLIF(agg.priced,0)>=0.7 THEN 2
-             WHEN agg.priced>=5 AND agg.wins::float/NULLIF(agg.priced,0)>=0.5 THEN 1
-             ELSE 0 END
-        + CASE WHEN agg.avg_return_pct>=30 THEN 1.5
-               WHEN agg.avg_return_pct>=15 THEN 1
-               WHEN agg.avg_return_pct>=5  THEN 0.5
-               WHEN agg.avg_return_pct<0   THEN -0.5
-               ELSE 0 END
-        + CASE WHEN agg.relationship='strong' THEN 1.5
-               WHEN agg.relationship='medium' THEN 0.75
-               ELSE 0 END
-        + CASE WHEN (agg.om_buys+agg.om_sells)>=10 THEN 1
-               WHEN (agg.om_buys+agg.om_sells)>=5  THEN 0.5
-               ELSE 0 END
-        + CASE WHEN agg.total_buys>0 AND agg.om_buys::float/agg.total_buys>=0.7 THEN 0.5 ELSE 0 END
-      ) AS proxy_rank
-    FROM (
-      SELECT f.insider_name,
-             -- Pick the most frequently-filed title for this name, not just
-             -- whatever GROUP BY happened to land on — avoids one person
-             -- splitting into multiple rows because their title varied
-             -- across filings (e.g. "President" vs "President and CEO").
-             MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
-             MODE() WITHIN GROUP (ORDER BY f.relationship)  AS relationship,
-             BOOL_OR(f.transaction_code LIKE 'CONGRESS%') AS is_congress,
-             COUNT(*) FILTER (WHERE f.transaction_type='buy' AND f.is_open_market) AS om_buys,
-             COUNT(*) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market) AS om_sells,
-             COUNT(*) FILTER (WHERE f.transaction_type='buy') AS total_buys,
-             -- Sanity-bound the dollar sums: exclude any single transaction's
-             -- value if it's wildly disproportionate (>$50B on one Form 4 line
-             -- is essentially always a data/unit error, not a real trade) so
-             -- one bad row can't blow up an insider's aggregate to nonsense.
-             SUM(f.value) FILTER (WHERE f.transaction_type='buy'  AND f.is_open_market AND f.value < 50000000000) AS bought_value,
-             SUM(f.value) FILTER (WHERE f.transaction_type='sell' AND f.is_open_market AND f.value < 50000000000) AS sold_value,
-             ARRAY_AGG(DISTINCT f.ticker) FILTER (WHERE f.ticker IS NOT NULL) AS tickers,
-             ARRAY_AGG(DISTINCT f.sector) FILTER (WHERE f.sector IS NOT NULL AND f.sector != 'Other') AS sectors,
-             COUNT(*) FILTER (
-               WHERE f.transaction_type='buy' AND f.is_open_market
-                 AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
-                 AND ph_buy.close >= f.price_per_share * 1.05
-                 AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
-             ) AS wins,
-             COUNT(*) FILTER (
-               WHERE f.transaction_type='buy' AND f.is_open_market
-                 AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
-                 AND (ph_buy.close >= f.price_per_share * 1.05 OR ph_buy.close <= f.price_per_share * 0.95)
-                 AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
-             ) AS priced,
-             -- Magnitude, not just frequency — a bare hit-rate can't tell
-             -- "wins often by a little" apart from "wins less often but by a
-             -- lot." Averaged over the same sanity-bounded, priced trade set.
-             AVG(
-               CASE WHEN f.transaction_type='buy' AND f.is_open_market
-                         AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
-                         AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
-                    THEN (ph_buy.close-f.price_per_share)/f.price_per_share*100
-               END
-             ) AS avg_return_pct,
-             -- SPY's own return over the exact same transaction-date-to-today
-             -- window, averaged over the SAME priced trade set as
-             -- avg_return_pct above (same WHERE conditions deliberately
-             -- duplicated, not approximated) — so the two numbers are
-             -- directly comparable context, not two different populations.
-             -- NULL (not 0) whenever benchmark_prices doesn't have data for
-             -- the relevant dates yet, so an incomplete backfill degrades
-             -- gracefully instead of silently reporting a false 0% move.
-             AVG(
-               CASE WHEN f.transaction_type='buy' AND f.is_open_market
-                         AND f.price_per_share>0 AND ph_buy.close IS NOT NULL
-                         AND ABS((ph_buy.close-f.price_per_share)/f.price_per_share)<3
-                         AND spy_then.close IS NOT NULL AND spy_now.close IS NOT NULL
-                    THEN (spy_now.close-spy_then.close)/spy_then.close*100
-               END
-             ) AS avg_spy_return_pct
-      FROM public.filings f
-      LEFT JOIN LATERAL (
-        SELECT close FROM public.prices_history
-        WHERE ticker=f.ticker ORDER BY date DESC LIMIT 1
-      ) ph_buy ON true
-      -- SPY's closing price on or before the transaction date — <=, not =,
-      -- since the exact date may be a weekend/holiday when SPY didn't
-      -- trade, same "walk back to the last real session" idea used
-      -- elsewhere for market data.
-      LEFT JOIN LATERAL (
-        SELECT close FROM public.benchmark_prices
-        WHERE symbol='SPY' AND date <= COALESCE(f.transaction_date, f.filing_date)
-        ORDER BY date DESC LIMIT 1
-      ) spy_then ON true
-      LEFT JOIN LATERAL (
-        SELECT close FROM public.benchmark_prices
-        WHERE symbol='SPY' ORDER BY date DESC LIMIT 1
-      ) spy_now ON true
-      WHERE f.insider_name IS NOT NULL
-        ${dateClause}
-        ${sectorClause}
-        ${sourceClause}
-        ${nameClause}
-      GROUP BY f.insider_name
-      HAVING COUNT(*) FILTER (WHERE f.transaction_type IN ('buy','sell') AND f.is_open_market) >= ${minTrades}
-    ) agg
-    ORDER BY proxy_rank DESC NULLS LAST
-    LIMIT ${limit}
-  `;
+// Insights drawer leaderboard rows come from the Worker (GET /api/leaders,
+// worker/lib/data.js), which runs the aggregate, applies the free-plan window
+// and caches the common filter combinations for 30 minutes.
+function leadersPath(minTrades, yearsBack, source, nameFilter) {
+  const qs = new URLSearchParams({ years: yearsBack == null ? 'all' : String(yearsBack), min: String(minTrades) });
+  if (source) qs.set('source', source);
+  if (nameFilter) qs.set('q', nameFilter);
+  return `/api/leaders?${qs}`;
 }
 
 // (processLeaderboardRows now lives in src/lib/scoring.js — imported above.)
@@ -4193,8 +3973,8 @@ function fetchLeaderboard(limit, minTrades, yearsBack, source, nameFilter = null
   // Name-filtered queries are one-off searches, not cached — the result set
   // is specific to the search string and usually tiny.
   if (nameFilter) {
-    return queryNeon(LEADERBOARD_QUERY(limit, null, minTrades, yearsBack, source, nameFilter))
-      .then(r => processLeaderboardRows(r));
+    return api(leadersPath(minTrades, yearsBack, source, nameFilter))
+      .then(r => processLeaderboardRows(r.rows || []));
   }
   const key = lbCacheKey(yearsBack, source);
   const cached = _lbCache.get(key);
@@ -4202,9 +3982,9 @@ function fetchLeaderboard(limit, minTrades, yearsBack, source, nameFilter = null
   if (cached && cached.limit >= limit && cached.rows) return Promise.resolve(cached.rows);
   // If an identical or wider request is already in flight, piggyback on it
   if (cached && cached.promise && cached.limit >= limit) return cached.promise;
-  const promise = queryNeon(LEADERBOARD_QUERY(limit, null, minTrades, yearsBack, source))
+  const promise = api(leadersPath(minTrades, yearsBack, source))
     .then(r => {
-      const rows = processLeaderboardRows(r);
+      const rows = processLeaderboardRows(r.rows || []);
       _lbCache.set(key, { rows, limit, promise: null });
       return rows;
     })
@@ -4232,20 +4012,6 @@ const DATA_SORTABLE_COLS = [
   { key: 'pct_owned_change', label: 'Pos%', type: 'num' },
   { key: 'relationship', label: 'Role', type: 'text' },
 ];
-
-async function proxySQL(sql) {
-  const r = await fetch(cfg.NEON_PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
-    body: JSON.stringify({ query: sql }),
-  });
-  if (r.status === 401) throw new Error('Your session needs a refresh — try reloading the page');
-  if (r.status === 403) throw new Error('You don\'t have access to this — check your plan in Account');
-  if (!r.ok) throw new Error('Something went wrong loading this — try again in a moment');
-  const d = await r.json();
-  if (d.error) throw new Error(d.error);
-  return d.rows || [];
-}
 
 // Tries the pre-built R2 snapshot first — nearly all of a large export is
 // served from a static file instead of pulled live through Neon, which is
@@ -4424,37 +4190,25 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
 
   useEffect(() => {
     if (!cfg.NEON_PROXY_URL) return;
-    proxySQL(`SELECT DISTINCT sector FROM public.filings WHERE sector IS NOT NULL ORDER BY sector`)
-      .then(r => setSectors(r.map(x => x.sector).filter(Boolean))).catch(() => { });
+    api('/api/sectors')
+      .then(r => setSectors((r.sectors || []).filter(Boolean))).catch(() => { });
   }, []);
 
-  function where() {
-    const c = [];
-    const ef = dateFrom || (dPreset != null ? (() => { const d = new Date(); d.setDate(d.getDate() - dPreset); return d.toISOString().split('T')[0]; })() : null);
-    const et = dateTo || new Date().toISOString().split('T')[0];
-    if (ef) c.push(`COALESCE(transaction_date,filing_date)>='${ef}'`);
-    c.push(`COALESCE(transaction_date,filing_date)>='2013-01-01'`); // hard floor — matches earliest backfilled data
-    c.push(`COALESCE(transaction_date,filing_date)<='${et}'`);
-    if (typeF) c.push(`transaction_type='${typeF}'`);
-    if (relF) c.push(`relationship='${relF}'`);
-    if (sectorF) c.push(`sector='${sectorF.replace(/'/g, "''")}'`);
-    if (openMkt) c.push(`is_open_market=true`);
-    if (sourceF === 'corporate') c.push(`transaction_code NOT LIKE 'CONGRESS%'`);
-    if (sourceF === 'political') c.push(`transaction_code LIKE 'CONGRESS%'`);
-    if (fromPortfolio && portfolioTickers && portfolioTickers.length) {
-      c.push(`ticker IN (${portfolioTickers.map(t => `'${t.replace(/'/g, "''")}'`).join(',')})`);
-    } else if (fromPortfolio) {
-      c.push(`1=0`);
-    }
-    if (search) { const q = search.replace(/'/g, "''"); c.push(`(ticker ILIKE '%${q}%' OR insider_name ILIKE '%${q}%' OR company_name ILIKE '%${q}%')`); }
-    return c.length ? 'WHERE ' + c.join(' AND ') : '';
-  }
-  function orderBy() {
-    const col = DATA_SORTABLE_COLS.find(c => c.key === sortKey);
-    const dir = sortDir > 0 ? 'ASC' : 'DESC';
-    if (!col) return `ORDER BY COALESCE(transaction_date,filing_date) DESC`;
-    if (sortKey === 'transaction_date') return `ORDER BY COALESCE(transaction_date,filing_date) ${dir} NULLS LAST`;
-    return `ORDER BY ${sortKey} ${dir} NULLS LAST`;
+  // Filters go to the Worker as plain parameters (GET /api/explore); it
+  // builds the SQL, whitelists the sort column and applies the plan's window.
+  function exploreParams(page) {
+    const qs = new URLSearchParams({ page: String(page), sort: sortKey || 'transaction_date', dir: sortDir > 0 ? 'asc' : 'desc' });
+    if (dateFrom) qs.set('from', dateFrom);
+    else if (dPreset != null) qs.set('days', String(dPreset));
+    if (dateTo) qs.set('to', dateTo);
+    if (typeF) qs.set('type', typeF);
+    if (relF) qs.set('rel', relF);
+    if (sectorF) qs.set('sector', sectorF);
+    if (openMkt) qs.set('om', '1');
+    if (sourceF) qs.set('source', sourceF);
+    if (fromPortfolio) qs.set('tickers', (portfolioTickers || []).join(','));
+    if (search) qs.set('q', search);
+    return qs.toString();
   }
 
   // Stale-while-revalidate: keep showing previous rows while new query runs.
@@ -4463,29 +4217,23 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
   const [dataLoading, setDataLoading] = useState(false);
   const [explorePage, setExplorePage] = useState(0);
   const [exploreTotal, setExploreTotal] = useState(null);
+  const exploreSeq = useRef(0);
 
   function loadExplorePage(p) {
     if (!cfg.NEON_PROXY_URL) return;
     setDataLoading(true);
-    const w = where();
-    // Get total count on first load or filter change
-    if (p === 0) {
-      proxySQL(`SELECT COUNT(*) AS count FROM public.filings ${w}`).then(r => {
-        setExploreTotal(parseInt(r[0]?.count || 0));
-      }).catch(() => { });
-    }
-    proxySQL(`
-      SELECT transaction_date,filing_date,ticker,company_name,insider_name,insider_title,
-             relationship,transaction_type,transaction_code,is_open_market,
-             shares::float,price_per_share::float,value::float,pct_owned_change::float,sector
-      FROM public.filings ${w}
-      ${orderBy()}
-      LIMIT ${EXPLORE_PAGE} OFFSET ${p * EXPLORE_PAGE}
-    `).then(r => { setRows(r); setExplorePage(p); setDataLoading(false); }).catch(() => { setRows(prev => prev || []); setDataLoading(false); });
+    const reqId = ++exploreSeq.current;
+    api(`/api/explore?${exploreParams(p)}`).then(r => {
+      if (reqId !== exploreSeq.current) return; // a newer filter change won
+      if (r.total !== undefined) setExploreTotal(r.total);
+      setRows(r.rows || []); setExplorePage(p); setDataLoading(false);
+    }).catch(() => { if (reqId === exploreSeq.current) { setRows(prev => prev || []); setDataLoading(false); } });
   }
 
   useEffect(() => {
-    loadExplorePage(0);
+    // Typing in search waits a beat so each keystroke isn't its own query.
+    const t = setTimeout(() => loadExplorePage(0), search ? 250 : 0);
+    return () => clearTimeout(t);
   }, [search, typeF, relF, sectorF, sourceF, openMkt, fromPortfolio, dPreset, dateFrom, dateTo, sortKey, sortDir]);
 
   function navigate(d) { if (detail) setDetailStack(s => [...s, detail]); setDetail(d); }
@@ -7201,8 +6949,8 @@ function AppInner() {
   const [latestFiling, setLatestFiling] = useState(null);
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !cfg.NEON_PROXY_URL) return;
-    queryNeon(`SELECT MAX(filing_date) AS d FROM public.filings WHERE filing_date <= CURRENT_DATE`)
-      .then(r => setLatestFiling(r?.[0]?.d ? String(r[0].d).slice(0, 10) : null))
+    api('/api/latest')
+      .then(r => setLatestFiling(r?.latest_filing ? String(r.latest_filing).slice(0, 10) : null))
       .catch(() => { });
   }, [isLoaded, isSignedIn]);
   const lastFilingDate = useMemo(() => {
@@ -7369,7 +7117,7 @@ function AppInner() {
             renderProfile={(t, cik, company) => <CompanyProfileCard ticker={t} cik={cik} company={company} />} />}
           {page === 'insider' && <InsiderPage key={route.raw} raw={route.raw} watchlist={watchlist} onUpgrade={onUpgrade} />}
           {page === 'dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={openDetail} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={onUpgrade} />}
-          {page === 'leaderboard' && <LeaderboardPage fetchLeaderboard={fetchLeaderboard} pro={billingPro} onUpgrade={onUpgrade} />}
+          {page === 'leaderboard' && <LeaderboardPage pro={billingPro} onUpgrade={onUpgrade} />}
           {page === 'watchlist' && <WatchlistPage watchlist={watchlist} portfolioTickers={billingPro ? portfolioTickers : []} onUpgrade={onUpgrade} alertsMasterOn={alertsMaster} />}
           {page === 'account' && <AccountPage user={user} onUpgrade={onUpgrade} dark={dark} setDark={setDark} />}
         </main>

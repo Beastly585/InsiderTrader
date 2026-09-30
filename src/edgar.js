@@ -1,7 +1,6 @@
 // src/edgar.js — SEC Form 4 data layer (ES module for Vite)
-// No window.APP_CONFIG, no window.EdgarData, no XHR hacks.
-// Normal fetch works fine since Babel is gone.
 import cfg from './config.js';
+import { api } from './lib/api.js';
 
 // ── Sector map ────────────────────────────────────────────────────────────────
 const SECTOR_MAP = {
@@ -79,118 +78,13 @@ export function enrich(raw) {
   };
 }
 
-// ── Auth header helper ────────────────────────────────────────────────────────
-// Shares the poll promise and token cache with app.jsx via window.__seliAuth.
-// Whichever file's getAuthHeaders runs first creates the shared state; every
-// other caller across both files piggybacks on the same polling loop and the
-// same cached token. This eliminates the 0-2s independent polling loop that
-// loadFilings (the critical-path query) used to run separately from app.jsx's
-// own 15+ callers.
-async function getAuthHeaders() {
-  if (!window.__seliAuth) window.__seliAuth = { poll: null, token: null, expiry: 0 };
-  const auth = window.__seliAuth;
-
-  // Fast path: reuse a recently-fetched token
-  if (auth.token && Date.now() < auth.expiry) {
-    return { 'Authorization': `Bearer ${auth.token}` };
-  }
-
-  // Shared polling loop — same promise as app.jsx's callers
-  if (!window.__clerkGetToken) {
-    if (!auth.poll) {
-      auth.poll = (async () => {
-        for (let i = 0; i < 40 && !window.__clerkGetToken; i++) {
-          await new Promise(r => setTimeout(r, 50));
-        }
-        auth.poll = null;
-      })();
-    }
-    await auth.poll;
-  }
-
-  if (window.__clerkGetToken) {
-    try {
-      const token = await window.__clerkGetToken();
-      if (token) {
-        auth.token = token;
-        auth.expiry = Date.now() + 10_000;
-        return { 'Authorization': `Bearer ${token}` };
-      }
-    } catch {}
-  }
-  return {};
-}
-
 // ── Main data fetch ───────────────────────────────────────────────────────────
-// Performance notes for the Neon/Worker side:
-// - An index on (is_open_market, transaction_date DESC) or a partial index
-//   WHERE is_open_market = true ORDER BY transaction_date DESC would turn
-//   the narrow-window queries (7d/14d) from sequential scans into index
-//   scans — the single biggest server-side win.
-// - The Worker could pre-compute and cache the 7-day result set (the
-//   default initial load) and serve it from R2/KV, updating on each
-//   ingestion run, so the very first page load never hits Neon at all.
-async function fetchFromNeon(daysBack = 90) {
-  // Absolute floor — matches the earliest data backfilled into Neon.
-  // daysBack=null ("All") uses this floor; otherwise the computed date
-  // from daysBack will be more recent and override it.
-  let floorDate = '2013-01-01';
-  if (daysBack != null) {
-    const d = new Date();
-    d.setDate(d.getDate() - daysBack);
-    floorDate = d.toISOString().split('T')[0];
-  }
-
-  // Scale the LIMIT to the window size. The 7-day default rarely exceeds
-  // ~500 rows; 30d caps around 2-3K; wider windows get the full 50K ceiling.
-  // This keeps the JSON payload small for the critical initial load while
-  // still allowing full data for Pro users widening to "All".
-  const limit = daysBack != null && daysBack <= 7 ? 5000
-              : daysBack != null && daysBack <= 30 ? 15000
-              : 50000;
-
-  const sql = `
-    SELECT
-      accession_number,
-      cik_issuer,
-      filing_date            AS date,
-      transaction_date,
-      company_name           AS company,
-      ticker,
-      insider_name,
-      insider_title          AS title,
-      is_officer,
-      transaction_type,
-      transaction_code,
-      is_open_market,
-      shares::float,
-      price_per_share::float AS price,
-      value::float,
-      shares_owned_after::float,
-      pct_owned_change::float,
-      sector,
-      relationship,
-      is_routine
-    FROM public.filings
-    WHERE COALESCE(transaction_date, filing_date) >= '${floorDate}'
-      AND COALESCE(transaction_date, filing_date) <= CURRENT_DATE
-      AND is_open_market = true
-    ORDER BY COALESCE(transaction_date, filing_date) DESC,
-             value DESC NULLS LAST
-    LIMIT ${limit}
-  `;
-
-  // Normal fetch — no XHR needed since Babel is gone
-  const res = await fetch(cfg.NEON_PROXY_URL, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
-    body:    JSON.stringify({ query: sql }),
-  });
-
-  if (!res.ok) throw new Error(`Worker ${res.status}`);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-
+// The Worker builds the query now (GET /api/filings, worker/lib/data.js), so
+// the browser never sends SQL and the free plan's 12-month window is enforced
+// server-side. Auth and the shared token cache come from lib/api.js.
+async function fetchFilings(daysBack = 90) {
+  const days = daysBack == null ? 'all' : Math.max(1, Math.round(daysBack));
+  const data = await api(`/api/filings?days=${days}`);
   return (data.rows || []).map(r => enrich({
     accessionNumber:      r.accession_number,
     cikIssuer:            r.cik_issuer,
@@ -218,7 +112,7 @@ async function fetchFromNeon(daysBack = 90) {
 export async function loadFilings(daysBack = 90) {
   switch (cfg.DATA_SOURCE) {
     case 'neon':
-    case 'proxy': return fetchFromNeon(daysBack);
+    case 'proxy': return fetchFilings(daysBack);
     default:      return [];
   }
 }

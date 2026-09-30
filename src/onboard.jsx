@@ -3,6 +3,7 @@
 // Skippable at any time. Writes to real watchlist on step 6.
 import React, { useState, useEffect, useRef } from 'react';
 import cfg from './config.js';
+import { api } from './lib/api.js';
 import { SearchBox } from './components/Search.jsx';
 import { SCORE_TIERS, prettyPerson } from './lib/text.js';
 // Styles live at the bottom of style.css (ob-* prefix) — no separate import needed.
@@ -624,44 +625,16 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
       })
       .catch(() => {});
 
-    // Sample filings by category (corporate, congress, officers)
-    (async () => {
-      const headers = { 'Content-Type': 'application/json' };
-      if (window.__clerkGetToken) {
-        try {
-          const token = await window.__clerkGetToken();
-          if (token) headers['Authorization'] = `Bearer ${token}`;
-        } catch {}
+    // Sample filings by category (corporate, congress, officers). One cached
+    // Worker call (GET /api/samples) instead of three raw queries.
+    api('/api/samples').then(d => {
+      const samples = {};
+      for (const key of ['corporate', 'congress', 'officers']) {
+        const r = d?.[key];
+        if (r) samples[key] = { insiderName: r.insider_name, ticker: r.ticker, companyName: r.company_name, transactionType: r.transaction_type, value: r.value };
       }
-      try {
-        // Get one recent filing per insider type
-        const queries = {
-          corporate: `SELECT insider_name, ticker, company_name, transaction_type, value, filing_date FROM public.filings WHERE relationship = 'strong' AND transaction_type = 'buy' AND value > 100000 ORDER BY filing_date DESC LIMIT 1`,
-          congress: `SELECT insider_name, ticker, company_name, transaction_type, value, filing_date FROM public.filings WHERE source = 'congress' ORDER BY filing_date DESC LIMIT 1`,
-          officers: `SELECT insider_name, ticker, company_name, transaction_type, value, filing_date FROM public.filings WHERE relationship = 'medium' ORDER BY filing_date DESC LIMIT 1`,
-        };
-        const samples = {};
-        for (const [key, query] of Object.entries(queries)) {
-          try {
-            const res = await fetch(cfg.NEON_PROXY_URL, { method: 'POST', headers, body: JSON.stringify({ query }) });
-            if (res.ok) {
-              const data = await res.json();
-              if (data.rows?.[0]) {
-                const r = data.rows[0];
-                samples[key] = {
-                  insiderName: r.insider_name,
-                  ticker: r.ticker,
-                  companyName: r.company_name,
-                  transactionType: r.transaction_type,
-                  value: r.value,
-                };
-              }
-            }
-          } catch {}
-        }
-        setSampleFilings(samples);
-      } catch {}
-    })();
+      setSampleFilings(samples);
+    }).catch(() => { /* samples are optional */ });
   }, []);
 
   // PostHog tracking
