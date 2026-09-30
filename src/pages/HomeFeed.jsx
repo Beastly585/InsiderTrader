@@ -2,7 +2,7 @@
 // Your stuff first, then the week's most notable insider buying told the
 // way the Sunday email tells it, then the rest. Every tile answers
 // "what did insiders do".
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link, stockPath } from '../lib/nav.jsx';
 import { money, congressRange, ago, plural } from '../lib/text.js';
@@ -84,7 +84,10 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
   );
 }
 
+const YOURS_PREVIEW = 8;
+
 function Yours({ d, watchlist }) {
+  const [expanded, setExpanded] = useState(false);
   const y = d.yours;
   if (!y.watching && !y.holdings) {
     return (
@@ -99,10 +102,21 @@ function Yours({ d, watchlist }) {
       </Card>
     );
   }
-  const active = y.stocks.filter(s => s.active);
-  const quiet = y.stocks.filter(s => !s.active);
-  const activePeople = y.people.filter(p => p.recent.length);
-  const quietPeople = y.people.filter(p => !p.recent.length);
+  const activeAll = y.stocks.filter(s => s.active);
+  const quietAll = y.stocks.filter(s => !s.active);
+  const activePeopleAll = y.people.filter(p => p.recent.length);
+  const quietPeopleAll = y.people.filter(p => !p.recent.length);
+  // Long lists open collapsed: anything with new activity comes first, then
+  // quiet ones, up to YOURS_PREVIEW rows. "Show all" opens the rest in place.
+  const total = y.stocks.length + y.people.length;
+  let budget = expanded ? Infinity : YOURS_PREVIEW;
+  const take = arr => { const out = arr.slice(0, Math.max(0, budget)); budget -= out.length; return out; };
+  const active = take(activeAll);
+  const activePeople = take(activePeopleAll);
+  const quiet = take(quietAll);
+  const quietPeople = take(quietPeopleAll);
+  const hidden = total - (active.length + activePeople.length + quiet.length + quietPeople.length);
+  const movedHidden = activeAll.length + activePeopleAll.length - active.length - activePeople.length;
   return (
     <Card title="Your stocks and people" sub="Last 14 days" className="sx-yours"
       action={<Link to="/watchlist" className="sx-link">Watchlist <Icon name="arrow" size={12} /></Link>}>
@@ -161,6 +175,13 @@ function Yours({ d, watchlist }) {
             </li>
           ))}
         </ul>
+      )}
+      {(hidden > 0 || (expanded && total > YOURS_PREVIEW)) && (
+        <button className="sx-more" onClick={() => setExpanded(e => !e)} aria-expanded={expanded}>
+          {expanded ? 'Show less'
+            : `Show all ${total}${movedHidden > 0 ? ` (${movedHidden} more with new trades)` : ''}`}
+          <Icon name="chevron" size={12} className={expanded ? 'sx-more__up' : ''} />
+        </button>
       )}
     </Card>
   );

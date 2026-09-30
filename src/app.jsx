@@ -5981,7 +5981,7 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
           </SxSetting>
         ) : (
           <SxSetting label={snaptrade.status.connection.broker || 'Brokerage linked'}
-            sub={`Connected ${new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}>
+            sub={`Connected ${new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. Unlinks automatically if you don't open Seli for 30 days; relink any time.`}>
             <button className="sx-btn sx-btn--ghost sx-btn--sm" onClick={snaptrade.disconnect}>Disconnect</button>
           </SxSetting>
         )}

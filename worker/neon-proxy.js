@@ -366,6 +366,12 @@ const workerHandler = {
     } catch (e) {
       console.error('[Scheduled] search_entities refresh failed:', e.message);
     }
+    try {
+      const pruned = await prunePortfolioLinks(env);
+      console.log('[Scheduled] brokerage cleanup:', JSON.stringify(pruned));
+    } catch (e) {
+      console.error('[Scheduled] brokerage cleanup threw:', e.message);
+    }
     // Dead-man's-switch: alert if no new filings have landed in 48 hours
     // on a weekday. Prevents silent ingestion gaps from going unnoticed.
     try {
@@ -2878,6 +2884,53 @@ async function handleFeedback(request, env, origin) {
 //   STRIPE_SECRET_KEY, etc. — so a leak of any one of them doesn't also
 //   compromise this one.
 
+// Records that the user opened Seli with a linked brokerage. Throttled to one
+// write an hour; never blocks the request it's called from.
+function touchPortfolioSeen(env, clerkUserId) {
+  neonFetch(env, `
+    UPDATE public.portfolio_connections SET last_seen_at = now()
+     WHERE clerk_user_id = ${sqlVal(clerkUserId)}
+       AND (last_seen_at IS NULL OR last_seen_at < now() - interval '1 hour')`)
+    .catch(e => console.error('[Worker] last_seen_at update failed (run the portfolio migration?):', e.message));
+}
+
+// Daily cleanup (6am cron). SnapTrade bills per connected user per month, so:
+//  - active links with no Seli visit in PORTFOLIO_IDLE_DAYS are unlinked
+//  - links left 'pending' for over a day (user closed the SnapTrade window)
+//    are removed too
+// The SnapTrade user is deleted first; our row is only removed once that
+// succeeds (or SnapTrade says it's already gone), so nothing is left billing.
+const PORTFOLIO_IDLE_DAYS = 30;
+async function prunePortfolioLinks(env) {
+  if (!env.SNAPTRADE_ENCRYPTION_KEY) return { skipped: 'not configured' };
+  const rows = (await neonFetch(env, `
+    SELECT clerk_user_id, status FROM public.portfolio_connections
+     WHERE (status = 'active' AND COALESCE(last_seen_at, connected_at, updated_at) < now() - interval '${PORTFOLIO_IDLE_DAYS} days')
+        OR (status <> 'active' AND updated_at < now() - interval '1 day')
+     ORDER BY updated_at
+     LIMIT 50`)).rows || [];
+  let removed = 0, failed = 0;
+  for (const r of rows) {
+    try {
+      const conn = await getSnapTradeConnection(env, r.clerk_user_id, { anyStatus: true });
+      if (conn) {
+        try {
+          await signSnapTradeRequest(env, 'DELETE', '/api/v1/snapTrade/deleteUser', { query: { userId: conn.snapTradeUserId } });
+        } catch (e) {
+          if (!/\(404\)|not found|does not exist/i.test(e.message)) throw e;
+        }
+      }
+      await neonFetch(env, `DELETE FROM public.portfolio_connections WHERE clerk_user_id = ${sqlVal(r.clerk_user_id)}`);
+      removed++;
+      console.log(`[Scheduled] unlinked ${r.status} brokerage for ${r.clerk_user_id}`);
+    } catch (e) {
+      failed++;
+      console.error(`[Scheduled] brokerage cleanup failed for ${r.clerk_user_id} (will retry tomorrow):`, e.message);
+    }
+  }
+  return { checked: rows.length, removed, failed };
+}
+
 // The one authorized function that ever reads+decrypts a stored secret.
 async function getSnapTradeConnection(env, clerkUserId, { anyStatus = false } = {}) {
   const statusFilter = anyStatus ? '' : `AND status = 'active'`;
@@ -3007,7 +3060,7 @@ async function handleSnapTradeConnect(request, env, origin) {
         userId: snapTradeUserId,
         userSecret,
         connectionType: 'read',
-        customRedirect: `${origin}/settings?snaptrade=connected`,
+        customRedirect: `${origin}/account?snaptrade=connected`,
       },
     });
     return corsResponse({ redirectURI: portalResp.redirectURI }, 200, origin, env);
@@ -3074,6 +3127,9 @@ async function handleSnapTradeConfirm(request, env, origin) {
             updated_at = now()
         WHERE clerk_user_id = ${sqlVal(clerkUserId)}
       `);
+      // Fresh link, fresh 30-day clock (a relink keeps the old row's dates).
+      await neonFetch(env, `UPDATE public.portfolio_connections SET last_seen_at = now() WHERE clerk_user_id = ${sqlVal(clerkUserId)}`)
+        .catch(e => console.error('[Worker] last_seen_at on confirm failed:', e.message));
       return corsResponse({ confirmed: true, broker }, 200, origin, env);
     } else {
       // User cancelled — leave as pending (invisible to /status)
@@ -3098,7 +3154,9 @@ async function handleSnapTradeDisconnect(request, env, origin) {
     // failed remote cleanup shouldn't trap the user unable to disconnect
     // at all, and the self-healing retry in handleSnapTradeConnect covers
     // the case where this step didn't fully succeed.
-    const conn = await getSnapTradeConnection(env, clerkUserId);
+    // anyStatus: a half-finished link (still 'pending') is registered on
+    // SnapTrade's side too and needs the same cleanup.
+    const conn = await getSnapTradeConnection(env, clerkUserId, { anyStatus: true });
     if (conn) {
       await signSnapTradeRequest(env, 'DELETE', '/api/v1/snapTrade/deleteUser', {
         query: { userId: conn.snapTradeUserId },
@@ -3125,6 +3183,27 @@ async function handleSnapTradePositions(request, env, origin) {
   }
 
   try {
+    // The app calls this on every load for Pro users. Two things happen here:
+    //  - last_seen_at is bumped (at most hourly). That's the activity signal
+    //    the daily cleanup uses to unlink brokerages nobody has opened Seli
+    //    with in 30 days. The digest batch job does NOT bump it.
+    //  - If holdings were fetched in the last 8 hours, the cached tickers are
+    //    returned instead of calling SnapTrade again (their limit is 4
+    //    holdings calls per user per day; every page load used to be one).
+    const cachedRow = await neonFetch(env, `
+      SELECT last_synced_at, cached_tickers FROM public.portfolio_connections
+       WHERE clerk_user_id = ${sqlVal(clerkUserId)} AND status = 'active'`).then(r => r.rows?.[0]);
+    if (!cachedRow) return corsResponse({ error: 'No active connection' }, 404, origin, env);
+    touchPortfolioSeen(env, clerkUserId);
+    const age = cachedRow.last_synced_at ? Date.now() - new Date(cachedRow.last_synced_at).getTime() : Infinity;
+    if (age < 8 * 3600 * 1000 && cachedRow.cached_tickers) {
+      let cached = [];
+      try { cached = JSON.parse(cachedRow.cached_tickers) || []; } catch { cached = []; }
+      if (cached.length) {
+        return corsResponse({ cached: true, accounts: [{ account: 'cached', positions: cached.map(t => ({ instrument: { symbol: t } })) }] }, 200, origin, env);
+      }
+    }
+
     const conn = await getSnapTradeConnection(env, clerkUserId);
     if (!conn) return corsResponse({ error: 'No active connection' }, 404, origin, env);
 
@@ -3628,7 +3707,7 @@ async function handleStripeWebhook(request, env) {
         // resubscribe later.
         if (plan === 'free') {
           try {
-            const conn = await getSnapTradeConnection(env, clerkUserId);
+            const conn = await getSnapTradeConnection(env, clerkUserId, { anyStatus: true });
             if (conn) {
               console.log('[Worker] Auto-disconnecting SnapTrade for downgraded user:', clerkUserId);
               await signSnapTradeRequest(env, 'DELETE', '/api/v1/snapTrade/deleteUser', {
@@ -3877,6 +3956,14 @@ async function handleClerkWebhook(request, env) {
     // exactly what does and doesn't get deleted here.
     await neonFetch(env, `DELETE FROM public.cancellation_feedback WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
     await neonFetch(env, `DELETE FROM public.data_purchases WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    // Deleting only our row left the user registered (and billed) at
+    // SnapTrade forever. Remove them there first; best-effort.
+    try {
+      const conn = await getSnapTradeConnection(env, clerkUserId, { anyStatus: true });
+      if (conn) await signSnapTradeRequest(env, 'DELETE', '/api/v1/snapTrade/deleteUser', { query: { userId: conn.snapTradeUserId } });
+    } catch (e) {
+      console.error('[Worker] SnapTrade deleteUser on account deletion failed (non-fatal):', e.message);
+    }
     await neonFetch(env, `DELETE FROM public.portfolio_connections WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
     await neonFetch(env, `DELETE FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
     await neonFetch(env, `DELETE FROM public.user_preferences WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
