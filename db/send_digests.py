@@ -212,18 +212,18 @@ def nudge_block(n_watch: int, medium: str, campaign: str) -> str:
     """Free users only (caller checks). n_watch is the real server-side count,
     now that free watchlists sync to user_watchlist."""
     if n_watch == 0:
-        inner = (ek.p("<strong>Your watchlist is empty.</strong> Add up to 3 tickers and this email will start "
-                      "each week with insider activity on those stocks.", 14, ek.TEXT_2, "0 0 12px")
+        inner = (ek.p("<strong>Your watchlist is empty.</strong> Watch up to 3 stocks or people and this email will start "
+                      "each week with what insiders did with them.", 14, ek.TEXT_2, "0 0 12px")
                  + ek.button("Add tickers", ek.track("/watchlist", medium, "nudge_empty", campaign)))
     elif n_watch < FREE_WATCHLIST_CAP:
         k = FREE_WATCHLIST_CAP - n_watch
         inner = ek.p(f"You're using {n_watch} of {FREE_WATCHLIST_CAP} free watchlist slots. "
-                     f"{ek.a(ek.track('/watchlist', medium, 'nudge_slot', campaign), 'Add ' + ('another ticker' if k == 1 else f'{k} more tickers'))} "
+                     f"{ek.a(ek.track('/watchlist', medium, 'nudge_slot', campaign), 'Add ' + ('one more' if k == 1 else f'{k} more'))} "
                      f"and {'it' if k == 1 else 'they'}'ll show up here next week.", 14, ek.TEXT_2, "0")
     else:
         inner = (ek.p(f"<strong>You're using all {FREE_WATCHLIST_CAP} free watchlist slots.</strong> Pro removes the limit and adds "
-                      "same-day email alerts when insiders file on stocks you watch. $6.99/mo.", 14, ek.TEXT_2, "0 0 10px")
-                 + ek.p(ek.a(ek.track("/settings?section=billing", medium, "nudge_pro", campaign), "See what Pro includes &rarr;"), 13, ek.ACCENT, "0"))
+                      "same-day email alerts when insiders file on what you watch. $6.99/mo.", 14, ek.TEXT_2, "0 0 10px")
+                 + ek.p(ek.a(ek.track("/account#billing", medium, "nudge_pro", campaign), "See what Pro includes &rarr;"), 13, ek.ACCENT, "0"))
     return f'<tr><td class="px" style="padding:26px 28px 0;">{ek.card(inner, bg=ek.SOFT)}</td></tr>'
 
 
@@ -344,7 +344,7 @@ def compose(u: dict, *, weekly: bool, statuses: dict, clusters_by_key: dict, pul
     rows += (watch_html + market_html) if w_active or port_status or fol else (market_html + watch_html)
 
     if not pro:  # never shown to Pro (plan = 'pro' in subscriptions, same check the Worker uses)
-        rows += nudge_block(len(watch), medium, campaign)
+        rows += nudge_block(len(watch) + len(u["insiders"]), medium, campaign)  # free cap counts stocks and people
 
     rows += (f'<tr><td class="px" style="padding:26px 28px 0;">'
              + ek.button("Open Seli", ek.track("/", medium, "cta", campaign)) + "</td></tr>")

@@ -1,27 +1,20 @@
 // src/onboard.jsx — Interactive onboarding flow for new Seli users
 // Lives at seli.app/onboard — full-screen, no main nav, immersive.
 // Skippable at any time. Writes to real watchlist on step 6.
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import cfg from './config.js';
+import { SearchBox } from './components/Search.jsx';
+import { SCORE_TIERS, prettyPerson } from './lib/text.js';
 // Styles live at the bottom of style.css (ob-* prefix) — no separate import needed.
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 7;
 
 // Popular tickers for the quick-add grid (step 6)
 const POPULAR_TICKERS = [
   'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'JPM',
   'V', 'UNH', 'JNJ', 'WMT', 'PG', 'MA', 'HD', 'BAC',
   'XOM', 'COST', 'ABBV', 'CRM', 'PFE', 'KO', 'MCD', 'DIS',
-];
-
-// Signal scoring breakdown for the interactive builder (step 3)
-const SIGNAL_FACTORS = [
-  { id: 'market',    label: 'Open-market trade',          points: 2, description: 'Not a grant, option exercise, or automatic plan. The insider chose to buy or sell on the open market.' },
-  { id: 'role',      label: 'C-suite or congressional',   points: 2, description: 'CEO, CFO, President, or member of Congress. These insiders have the deepest view into the company.' },
-  { id: 'routine',   label: 'Non-routine trade',          points: 3, description: 'Not on a pre-set 10b5-1 plan. The insider made a deliberate, discretionary decision to trade.' },
-  { id: 'value',     label: 'Trade value ≥ $1M',          points: 3, description: 'Large dollar amount. The insider is putting serious capital behind their conviction.' },
-  { id: 'direction', label: 'Purchase (not a sale)',       points: 1, description: 'Sells are excluded from conviction scoring entirely. Insiders sell for many reasons. A buy means the insider is putting their own money behind the stock.' },
 ];
 
 // ── Icons (inline SVG to avoid import dependencies) ─────────────────────────
@@ -41,13 +34,6 @@ function IconCheck({ size = 16, ...props }) {
   );
 }
 
-function IconPlus({ size = 16, ...props }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
 
 function IconX({ size = 16, ...props }) {
   return (
@@ -57,13 +43,6 @@ function IconX({ size = 16, ...props }) {
   );
 }
 
-function IconStar({ size = 16, filled = false, ...props }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-    </svg>
-  );
-}
 
 function IconBell({ size = 16, ...props }) {
   return (
@@ -73,13 +52,6 @@ function IconBell({ size = 16, ...props }) {
   );
 }
 
-function IconSearch({ size = 16, ...props }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  );
-}
 
 function IconBuilding({ size = 20, ...props }) {
   return (
@@ -105,29 +77,6 @@ function IconUserCheck({ size = 20, ...props }) {
   );
 }
 
-function IconBarChart({ size = 20, ...props }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" />
-    </svg>
-  );
-}
-
-function IconUsers({ size = 20, ...props }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
-function IconSettings({ size = 20, ...props }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
 
 function IconSun({ size = 16, ...props }) {
   return (
@@ -145,13 +94,6 @@ function IconMoon({ size = 16, ...props }) {
   );
 }
 
-function IconHome({ size = 16, ...props }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  );
-}
 
 function IconChevronLeft({ size = 16, ...props }) {
   return (
@@ -169,13 +111,6 @@ function IconChevronRight({ size = 16, ...props }) {
   );
 }
 
-function IconChevronDown({ size = 16, ...props }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
-}
 
 // Touch screens fire mouseenter on tap, right before click. Cards that open on
 // hover AND toggle on click would open then instantly close on a phone, so
@@ -342,456 +277,147 @@ function StepInsiderTypes({ sampleFilings, onNext }) {
   );
 }
 
-// ── Step 3: Reading a Filing ─────────────────────────────────────────────────
+// ── Step 3: What makes a filing stand out ─────────────────────────────────────
+// The same facts the app and the emails call out on a real filing. No points
+// or made-up arithmetic here: Seli's actual score is 0-100 (next step).
+const STANDOUT = [
+  { id: 'om', label: 'Open-market', field: 'Bought at market price, own money', why: 'Most insider stock arrives as grants and option exercises. An open-market buy is a choice to pay full price, which is why Seli leaves the rest out of summaries.' },
+  { id: 'role', label: 'Who', field: 'CEO or CFO', why: 'Senior executives see the most of the business. Directors and VPs count too, just for less.' },
+  { id: 'cluster', label: 'How many', field: '3 insiders in two weeks', why: 'When several insiders at one company buy within a few weeks it\'s called a cluster. Rarer than a single buy.' },
+  { id: 'first', label: 'History', field: 'First buy in 4 years', why: 'A break from someone\'s usual pattern says more than a regular top-up.' },
+  { id: 'stake', label: 'Stake change', field: '+38% stake', why: 'Shares bought compared with what they already held. The same dollar amount means more to someone with a small position.' },
+  { id: 'plan', label: 'Timing', field: 'Not pre-scheduled', why: 'Trades set up months ahead under a 10b5-1 plan say less about what the insider thinks today.' },
+];
+
 function StepReadingFiling({ onNext }) {
-  const [revealedFactors, setRevealedFactors] = useState(new Set());
-  const [activeHotspot, setActiveHotspot] = useState(null);
-
-  const hotspots = [
-    { id: 'name', label: 'Insider Name & Title', field: 'Jane Smith, CEO', factorId: 'role', points: 2, tooltip: 'C-suite trades carry the most weight. Their title determines relationship strength in the conviction score.' },
-    { id: 'type', label: 'Transaction Type', field: 'Open-Market Purchase', factorId: 'market', points: 2, tooltip: 'Open-market buys are the most informative signal. Grants, exercises, and auto-plan trades are usually routine.' },
-    { id: 'value', label: 'Value', field: '$2,450,000', factorId: 'value', points: 3, tooltip: 'The dollar amount of the trade. $1M+ trades get the highest value boost. Seli also shows % of position: how much of the insider\'s own holdings this trade represents.' },
-    { id: 'routine', label: 'Routine Flag', field: 'Non-routine', factorId: 'routine', points: 3, tooltip: 'This trade is NOT on a pre-set 10b5-1 plan. The insider made a deliberate decision, so this gets a +3 boost.' },
-    { id: 'direction', label: 'Direction', field: 'Purchase', factorId: 'direction', points: 1, tooltip: 'Sells are excluded from conviction scoring entirely. A purchase means the insider is betting their own money, and there\'s only one reason to do that.' },
-  ];
-
-  function toggleHotspot(hs) {
-    const wasRevealed = revealedFactors.has(hs.factorId);
-    // Toggle the factor on/off
-    setRevealedFactors(prev => {
-      const next = new Set(prev);
-      if (wasRevealed) next.delete(hs.factorId);
-      else next.add(hs.factorId);
-      return next;
-    });
-    // Show explanation when turning ON, close when turning OFF or re-clicking active
-    if (wasRevealed || activeHotspot === hs.id) {
-      setActiveHotspot(null);
-    } else {
-      setActiveHotspot(hs.id);
-    }
-  }
-
-  const currentScore = SIGNAL_FACTORS.filter(f => revealedFactors.has(f.id)).reduce((sum, f) => sum + f.points, 0);
-  const allRevealed = revealedFactors.size === hotspots.length;
-
+  const [open, setOpen] = useState(new Set());
+  const toggle = id => setOpen(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const allOpen = open.size === STANDOUT.length;
   return (
     <div className="ob-step ob-step--filing">
       <div className="ob-step__header">
-        <span className="ob-step__eyebrow">Understanding the data</span>
-        <h2 className="ob-step__title">How signals are scored</h2>
-        <p className="ob-step__subtitle">Toggle each factor on and off to see how it affects conviction.</p>
+        <span className="ob-step__eyebrow">Reading a filing</span>
+        <h2 className="ob-step__title">What makes one stand out</h2>
+        <p className="ob-step__subtitle">Thousands of insider trades are filed every week and most are routine. These are the things Seli looks for. Tap each one.</p>
       </div>
-
       <div className="ob-filing__card">
         <div className="ob-filing__card-header">
-          <span className="ob-filing__card-badge">SEC Form 4</span>
-          <span className="ob-filing__card-date">Filed Sep 19, 2026</span>
+          <span className="ob-filing__card-badge">Example buy</span>
+          <span className="ob-filing__card-date">SEC Form 4</span>
         </div>
         <div className="ob-filing__hotspots">
-          {hotspots.map((hs, idx) => {
-            const isActive = activeHotspot === hs.id;
-            const isRevealed = revealedFactors.has(hs.factorId);
-            // Only pulse the next-up hint after the user has clicked at least once
-            const isNextUp = revealedFactors.size > 0 && !isRevealed && hotspots.findIndex(h => !revealedFactors.has(h.factorId)) === idx;
+          {STANDOUT.map((f, idx) => {
+            const isOpen = open.has(f.id);
+            const isNext = open.size > 0 && !isOpen && STANDOUT.findIndex(x => !open.has(x.id)) === idx;
             return (
-              <button
-                key={hs.id}
-                className={`ob-hotspot${isActive ? ' ob-hotspot--active' : ''}${isRevealed ? ' ob-hotspot--revealed' : ''}${isNextUp ? ' ob-hotspot--next' : ''}`}
-                onClick={() => toggleHotspot(hs)}
-              >
+              <button key={f.id} className={`ob-hotspot${isOpen ? ' ob-hotspot--active ob-hotspot--revealed' : ''}${isNext ? ' ob-hotspot--next' : ''}`} onClick={() => toggle(f.id)}>
                 <div className="ob-hotspot__row">
                   <div className="ob-hotspot__content">
-                    <span className="ob-hotspot__label">{hs.label}</span>
-                    <span className="ob-hotspot__field">{hs.field}</span>
+                    <span className="ob-hotspot__label">{f.label}</span>
+                    <span className="ob-hotspot__field">{f.field}</span>
                   </div>
-                  <span className="ob-hotspot__indicator">
-                    {isRevealed ? (
-                      <IconCheck size={14} className="ob-hotspot__check" />
-                    ) : (
-                      <IconChevronRight size={14} className="ob-hotspot__chevron" />
-                    )}
-                  </span>
+                  <span className="ob-hotspot__indicator">{isOpen ? <IconCheck size={14} className="ob-hotspot__check" /> : <IconChevronRight size={14} className="ob-hotspot__chevron" />}</span>
                 </div>
-                {/* Inline explanation — always in DOM, revealed via CSS transition */}
-                <div className={`ob-hotspot__explain${isActive ? ' ob-hotspot__explain--open' : ''}`}>
-                  <p>{hs.tooltip}</p>
-                  <span className="ob-hotspot__points-tag">+{hs.points} conviction</span>
-                </div>
+                <div className={`ob-hotspot__explain${isOpen ? ' ob-hotspot__explain--open' : ''}`}><p>{f.why}</p></div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <p className="ob-conviction__note">{allOpen ? 'That\'s the whole list. ' : ''}Stock pages and the weekly email point these out in plain English on real filings.</p>
+      <button className="ob-cta" onClick={onNext}>Next: the score <IconArrowRight size={16} /></button>
+    </div>
+  );
+}
+
+// ── Step 4: The score ──────────────────────────────────────────────────────────
+// Same 0-100 scale and labels as the app (src/lib/text.js SCORE_TIERS).
+function StepConviction({ onNext }) {
+  const [activeTier, setActiveTier] = useState(null);
+  const colors = { High: ['var(--green-600)', 'var(--green-50)'], Medium: ['var(--accent)', 'var(--accent-50)'], Low: ['var(--text-2)', 'var(--surface-2)'] };
+  const ranges = { High: '60–100', Medium: '35–59', Low: '1–34' };
+  return (
+    <div className="ob-step ob-step--conviction">
+      <div className="ob-step__header">
+        <span className="ob-step__eyebrow">One score</span>
+        <h2 className="ob-step__title">Conviction, from 0 to 100</h2>
+        <p className="ob-step__subtitle">Seli adds up those markers into one score for insider buying on each stock. {CAN_HOVER ? 'Hover or tap' : 'Tap'} a level.</p>
+      </div>
+      <div className="ob-conviction__scale">
+        {SCORE_TIERS.map(tier => {
+          const [color, bg] = colors[tier.label];
+          return (
+            <div key={tier.label}
+              className={`ob-conviction__tier${activeTier === tier.label ? ' ob-conviction__tier--active' : ''}`}
+              style={{ '--tier-color': color, '--tier-bg': bg }}
+              onMouseEnter={CAN_HOVER ? () => setActiveTier(tier.label) : undefined}
+              onMouseLeave={CAN_HOVER ? () => setActiveTier(null) : undefined}
+              onClick={() => setActiveTier(activeTier === tier.label ? null : tier.label)}>
+              <div className="ob-conviction__badge" style={{ background: bg, color }}>{ranges[tier.label]}</div>
+              <div className="ob-conviction__info">
+                <div className="ob-conviction__label" style={{ color }}>{tier.label}</div>
+                <div className="ob-conviction__desc">{tier.blurb}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="ob-conviction__note">Sales aren't scored. Insiders sell for taxes, diversification and scheduled plans, so a sale on its own says little. Seli still shows every one.</p>
+      <button className="ob-cta" onClick={onNext}>Next: pick what to watch <IconArrowRight size={16} /></button>
+    </div>
+  );
+}
+
+// ── Step 5: Watch stocks and people ─────────────────────────────────────────────
+function StepWatchlist({ watchlist, onNext }) {
+  const tickers = watchlist.tickers;
+  const people = watchlist.insiders || [];
+  const count = tickers.length + people.length;
+  const limit = watchlist.pro ? null : watchlist.freeLimit;
+  return (
+    <div className="ob-step ob-step--watchlist">
+      <div className="ob-step__header">
+        <span className="ob-step__eyebrow">Get personal</span>
+        <h2 className="ob-step__title">What do you want to watch?</h2>
+        <p className="ob-step__subtitle">Stocks you own or follow, or people you want to keep tabs on. They show up first in the app and in your email.{limit ? ` Free accounts watch up to ${limit}.` : ''}</p>
+      </div>
+
+      <div className="ob-watchlist__search-wrap">
+        <SearchBox mode="pick" variant="inline" watchlist={watchlist} placeholder="Search a ticker, company or person"
+          onPick={it => {
+            const on = it.kind === 'stock' ? watchlist.hasTicker(it.id) : watchlist.hasInsider(it.id);
+            if (!on) (it.kind === 'stock' ? watchlist.toggleTicker(it.id) : watchlist.toggleInsider(it.id));
+          }} />
+      </div>
+
+      <div className="ob-watchlist__popular">
+        <div className="ob-watchlist__popular-label">Popular. Tap to add</div>
+        <div className="ob-watchlist__popular-grid">
+          {POPULAR_TICKERS.slice(0, 16).map(ticker => {
+            const on = tickers.includes(ticker);
+            return (
+              <button key={ticker} className={`ob-watchlist__chip${on ? ' ob-watchlist__chip--added' : ''}`} onClick={() => watchlist.toggleTicker(ticker)}>
+                {ticker}{on && <IconCheck size={12} />}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Standalone conviction score bar */}
-      <div className={`ob-score-bar${allRevealed ? ' ob-score-bar--complete' : ''}`}>
-        <div className="ob-score-bar__top">
-          <span className="ob-score-bar__label">Conviction Score</span>
-          <span className="ob-score-bar__value" key={currentScore}>
-            {currentScore}<span className="ob-score-bar__max"> / 14</span>
-          </span>
-        </div>
-        <div className="ob-score-bar__track">
-          <div
-            className="ob-score-bar__fill"
-            style={{ width: `${(currentScore / 14) * 100}%` }}
-          />
-          {/* Threshold markers */}
-          <span className="ob-score-bar__marker" style={{ left: '35.7%' }} title="Moderate (5)" />
-          <span className="ob-score-bar__marker" style={{ left: '64.3%' }} title="Strong (9)" />
-        </div>
-        <div className="ob-score-bar__factors">
-          {SIGNAL_FACTORS.map(f => (
-            <span key={f.id} className={`ob-score-bar__chip${revealedFactors.has(f.id) ? ' ob-score-bar__chip--active' : ''}`}>
-              {f.label} <strong>+{f.points}</strong>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <button className="ob-cta" onClick={onNext}>
-        Next: Conviction levels <IconArrowRight size={16} />
-      </button>
-    </div>
-  );
-}
-
-// ── Step 4: Signal Score Breakdown ───────────────────────────────────────────
-function StepConviction({ onNext }) {
-  const [activeTier, setActiveTier] = useState(null);
-
-  const tiers = [
-    { id: 'high', range: '10–14', label: 'High Conviction', color: 'var(--green-600)', bg: 'var(--green-50)', tagline: 'Rare, high-confidence insider trades', description: 'C-suite or congressional, non-routine, open-market, large value. Rare and worth immediate attention.' },
-    { id: 'medium', range: '6–9', label: 'Medium Conviction', color: 'var(--blue-600)', bg: 'var(--blue-50)', tagline: 'Multiple signal filters cleared', description: 'Meaningful trades that clear multiple signal filters. Worth monitoring and investigating further.' },
-    { id: 'low', range: '3–5', label: 'Low Conviction', color: 'var(--amber-600)', bg: 'var(--amber-50)', tagline: 'Some signal, possibly routine', description: 'Some signal but may be routine, small, or from lower-ranked insiders. Useful for pattern-tracking.' },
-    { id: 'noise', range: '0–2', label: 'Noise', color: 'var(--text-3)', bg: 'var(--surface-2)', tagline: 'Likely routine or automatic', description: 'Likely routine grants, small dispositions, or weak-relationship insiders. Seli still tracks them so you can filter them out.' },
-  ];
-
-  return (
-    <div className="ob-step ob-step--conviction">
-      <div className="ob-step__header">
-        <span className="ob-step__eyebrow">The scoring system</span>
-        <h2 className="ob-step__title">Conviction levels</h2>
-        <p className="ob-step__subtitle">Every filing gets a score from 0 to 14. {CAN_HOVER ? 'Hover or tap' : 'Tap'} each level to learn more.</p>
-      </div>
-      <div className="ob-conviction__scale">
-        {tiers.map(tier => (
-          <div
-            key={tier.id}
-            className={`ob-conviction__tier${activeTier === tier.id ? ' ob-conviction__tier--active' : ''}`}
-            style={{ '--tier-color': tier.color, '--tier-bg': tier.bg }}
-            onMouseEnter={CAN_HOVER ? () => setActiveTier(tier.id) : undefined}
-            onMouseLeave={CAN_HOVER ? () => setActiveTier(null) : undefined}
-            onClick={() => setActiveTier(activeTier === tier.id ? null : tier.id)}
-          >
-            <div className="ob-conviction__badge" style={{ background: tier.bg, color: tier.color }}>
-              {tier.range}
-            </div>
-            <div className="ob-conviction__info">
-              <div className="ob-conviction__label" style={{ color: tier.color }}>{tier.label}</div>
-              <div className="ob-conviction__tagline">{tier.tagline}</div>
-              <div className="ob-conviction__desc">{tier.description}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="ob-conviction__note">
-        By default, Seli shows you everything. You can filter to only see the conviction levels you care about.
-      </p>
-      <button className="ob-cta" onClick={onNext}>
-        Next: Where data lives <IconArrowRight size={16} />
-      </button>
-    </div>
-  );
-}
-
-// ── Step 5: Where Data Lives ─────────────────────────────────────────────────
-function StepDataMap({ onNext }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
-
-  const tabs = [
-    { id: 'dashboard', label: 'Dashboard', Icon: IconHome },
-    { id: 'data', label: 'Data', Icon: IconBarChart },
-    { id: 'insiders', label: 'Insiders', Icon: IconUsers },
-    { id: 'watchlist', label: 'Watchlist', Icon: IconStar },
-    { id: 'settings', label: 'Settings', Icon: IconSettings },
-  ];
-
-  const tabContent = {
-    dashboard: {
-      description: 'Your home base: a live snapshot of the most important insider activity right now.',
-      preview: (
-        <div className="ob-preview ob-preview--dashboard">
-          <div className="ob-preview__stats">
-            <div className="ob-preview__stat"><span className="ob-preview__stat-val">847</span><span className="ob-preview__stat-lbl">Filings today</span></div>
-            <div className="ob-preview__stat"><span className="ob-preview__stat-val ob-preview__stat-val--green">23</span><span className="ob-preview__stat-lbl">High conviction</span></div>
-            <div className="ob-preview__stat"><span className="ob-preview__stat-val">$42M</span><span className="ob-preview__stat-lbl">Total value</span></div>
-          </div>
-          <div className="ob-preview__feed">
-            <div className="ob-preview__feed-row"><span className="ob-preview__ticker">NVDA</span><span className="ob-preview__name">Jensen Huang</span><span className="ob-preview__badge ob-preview__badge--buy">Buy</span><span className="ob-preview__amt">$12.4M</span></div>
-            <div className="ob-preview__feed-row"><span className="ob-preview__ticker">AAPL</span><span className="ob-preview__name">Tim Cook</span><span className="ob-preview__badge ob-preview__badge--sell">Sell</span><span className="ob-preview__amt">$8.1M</span></div>
-          </div>
-        </div>
-      ),
-    },
-    data: {
-      description: 'Two views in one: scored signals grouped by conviction, and raw filings straight from the SEC. Filter by sector, source, date, and more.',
-      preview: (
-        <div className="ob-preview ob-preview--data">
-          <div className="ob-preview__filters">
-            <span className="ob-preview__chip ob-preview__chip--active">Signals</span>
-            <span className="ob-preview__chip">Raw Filings</span>
-            <span className="ob-preview__chip">High Conviction</span>
-          </div>
-          <div className="ob-preview__table">
-            <div className="ob-preview__table-head"><span>Ticker</span><span>Insider</span><span>Type</span><span>Score</span></div>
-            <div className="ob-preview__table-row"><span className="ob-preview__ticker">MSFT</span><span>Satya Nadella</span><span>Purchase</span><span className="ob-preview__score">92</span></div>
-            <div className="ob-preview__table-row"><span className="ob-preview__ticker">GOOGL</span><span>Sundar Pichai</span><span>Purchase</span><span className="ob-preview__score">74</span></div>
-            <div className="ob-preview__table-row"><span className="ob-preview__ticker">META</span><span>Mark Zuckerberg</span><span>Sale</span><span className="ob-preview__score ob-preview__score--low">—</span></div>
-          </div>
-        </div>
-      ),
-    },
-    insiders: {
-      description: 'Ranked leaderboard of insiders by track record and conviction accuracy. Click any name for their full trading history and trend.',
-      preview: (
-        <div className="ob-preview ob-preview--insiders">
-          <div className="ob-preview__leaderboard">
-            <div className="ob-preview__leader"><span className="ob-preview__rank">#1</span><span className="ob-preview__leader-name">Mark Cuban</span><span className="ob-preview__leader-title">Director</span><span className="ob-preview__accuracy">89%</span></div>
-            <div className="ob-preview__leader"><span className="ob-preview__rank">#2</span><span className="ob-preview__leader-name">Lisa Su</span><span className="ob-preview__leader-title">CEO</span><span className="ob-preview__accuracy">84%</span></div>
-            <div className="ob-preview__leader"><span className="ob-preview__rank">#3</span><span className="ob-preview__leader-name">Jamie Dimon</span><span className="ob-preview__leader-title">CEO</span><span className="ob-preview__accuracy">81%</span></div>
-          </div>
-        </div>
-      ),
-    },
-    watchlist: {
-      description: 'Activity for just the tickers you care about. You\'ll build yours in the next step.',
-      preview: (
-        <div className="ob-preview ob-preview--watchlist">
-          <div className="ob-preview__tickers">
-            <span className="ob-preview__ticker-chip">AAPL</span>
-            <span className="ob-preview__ticker-chip">NVDA</span>
-            <span className="ob-preview__ticker-chip">TSLA</span>
-            <span className="ob-preview__ticker-chip ob-preview__ticker-chip--add">+ Add</span>
-          </div>
-          <div className="ob-preview__feed">
-            <div className="ob-preview__feed-row"><span className="ob-preview__ticker">AAPL</span><span className="ob-preview__name">Jeff Williams</span><span className="ob-preview__badge ob-preview__badge--buy">Buy</span><span className="ob-preview__amt">$2.1M</span></div>
-            <div className="ob-preview__feed-row"><span className="ob-preview__ticker">TSLA</span><span className="ob-preview__name">Robyn Denholm</span><span className="ob-preview__badge ob-preview__badge--sell">Sell</span><span className="ob-preview__amt">$5.8M</span></div>
-          </div>
-        </div>
-      ),
-    },
-    settings: {
-      description: 'Control how and when Seli reaches you: digest emails, real-time alerts, and more.',
-      preview: (
-        <div className="ob-preview ob-preview--settings">
-          <div className="ob-preview__toggles">
-            <div className="ob-preview__toggle-row"><span>Daily digest email</span><span className="ob-preview__switch ob-preview__switch--on" /></div>
-            <div className="ob-preview__toggle-row"><span>High-conviction alerts</span><span className="ob-preview__switch ob-preview__switch--on" /></div>
-            <div className="ob-preview__toggle-row"><span>Congressional trade alerts</span><span className="ob-preview__switch" /></div>
-          </div>
-        </div>
-      ),
-    },
-  };
-
-  return (
-    <div className="ob-step ob-step--datamap">
-      <div className="ob-step__header">
-        <span className="ob-step__eyebrow">Navigating the app</span>
-        <h2 className="ob-step__title">Where the data lives</h2>
-        <p className="ob-step__subtitle">Five pages, each with a different job. Tap to preview.</p>
-      </div>
-
-      {/* Tab bar */}
-      <div className="ob-tabs">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            className={`ob-tabs__tab${activeTab === tab.id ? ' ob-tabs__tab--active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            <tab.Icon size={18} />
-            <span className="ob-tabs__label">{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Preview panel */}
-      <div className="ob-tabs__panel">
-        <div className="ob-tabs__preview" key={activeTab}>
-          {tabContent[activeTab].preview}
-        </div>
-        <p className="ob-tabs__desc">{tabContent[activeTab].description}</p>
-      </div>
-
-      <button className="ob-cta" onClick={onNext}>
-        Next: Build your watchlist <IconArrowRight size={16} />
-      </button>
-    </div>
-  );
-}
-
-// ── Step 6: Build Your Watchlist ─────────────────────────────────────────────
-function StepWatchlist({ watchlist, onNext }) {
-  const [search, setSearch] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const searchTimeout = useRef(null);
-  const [recentCount, setRecentCount] = useState(null);
-
-  // Search tickers using the existing Neon query (searches the filings table)
-  const doSearch = useCallback(async (query) => {
-    if (!query || query.length < 1) { setSearchResults([]); return; }
-    setSearching(true);
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      // Try to get auth headers for authenticated search
-      if (window.__clerkGetToken) {
-        try {
-          const token = await window.__clerkGetToken();
-          if (token) headers['Authorization'] = `Bearer ${token}`;
-        } catch {}
-      }
-      const q = query.toUpperCase().replace(/'/g, "''");
-      const res = await fetch(cfg.NEON_PROXY_URL, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          query: `SELECT DISTINCT ticker, company_name FROM filings WHERE ticker ILIKE '${q}%' OR company_name ILIKE '%${q}%' ORDER BY ticker LIMIT 10`
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSearchResults((data.rows || []).map(r => ({ ticker: r.ticker, name: r.company_name })));
-      }
-    } catch {}
-    setSearching(false);
-  }, []);
-
-  function onSearchChange(e) {
-    const val = e.target.value;
-    setSearch(val);
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    if (val.length >= 1) {
-      searchTimeout.current = setTimeout(() => doSearch(val), 300);
-    } else {
-      setSearchResults([]);
-    }
-  }
-
-  // Fetch recent filing count for user's watchlist tickers
-  useEffect(() => {
-    if (watchlist.tickers.length === 0) { setRecentCount(null); return; }
-    const tickers = watchlist.tickers.map(t => `'${t.replace(/'/g, "''")}'`).join(',');
-    (async () => {
-      try {
-        const headers = { 'Content-Type': 'application/json' };
-        if (window.__clerkGetToken) {
-          try {
-            const token = await window.__clerkGetToken();
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-          } catch {}
-        }
-        const res = await fetch(cfg.NEON_PROXY_URL, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            query: `SELECT COUNT(*) as cnt FROM filings WHERE ticker IN (${tickers}) AND filing_date >= CURRENT_DATE - INTERVAL '14 days'`
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setRecentCount(data.rows?.[0]?.cnt || 0);
-        }
-      } catch {}
-    })();
-  }, [watchlist.tickers]);
-
-  const addedSet = new Set(watchlist.tickers);
-
-  return (
-    <div className="ob-step ob-step--watchlist">
-      <div className="ob-step__header">
-        <span className="ob-step__eyebrow">Get personal</span>
-        <h2 className="ob-step__title">Build your watchlist</h2>
-        <p className="ob-step__subtitle">Add the tickers you own, follow, or are curious about. Seli will filter insider activity to just these stocks.</p>
-      </div>
-
-      {/* Search */}
-      <div className="ob-watchlist__search-wrap">
-        <IconSearch size={16} className="ob-watchlist__search-icon" />
-        <input
-          type="text"
-          className="ob-watchlist__search"
-          placeholder="Search by ticker or company name…"
-          value={search}
-          onChange={onSearchChange}
-          autoComplete="off"
-        />
-        {searching && <div className="ob-watchlist__search-spinner" />}
-      </div>
-
-      {/* Search results */}
-      {searchResults.length > 0 && (
-        <div className="ob-watchlist__results">
-          {searchResults.map(r => (
-            <button
-              key={r.ticker}
-              className={`ob-watchlist__result${addedSet.has(r.ticker) ? ' ob-watchlist__result--added' : ''}`}
-              onClick={() => { if (!addedSet.has(r.ticker)) watchlist.toggleTicker(r.ticker); }}
-            >
-              <span className="ob-watchlist__result-ticker">{r.ticker}</span>
-              <span className="ob-watchlist__result-name">{r.name}</span>
-              {addedSet.has(r.ticker) ? (
-                <IconCheck size={14} className="ob-watchlist__result-check" />
-              ) : (
-                <IconPlus size={14} />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Popular tickers grid */}
-      <div className="ob-watchlist__popular">
-        <div className="ob-watchlist__popular-label">Popular tickers. Tap to add</div>
-        <div className="ob-watchlist__popular-grid">
-          {POPULAR_TICKERS.map(ticker => (
-            <button
-              key={ticker}
-              className={`ob-watchlist__chip${addedSet.has(ticker) ? ' ob-watchlist__chip--added' : ''}`}
-              onClick={() => watchlist.toggleTicker(ticker)}
-            >
-              {ticker}
-              {addedSet.has(ticker) && <IconCheck size={12} />}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Current watchlist */}
-      {watchlist.tickers.length > 0 && (
+      {count > 0 && (
         <div className="ob-watchlist__current">
           <div className="ob-watchlist__current-header">
-            <span className="ob-watchlist__current-label">
-              <IconStar size={14} filled />
-              Your watchlist ({watchlist.tickers.length})
-            </span>
-            {recentCount != null && (
-              <span className="ob-watchlist__recent-count">
-                {recentCount} filing{recentCount !== 1 ? 's' : ''} in the last 14 days
-              </span>
-            )}
+            <span className="ob-watchlist__current-label"><IconBell size={14} /> Watching {count}{limit ? ` of ${limit}` : ''}</span>
           </div>
           <div className="ob-watchlist__current-tickers">
-            {watchlist.tickers.map(t => (
-              <span key={t} className="ob-watchlist__current-tag">
-                {t}
-                <button className="ob-watchlist__current-remove" onClick={() => watchlist.toggleTicker(t)} aria-label={`Remove ${t}`}>
-                  <IconX size={10} />
-                </button>
+            {tickers.map(t => (
+              <span key={t} className="ob-watchlist__current-tag">{t}
+                <button className="ob-watchlist__current-remove" onClick={() => watchlist.toggleTicker(t)} aria-label={`Remove ${t}`}><IconX size={10} /></button>
+              </span>
+            ))}
+            {people.map(n => (
+              <span key={n} className="ob-watchlist__current-tag ob-watchlist__current-tag--person">{prettyPerson(n)}
+                <button className="ob-watchlist__current-remove" onClick={() => watchlist.toggleInsider(n)} aria-label="Remove"><IconX size={10} /></button>
               </span>
             ))}
           </div>
@@ -799,14 +425,8 @@ function StepWatchlist({ watchlist, onNext }) {
       )}
 
       <button className="ob-cta" onClick={onNext}>
-        {watchlist.tickers.length >= 3
-          ? <>Next: Notifications <IconArrowRight size={16} /></>
-          : <>Skip for now <IconArrowRight size={16} /></>
-        }
+        {count ? <>Next: emails <IconArrowRight size={16} /></> : <>Skip for now <IconArrowRight size={16} /></>}
       </button>
-      {watchlist.tickers.length < 3 && watchlist.tickers.length > 0 && (
-        <p className="ob-watchlist__nudge">Add {3 - watchlist.tickers.length} more to get the most out of Seli</p>
-      )}
     </div>
   );
 }
@@ -852,9 +472,8 @@ function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, o
   }
 
   const proAlerts = [
-    { id: 'watchlist', label: 'Watchlist ticker activity', description: 'Get notified when any insider trades a stock you follow.' },
-    { id: 'followed', label: 'Followed insider activity', description: 'Get notified when a specific insider you follow makes any trade.' },
-    { id: 'conviction', label: 'High-conviction trades', description: 'C-suite purchases above your conviction threshold.' },
+    { id: 'watchlist', label: 'Anything you watch', description: 'An email the day a new filing lands for a stock or person you watch.' },
+    { id: 'conviction', label: 'Big executive buys', description: 'A CEO, CFO or other C-suite executive buys a lot of any stock.' },
     { id: 'reversal', label: 'Direction reversals', description: 'An insider who usually sells starts buying, or vice versa.' },
   ];
 
@@ -873,7 +492,7 @@ function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, o
             <span className="ob-notif__tier-badge">Free</span>
             <span className="ob-notif__tier-title">Weekly Digest</span>
           </div>
-          <p className="ob-notif__tier-desc">One email every Sunday evening: what insiders did with your watchlist stocks (even in quiet weeks), plus the strongest insider buying of the week and why it stands out.</p>
+          <p className="ob-notif__tier-desc">One email every Sunday evening: what insiders did with everything you watch (even in quiet weeks), plus the week's most notable insider buying and why it stands out.</p>
           <label className="ob-notif__toggle">
             <input type="checkbox" checked={digestOn} onChange={e => toggleDigest(e.target.checked)} disabled={saving} />
             <span className="ob-notif__toggle-track" />
@@ -889,7 +508,7 @@ function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, o
             <span className="ob-notif__tier-badge ob-notif__tier-badge--pro">Pro</span>
             <span className="ob-notif__tier-title">Instant Alerts</span>
           </div>
-          <p className="ob-notif__tier-desc">Real-time notifications the moment a filing lands. Never be the last to know.</p>
+          <p className="ob-notif__tier-desc">Same-day emails when a new filing lands, plus a daily digest.</p>
           <div className="ob-notif__alert-list">
             {proAlerts.map(a => (
               <div key={a.id} className="ob-notif__alert-item">
@@ -902,11 +521,11 @@ function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, o
             ))}
           </div>
           <div className="ob-notif__portfolio-note">
-            Link your brokerage portfolio in Settings to get notified whenever insiders trade your held stocks.
+            Link your brokerage in Account and your holdings get the same treatment as what you watch.
           </div>
           {!pro && (
             <div className="ob-notif__pro-cta">
-              Upgrade to Pro for $6.99/mo to unlock instant alerts →
+              Pro is $6.99/mo. You can upgrade anytime from Account.
             </div>
           )}
         </div>
@@ -921,33 +540,25 @@ function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, o
 
 // ── Step 8: You're All Set ──────────────────────────────────────────────────
 function StepReady({ watchlist, onComplete }) {
+  const n = watchlist.tickers.length + (watchlist.insiders || []).length;
   return (
     <div className="ob-step ob-step--ready">
       <div className="ob-step__header">
         <h2 className="ob-step__title ob-ready__title">You're all set</h2>
         <p className="ob-step__subtitle">
-          {watchlist.tickers.length > 0
-            ? `You're following ${watchlist.tickers.length} ticker${watchlist.tickers.length !== 1 ? 's' : ''}.`
-            : 'You can add tickers anytime from the Watchlist page.'
-          }
+          {n > 0 ? `You're watching ${n} ${n === 1 ? 'thing' : 'things'}. Home shows what insiders did with them first.` : 'Watch anything from its page, or from your Watchlist.'}
         </p>
       </div>
-
       {watchlist.tickers.length > 0 && (
         <div className="ob-ready__tickers">
-          {watchlist.tickers.map(t => (
-            <span key={t} className="ob-ready__ticker">{t}</span>
-          ))}
+          {watchlist.tickers.map(t => <span key={t} className="ob-ready__ticker">{t}</span>)}
         </div>
       )}
-
       <p className="ob-ready__guide-note">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px', marginRight: '6px', opacity: 0.5 }}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-        You can revisit this guide anytime from the navigation.
+        Look up any stock or person with the search box at the top. Press <kbd>/</kbd> to jump to it.
       </p>
-
       <button className="ob-cta ob-cta--primary" onClick={onComplete}>
-        Get started with Seli <IconArrowRight size={16} />
+        Go to Seli <IconArrowRight size={16} />
       </button>
     </div>
   );
@@ -960,7 +571,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
     // Resume from last step if user refreshed mid-flow
     try {
       const saved = localStorage.getItem('seli_onboard_step');
-      if (saved != null) return Math.min(parseInt(saved, 10), TOTAL_STEPS - 1);
+      if (saved != null) return Math.min(parseInt(saved, 10) || 0, TOTAL_STEPS - 1);
     } catch {}
     return 0;
   });
@@ -1025,9 +636,9 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
       try {
         // Get one recent filing per insider type
         const queries = {
-          corporate: `SELECT insider_name, ticker, company_name, transaction_type, value, filing_date FROM filings WHERE relationship = 'strong' AND transaction_type = 'buy' AND value > 100000 ORDER BY filing_date DESC LIMIT 1`,
-          congress: `SELECT insider_name, ticker, company_name, transaction_type, value, filing_date FROM filings WHERE source = 'congress' ORDER BY filing_date DESC LIMIT 1`,
-          officers: `SELECT insider_name, ticker, company_name, transaction_type, value, filing_date FROM filings WHERE relationship = 'medium' ORDER BY filing_date DESC LIMIT 1`,
+          corporate: `SELECT insider_name, ticker, company_name, transaction_type, value, filing_date FROM public.filings WHERE relationship = 'strong' AND transaction_type = 'buy' AND value > 100000 ORDER BY filing_date DESC LIMIT 1`,
+          congress: `SELECT insider_name, ticker, company_name, transaction_type, value, filing_date FROM public.filings WHERE source = 'congress' ORDER BY filing_date DESC LIMIT 1`,
+          officers: `SELECT insider_name, ticker, company_name, transaction_type, value, filing_date FROM public.filings WHERE relationship = 'medium' ORDER BY filing_date DESC LIMIT 1`,
         };
         const samples = {};
         for (const [key, query] of Object.entries(queries)) {
@@ -1072,7 +683,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
     try { localStorage.removeItem('seli_onboard_step'); } catch {}
     try {
       if (window.posthog) {
-        window.posthog.capture('onboarding_completed', { tickers_added: watchlist.tickers.length });
+        window.posthog.capture('onboarding_completed', { tickers_added: watchlist.tickers.length, people_added: (watchlist.insiders || []).length });
       }
     } catch {}
     onComplete();
@@ -1100,7 +711,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
       <div className="ob__topbar">
         <ThemeToggle />
         <button className="ob__skip" onClick={handleSkip}>
-          Skip to dashboard →
+          Skip to Seli →
         </button>
       </div>
 
@@ -1137,12 +748,11 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
       {step === 1 && <StepInsiderTypes sampleFilings={sampleFilings} onNext={goNext} />}
       {step === 2 && <StepReadingFiling onNext={goNext} />}
       {step === 3 && <StepConviction onNext={goNext} />}
-      {step === 4 && <StepDataMap onNext={goNext} />}
-      {step === 5 && <StepWatchlist watchlist={watchlist} onNext={goNext} />}
-      {step === 6 && <StepNotifications user={user} pro={pro} onNext={goNext} digestOn={digestOn} onDigestChange={setDigestOn} />}
-      {step === 7 && <StepReady watchlist={watchlist} onComplete={handleComplete} />}
+      {step === 4 && <StepWatchlist watchlist={watchlist} onNext={goNext} />}
+      {step === 5 && <StepNotifications user={user} pro={pro} onNext={goNext} digestOn={digestOn} onDigestChange={setDigestOn} />}
+      {step === 6 && <StepReady watchlist={watchlist} onComplete={handleComplete} />}
     </div>
   );
 }
 
-const STEP_NAMES = ['welcome', 'insider_types', 'reading_filing', 'conviction', 'data_map', 'watchlist', 'notifications', 'ready'];
+const STEP_NAMES = ['welcome', 'insider_types', 'standout', 'score', 'watchlist', 'notifications', 'ready'];

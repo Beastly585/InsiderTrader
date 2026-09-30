@@ -306,7 +306,7 @@ def track(path: str, medium: str, content: str = "", campaign: str = "") -> str:
 
 
 def ticker_path(ticker: str) -> str:
-    return f"/ticker/{quote(str(ticker).upper())}"
+    return f"/stock/{quote(str(ticker).upper())}"
 
 
 def insider_path(raw_name: str) -> str:
@@ -321,7 +321,7 @@ def link_sig(kind: str, clerk_user_id: str) -> str:
 
 def unsubscribe_url(clerk_user_id: str, kind: str = "digest") -> str:
     if not EMAIL_LINK_SECRET:
-        return APP_URL + "/settings?section=notifications"
+        return APP_URL + "/account#emails"
     return f"{WORKER_URL}/email/unsubscribe?" + urlencode(
         {"u": clerk_user_id, "k": kind, "t": link_sig(kind, clerk_user_id)})
 
@@ -419,7 +419,7 @@ def footer(*, reason: str, clerk_user_id: str, manage: bool = True) -> str:
     unsub = unsubscribe_url(clerk_user_id)
     links = [a(unsub, "Unsubscribe", MUTED, 500)]
     if manage:
-        links.append(a(track("/settings?section=notifications", "footer"), "Email settings", MUTED, 500))
+        links.append(a(track("/account#emails", "footer"), "Email settings", MUTED, 500))
     # Zero-width spaces break Gmail/iOS address detection, so it stays plain grey text.
     addr = p(esc(MAILING_ADDRESS).replace(" ", " &#8203;"), 11, FAINT, "6px 0 0") if MAILING_ADDRESS else ""
     return (divider("0 0 16px")

@@ -44,6 +44,7 @@ import { sqlVal } from './lib/sql.js';
 import { verifyClerkWebhook } from './lib/clerk-webhook.js';
 import { encryptSecret, decryptSecret } from './lib/crypto.js';
 import { computeSignature } from './lib/snaptrade-sign.js';
+import { handleResearch } from './lib/research.js';
 import * as Sentry from '@sentry/cloudflare';
 // ── Streaming ZIP writer — Archive Utility compatible ─────────────────────
 // Streams each file directly from R2 without buffering the entire file in
@@ -352,6 +353,15 @@ const workerHandler = {
       }
     } catch (e) {
       console.error('[Scheduled] ZIP check/build threw:', String(e), e?.stack?.slice(0, 500));
+    }
+    // Global search reads public.search_entities; refresh it daily so new
+    // tickers and insiders become searchable. CONCURRENTLY keeps search
+    // working during the refresh (needs the unique index in the migration).
+    try {
+      await neonFetch(env, 'REFRESH MATERIALIZED VIEW CONCURRENTLY public.search_entities');
+      console.log('[Scheduled] search_entities refreshed');
+    } catch (e) {
+      console.error('[Scheduled] search_entities refresh failed:', e.message);
     }
     // Dead-man's-switch: alert if no new filings have landed in 48 hours
     // on a weekday. Prevents silent ingestion gaps from going unnoticed.
@@ -708,6 +718,13 @@ async function handleFetchInner(request, env, origin) {
     }
     if (url.pathname === '/finnhub/news' && request.method === 'GET') {
       return handleFinnhubGeneralNews(request, env, origin, url);
+    }
+
+    // ── Research pages: search, stock, insider, home feed, watchlist ────
+    // Named read endpoints (worker/lib/research.js). The app no longer
+    // builds SQL for these pages; see handleQuery below for the legacy path.
+    if (url.pathname.startsWith('/api/')) {
+      return handleResearch(request, env, origin, url, { corsResponse, verifiedUserId, isProServerSide, neonFetch, sqlVal });
     }
 
     return handleQuery(request, env, origin);
@@ -1648,6 +1665,16 @@ async function handleQuery(request, env, origin) {
   // Table allowlist — only the two tables the client legitimately queries.
   // Any reference to another table (subscriptions, data_purchases,
   // cancellation_feedback, etc.) is either a mistake or an attack.
+  // The allowlist below only sees schema-qualified names, and Postgres
+  // resolves a bare "FROM user_preferences" through search_path to
+  // public.user_preferences. So "SELECT email FROM user_preferences" used to
+  // pass every check here. Block private tables and system catalogs by bare
+  // name too, anywhere in the query.
+  const PRIVATE_NAMES = /\b(user_preferences|user_watchlist|user_feedback|subscriptions|data_purchases|cancellation_feedback|snaptrade_\w+|pg_\w+|information_schema|dblink\w*|lo_\w+|current_setting|set_config|query_to_xml\w*|table_to_xml\w*|xpath)\b/i;
+  if (PRIVATE_NAMES.test(normalized)) {
+    console.error('[Worker] Query rejected: references a private table or system object');
+    return corsResponse({ error: 'Query rejected' }, 403, origin, env);
+  }
   const ALLOWED_TABLES = ['public.filings', 'public.prices_history', 'public.benchmark_prices'];
   const tableRefs = normalized.match(/public\.\w+/gi) || [];
   for (const ref of tableRefs) {
@@ -2647,9 +2674,18 @@ async function handleWatchlist(request, env, origin) {
   // GET — load watchlist
   if (request.method === 'GET') {
     try {
-      const result = await neonFetch(env,
-        `SELECT item_type, item_value FROM public.user_watchlist WHERE clerk_user_id=${sqlVal(userId)} ORDER BY added_at DESC`
-      );
+      let result;
+      try {
+        result = await neonFetch(env,
+          `SELECT item_type, item_value, alerts FROM public.user_watchlist WHERE clerk_user_id=${sqlVal(userId)} ORDER BY added_at DESC`
+        );
+      } catch (e) {
+        // user_watchlist.alerts doesn't exist until db/migrations/2026-09-29_research_pages.sql runs
+        if (!/alerts/.test(e.message)) throw e;
+        result = await neonFetch(env,
+          `SELECT item_type, item_value, TRUE AS alerts FROM public.user_watchlist WHERE clerk_user_id=${sqlVal(userId)} ORDER BY added_at DESC`
+        );
+      }
       return corsResponse({ items: result.rows || [] }, 200, origin, env);
     } catch (e) {
       console.error('[Worker] watchlist GET failed:', e.message);
@@ -2662,7 +2698,7 @@ async function handleWatchlist(request, env, origin) {
     let body;
     try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
     const { action, item_type, item_value } = body;
-    if (!['add','remove'].includes(action))   return corsResponse({ error: 'Invalid action' }, 400, origin, env);
+    if (!['add','remove','alerts'].includes(action))   return corsResponse({ error: 'Invalid action' }, 400, origin, env);
     // Only gate 'add' — same principle as SnapTrade's disconnect staying
     // ungated: removing something should always be allowed regardless of
     // plan (it shrinks usage, not grows it), so a downgraded user isn't
@@ -2673,23 +2709,29 @@ async function handleWatchlist(request, env, origin) {
     // in localStorage and every email script saw free users as having an
     // empty watchlist. Following insiders stays Pro. The cap is enforced
     // here, not just in the UI.
+    if (!item_value || typeof item_value !== 'string') return corsResponse({ error: 'Missing item_value' }, 400, origin, env);
+    // Free tier: 3 watched things total, stocks or people. Stocks and people
+    // are watched the same way now (one Watch button), so the cap counts both.
+    // The weekly digest already covers followed insiders for everyone.
     if (action==='add' && !(await isProServerSide(env, userId))) {
-      if (item_type !== 'ticker') {
-        return corsResponse({ error: 'Following insiders is a Pro feature' }, 403, origin, env);
-      }
       const FREE_WATCHLIST_LIMIT = 3;
       const cnt = await neonFetch(env,
-        `SELECT COUNT(*)::int AS n FROM public.user_watchlist WHERE clerk_user_id=${sqlVal(userId)} AND item_type='ticker' AND item_value <> ${sqlVal(item_value.slice(0,200))}`);
+        `SELECT COUNT(*)::int AS n FROM public.user_watchlist WHERE clerk_user_id=${sqlVal(userId)} AND NOT (item_type=${sqlVal(item_type)} AND item_value = ${sqlVal(item_value.slice(0,200))})`);
       if ((cnt.rows?.[0]?.n ?? 0) >= FREE_WATCHLIST_LIMIT) {
-        return corsResponse({ error: 'Free watchlist is full (3 tickers)', limit: FREE_WATCHLIST_LIMIT }, 403, origin, env);
+        return corsResponse({ error: 'Free watchlist is full (3 items)', limit: FREE_WATCHLIST_LIMIT }, 403, origin, env);
       }
     }
-    if (!item_value || typeof item_value !== 'string') return corsResponse({ error: 'Missing item_value' }, 400, origin, env);
 
     const val = item_value.slice(0,200);
 
     try {
-      if (action === 'add') {
+      if (action === 'alerts') {
+        // Per-item same-day alerts. Needs user_watchlist.alerts (see migration).
+        await neonFetch(env, `
+          UPDATE public.user_watchlist SET alerts = ${body.alerts ? 'TRUE' : 'FALSE'}
+          WHERE clerk_user_id=${sqlVal(userId)} AND item_type=${sqlVal(item_type)} AND item_value=${sqlVal(val)}
+        `);
+      } else if (action === 'add') {
         await neonFetch(env, `
           INSERT INTO public.user_watchlist (clerk_user_id, item_type, item_value)
           VALUES (${sqlVal(userId)}, ${sqlVal(item_type)}, ${sqlVal(val)})
@@ -3233,7 +3275,19 @@ async function handlePublicDataStats(request, env, origin) {
       `SELECT MIN(COALESCE(transaction_date, filing_date)) AS oldest FROM public.filings`
     );
     const oldest = result.rows?.[0]?.oldest || null;
-    return corsResponse({ oldest_filing_date: oldest }, 200, origin, env);
+    // Onboarding's welcome step reads these. Counts come from the search
+    // index (tens of thousands of rows) and the planner's row estimate, not a
+    // COUNT(*) over filings, so this stays fast for a public endpoint.
+    let counts = {};
+    try {
+      const c = await neonFetch(env, `
+        SELECT (SELECT reltuples::bigint FROM pg_class WHERE oid = 'public.filings'::regclass) AS total_filings,
+               (SELECT COUNT(*) FROM public.search_entities WHERE kind = 'person') AS unique_insiders,
+               (SELECT COUNT(*) FROM public.search_entities WHERE kind = 'stock') AS companies_covered`);
+      const r = c.rows?.[0] || {};
+      counts = { total_filings: Number(r.total_filings) || null, unique_insiders: Number(r.unique_insiders) || null, companies_covered: Number(r.companies_covered) || null };
+    } catch { /* search_entities not built yet */ }
+    return corsResponse({ oldest_filing_date: oldest, ...counts }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] handlePublicDataStats failed:', e.message);
     return corsResponse({ oldest_filing_date: null }, 200, origin, env); // degrade gracefully — the landing page has a hardcoded fallback for this

@@ -168,7 +168,7 @@ def compose(u: dict, statuses: dict, backfill: bool, today: date) -> tuple[str, 
     name = u.get("first_name")
     watch = [statuses[t] for t in sorted(set(u["tickers"])) if t in statuses]
     P = lambda html, **kw: ek.p(html, **{"size": 15, "color": ek.TEXT_2, **kw})
-    settings = ek.track("/settings?section=notifications", MEDIUM, "settings")
+    settings = ek.track("/account#emails", MEDIUM, "settings")
 
     # 1. Welcome
     hello = P(f"Hey {ek.esc(name) if name else 'there'},", margin="0 0 12px")
@@ -187,7 +187,7 @@ def compose(u: dict, statuses: dict, backfill: bool, today: date) -> tuple[str, 
         inner = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">{tbl}</table>'
                  + ek.p(ek.a(ek.track("/watchlist", MEDIUM, "watchlist"), "Open your watchlist &rarr;"), 13, ek.ACCENT, "12px 0 0"))
     else:
-        limit = "Add as many as you like." if u.get("pro") else "Free accounts can follow up to 3."
+        limit = "Add as many as you like." if u.get("pro") else "Free accounts can watch up to 3 stocks or people."
         target = "/watchlist" if u.get("onboarded_at") else "/onboard"
         inner = (P(f"Nothing yet. Add the tickers you own or keep an eye on and Seli will track insider filings on them. {limit}", margin="0 0 14px")
                  + ek.button("Add tickers", ek.track(target, MEDIUM, "add_tickers")))
@@ -195,7 +195,7 @@ def compose(u: dict, statuses: dict, backfill: bool, today: date) -> tuple[str, 
 
     # 3. What happens next
     nxt = "".join(P(ek.esc(l), margin="0 0 10px") for l in email_plan(u))
-    nxt += P(f"You can change any of this in {ek.a(settings, 'Settings')}, or unsubscribe with the link at the bottom of any email.", margin="0")
+    nxt += P(f"You can change any of this in {ek.a(settings, 'Account')}, or unsubscribe with the link at the bottom of any email.", margin="0")
     rows += block("Next", "What happens next", nxt)
 
     # 4. Support
