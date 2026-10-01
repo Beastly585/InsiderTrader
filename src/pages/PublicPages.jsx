@@ -120,17 +120,14 @@ function PopularStocks() {
   );
 }
 
-const FOOT_LINKS = [
-  ['Insider buying', '/insider-buying', true], ['Congress trades', '/congress', true], ['Leaderboard', '/leaderboard', true],
-  ['Dataset', '/data-download'], ['About', '/about'], ['Help', '/help'], ['Terms', '/terms'], ['Privacy', '/privacy'],
-];
+const FOOT_LINKS = [['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
 
 function PublicFooter({ logoSrc }) {
   return (
     <footer className="sx-pub__foot">
       <a className="sx-pub__foot-logo" href="/" onClick={navClick('/')}>{logoSrc && <img src={logoSrc} alt="" />}<span>Seli</span></a>
       <nav className="sx-pub__foot-links" aria-label="Footer">
-        {FOOT_LINKS.map(([label, path, inApp]) => <a key={path} href={path} onClick={inApp ? navClick(path) : undefined}>{label}</a>)}
+        {FOOT_LINKS.map(([label, path]) => <a key={path} href={path}>{label}</a>)}
       </nav>
       <p className="sx-pub__fine">Data from SEC EDGAR and congressional STOCK Act disclosures. Not financial advice.</p>
     </footer>
