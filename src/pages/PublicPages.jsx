@@ -15,9 +15,9 @@ import { TradeTable } from './StockPage.jsx';
 import { MarketSections } from './HomeFeed.jsx';
 
 const PUBLIC_LINKS = [
-  { id: 'insiderBuying', label: 'Insider buying', path: '/insider-buying' },
-  { id: 'congress', label: 'Congress trades', path: '/congress' },
-  { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard' },
+  { id: 'insiderBuying', label: 'Insider buying', short: 'Buying', path: '/insider-buying' },
+  { id: 'congress', label: 'Congress trades', short: 'Congress', path: '/congress' },
+  { id: 'leaderboard', label: 'Leaderboard', short: 'Leaders', path: '/leaderboard' },
 ];
 const POPULAR = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'JPM', 'PLTR', 'AMD'];
 
@@ -71,23 +71,29 @@ export function PublicShell({ page, logoSrc, isMobile, children }) {
                   className={`sx-nav__link${page === n.id ? ' sx-nav__link--on' : ''}`} onClick={navClick(n.path)}>{n.label}</a>
               ))}
             </nav>
-            <div className="sx-nav__search"><SearchBox hotkey /></div>
+            <div className="sx-nav__end">
+              <div className="sx-nav__search"><SearchBox hotkey /></div>
+              {actions}
+            </div>
           </div>
-          {actions}
+          {/* Empty right column keeps the grid symmetric, so the middle column
+              (links → buttons) lines up with the page content edges. */}
+          <div className="sx-nav__right" />
         </header>
       )}
       {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} />}
       {isMobile && (
         <nav className="sx-pub__tabs" aria-label="Browse">
           {PUBLIC_LINKS.map(n => (
-            <a key={n.id} href={n.path} className={page === n.id ? 'is-on' : ''} onClick={navClick(n.path)}>{n.label}</a>
+            <a key={n.id} href={n.path} className={page === n.id ? 'is-on' : ''} onClick={navClick(n.path)}>{n.short || n.label}</a>
           ))}
         </nav>
       )}
-      <main className="ws-main">
-        {children}
+      <main className="ws-main sx-pub__main">
+        <div className="sx-pub__content">{children}</div>
         <SignupBand onSignUp={signUp} />
-        <PublicFooter />
+        <PopularStocks />
+        <PublicFooter logoSrc={logoSrc} />
       </main>
     </div>
   );
@@ -105,29 +111,28 @@ function SignupBand({ onSignUp }) {
   );
 }
 
-function PublicFooter() {
+function PopularStocks() {
+  return (
+    <section className="sx-pub__popular" aria-label="Popular stocks">
+      <h2>Popular stocks</h2>
+      <p className="sx-pub__tickers">{POPULAR.map(t => <StockLink key={t} ticker={t} />)}</p>
+    </section>
+  );
+}
+
+const FOOT_LINKS = [
+  ['Insider buying', '/insider-buying', true], ['Congress trades', '/congress', true], ['Leaderboard', '/leaderboard', true],
+  ['Dataset', '/data-download'], ['About', '/about'], ['Help', '/help'], ['Terms', '/terms'], ['Privacy', '/privacy'],
+];
+
+function PublicFooter({ logoSrc }) {
   return (
     <footer className="sx-pub__foot">
-      <div className="sx-pub__foot-cols">
-        <div>
-          <h3>Browse</h3>
-          <a href="/insider-buying" onClick={navClick('/insider-buying')}>Insider buying this week</a>
-          <a href="/congress" onClick={navClick('/congress')}>Congress stock trades</a>
-          <a href="/data-download">Download the dataset</a>
-        </div>
-        <div>
-          <h3>Popular stocks</h3>
-          <p className="sx-pub__tickers">{POPULAR.map(t => <StockLink key={t} ticker={t} />)}</p>
-        </div>
-        <div>
-          <h3>Seli</h3>
-          <a href="/about">About the data</a>
-          <a href="/help">Help</a>
-          <a href="/terms">Terms</a>
-          <a href="/privacy">Privacy</a>
-        </div>
-      </div>
-      <p className="sx-pub__fine">Data from SEC EDGAR Form 4 filings and congressional STOCK Act disclosures. Not financial advice.</p>
+      <a className="sx-pub__foot-logo" href="/" onClick={navClick('/')}>{logoSrc && <img src={logoSrc} alt="" />}<span>Seli</span></a>
+      <nav className="sx-pub__foot-links" aria-label="Footer">
+        {FOOT_LINKS.map(([label, path, inApp]) => <a key={path} href={path} onClick={inApp ? navClick(path) : undefined}>{label}</a>)}
+      </nav>
+      <p className="sx-pub__fine">Data from SEC EDGAR and congressional STOCK Act disclosures. Not financial advice.</p>
     </footer>
   );
 }
