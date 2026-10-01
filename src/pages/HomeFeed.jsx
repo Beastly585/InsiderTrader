@@ -35,52 +35,62 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
       {d && (
         <>
           <Yours d={d} watchlist={watchlist} />
-          {d.pulse && <Pulse p={d.pulse} />}
-          {d.featured && <Featured c={d.featured} watchlist={watchlist} />}
-          <div className="sx-feed-cols">
-            {d.more?.length > 0 && (
-              <Card title="More insider buying this week" pad={false}>
-                <ul className="sx-rows">{d.more.map(c => <ClusterRow key={c.ticker} c={c} />)}</ul>
-              </Card>
-            )}
-            <div className="sx-feed-stack">
-              {d.congress?.length > 0 && (
-                <Card title="From Congress" sub="Disclosed as ranges, often weeks after the trade" pad={false}>
-                  <ul className="sx-rows">
-                    {d.congress.map(c => (
-                      <li key={c.ticker} className="sx-row">
-                        <StockLink ticker={c.ticker} />
-                        <div className="sx-row__main">
-                          <div className="sx-row__title"><InsiderLink raw={c.buyers[0].raw}>{c.buyers[0].name}</InsiderLink> bought {congressRange(c.buyers[0].value)}</div>
-                          <div className="sx-row__sub">{c.company}{c.n_insiders > 1 ? ` · ${plural(c.n_insiders - 1, 'other member')}` : ''}</div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              )}
-              {d.sells?.length > 0 && (
-                <Card title="Largest insider sales this week" pad={false}>
-                  <ul className="sx-rows">
-                    {d.sells.map(r => (
-                      <li key={`${r.ticker}:${r.raw}`} className="sx-row">
-                        <StockLink ticker={r.ticker} />
-                        <div className="sx-row__main">
-                          <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <span className="sx-muted">({r.role})</span></div>
-                          <div className="sx-row__sub">{r.company}{r.planned ? ' · pre-scheduled plan' : ''}</div>
-                        </div>
-                        <span className="sx-row__amt sx-down">{money(r.value)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="sx-note">Insiders sell for lots of reasons: taxes, diversification, scheduled plans. Sales are shown for context, not as a signal.</p>
-                </Card>
-              )}
-            </div>
-          </div>
+          <MarketSections d={d} watchlist={watchlist} />
         </>
       )}
     </div>
+  );
+}
+
+// The market-wide part of Home: this week's buying, Congress, big sales.
+// Also used by the public /insider-buying page.
+export function MarketSections({ d, watchlist }) {
+  return (
+    <>
+    {d.pulse && <Pulse p={d.pulse} />}
+    {d.featured && <Featured c={d.featured} watchlist={watchlist} />}
+    <div className="sx-feed-cols">
+      {d.more?.length > 0 && (
+        <Card title="More insider buying this week" pad={false}>
+          <ul className="sx-rows">{d.more.map(c => <ClusterRow key={c.ticker} c={c} />)}</ul>
+        </Card>
+      )}
+      <div className="sx-feed-stack">
+        {d.congress?.length > 0 && (
+          <Card title="From Congress" sub="Disclosed as ranges, often weeks after the trade" pad={false}>
+            <ul className="sx-rows">
+              {d.congress.map(c => (
+                <li key={c.ticker} className="sx-row">
+                  <StockLink ticker={c.ticker} />
+                  <div className="sx-row__main">
+                    <div className="sx-row__title"><InsiderLink raw={c.buyers[0].raw}>{c.buyers[0].name}</InsiderLink> bought {congressRange(c.buyers[0].value)}</div>
+                    <div className="sx-row__sub">{c.company}{c.n_insiders > 1 ? ` · ${plural(c.n_insiders - 1, 'other member')}` : ''}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+        {d.sells?.length > 0 && (
+          <Card title="Largest insider sales this week" pad={false}>
+            <ul className="sx-rows">
+              {d.sells.map(r => (
+                <li key={`${r.ticker}:${r.raw}`} className="sx-row">
+                  <StockLink ticker={r.ticker} />
+                  <div className="sx-row__main">
+                    <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <span className="sx-muted">({r.role})</span></div>
+                    <div className="sx-row__sub">{r.company}{r.planned ? ' · pre-scheduled plan' : ''}</div>
+                  </div>
+                  <span className="sx-row__amt sx-down">{money(r.value)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="sx-note">Insiders sell for lots of reasons: taxes, diversification, scheduled plans. Sales are shown for context, not as a signal.</p>
+          </Card>
+        )}
+      </div>
+    </div>
+    </>
   );
 }
 

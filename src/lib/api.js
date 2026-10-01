@@ -32,7 +32,8 @@ export class ApiError extends Error {
 }
 
 export async function api(path, { method = 'GET', body, signal } = {}) {
-  const headers = { ...(await authHeaders()) };
+  // /public/* needs no sign-in; don't wait on Clerk for it.
+  const headers = path.startsWith('/public/') ? {} : { ...(await authHeaders()) };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   let res;
   try {
@@ -58,6 +59,13 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
 // Session cache so going back to a page you just saw is instant. The page
 // still refetches in the background and swaps in fresh data when it lands.
 const cache = new Map();
+// Public pages arrive with their data already embedded by the server
+// (window.__SELI_PREFETCH__, see edge/seo.js). Seed the cache with it and
+// skip the first fetch for those paths.
+const prefetched = new Set();
+if (typeof window !== 'undefined' && window.__SELI_PREFETCH__) {
+  for (const [k, v] of Object.entries(window.__SELI_PREFETCH__)) { cache.set(k, v); prefetched.add(k); }
+}
 export function clearApiCache(prefix = '') { for (const k of cache.keys()) if (k.startsWith(prefix)) cache.delete(k); }
 
 export function useApi(path) {
@@ -65,6 +73,7 @@ export function useApi(path) {
   const seq = useRef(0);
   const load = useCallback(() => {
     if (!path) return;
+    if (prefetched.delete(path) && cache.has(path)) { setState({ data: cache.get(path), error: null, loading: false, path }); return; }
     const id = ++seq.current;
     const ctl = new AbortController();
     setState(s => ({ data: cache.get(path) ?? (s.path === path ? s.data : null), error: null, loading: true, path }));

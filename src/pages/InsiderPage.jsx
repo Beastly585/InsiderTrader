@@ -11,14 +11,18 @@ import { TradeTable } from './StockPage.jsx';
 
 const PAGE = 30;
 
-export default function InsiderPage({ raw, watchlist, onUpgrade }) {
-  const { data, error, reload } = useApi(`/api/insider/${encodeURIComponent(raw)}`);
+export default function InsiderPage({ raw, watchlist, onUpgrade, publicMode = false }) {
+  const { data, error, reload } = useApi(`/${publicMode ? 'public' : 'api'}/insider/${encodeURIComponent(raw)}`);
   const d = data && data.raw === raw ? data : null;
 
   useEffect(() => {
-    document.title = `${d?.name || prettyPerson(raw)} · insider trades · Seli`;
-    if (d?.known) pushRecent({ kind: 'person', id: raw, label: d.name, sub: [d.role, d.companies[0]?.ticker].filter(Boolean).join(' · ') });
-  }, [raw, d?.name, d?.known]);
+    const who = d?.name || prettyPerson(raw);
+    document.title = publicMode
+      ? (d?.congress ? `${who} Stock Trades & STOCK Act Disclosures | Seli`
+        : `${who} Insider Trades${d?.companies?.length ? ` (${d.companies.slice(0, 2).map(c => c.ticker).join(', ')})` : ''}: ${d?.role || 'Insider'} Form 4 Filings | Seli`)
+      : `${who} · insider trades · Seli`;
+    if (d?.known && !publicMode) pushRecent({ kind: 'person', id: raw, label: d.name, sub: [d.role, d.companies[0]?.ticker].filter(Boolean).join(' · ') });
+  }, [raw, d?.name, d?.known, d?.congress, d?.role, d?.companies, publicMode]);
 
   if (error && !d) return <div className="sx-page"><ErrorNote message={error} onRetry={reload} /></div>;
   if (!d) return <div className="sx-page"><header className="sx-head"><div className="sx-head__main"><h1 className="sx-head__person">{prettyPerson(raw)}</h1></div></header><Card><Skeleton lines={5} /></Card></div>;

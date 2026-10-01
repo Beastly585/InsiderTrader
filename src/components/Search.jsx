@@ -61,7 +61,8 @@ export function SearchBox({ mode = 'navigate', onPick, placeholder, autoFocus = 
     const id = ++seq.current;
     setLoading(true);
     const t = setTimeout(() => {
-      api(`/api/search?q=${encodeURIComponent(query)}`)
+      // Signed-out visitors (public stock and insider pages) use the public route.
+      api(`${window.__clerkGetToken ? '/api' : '/public'}/search?q=${encodeURIComponent(query)}`)
         .then(r => { resultCache.set(key, r); if (id === seq.current) { setRes(r); setLoading(false); } })
         .catch(() => { if (id === seq.current) { setRes({ stocks: [], people: [], error: true }); setLoading(false); } });
     }, 140);

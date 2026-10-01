@@ -20,6 +20,7 @@ import InsiderPage from './pages/InsiderPage.jsx';
 import HomeFeed from './pages/HomeFeed.jsx';
 import WatchlistPage from './pages/WatchlistPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
+import { PublicShell, CongressPage, InsiderBuyingPage, usePublicWatchlist } from './pages/PublicPages.jsx';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
@@ -6494,6 +6495,8 @@ function LandingPage({ onEnter, dark, setDark }) {
             <a href="#features" onClick={(e) => goToSection(e, '#features')} className="lp-nav__link">Features</a>
             <a href="#pricing" onClick={(e) => goToSection(e, '#pricing')} className="lp-nav__link">Pricing</a>
             <a href="/about" onClick={goToAbout} className="lp-nav__link">About</a>
+            <a href="/insider-buying" className="lp-nav__link">Insider buying</a>
+            <a href="/congress" className="lp-nav__link">Congress trades</a>
           </div>
           <div className="lp-nav__actions">
             <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={() => setDark(d => !d)} title="Toggle theme">
@@ -6767,6 +6770,11 @@ function LandingPage({ onEnter, dark, setDark }) {
               <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
             </div>
             <div className="lp-footer__links">
+              <a href="/insider-buying">Insider buying this week</a>
+              <span>·</span>
+              <a href="/congress">Congress stock trades</a>
+              <span>·</span>
+              {['NVDA', 'AAPL', 'TSLA', 'MSFT', 'PLTR'].map(t => <React.Fragment key={t}><a href={`/stock/${t}`} className="lp-footer__link-muted">{t}</a><span>·</span></React.Fragment>)}
               <a href="https://www.sec.gov" target="_blank" rel="noreferrer">SEC EDGAR</a>
               <span>·</span>
               <a href="/help" className="lp-footer__link-muted">Help</a>
@@ -6818,6 +6826,8 @@ function routeFromLocation(loc = window.location) {
     return { page: 'stock', ticker, canonical: a === 'ticker' ? stockPath(ticker) : null };
   }
   if (a === 'insider' && b) return { page: 'insider', raw: decodeURIComponent(parts.slice(1).join('/')) };
+  if (a === 'congress' && !b) return { page: 'congress' };
+  if (a === 'insider-buying' && !b) return { page: 'insiderBuying' };
   if (a === 'data') return { page: 'dashboard' };
   if (a === 'leaderboard') return { page: 'leaderboard' };
   if (a === 'insights' || a === 'insiders') return { page: 'leaderboard', canonical: '/leaderboard' };
@@ -6828,6 +6838,7 @@ function routeFromLocation(loc = window.location) {
 }
 const PAGE_PATHS = { home: '/', dashboard: '/data', data: '/data', signals: '/leaderboard', leaderboard: '/leaderboard', watchlist: '/watchlist', settings: '/account', account: '/account' };
 const PAGE_TITLES = { home: 'Home', dashboard: 'Data', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
+const PUBLIC_PAGES = ['stock', 'insider', 'congress', 'insiderBuying'];
 const STANDALONE_PATHS = ['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/about', '/onboard'];
 
 import * as Sentry from '@sentry/react';
@@ -7000,6 +7011,8 @@ function AppInner() {
   }, []);
 
   const watchlist = useWatchlist(user);
+  const publicWatchlist = usePublicWatchlist();
+  const isMobileShell = useIsMobile();
   const [alertsMaster, setAlertsMaster] = useState(null);
 
   // ── First-run onboarding redirect ─────────────────────────────────────
@@ -7060,6 +7073,21 @@ function AppInner() {
   if (path === '/purchase-complete') return <PurchaseCompletePage />;
   if (path === '/redownload') return <RedownloadPage />;
 
+  // Stock, insider, Congress and insider-buying pages are public. Signed-out
+  // visitors (and Google) get the read-only version straight away, including
+  // while Clerk is still loading, so the server-rendered content isn't swapped
+  // for a spinner or the landing page.
+  if (PUBLIC_PAGES.includes(route.page) && (!isLoaded || !isSignedIn)) {
+    return (
+      <PublicShell page={route.page} logoSrc={logoSimple} isMobile={isMobileShell}>
+        {route.page === 'stock' && <StockPage key={route.ticker} ticker={route.ticker} watchlist={publicWatchlist} onUpgrade={publicWatchlist.signUp} publicMode />}
+        {route.page === 'insider' && <InsiderPage key={route.raw} raw={route.raw} watchlist={publicWatchlist} onUpgrade={publicWatchlist.signUp} publicMode />}
+        {route.page === 'congress' && <CongressPage />}
+        {route.page === 'insiderBuying' && <InsiderBuyingPage watchlist={publicWatchlist} />}
+      </PublicShell>
+    );
+  }
+
   if (!isLoaded) return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div className="spinner" style={{ width: 32, height: 32 }} />
@@ -7112,6 +7140,8 @@ function AppInner() {
           {page === 'insider' && <InsiderPage key={route.raw} raw={route.raw} watchlist={watchlist} onUpgrade={onUpgrade} />}
           {page === 'dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={openDetail} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={onUpgrade} />}
           {page === 'leaderboard' && <LeaderboardPage pro={billingPro} onUpgrade={onUpgrade} />}
+          {page === 'congress' && <CongressPage />}
+          {page === 'insiderBuying' && <InsiderBuyingPage watchlist={watchlist} />}
           {page === 'watchlist' && <WatchlistPage watchlist={watchlist} portfolioTickers={billingPro ? portfolioTickers : []} onUpgrade={onUpgrade} alertsMasterOn={alertsMaster} />}
           {page === 'account' && <AccountPage user={user} onUpgrade={onUpgrade} dark={dark} setDark={setDark} />}
         </main>
@@ -7178,7 +7208,7 @@ function AppErrorFallback({ error }) {
 // homepage." This sets it correctly per route so /about, /data-download, etc.
 // get indexed as separate pages.
 const SEO_TITLES = {
-  '/': 'Seli — Know When Insiders Move | SEC Form 4 & Congressional Stock Trades',
+  '/': 'Seli: Insider Trading & Congress Stock Trades Tracker',
   '/about': 'How Insider Trades Beat the Market | Research & Methodology — Seli',
   '/data-download': 'Download SEC Insider Trading Data (CSV) | 10+ Years of Form 4 Filings — Seli',
   '/terms': 'Terms of Service — Seli',
@@ -7187,12 +7217,12 @@ const SEO_TITLES = {
   '/help': 'Help Center — Seli',
   '/data': 'Insider Trading Signals & Raw SEC Filings | Market Data — Seli',
   '/insights': 'Top Insider Traders Ranked by Performance | Leaderboard — Seli',
-  '/home': 'Seli — Know When Insiders Move | SEC Form 4 & Congressional Stock Trades',
+  '/home': 'Seli: Insider Trading & Congress Stock Trades Tracker',
   '/blog': 'Seli Blog — Insider Trading Intelligence, SEC Form 4 Analysis & Market Signals',
   '/onboard': 'Get Started — Seli',
 };
 const SEO_DESCRIPTIONS = {
-  '/': 'Track SEC Form 4 insider trades and congressional stock disclosures in real time. Scored by conviction, with instant alerts and portfolio integration. Free to start.',
+  '/': 'Track insider trading and Congress stock trades. Every SEC Form 4 filing and STOCK Act disclosure, explained in plain English, with free alerts on the stocks you own.',
   '/about': 'The peer-reviewed research behind insider trading signals. How corporate insider buying outperforms the market by 4-5% annually, and how Seli scores each trade using findings from Seyhun, Lakonishok & Lee, and Cohen et al.',
   '/data-download': 'Download the complete SEC Form 4 insider trading dataset. 10+ years of corporate executive trades as structured CSV. One-time purchase, $39.99. Works with Excel, Python, R.',
   '/data': 'Live feed of SEC Form 4 insider trades scored by conviction. Filter by sector, type, role, and date. Export to CSV.',
@@ -7206,7 +7236,12 @@ function useSEO() {
     const path = window.location.pathname.replace(/\/$/, '') || '/';
     const origin = 'https://seli.app';
     const url = `${origin}${path === '/' ? '' : path}`;
-    const title = SEO_TITLES[path] || 'Seli — Insider Trading Intelligence';
+    // Stock, insider, Congress and insider-buying pages arrive with their own
+    // title, description, canonical and JSON-LD written by the server
+    // (functions/ + edge/seo.js). Leave those alone; overwriting them here
+    // with generic tags is what Google would index after running the page.
+    if (!SEO_TITLES[path]) return;
+    const title = SEO_TITLES[path];
     const desc = SEO_DESCRIPTIONS[path] || SEO_DESCRIPTIONS['/'];
 
     // Canonical

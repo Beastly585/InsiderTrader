@@ -13,14 +13,18 @@ import PriceChart from '../components/PriceChart.jsx';
 
 const PAGE = 25;
 
-export default function StockPage({ ticker, watchlist, onUpgrade, renderProfile }) {
-  const { data, error, loading, reload } = useApi(`/api/stock/${encodeURIComponent(ticker)}`);
+// publicMode: signed-out visitors (and Google). Reads /public/stock, the same
+// free-plan view, and the server already wrote the page's title and meta tags.
+export default function StockPage({ ticker, watchlist, onUpgrade, renderProfile, publicMode = false }) {
+  const { data, error, loading, reload } = useApi(`/${publicMode ? 'public' : 'api'}/stock/${encodeURIComponent(ticker)}`);
   const d = data && data.ticker === ticker ? data : null;
 
   useEffect(() => {
-    document.title = `${ticker}${d?.company ? ` · ${d.company}` : ''} insider trading · Seli`;
-    if (d?.known) pushRecent({ kind: 'stock', id: ticker, label: ticker, sub: d.company });
-  }, [ticker, d?.company, d?.known]);
+    document.title = publicMode
+      ? `${d?.company ? `${d.company} (${ticker})` : ticker} Insider Trading: Buys & Sells by Executives | Seli`
+      : `${ticker}${d?.company ? ` · ${d.company}` : ''} insider trading · Seli`;
+    if (d?.known && !publicMode) pushRecent({ kind: 'stock', id: ticker, label: ticker, sub: d.company });
+  }, [ticker, d?.company, d?.known, publicMode]);
 
   if (error && !d) return <div className="sx-page"><ErrorNote message={error} onRetry={reload} /></div>;
   if (!d) return <div className="sx-page"><StockHeaderSkeleton ticker={ticker} /><Card><Skeleton lines={4} /></Card></div>;
@@ -70,8 +74,8 @@ function StockView({ d, watchlist, onUpgrade, renderProfile }) {
       <header className="sx-head">
         <div className="sx-head__main">
           <div className="sx-head__row">
-            <h1 className="sx-head__ticker">{d.ticker}</h1>
-            <span className="sx-head__name">{d.company}</span>
+            {/* One h1 with ticker and company, so search engines read "NVDA NVIDIA Corp". */}
+            <h1 className="sx-head__ticker sx-head__h1">{d.ticker} <span className="sx-head__name">{d.company}</span></h1>
           </div>
           <div className="sx-head__sub">
             {d.price && <span className="sx-head__price">{price(d.price.close)}</span>}
