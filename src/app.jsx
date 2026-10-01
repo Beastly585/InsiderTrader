@@ -5843,13 +5843,8 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
   const [testState, setTestState] = useState(null);
   useEffect(() => { if (prefs) setLocal({ ...DEFAULT_PREFS, ...prefs }); }, [prefs]);
 
-  // Old links (emails, SnapTrade return) use ?section=; new ones use #anchors.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const map = { notifications: 'emails', billing: 'billing', brokers: 'portfolio' };
-    const target = map[params.get('section')] || (params.has('connection_id') || params.get('snaptrade') ? 'portfolio' : null) || window.location.hash.slice(1);
-    if (target) setTimeout(() => document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
-  }, []);
+  // The page is short, so no section jump-links or auto-scrolling. Old links
+  // with #emails / ?section= just land at the top.
 
   async function update(patch) {
     if (!local) return;
@@ -5909,13 +5904,30 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
           {status && status !== 'saving' && status !== 'saved' && <span className="sx-err">{status}</span>}
         </div>
       </header>
-      <nav className="sx-acct-nav" aria-label="Account sections">
-        <a href="#billing">Plan</a><a href="#emails">Emails</a><a href="#portfolio">Brokerage</a><a href="#more">Appearance &amp; help</a>
-      </nav>
+      <Card id="billing" className="sx-card--section" title="Plan and billing"><BillingSection user={user} /></Card>
 
-      <Card id="billing" title="Plan and billing"><BillingSection user={user} /></Card>
+      <Card id="portfolio" className="sx-card--section" title="Linked brokerage" sub="Read-only. Seli sees positions, never your login and never trading access.">
+        {!pro ? (
+          <div className="sx-gate sx-gate--block">
+            <span className="sx-gate__text">Link a brokerage and your holdings show up on Home and your Watchlist, and in your digests.</span>
+            <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={() => onUpgrade('portfolio')}>See Pro</button>
+          </div>
+        ) : snaptrade.status === null ? (
+          <span className="sx-muted">Checking connection…</span>
+        ) : !snaptrade.status.connection ? (
+          <SxSetting label="No brokerage linked" sub="Fidelity, Schwab, Robinhood, Alpaca and most others, through SnapTrade.">
+            <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={snaptrade.connect} disabled={snaptrade.connecting}>{snaptrade.connecting ? 'Redirecting…' : 'Link brokerage'}</button>
+          </SxSetting>
+        ) : (
+          <SxSetting label={snaptrade.status.connection.broker || 'Brokerage linked'}
+            sub={`Connected ${new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. Unlinks automatically if you don't open Seli for 30 days; relink any time.`}>
+            <button className="sx-btn sx-btn--ghost sx-btn--sm" onClick={snaptrade.disconnect}>Disconnect</button>
+          </SxSetting>
+        )}
+        {snaptrade.error && <p className="sx-err">{snaptrade.error}</p>}
+      </Card>
 
-      <Card id="emails" title="Emails" sub="What Seli sends you. The stocks and people you watch decide what's in them.">
+      <Card id="emails" className="sx-card--section" title="Emails" sub="What Seli sends you. The stocks and people you watch decide what's in them.">
         {!L ? <Spinner /> : (<>
           <SxSetting label="Weekly digest" sub="Sunday evening: what insiders did with everything you watch, plus the week's most notable insider buying.">
             <SxToggle label="Weekly digest" checked={L.weekly_digest} onChange={v => update({ weekly_digest: v })} />
@@ -5967,28 +5979,7 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
         </>)}
       </Card>
 
-      <Card id="portfolio" title="Linked brokerage" sub="Read-only. Seli sees positions, never your login and never trading access.">
-        {!pro ? (
-          <div className="sx-gate sx-gate--block">
-            <span className="sx-gate__text">Link a brokerage and your holdings show up on Home and your Watchlist, and in your digests.</span>
-            <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={() => onUpgrade('portfolio')}>See Pro</button>
-          </div>
-        ) : snaptrade.status === null ? (
-          <span className="sx-muted">Checking connection…</span>
-        ) : !snaptrade.status.connection ? (
-          <SxSetting label="No brokerage linked" sub="Fidelity, Schwab, Robinhood, Alpaca and most others, through SnapTrade.">
-            <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={snaptrade.connect} disabled={snaptrade.connecting}>{snaptrade.connecting ? 'Redirecting…' : 'Link brokerage'}</button>
-          </SxSetting>
-        ) : (
-          <SxSetting label={snaptrade.status.connection.broker || 'Brokerage linked'}
-            sub={`Connected ${new Date(snaptrade.status.connection.connected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. Unlinks automatically if you don't open Seli for 30 days; relink any time.`}>
-            <button className="sx-btn sx-btn--ghost sx-btn--sm" onClick={snaptrade.disconnect}>Disconnect</button>
-          </SxSetting>
-        )}
-        {snaptrade.error && <p className="sx-err">{snaptrade.error}</p>}
-      </Card>
-
-      <Card id="more" title="Appearance and help">
+      <Card id="more" className="sx-card--section" title="Appearance and help">
         <SxSetting label="Dark mode"><SxToggle label="Dark mode" checked={dark} onChange={setDark} /></SxSetting>
         <SxSetting label="How Seli works" sub="What the numbers mean, where the data comes from, and common questions.">
           <a className="sx-btn sx-btn--sm" href="/help" target="_blank" rel="noreferrer">Help center</a>
