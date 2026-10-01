@@ -565,3 +565,50 @@ body.drawer-open .sx-nav { z-index: 94; }
   .sx-pub__popular, .sx-pub__foot, .sx-pub .sx-pub__band { width: calc(100% - 24px); }
   .sx-pub__tabs a { padding: 7px 6px; white-space: nowrap; }
 }
+
+/* ── Public pages polish: roomier tiles and the landing page's button motion ── */
+.sx-pub .sx-btn--accent, .sx-pub .sx-plan .sx-btn {
+  position: relative; overflow: hidden; isolation: isolate;
+  transition: background .12s, border-color .15s, color .15s, transform .15s, box-shadow .2s;
+}
+/* Shine: an angled light streak sweeps across on hover (same as the old landing page). */
+.sx-pub .sx-btn--accent::after {
+  content: ''; position: absolute; top: -50%; left: -60%; width: 40%; height: 200%;
+  background: rgba(255, 255, 255, .32); transform: rotate(20deg) translateX(-220%);
+  transition: transform .55s ease; z-index: -1; pointer-events: none;
+}
+.sx-pub .sx-btn--accent:hover::after { transform: rotate(20deg) translateX(420%); }
+.sx-pub .sx-btn--accent:hover { transform: translateY(-1px); box-shadow: 0 6px 24px color-mix(in srgb, var(--accent) 45%, transparent); }
+.sx-pub .sx-plan .sx-btn:not(.sx-btn--accent):hover { transform: translateY(-1px); border-color: var(--accent); color: var(--text); background: var(--surface-2); }
+.sx-pub .sx-btn:active { transform: translateY(0); }
+
+/* Hero CTA and plan buttons: a bit bigger, pill-shaped like the old landing page. */
+.sx-hero__cta .sx-btn, .sx-plan .sx-btn { height: 42px; padding: 0 22px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+.sx-plan .sx-btn { width: 100%; }
+
+/* Tiles: more breathing room and a gentle lift on hover. */
+.sx-how { margin-top: 36px; }
+.sx-plans { margin-top: 40px; }
+.sx-section-title { margin-bottom: 16px; font-size: 22px; }
+.sx-how__steps { gap: 16px; }
+.sx-how__steps li { padding: 24px 24px 26px; transition: border-color .15s, transform .15s; }
+.sx-how__steps li::before { width: 30px; height: 30px; font-size: 13px; margin-bottom: 14px; }
+.sx-how__steps b { font-size: 15.5px; margin-bottom: 6px; }
+.sx-plans__grid { gap: 16px; }
+.sx-plan { padding: 26px 26px 24px; transition: border-color .15s, transform .15s, box-shadow .2s; }
+.sx-how__steps li:hover, .sx-plan:hover { transform: translateY(-2px); border-color: var(--border-md); }
+.sx-plan--pro { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 9%, var(--surface)) 0%, var(--surface) 55%); }
+.sx-plan--pro:hover { border-color: var(--accent); box-shadow: 0 10px 34px color-mix(in srgb, var(--accent) 22%, transparent); }
+.sx-plan__price { margin-top: 10px; font-size: 34px; }
+.sx-plan__desc { margin-top: 10px; }
+.sx-plan__list { margin: 14px 0 22px; line-height: 1.85; }
+.sx-plans .sx-note { margin-top: 16px; }
+.sx-hero { padding: 36px 2px 18px; }
+.sx-hero__cta { margin-top: 20px; }
+@media (prefers-reduced-motion: reduce) {
+  .sx-pub .sx-btn, .sx-pub .sx-btn::after, .sx-how__steps li, .sx-plan { transition: none; }
+}
+@media (max-width: 640px) {
+  .sx-how__steps li, .sx-plan { padding: 20px; }
+  .sx-hero { padding-top: 22px; }
+}
