@@ -12,7 +12,9 @@ import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
 import OnboardingFlow from './onboard.jsx';
 import './research.css';
 import { go, stockPath, insiderPath } from './lib/nav.jsx';
-import { clearApiCache, api } from './lib/api.js';
+import { clearApiCache, api, useDataSinceYear } from './lib/api.js';
+import { prettyPerson, prettyCompany, shortDate, plural } from './lib/text.js';
+import { peekIntent, clearIntent } from './lib/intent.js';
 import { SearchBox, SearchOverlay } from './components/Search.jsx';
 import { Icon, Card } from './components/ui.jsx';
 import StockPage from './pages/StockPage.jsx';
@@ -20,7 +22,7 @@ import InsiderPage from './pages/InsiderPage.jsx';
 import HomeFeed from './pages/HomeFeed.jsx';
 import WatchlistPage from './pages/WatchlistPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
-import { PublicShell, CongressPage, InsiderBuyingPage, usePublicWatchlist } from './pages/PublicPages.jsx';
+import { PublicShell, CongressPage, InsiderBuyingPage, PublicHome, usePublicWatchlist } from './pages/PublicPages.jsx';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
@@ -215,14 +217,15 @@ function UpgradeModal({ feature, pro, onClose }) {
 
   // Outcome-oriented messages — tell the user what changes for them, not
   // what features they unlock.
+  const since = useDataSinceYear();
+  const sinceText = since ? `back to ${since}` : 'all the way back';
   const FEATURE_MESSAGES = {
     watchlist_ticker: "You're watching 3 things, the free limit. Pro watches as many stocks and people as you like, and emails you the same day they file.",
     watchlist_insider: "You're watching 3 things, the free limit. Pro watches as many stocks and people as you like, and emails you the same day they file.",
     notifications: 'Set it and forget it. Pro sends you email digests and instant alerts — you only open Seli when something happens.',
-    portfolio: "Link your brokerage and Seli watches every stock you own. You'll know about insider moves before the market reacts.",
+    portfolio: "Link your brokerage and Seli watches every stock you own. You'll hear about insider trades in what you own the same day they're filed.",
     data_export: 'Get a one-time CSV export of the full historical dataset — no subscription required.',
-    full_history: 'Free shows 12 months. Pro unlocks the full picture — every filing back to 2010, so you see the patterns that matter.',
-    my_news: 'My News filters headlines to only the tickers and insiders you follow. Set it up once, and your feed shows only what matters to you.',
+    full_history: `Free shows 12 months. Pro unlocks the full picture — every filing ${sinceText}, so you see the patterns that matter.`,
     default: 'Tell Seli what to watch. It does the rest.',
   };
   const subtitle = FEATURE_MESSAGES[feature] || FEATURE_MESSAGES.default;
@@ -236,14 +239,14 @@ function UpgradeModal({ feature, pro, onClose }) {
       outcomes: [
         { step: '1', text: 'Pick the stocks, insiders, or politicians you care about' },
         { step: '2', text: 'Seli monitors every Form 4 — 24/7, automatically' },
-        { step: '3', text: 'Get alerted before the market reacts' },
+        { step: '3', text: 'Get an email the same day they file' },
       ],
       cta: 'Start watching',
     },
     data: {
       title: 'See the full picture',
       outcomes: [
-        { step: '1', text: 'Unlock every filing back to 2010, not just 12 months' },
+        { step: '1', text: `Unlock every filing ${sinceText}, not just 12 months` },
         { step: '2', text: 'Filter by insider, sector, trade size, and score' },
         { step: '3', text: 'Spot patterns that only show up over years' },
       ],
@@ -264,7 +267,7 @@ function UpgradeModal({ feature, pro, onClose }) {
   const FEATURE_TO_VARIANT = {
     watchlist_ticker: 'alert', watchlist_insider: 'alert', notifications: 'alert', alerts: 'alert', default: 'alert',
     full_history: 'data', data_explorer: 'data', insider_detail: 'data',
-    portfolio: 'personalize', watchlist_limit: 'personalize', my_news: 'personalize',
+    portfolio: 'personalize', watchlist_limit: 'personalize',
   };
 
   const variant = MODAL_VARIANTS[FEATURE_TO_VARIANT[feature] || 'alert'];
@@ -450,6 +453,7 @@ function ProcessingModal({ text = 'Finishing up…' }) {
 // ─── Status modal — reusable success/confirmation pattern ─────────────────────
 function StatusModal({ type, title, message, onClose }) {
   const isPro = type === 'pro';
+  const since = useDataSinceYear();
   return (
     <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
       <div className="upgrade-modal" style={{ maxWidth: isPro ? 480 : 420, textAlign: 'center', padding: isPro ? '40px 36px 32px' : undefined }}>
@@ -464,7 +468,7 @@ function StatusModal({ type, title, message, onClose }) {
             <div style={{ textAlign: 'left', background: 'var(--surface-2)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', marginBottom: 24 }}>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {[
-                  ['Full historical data', '2010→present, every filed SEC insider trade'],
+                  ['Full historical data', since ? `${since}→present, every open-market insider and Congress trade` : 'Every open-market insider and Congress trade on record'],
                   ['Portfolio linking', 'Connect your brokerage to see insider activity on your holdings'],
                   ['Instant alerts', 'Get notified the moment insiders trade your watched tickers'],
                   ['Full score breakdown', 'See conviction scoring on every signal'],
@@ -1040,6 +1044,7 @@ function useWatchlist(user) {
   // Bumps each time an add is confirmed saved, so pages that summarize the
   // list server-side know when it's safe to refetch.
   const [synced, setSynced] = useState(0);
+  const [ready, setReady] = useState(false); // server list loaded
 
   // Waits for billingStatus so a Pro user with stale Clerk metadata isn't
   // treated as free. If the server has nothing but this browser does (lists
@@ -1048,6 +1053,7 @@ function useWatchlist(user) {
   useEffect(() => {
     if (!user || !billingKnown) return;
     neonWatchlistLoad().then(items => {
+      setReady(true);
       if (!items) return;
       const t = items.filter(i => i.item_type === 'ticker').map(i => i.item_value);
       const ins = items.filter(i => i.item_type === 'insider').map(i => i.item_value);
@@ -1113,7 +1119,7 @@ function useWatchlist(user) {
     tickers, insiders, toggle: toggleTicker, has: hasTicker,
     toggleTicker, toggleInsider, hasTicker, hasInsider,
     alertsOn, setAlerts,
-    showUpgrade, setShowUpgrade, pro, synced,
+    showUpgrade, setShowUpgrade, pro, synced, ready,
     freeLimit: FREE_WATCHLIST_LIMIT,
     freeSlotsLeft: pro ? Infinity : Math.max(0, FREE_WATCHLIST_LIMIT - count),
   };
@@ -1295,6 +1301,20 @@ const TX_CODE_SHORT = {
   CONGRESS_P: 'Buy (range)', CONGRESS_S: 'Sell (range)',
 };
 
+
+// Phone-width sort control for the Data page lists (replaces column headers).
+function MobileSort({ value, dir, onSort, options }) {
+  return (
+    <div className="ws-msort" role="group" aria-label="Sort">
+      <span className="ws-msort__label">Sort</span>
+      {options.map(([k, l]) => (
+        <button key={k} className={`ws-msort__btn${value === k ? ' is-on' : ''}`} onClick={() => onSort(k)} aria-pressed={value === k}>
+          {l}{value === k && (dir < 0 ? ' ↓' : ' ↑')}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function ConvictionBar({ score, max = 100, showLabel = false }) {
   const pct = Math.min((score / max) * 100, 100);
@@ -2873,21 +2893,15 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
   return (
     <div className="ws-page">
-      <div className="ws-page-hdr">
-        <div style={{ flex: 1 }}>
-          <h1 className="ws-page-title">Market Data</h1>
-          <p className="ws-page-sub">{isMobile ? 'Tap any row to see the details.' : 'Click any row to see details inline. Use "Explore full view" for deep analysis.'}</p>
+      <header className="sx-head sx-head--page ws-data-head">
+        <div className="sx-head__main">
+          <h1 className="sx-head__title">Data</h1>
+          <p className="sx-head__desc">Every open-market insider and Congress trade. Signals groups them by stock; Raw filings shows one row per trade.{isMobile ? ' Tap a row for details.' : ''}</p>
         </div>
-        <button className="data-export-btn" onClick={() => onUpgrade('data_export_direct')}><IconDownload style={{ width: 13, height: 13 }} /> Download Dataset</button>
-      </div>
-
-      {/* Stat strip */}
-      <div className="ws-stat-strip">
-        <HelpStat label="Showing" value={tab === 'signals' ? signals.length : rawFilings.length} sub={`${tab === 'signals' ? 'signals' : 'filings'} after filters`} tip="Number of results after all filters are applied." />
-        <HelpStat label="High conviction" value={loading ? '—' : signals.filter(s => s.conviction >= 60).length} sub="Score ≥60" tip={TIPS.highConviction} />
-        <HelpStat label="Unique tickers" value={loading ? '—' : tab === 'signals' ? new Set(signals.map(s => s.ticker)).size : new Set(rawFilings.map(f => f.ticker)).size} sub="In current view" tip="Number of distinct stocks with insider activity in the current filtered view." />
-        <HelpStat label="Net flow" value={loading ? '—' : fmt.money(signals.reduce((s, x) => s + x.netValue, 0))} sub="Buys − sells" color={signals.reduce((s, x) => s + x.netValue, 0) >= 0 ? 'var(--green-600)' : 'var(--red-600)'} tip={TIPS.netFlow} />
-      </div>
+        <div className="sx-head__actions">
+          <button className="sx-btn sx-btn--ghost sx-btn--sm" onClick={() => onUpgrade('data_export_direct')}><IconDownload style={{ width: 13, height: 13 }} /> Download dataset</button>
+        </div>
+      </header>
 
       <div className="ws-tile">
         {/* Tab bar + Explore full view */}
@@ -2903,7 +2917,6 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             </button>
           </div>
           <div className="ws-toolbar-right">
-            {tab === 'raw' && <button className="btn btn--primary btn--sm" style={{ flexShrink: 0 }} onClick={() => onUpgrade('data_export_direct')}>Export CSV</button>}
             {/* Opens the correct full drawer for whichever tab is active.
                 Hidden on mobile — the drawer's two-pane layout doesn't work
                 on phone-sized viewports; the inline expand + page navigation
@@ -2915,6 +2928,19 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             </button>}
           </div>
         </div>
+
+        {/* One-line summary of the current view (replaces the four stat tiles). */}
+        {!loading && (() => {
+          const net = signals.reduce((sum, x) => sum + x.netValue, 0);
+          const high = signals.filter(x => x.conviction >= 60).length;
+          return (
+            <p className="ws-summary">
+              {tab === 'signals'
+                ? <>{plural(signals.length, 'stock')} · {high} high conviction · net <b className={net >= 0 ? 'val-buy' : 'val-sell'}>{net >= 0 ? '+' : '−'}{fmt.money(Math.abs(net))}</b></>
+                : <>{plural(rawFilings.length, 'trade')} · {new Set(rawFilings.map(f => f.ticker)).size} stocks</>}
+            </p>
+          );
+        })()}
 
         {/* Filter bar — collapses on mobile behind a toggle */}
         <div className="ws-filter-bar">
@@ -3021,7 +3047,9 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             <div className="ws-empty">No signals match these filters. Try widening the window or clearing filters.</div>
           ) : (
             <>
-              <div className="ws-col-hdrs ws-col-hdrs--data">
+              {isMobile && <MobileSort value={sigSort} dir={sigDir} onSort={onSigSort}
+                options={[['conviction', 'Conviction'], ['netValue', 'Value'], ['insiderCount', 'Insiders'], ['lastTradeDate', 'Newest']]} />}
+              {!isMobile && <div className="ws-col-hdrs ws-col-hdrs--data">
                 <button className={`ws-col-sort${sigSort === 'ticker' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('ticker')}>Ticker{sigSort === 'ticker' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
                 {!isMobile && <button className={`ws-col-sort${sigSort === 'company' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('company')}>Company{sigSort === 'company' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>}
                 {!isMobile && <button className={`ws-col-sort${sigSort === 'lastTradeDate' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('lastTradeDate')}><InfoTip tip={TIPS.signalDate}>Date</InfoTip>{sigSort === 'lastTradeDate' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>}
@@ -3029,7 +3057,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                 {!isMobile && <button className={`ws-col-sort ws-col-sort--right${sigSort === 'buys' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('buys')}><InfoTip tip={TIPS.trades}>Trades</InfoTip>{sigSort === 'buys' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>}
                 <button className={`ws-col-sort ws-col-sort--right${sigSort === 'netValue' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('netValue')}><InfoTip tip={TIPS.netValue}>{isMobile ? 'Value' : 'Net value'}</InfoTip>{sigSort === 'netValue' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
                 <button className={`ws-col-sort ws-col-sort--right${sigSort === 'conviction' ? ' ws-col-sort--active' : ''}`} onClick={() => onSigSort('conviction')}><InfoTip tip={TIPS.conviction}>{isMobile ? 'Conv' : 'Conviction'}</InfoTip>{sigSort === 'conviction' && (sigDir < 0 ? ' ↓' : ' ↑')}</button>
-              </div>
+              </div>}
               <div>
                 {signals.map(s => {
                   const isBuy = s.direction !== 'sell';
@@ -3040,6 +3068,20 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                     <div key={s.ticker} className={`ws-row${isExp ? ' ws-row--open' : ''}`}
                       style={{ borderLeft: `3px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
 
+                      {isMobile ? (
+                        <div className="ws-mrow" onClick={() => toggleSig(s.ticker)}>
+                          <div className="ws-mrow__top">
+                            <span className="ticker">{s.ticker}</span>
+                            {hasRev && <span className="reversal-badge" style={{ fontSize: 9, padding: '0 3px' }}><IconReversal className="reversal-badge__icon" />rev</span>}
+                            <span onClick={e => e.stopPropagation()}><StarBtn ticker={s.ticker} watchlist={watchlist} /></span>
+                            <span className={`ws-mrow__amt${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(Math.abs(s.netValue))}</span>
+                          </div>
+                          <div className="ws-mrow__sub">
+                            <span className="ws-mrow__name">{prettyCompany(s.company)}{s.insiderCount != null ? ` · ${plural(s.insiderCount, 'insider')}` : ''}</span>
+                            <ConvictionBar score={s.conviction} max={100} showLabel />
+                          </div>
+                        </div>
+                      ) : (<>
                       {/* ── Main row — click anywhere to expand ── */}
                       <div className="ws-row__main ws-row__main--data" style={{ cursor: 'pointer' }}
                         onClick={() => toggleSig(s.ticker)}>
@@ -3054,7 +3096,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                           </div>
                           {isMobile && <div className="ws-mob-sub" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, paddingLeft: 18 }}>{s.company}</div>}
                         </div>
-                        {!isMobile && <div className="ws-row__cell ws-row__cell--overflow">{s.company}</div>}
+                        {!isMobile && <div className="ws-row__cell ws-row__cell--overflow">{prettyCompany(s.company)}</div>}
                         {!isMobile && <div className="ws-row__cell ws-row__cell--muted" style={{ fontSize: 11 }}>{fmt.dateShort(s.lastTradeDate)}</div>}
                         <div className="ws-row__cell ws-row__cell--right">
                           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{s.insiderCount}</span>
@@ -3069,6 +3111,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                           <ConvictionBar score={s.conviction} max={100} showLabel={!isMobile} />
                         </div>
                       </div>
+                      </>)}
 
                       {/* ── Expanded detail ── */}
                       {isExp && (
@@ -3134,7 +3177,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
           ) : (
             <>
               {/* Same outer width as signals. 7-col grid: chevron+date | ticker | insider | role | type | ±position | value */}
-              <div className="ws-col-hdrs ws-col-hdrs--raw">
+              {isMobile && <MobileSort value={rawSort} dir={rawDir} onSort={onRawSort} options={[['date', 'Newest'], ['value', 'Value']]} />}
+              {!isMobile && <div className="ws-col-hdrs ws-col-hdrs--raw">
                 <span className="ws-col-sort">Ticker</span>
                 {!isMobile && <span className="ws-col-sort">Insider</span>}
                 <button className={`ws-col-sort${rawSort === 'date' ? ' ws-col-sort--active' : ''}`} onClick={() => onRawSort('date')}>Date{rawSort === 'date' && (rawDir < 0 ? ' ↓' : ' ↑')}</button>
@@ -3142,7 +3186,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                 <span className="ws-col-sort"><InfoTip tip={TIPS.tradeType}>Type</InfoTip></span>
                 {!isMobile && <button className={`ws-col-sort ws-col-sort--right${rawSort === 'pctChange' ? ' ws-col-sort--active' : ''}`} onClick={() => onRawSort('pctChange')}><InfoTip tip={TIPS.pctPosition}>% Position</InfoTip>{rawSort === 'pctChange' && (rawDir < 0 ? ' ↓' : ' ↑')}</button>}
                 <button className={`ws-col-sort ws-col-sort--right${rawSort === 'value' ? ' ws-col-sort--active' : ''}`} onClick={() => onRawSort('value')}><InfoTip tip={TIPS.tradeValue}>Value</InfoTip>{rawSort === 'value' && (rawDir < 0 ? ' ↓' : ' ↑')}</button>
-              </div>
+              </div>}
               <div>
                 {rawFilings.map((f, i) => {
                   const isBuy = f.transactionType === 'buy';
@@ -3154,6 +3198,19 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                     <div key={i} className={`ws-row${isExp ? ' ws-row--open' : ''}`}
                       style={{ borderLeft: `3px solid ${isBuy ? 'var(--green-600)' : 'var(--red-600)'}` }}>
 
+                      {isMobile ? (
+                        <div className="ws-mrow" onClick={() => toggleRaw(i)}>
+                          <div className="ws-mrow__top">
+                            <span className="ticker">{f.ticker}</span>
+                            <span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span>
+                            <span className={`ws-mrow__amt${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(Math.abs(f.value || 0))}</span>
+                          </div>
+                          <div className="ws-mrow__sub">
+                            <span className="ws-mrow__name">{prettyPerson(f.insiderName, f.relationship === 'congress')}<span className="ws-mrow__role"> · {f.relationship === 'congress' ? 'Congress' : f.relationship === 'strong' ? 'C-suite' : f.relationship === 'medium' ? 'Officer' : 'Director'}</span></span>
+                            <span className="ws-mrow__date">{shortDate(f.transactionDate || f.date)}</span>
+                          </div>
+                        </div>
+                      ) : (
                       <div className="ws-row__main ws-row__main--raw" style={{ cursor: 'pointer' }}
                         onClick={() => toggleRaw(i)}>
                         <div className="ws-row__cell">
@@ -3163,7 +3220,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                           </div>
                           {isMobile && <div className="ws-mob-sub" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, paddingLeft: 18 }}>{f.insiderName}</div>}
                         </div>
-                        {!isMobile && <div className="ws-row__cell ws-row__cell--overflow" style={{ fontSize: 12 }}>{f.insiderName}</div>}
+                        {!isMobile && <div className="ws-row__cell ws-row__cell--overflow" style={{ fontSize: 12 }}>{prettyPerson(f.insiderName, f.relationship === 'congress')}</div>}
                         <div className="ws-row__cell ws-row__cell--muted" style={{ fontSize: 11 }}>
                           {fmt.dateShort(f.transactionDate || f.date)}
                         </div>
@@ -3178,6 +3235,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                           <span className={`ws-data-mono${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(f.value)}</span>
                         </div>
                       </div>
+                      )}
 
                       {isExp && (
                         <div className="ws-row__detail" onClick={e => e.stopPropagation()}>
@@ -4799,7 +4857,7 @@ const HELP_SECTIONS = [
         <h3>Where does the data come from?</h3>
         <p>Every trade comes from a public government filing: SEC Form 4 for corporate insiders, and STOCK Act periodic transaction reports for Congress. Nothing is scraped from rumors or licensed from a third party.</p>
         <h3>How current is it?</h3>
-        <p>Seli checks for new filings throughout the trading day. A disclosure typically appears within minutes of becoming public. The date at the top of the app shows the newest filing Seli has.</p>
+        <p>Seli checks for new filings throughout the trading day. New filings usually show up the same day they're published. The newest filing date Seli has is in the account menu (your avatar, top right).</p>
         <h3>Is this financial advice?</h3>
         <p>No. Seli is informational and educational only. Every summary, score and alert is generated the same way for every user. Nothing is personalized to your holdings, goals or risk tolerance, even when you choose which stocks to watch. Nothing here is a recommendation to buy, sell or hold anything. See the <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
         <h3>Can Seli place trades for me?</h3>
@@ -5582,7 +5640,7 @@ const BLOG_ARTICLES = [
     read: '4 min read', date: 'Sep 2026' },
   { slug: 'form-4-dataset-csv', tag: 'Data', tagColor: null,
     title: 'The complete SEC Form 4 dataset: 10+ years, every insider trade, one download',
-    desc: 'Seli\'s CSV export contains every corporate insider trade and congressional stock disclosure from 2010 to present. 18 fields per transaction, split by year, linked to the original EDGAR filing. Built for quant researchers, data journalists, and anyone who needs the raw data.',
+    desc: 'Seli\'s CSV export contains every corporate insider trade and congressional stock disclosure from 2013 to present. 18 fields per transaction, split by year, linked to the original EDGAR filing. Built for quant researchers, data journalists, and anyone who needs the raw data.',
     read: '5 min read', date: 'Sep 2026' },
 ];
 
@@ -6838,7 +6896,7 @@ function routeFromLocation(loc = window.location) {
 }
 const PAGE_PATHS = { home: '/', dashboard: '/data', data: '/data', signals: '/leaderboard', leaderboard: '/leaderboard', watchlist: '/watchlist', settings: '/account', account: '/account' };
 const PAGE_TITLES = { home: 'Home', dashboard: 'Data', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
-const PUBLIC_PAGES = ['stock', 'insider', 'congress', 'insiderBuying'];
+const PUBLIC_PAGES = ['home', 'stock', 'insider', 'congress', 'insiderBuying', 'leaderboard'];
 const STANDALONE_PATHS = ['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/about', '/onboard'];
 
 import * as Sentry from '@sentry/react';
@@ -6887,11 +6945,12 @@ function AppInner() {
     }
   }, [route]);
   useEffect(() => {
-    if (PAGE_TITLES[route.page] && route.page !== 'home') document.title = `${PAGE_TITLES[route.page]} · Seli`;
+    // Signed-out pages set their own search-friendly titles.
+    if (isSignedIn && PAGE_TITLES[route.page] && route.page !== 'home') document.title = `${PAGE_TITLES[route.page]} · Seli`;
     // Canonical follows the page (useSEO only runs once, on first load).
     const link = document.querySelector('link[rel="canonical"]');
     if (link) link.href = 'https://seli.app' + (window.location.pathname === '/' ? '' : window.location.pathname);
-  }, [route]);
+  }, [route, isSignedIn]);
   const page = route.page;
   const isAboutPath = window.location.pathname === '/about';
 
@@ -7023,6 +7082,9 @@ function AppInner() {
     if (!isLoaded || !isSignedIn || !user?.id) return;
     const p = window.location.pathname;
     if (p === '/onboard' || window.location.search.includes('purchase=')) return;
+    // Just signed up from a public page to do something specific: let them
+    // finish that first. Onboarding can wait for the next visit.
+    if (peekIntent()) return;
     if (STANDALONE_PATHS.includes(p) || p.startsWith('/blog')) return;
     const flag = `seli_onboarded_${user.id}`;
     try { if (localStorage.getItem(flag)) return; } catch { }
@@ -7045,6 +7107,28 @@ function AppInner() {
     })();
     return () => { cancelled = true; };
   }, [isLoaded, isSignedIn, user?.id]);
+  // ── Finish what a visitor started before signing up ──────────────────
+  // Watch → add it (once the saved list has loaded) and confirm on screen.
+  // Go Pro → open checkout. They stay on the page they were on.
+  const [notice, setNotice] = useState(null);
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !watchlist.ready) return;
+    const intent = peekIntent();
+    if (!intent) return;
+    clearIntent();
+    if (intent.path && intent.path !== window.location.pathname) go(intent.path, { replace: true });
+    if (intent.kind === 'watch' && intent.id) {
+      const stock = intent.what === 'stock';
+      const has = stock ? watchlist.hasTicker(intent.id) : watchlist.hasInsider(intent.id);
+      if (!has) (stock ? watchlist.toggleTicker : watchlist.toggleInsider)(intent.id);
+      const label = stock ? intent.id : prettyPerson(intent.id);
+      setNotice(`${label} is on your watchlist. You'll get it in your weekly email.`);
+      setTimeout(() => setNotice(null), 6000);
+    } else if (intent.kind === 'upgrade' && !billingPro) {
+      setShowUpgradeModal('pro_direct');
+    }
+  }, [isLoaded, isSignedIn, watchlist.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function finishOnboarding() {
     try { if (user?.id) localStorage.setItem(`seli_onboarded_${user.id}`, '1'); } catch { }
     go('/', { replace: true });
@@ -7077,13 +7161,15 @@ function AppInner() {
   // visitors (and Google) get the read-only version straight away, including
   // while Clerk is still loading, so the server-rendered content isn't swapped
   // for a spinner or the landing page.
-  if (PUBLIC_PAGES.includes(route.page) && (!isLoaded || !isSignedIn)) {
+  if (PUBLIC_PAGES.includes(route.page) && (!isLoaded || !isSignedIn) && !isAboutPath) {
     return (
       <PublicShell page={route.page} logoSrc={logoSimple} isMobile={isMobileShell}>
-        {route.page === 'stock' && <StockPage key={route.ticker} ticker={route.ticker} watchlist={publicWatchlist} onUpgrade={publicWatchlist.signUp} publicMode />}
-        {route.page === 'insider' && <InsiderPage key={route.raw} raw={route.raw} watchlist={publicWatchlist} onUpgrade={publicWatchlist.signUp} publicMode />}
+        {route.page === 'stock' && <StockPage key={route.ticker} ticker={route.ticker} watchlist={publicWatchlist} onUpgrade={publicWatchlist.upgrade} publicMode />}
+        {route.page === 'insider' && <InsiderPage key={route.raw} raw={route.raw} watchlist={publicWatchlist} onUpgrade={publicWatchlist.upgrade} publicMode />}
         {route.page === 'congress' && <CongressPage />}
         {route.page === 'insiderBuying' && <InsiderBuyingPage watchlist={publicWatchlist} />}
+        {route.page === 'leaderboard' && <LeaderboardPage pro={false} onUpgrade={publicWatchlist.upgrade} publicMode />}
+        {route.page === 'home' && <PublicHome />}
       </PublicShell>
     );
   }
@@ -7131,6 +7217,7 @@ function AppInner() {
           </div>
         </div>
       )}
+      {notice && <div className="sx-toast" role="status"><Icon name="check" size={14} />{notice}</div>}
       <div className="ws-shell">
         <TopNav page={page} user={user} dark={dark} setDark={setDark} lastFilingDate={lastFilingDate} isDataStale={isDataStale} />
         <main className="ws-main" ref={mainRef}>

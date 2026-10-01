@@ -1,4 +1,9 @@
 User-agent: *
 Allow: /
+Disallow: /account
+Disallow: /watchlist
+Disallow: /onboard
+Disallow: /purchase-complete
+Disallow: /redownload
 
 Sitemap: https://seli.app/sitemap.xml

@@ -126,14 +126,19 @@ async function statusFor(ctx, tickers, windowDays) {
   tickers = [...new Set(tickers)].filter(t => TICKER_RE.test(t));
   if (!tickers.length) return {};
   const arr = sqlList(tickers, sqlVal);
-  const [rows, lastBuys, names] = await Promise.all([
+  // Detail rows only for the recent window (and Congress over the year, which
+  // is shown by name). Corporate 12-month totals are summed in SQL. A Pro
+  // watchlist of 100+ large caps used to pull every trade from the last year.
+  const congressSql = `(f.relationship = 'congress' OR f.transaction_code LIKE 'CONGRESS%')`;
+  const [rows, lastBuys, names, totals] = await Promise.all([
     ctx.db(`
       SELECT f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship, f.transaction_code,
              f.transaction_type, f.value::float AS value, f.pct_owned_change::float AS pct,
              f.accession_number, f.filing_date, COALESCE(f.transaction_date, f.filing_date) AS trade_date
         FROM public.filings f
        WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND f.transaction_type IN ('buy','sell')
-         AND f.filing_date <= CURRENT_DATE AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - 380`),
+         AND f.filing_date <= CURRENT_DATE AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - 380
+         AND (f.filing_date > CURRENT_DATE - ${Number(windowDays) + 1} OR ${congressSql})`),
     ctx.db(`
       SELECT DISTINCT ON (f.ticker) f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship,
              f.value::float AS value, COALESCE(f.transaction_date, f.filing_date) AS trade_date
@@ -145,10 +150,19 @@ async function statusFor(ctx, tickers, windowDays) {
     ctx.db(`
       SELECT DISTINCT ON (f.ticker) f.ticker, f.company_name FROM public.filings f
        WHERE f.ticker = ANY(${arr}) AND f.company_name IS NOT NULL ORDER BY f.ticker, f.filing_date DESC`),
+    ctx.db(`
+      SELECT f.ticker, f.transaction_type, COUNT(DISTINCT f.accession_number)::int AS n, COALESCE(SUM(f.value), 0)::float AS v
+        FROM public.filings f
+       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND f.transaction_type IN ('buy','sell')
+         AND f.filing_date <= CURRENT_DATE AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - 365
+         AND COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%'
+       GROUP BY f.ticker, f.transaction_type`),
   ]);
   const lb = Object.fromEntries(lastBuys.map(r => [r.ticker, r]));
   const nm = Object.fromEntries(names.map(r => [r.ticker, r.company_name]));
-  return tickerStatus(tickers, rows, lb, nm, windowDays);
+  const yt = {};
+  for (const r of totals) (yt[r.ticker] = yt[r.ticker] || {})[r.transaction_type] = { n: r.n, v: r.v };
+  return tickerStatus(tickers, rows, lb, nm, windowDays, undefined, yt);
 }
 
 function statusOut(s) {
@@ -372,7 +386,7 @@ async function loadWatchlist(ctx) {
 async function peopleActivity(ctx, names, days) {
   const { sqlVal } = ctx.deps;
   if (!names.length) return [];
-  const rows = await ctx.db(`
+  const [rows, last] = await Promise.all([ctx.db(`
     SELECT DISTINCT ON (f.insider_name, f.accession_number, f.ticker, f.transaction_type)
            f.accession_number, f.cik_issuer, f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship,
            f.transaction_code, f.transaction_type, f.is_open_market, f.is_routine, f.shares::float AS shares,
@@ -381,13 +395,13 @@ async function peopleActivity(ctx, names, days) {
       FROM public.filings f
      WHERE f.insider_name = ANY(${sqlList(names, sqlVal)}) AND f.is_open_market = true
        AND f.transaction_type IN ('buy','sell') AND f.filing_date > CURRENT_DATE - ${days}
-     ORDER BY f.insider_name, f.accession_number, f.ticker, f.transaction_type`);
-  const last = await ctx.db(`
+     ORDER BY f.insider_name, f.accession_number, f.ticker, f.transaction_type`),
+  ctx.db(`
     SELECT DISTINCT ON (f.insider_name) f.insider_name, f.insider_title, f.relationship, f.transaction_code, f.ticker,
            f.transaction_type, f.value::float AS value, COALESCE(f.transaction_date, f.filing_date) AS trade_date
       FROM public.filings f
      WHERE f.insider_name = ANY(${sqlList(names, sqlVal)}) AND f.transaction_type IN ('buy','sell') AND f.is_open_market = true
-     ORDER BY f.insider_name, COALESCE(f.transaction_date, f.filing_date) DESC`);
+     ORDER BY f.insider_name, COALESCE(f.transaction_date, f.filing_date) DESC`)]);
   const lastBy = Object.fromEntries(last.map(r => [r.insider_name, r]));
   return names.map(n => {
     const mine = rows.filter(r => r.insider_name === n).map(tradeOut).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -649,3 +663,7 @@ async function latest(ctx) {
   latestCache = { at: Date.now(), value: { latest_filing: asDate(rows[0]?.d) } };
   return latestCache.value;
 }
+
+// Shared with ./public.js (signed-out SEO pages), which calls these with a
+// context that has no user and the free-plan window.
+export { stock, insider, marketFeed, search, tradeOut, TICKER_RE, FREE_DAYS };

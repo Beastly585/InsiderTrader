@@ -45,6 +45,7 @@ import { verifyClerkWebhook } from './lib/clerk-webhook.js';
 import { encryptSecret, decryptSecret } from './lib/crypto.js';
 import { computeSignature } from './lib/snaptrade-sign.js';
 import { handleResearch } from './lib/research.js';
+import { handlePublic } from './lib/public.js';
 import * as Sentry from '@sentry/cloudflare';
 // ── Streaming ZIP writer — Archive Utility compatible ─────────────────────
 // Streams each file directly from R2 without buffering the entire file in
@@ -287,9 +288,9 @@ const ALLOWED_ORIGINS = new Set([
   'https://www.seli.app',
   'https://seli-dgu.pages.dev',
   'https://beastly585.github.io',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
 ]);
+// Local development: add 'http://localhost:5173' back above if you run the
+// site locally against the production Worker.
 // Cloudflare Pages preview builds (<hash>.seli-dgu.pages.dev) count as ours too,
 // so a preview deploy can sign in without being added here by hand.
 const isAllowedOrigin = o => !!o && (ALLOWED_ORIGINS.has(o) || /^https:\/\/[a-z0-9-]+\.seli-dgu\.pages\.dev$/.test(o));
@@ -475,7 +476,9 @@ async function handleFetchInner(request, env, origin, ctx) {
     // the route dispatch even happens, so the route's own "no auth required"
     // design never mattered — every request to it was rejected here first,
     // before ever reaching handlePublicDataStats. That's what caused the 401.
-    if ((env.WORKER_API_KEY || env.CLERK_JWKS_URL) && url.pathname !== '/public/data-stats') {
+    // Everything under /public/ is signed-out by design: data-stats for the
+    // landing page, and the read-only SEO pages (worker/lib/research.js).
+    if ((env.WORKER_API_KEY || env.CLERK_JWKS_URL) && !url.pathname.startsWith('/public/')) {
       const authHeader  = request.headers.get('Authorization') || '';
       const apiKey      = request.headers.get('X-API-Key') || '';
 
@@ -524,7 +527,12 @@ async function handleFetchInner(request, env, origin, ctx) {
     //   namespace_id = "1001"
     //   simple = { limit = 600, period = 60 }
     //
-    if (env.RATE_LIMITER) {
+    // The site's own page renderer (functions/, edge/seo.js) calls in from
+    // Cloudflare's network, so every visitor and crawler would share one IP
+    // bucket. It proves itself with EDGE_KEY and skips the limit; its results
+    // are cached anyway.
+    const fromEdge = env.EDGE_KEY && request.headers.get('X-Seli-Edge') === env.EDGE_KEY;
+    if (env.RATE_LIMITER && !fromEdge) {
       const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
       try {
         const { success } = await env.RATE_LIMITER.limit({ key: ip });
@@ -537,6 +545,13 @@ async function handleFetchInner(request, env, origin, ctx) {
         // an infra hiccup into an outage.
         console.error('[Worker] Rate limiter check failed, allowing request:', e.message);
       }
+    }
+
+    // ── Public, signed-out pages: stock, insider, Congress and insider-buying
+    // views plus sitemaps. Read-only, free-plan window, cached. Used by the
+    // site's Pages Functions (what Google sees) and signed-out visitors.
+    if (url.pathname.startsWith('/public/') && url.pathname !== '/public/data-stats') {
+      return handlePublic(request, env, origin, url, { corsHeaders, neonFetch, sqlVal });
     }
 
     // ── Billing routes ───────────────────────────────────────────────────
@@ -622,8 +637,10 @@ async function handleFetchInner(request, env, origin, ctx) {
     // signed in, Pro or not, purchased or not, could replay the exact same
     // request directly and get it for free. This route is the actual gate:
     // it runs before any query executes, not after.
-    if (url.pathname === '/export') {
-      return handleExport(request, env, origin);
+    // /export and /export/snapshot took client-supplied SELECT columns and a
+    // WHERE clause. The app no longer uses them, so they're switched off.
+    if (url.pathname === '/export' || url.pathname === '/export/snapshot') {
+      return corsResponse({ error: 'Gone' }, 410, origin, env);
     }
     // Snapshot-based export — serves nearly all of a large export from a
     // pre-built R2 file instead of pulling millions of rows live through
@@ -1268,8 +1285,11 @@ async function checkIngestionHealth(env) {
   const result = await neonFetch(env,
     `SELECT MAX(filing_date) AS last_filing FROM public.filings`
   );
-  const lastFiling = result?.[0]?.last_filing;
-  if (!lastFiling) return;
+  // neonFetch returns { rows }. This used to read result[0], which is always
+  // undefined, so the alert could never fire.
+  const raw = result?.rows?.[0]?.last_filing;
+  if (!raw) return;
+  const lastFiling = String(raw).slice(0, 10);
 
   const lastDate = new Date(lastFiling + 'T12:00:00');
   const hoursSince = (Date.now() - lastDate.getTime()) / (1000 * 60 * 60);
@@ -1319,6 +1339,19 @@ async function checkIngestionHealth(env) {
 // Creates a Stripe Checkout Session for the $39.99 data export. Stripe
 // collects the email and payment. On success, redirects to the app's
 // /purchase-complete page with the session_id.
+// True when a guest order's charge was refunded (fully or partly) or disputed.
+async function guestOrderRevoked(stripe, paymentIntentId) {
+  if (!paymentIntentId || String(paymentIntentId).startsWith('cs_')) return false; // $0 promo orders have no charge
+  try {
+    const charges = await stripe.charges.list({ payment_intent: paymentIntentId, limit: 1 });
+    const c = charges.data[0];
+    return !!(c && (c.refunded || c.amount_refunded > 0 || c.disputed));
+  } catch (e) {
+    console.error('[Guest CSV] refund check failed, allowing:', e.message);
+    return false;
+  }
+}
+
 async function handleGuestCSVCheckout(request, env, origin) {
   try {
     const Stripe = (await import("stripe")).default;
@@ -1380,7 +1413,12 @@ async function handleGuestCSVDownload(request, env, origin, ctx) {
         // Send confirmation email on first info_only call (i.e. when the user
         // first lands on /purchase-complete). Idempotent: Stripe session ID
         // is unique, so even if called twice the email is the same content.
-        if (customerEmail && env.RESEND_API_KEY) {
+        // Once per order: this runs on every visit to /purchase-complete, and
+        // anyone holding the link could otherwise trigger repeat emails.
+        const emailedKey = `csv-export/emailed/${body.session_id}`;
+        const alreadyEmailed = await env.EXPORT_SNAPSHOTS.head(emailedKey).catch(() => null);
+        if (customerEmail && env.RESEND_API_KEY && !alreadyEmailed && !(await guestOrderRevoked(stripe, session.payment_intent))) {
+          ctx?.waitUntil?.(env.EXPORT_SNAPSHOTS.put(emailedKey, new Date().toISOString()).catch(() => {}));
           fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -1459,15 +1497,22 @@ async function handleGuestCSVDownload(request, env, origin, ctx) {
       return corsResponse({ error: 'Missing session_id or order_id+email' }, 400, origin, env);
     }
 
-    // Serve the pre-built ZIP directly from R2.
-    const zipObj = await env.EXPORT_SNAPSHOTS.get('csv-export/full-export.zip');
+    // Refunded or disputed orders lose download access, same as signed-in
+    // purchases (the webhook only revokes those; guest orders live in Stripe).
+    if (await guestOrderRevoked(stripe, paymentIntent)) {
+      return corsResponse({ error: 'This order was refunded or disputed, so the download is no longer available.' }, 403, origin, env);
+    }
+    // Re-downloads serve the copy frozen at the first download, as the
+    // receipt promises. (This used to re-copy the latest ZIP over the frozen
+    // one on every download, so buyers got fresh data forever.)
+    const frozenKey = paymentIntent ? `csv-export/purchases/${paymentIntent}.zip` : null;
+    let zipObj = frozenKey ? await env.EXPORT_SNAPSHOTS.get(frozenKey) : null;
+    const firstDownload = !zipObj;
+    if (!zipObj) zipObj = await env.EXPORT_SNAPSHOTS.get('csv-export/full-export.zip');
     if (!zipObj) {
       return corsResponse({ error: 'Export is being prepared — try again in a few minutes.' }, 503, origin, env);
     }
-
-    // Freeze a snapshot for this purchase in the background — future
-    // redownloads serve this frozen copy instead of the latest data.
-    if (paymentIntent && ctx) {
+    if (firstDownload && paymentIntent && ctx) {
       ctx.waitUntil(
         copyR2Object(env, 'csv-export/full-export.zip', `csv-export/purchases/${paymentIntent}.zip`)
           .then(ok => ok && console.log(`[Guest CSV] Frozen snapshot for ${paymentIntent}`))
@@ -3363,7 +3408,10 @@ async function handlePortfolioTickersBatch(request, env, origin) {
 async function handlePublicDataStats(request, env, origin) {
   try {
     const result = await neonFetch(env,
-      `SELECT MIN(COALESCE(transaction_date, filing_date)) AS oldest FROM public.filings`
+      // Same floor the Data page and stock pages use, so every "since YEAR"
+      // in the app matches what Pro can actually open (a few rows with typo'd
+      // dates from decades ago used to drag this back).
+      `SELECT MIN(COALESCE(transaction_date, filing_date)) AS oldest FROM public.filings WHERE COALESCE(transaction_date, filing_date) >= DATE '2013-01-01'`
     );
     const oldest = result.rows?.[0]?.oldest || null;
     // Onboarding's welcome step reads these. Counts come from the search

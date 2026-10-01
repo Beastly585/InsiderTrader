@@ -68,6 +68,25 @@ if (typeof window !== 'undefined' && window.__SELI_PREFETCH__) {
 }
 export function clearApiCache(prefix = '') { for (const k of cache.keys()) if (k.startsWith(prefix)) cache.delete(k); }
 
+// The first year of data Seli has (Pro sees everything since then). One
+// lookup per page load, shared by every "since YEAR" in the app.
+let sincePromise = null;
+export function useDataSinceYear() {
+  const [year, setYear] = useState(null);
+  useEffect(() => {
+    if (!sincePromise) {
+      sincePromise = api('/public/data-stats').then(d => {
+        const y = d?.oldest_filing_date ? Number(String(d.oldest_filing_date).slice(0, 4)) : null;
+        return y && y > 2000 && y <= new Date().getFullYear() ? y : null;
+      }).catch(() => null);
+    }
+    let live = true;
+    sincePromise.then(y => { if (live) setYear(y); });
+    return () => { live = false; };
+  }, []);
+  return year;
+}
+
 export function useApi(path) {
   const [state, setState] = useState(() => ({ data: path ? cache.get(path) ?? null : null, error: null, loading: !!path }));
   const seq = useRef(0);

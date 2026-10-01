@@ -192,7 +192,7 @@ async function stock(ctx, ticker) {
              f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
              f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date
         FROM public.filings f
-       WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} >= CURRENT_DATE - 3650
+       WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} >= DATE '2013-01-01'
        ORDER BY ${date} DESC, f.value DESC NULLS LAST LIMIT 400`),
     ctx.db(`
       SELECT COUNT(*)::int AS n FROM public.filings f
@@ -241,7 +241,7 @@ async function stock(ctx, ticker) {
   const last = prices[prices.length - 1];
   const s = status[ticker];
   return {
-    ticker, known: true, pro, window_days: pro ? 3650 : FREE_DAYS, older_count: pro ? 0 : num(older[0]?.n) || 0,
+    ticker, known: true, pro, window_days: pro ? null : FREE_DAYS, older_count: pro ? 0 : num(older[0]?.n) || 0,
     company: prettyCompany(meta[0].company_name) || ticker, sector: meta[0].sector || null, cik: meta[0].cik_issuer || null,
     price: last ? { close: num(last.close), date: asDate(last.date) } : null,
     prices: prices.map(p => [asDate(p.date), num(p.close)]),
@@ -636,6 +636,7 @@ async function buildLeaderboard(ctx, years, source) {
     return {
       raw: r.insider_name, name: prettyPerson(r.insider_name, !!r.is_congress),
       title: /^unknown$/i.test(r.insider_title || '') ? '' : (r.insider_title || ''), congress: !!r.is_congress,
+      role: r.is_congress ? 'Congress' : shortRole(r.insider_title, null),
       tickers: r.tickers || [], om_buys: omBuys, bought: num(r.bought_value) || 0,
       scored, priced: num(r.priced) || 0, hit_rate: num(r.priced) ? Math.round(num(r.wins) / num(r.priced) * 100) : null,
       avg_return: avgRet, avg_spy: spy, excess,
@@ -663,3 +664,7 @@ async function latest(ctx) {
   latestCache = { at: Date.now(), value: { latest_filing: asDate(rows[0]?.d) } };
   return latestCache.value;
 }
+
+// Shared with ./public.js (signed-out SEO pages), which calls these with a
+// context that has no user and the free-plan window.
+export { stock, insider, marketFeed, search, leaderboard, tradeOut, TICKER_RE, FREE_DAYS };

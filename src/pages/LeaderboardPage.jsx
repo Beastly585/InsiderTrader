@@ -11,15 +11,73 @@ import { money, pct, plural } from '../lib/text.js';
 import { Card, Segmented, Skeleton, ErrorNote, Gate, Chip } from '../components/ui.jsx';
 
 const LIST = { rank: 'ranked', hit: 'by_hit', ret: 'by_return', buys: 'by_buying' };
+const signed = (v, d = 1) => `${v >= 0 ? '+' : ''}${Number(v).toFixed(d)}`;
+const roleOf = r => (r.congress ? 'Congress' : r.role || (/^unknown$/i.test(r.title || '') ? '' : r.title) || 'Insider');
 
-export default function LeaderboardPage({ pro, onUpgrade }) {
+// The number a row is ranked by, so the list always leads with it.
+function headline(r, sort) {
+  if (sort === 'hit') return { value: r.hit_rate != null ? `${r.hit_rate}%` : '—', label: 'hit rate', tone: r.hit_rate >= 50 ? 'sx-up' : 'sx-down' };
+  if (sort === 'ret') return { value: r.avg_return != null ? `${signed(r.avg_return, 0)}%` : '—', label: 'avg since buy', tone: r.avg_return >= 0 ? 'sx-up' : 'sx-down' };
+  if (sort === 'buys') return { value: money(r.bought), label: 'bought', tone: '' };
+  return { value: r.excess != null ? `${signed(r.excess, 0)} pts` : '—', label: 'vs S&P 500', tone: r.excess == null ? 'sx-muted' : r.excess >= 0 ? 'sx-up' : 'sx-down' };
+}
+
+function useNarrow(px = 640) {
+  const q = `(max-width: ${px}px)`;
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setNarrow(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, [q]);
+  return narrow;
+}
+
+// Phone layout: one card-like row per person, ranked number on the right.
+function LeaderList({ rows, sort }) {
+  return (
+    <ol className="sx-lb">
+      {rows.map(r => {
+        const h = headline(r, sort);
+        // One short line of context, minus whatever the big number already says.
+        const bits = [
+          plural(r.priced || r.om_buys || 0, 'buy'),
+          sort !== 'hit' && r.hit_rate != null ? `${r.hit_rate}% hit` : null,
+          sort !== 'ret' && r.avg_return != null ? `avg ${signed(r.avg_return, 0)}%` : null,
+          sort === 'buys' && r.excess != null ? `${signed(r.excess, 0)} pts vs S&P` : null,
+        ].filter(Boolean);
+        return (
+          <li key={r.raw} className="sx-lb__row">
+            <div className="sx-lb__main">
+              <InsiderLink raw={r.raw} className="sx-lb__name">{r.name}</InsiderLink>
+              <div className="sx-lb__who">
+                {r.congress ? <Chip tone="accent">Congress</Chip> : <span>{roleOf(r)}</span>}
+                {(r.tickers || []).slice(0, 2).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
+              </div>
+              <div className="sx-lb__stats">{bits.join(' · ')}</div>
+            </div>
+            <div className="sx-lb__num">
+              <span className={`sx-lb__val ${h.tone}`}>{h.value}</span>
+              <span className="sx-lb__lbl">{h.label}</span>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+
+export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) {
   const [years, setYears] = useState(pro ? 2 : 1);
   const [source, setSource] = useState('all');
   const [sort, setSort] = useState('rank');
-  useEffect(() => { document.title = 'Insider leaderboard · Seli'; }, []);
+  useEffect(() => { document.title = publicMode ? 'Best Insider Traders: Leaderboard of Insider Buying Track Records | Seli' : 'Insider leaderboard · Seli'; }, [publicMode]);
   useEffect(() => { if (!pro && years !== 1) setYears(1); }, [pro]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { data, error, loading } = useApi(`/api/leaderboard?years=${years}&source=${source}`);
+  const narrow = useNarrow();
+  const { data, error, loading } = useApi(`/${publicMode ? 'public' : 'api'}/leaderboard?years=${years}&source=${source}`);
   const visible = data ? data[LIST[sort]] || [] : null;
   const rules = data?.rules || { min_scored: 3, min_avg_buy: 25000 };
   const total = data?.total ?? 0;
@@ -50,7 +108,8 @@ export default function LeaderboardPage({ pro, onUpgrade }) {
         {visible && !visible.length && !loading && (
           <div className="sx-empty"><div className="sx-empty__body">Nobody has {rules.min_scored} or more scored open-market buys in this window yet. Try a longer window or a different group.</div></div>
         )}
-        {visible && visible.length > 0 && (
+        {visible && visible.length > 0 && narrow && <div className={loading ? 'sx-dim' : ''}><LeaderList rows={visible} sort={sort} /></div>}
+        {visible && visible.length > 0 && !narrow && (
           <div className={`sx-table-wrap${loading ? ' sx-dim' : ''}`}>
             <table className="sx-table sx-table--lb">
               <thead>
@@ -58,7 +117,7 @@ export default function LeaderboardPage({ pro, onUpgrade }) {
                   <th>Insider</th>
                   <th className="sx-r">Hit rate</th>
                   <th className="sx-r sx-hide-sm">Avg since buy</th>
-                  <th className="sx-r">vs S&amp;P</th>
+                  <th className="sx-r">vs S&amp;P 500</th>
                   <th className="sx-r sx-hide-sm">Bought</th>
                 </tr>
               </thead>
@@ -70,8 +129,8 @@ export default function LeaderboardPage({ pro, onUpgrade }) {
                       <td className="sx-table__who">
                         <InsiderLink raw={r.raw}>{r.name}</InsiderLink>
                         <span className="sx-table__role">
-                          {r.congress ? <Chip tone="accent">Congress</Chip> : r.title}
-                          {(r.tickers || []).slice(0, 2).map(t => <StockLink key={t} ticker={t} className="sx-ml" />)}
+                          {r.congress ? <Chip tone="accent">Congress</Chip> : roleOf(r)}
+                          {(r.tickers || []).slice(0, 3).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
                         </span>
                       </td>
                       <td className="sx-r sx-mono">{r.hit_rate != null ? `${r.hit_rate}%` : '—'}<span className="sx-n">{r.priced ? plural(r.priced, 'buy') : ''}</span></td>

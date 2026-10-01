@@ -1,0 +1,25 @@
+{
+  "builtThrough": "2026-09-03",
+  "totalRows": 0,
+  "years": [
+    {"year": "2010", "totalRows": 0},
+    {"year": "2011", "totalRows": 0},
+    {"year": "2012", "totalRows": 0},
+    {"year": "2013", "totalRows": 0},
+    {"year": "2014", "totalRows": 0},
+    {"year": "2015", "totalRows": 0},
+    {"year": "2016", "totalRows": 0},
+    {"year": "2017", "totalRows": 0},
+    {"year": "2018", "totalRows": 0},
+    {"year": "2019", "totalRows": 0},
+    {"year": "2020", "totalRows": 0},
+    {"year": "2021", "totalRows": 0},
+    {"year": "2022", "totalRows": 0},
+    {"year": "2023", "totalRows": 0},
+    {"year": "2024", "totalRows": 0},
+    {"year": "2025", "totalRows": 0},
+    {"year": "2026", "totalRows": 0}
+  ],
+  "undatedRows": 0,
+  "updatedAt": "2026-09-03T00:00:00.000Z"
+}
