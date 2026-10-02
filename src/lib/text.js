@@ -155,13 +155,16 @@ export function prettyCompany(name) {
 }
 
 const PARTICLES = new Set(['van', 'von', 'de', 'der', 'den', 'del', 'della', 'da', 'di', 'du', 'la', 'le', 'st', 'st.', 'bin', 'al', 'el', 'ten', 'ter']);
+const HONORIFICS = new Set(['dr', 'hon', 'honorable', 'mr', 'mrs', 'ms']);
 export function prettyPerson(name, isCongress = false) {
   if (!name) return '';
   const s = String(name).replace(/,/g, ' ').split(/\s+/).filter(Boolean).join(' ');
   const allCaps = s === s.toUpperCase();
   const words = s.split(' ');
   const fix = allCaps ? titleWord : (w => w);
-  if (isCongress || ENTITY_RE.test(s) || words.length < 2 || words.length > 6) return words.map(fix).join(' ');
+  // House names arrive with honorifics mixed in ("Richard Dean Dr McCormick").
+  if (isCongress) return words.filter(w => !HONORIFICS.has(w.replace(/\./g, '').toLowerCase())).map(fix).join(' ');
+  if (ENTITY_RE.test(s) || words.length < 2 || words.length > 6) return words.map(fix).join(' ');
   const strip = w => w.replace(/\./g, '').toUpperCase();
   const suffix = words.filter(w => SUFFIXES.has(strip(w)));
   let core = words.filter(w => !SUFFIXES.has(strip(w)));
