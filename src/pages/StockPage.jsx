@@ -185,7 +185,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
             return (
               <tr key={`${t.acc}:${i}`} className={t.om ? '' : 'sx-table__muted'}>
                 <td className="sx-nowrap">{shortDate(t.date)}</td>
-                {showTicker && <td>{t.ticker ? <StockLink ticker={t.ticker} /> : '—'}</td>}
+                {showTicker && <td>{t.ticker ? <StockLink ticker={t.ticker} /> : <span className="sx-asset" title={t.company || ''}>{t.company || 'Other asset'}</span>}</td>}
                 {showInsider && (
                   <td className="sx-table__who">
                     <InsiderLink raw={t.raw}>{t.name}</InsiderLink>

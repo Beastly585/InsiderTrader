@@ -122,7 +122,11 @@ async function congressHub(ctx) {
              f.shares_owned_after::float AS owned_after, f.filing_date, ${DATE} AS trade_date
         FROM public.filings f
        WHERE ${CONGRESS} AND f.transaction_type IN ('buy','sell') AND f.filing_date <= CURRENT_DATE
-       ORDER BY f.filing_date DESC, ${DATE} DESC
+         -- Stock trades only: disclosures without a ticker are bonds, funds
+         -- and other assets that don't belong on a stock page.
+         AND f.ticker IS NOT NULL AND f.ticker <> ''
+         AND ${DATE} <= CURRENT_DATE AND f.filing_date > CURRENT_DATE - 120
+       ORDER BY ${DATE} DESC, f.filing_date DESC
        LIMIT 60`),
     ctx.db(`
       SELECT f.ticker, MAX(f.company_name) AS company_name,

@@ -191,7 +191,7 @@ VALUES ({", ".join(["%s"]*len(COLUMNS))})
 ON CONFLICT (accession_number, COALESCE(transaction_date, '1900-01-01'::date), COALESCE(shares, -1), transaction_code)
 DO UPDATE SET
     company_name           = EXCLUDED.company_name,
-    ticker                 = EXCLUDED.ticker,
+    ticker                 = COALESCE(EXCLUDED.ticker, public.filings.ticker),  -- never blank out a ticker the backfill filled in
     insider_name           = EXCLUDED.insider_name,
     insider_title          = EXCLUDED.insider_title,
     transaction_type       = EXCLUDED.transaction_type,
@@ -244,13 +244,16 @@ TX_RE = re.compile(
     r'\s+(\$[\d,]+(?:\s*-\s*\$[\d,]+|\+)?)',
     re.IGNORECASE
 )
-TICKER_RE = re.compile(r'\(([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\)')
+# House PDFs extract some capitals as lowercase (l, u, g, o): "(AAPl)", "(RuN)",
+# "(XoM)", "(gE)". Accept those four in a ticker and uppercase the result.
+TICKER_RE = re.compile(r'\(([A-Zlugo]{1,5}(?:\.[A-Za-z]{1,2})?)\)')
+OWNER_RE  = re.compile(r'^(SP|JT|DC)\s+')
 # Words that legitimately show up in these parenthetical spots on disclosure
 # PDFs when there's no applicable ticker (e.g. "(NONE)" for a non-traded
 # asset) — all of them happen to also be valid 1-5 letter uppercase matches
 # for TICKER_RE above, so without this list they'd silently get stored as
 # if they were real ticker symbols.
-TICKER_BLOCKLIST = {'NONE','NULL','NA','TBD','VOID'}
+TICKER_BLOCKLIST = {'NONE','NULL','NA','TBD','VOID','FULL','ADR','ADS','LP','LLC','INC','PLC','PFD','ETF','NEW'}
 NOISE_RE  = re.compile(
     r'^(ID\s+Owner|S\s+O:|D:|F\s+S:|L:|Filing ID|Clerk of|Name:|Status:|State/|'
     r'ID\s+|Amendment|Page\s+\d|PTR\s*$|\s*$)',
@@ -299,18 +302,34 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
         if not tx_date:
             continue
 
+        # Owner column (SP = spouse, JT = joint, DC = child) sits in front of the asset.
+        owner_m = OWNER_RE.match(asset_raw)
+        owner   = owner_m.group(1) if owner_m else None
+        if owner_m:
+            asset_raw = asset_raw[owner_m.end():]
+
         ticker_m = TICKER_RE.search(asset_raw)
-        ticker   = ticker_m.group(1) if ticker_m else None
+        ticker   = ticker_m.group(1).upper() if ticker_m else None
 
-        if not ticker and i < len(all_lines):
-            next_line = all_lines[i].strip().replace('\x00','')
-            ticker_m2 = TICKER_RE.match(next_line)
+        # Long asset names wrap, and the ticker lands on the next line or two,
+        # usually after the rest of the name: "Stock (MSFT) [ST]". Search (not
+        # match) those lines, and stop at the next trade or a detail line.
+        j = i
+        while not ticker and j < min(i + 2, len(all_lines)):
+            nxt = all_lines[j].strip().replace('\x00', '')
+            if not nxt or TX_RE.match(nxt) or NOISE_RE.match(nxt) or re.match(r'^[A-Z]{1,2}\s*:', nxt):
+                break
+            ticker_m2 = TICKER_RE.search(nxt)
+            asset_raw = asset_raw + " " + nxt
+            j += 1
             if ticker_m2:
-                ticker = ticker_m2.group(1)
-                asset_raw = asset_raw + " " + next_line
-                i += 1
+                ticker = ticker_m2.group(1).upper()
+                i = j
+        if not ticker:
+            asset_raw = m.group(1).strip()
+            if owner_m: asset_raw = asset_raw[owner_m.end():]
 
-        asset = re.sub(r'\s*\([A-Z./]{1,7}\)\s*', ' ', asset_raw).strip()
+        asset = re.sub(r'\s*\([A-Za-z./]{1,7}\)\s*', ' ', asset_raw).strip()
         asset = re.sub(r'\s*\[(ST|OT|OP|DC)\]\s*$', '', asset).strip()
         asset = re.sub(r'\s+', ' ', asset).strip()
 
@@ -329,6 +348,7 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
         accession   = f"house-{doc_id}-{ticker_safe}-{tx_date}-{tc}"
 
         fn_parts = [f"Amount: {amount}"]
+        if owner: fn_parts.append(f"Owner: {owner}")
         trades.append(CongressTrade(
             accession_number  = accession,
             cik               = f"house-{member_slug(member)}",
@@ -406,10 +426,13 @@ def fetch_house(from_date: date, to_date: date,
 
     from_iso = from_date.isoformat()
     to_iso   = to_date.isoformat()
+    # PTRs already in the DB are skipped whole. Built once (it used to be rebuilt
+    # for every index entry) and compared exactly, not by prefix.
+    done_docs = {a.split("-")[1] for a in existing if a.startswith("house-")}
     relevant = [
         f for f in all_index
         if f.get("filed") and from_iso <= f["filed"] <= to_iso
-        and f"house-{f['doc_id']}" not in {a[:len(f'house-{f["doc_id"]}')] for a in existing}
+        and f["doc_id"] not in done_docs
     ]
     log.info(f"  House: {len(relevant)}/{len(all_index)} PTRs in date range")
 

@@ -153,7 +153,7 @@ export function CongressPage() {
       {!d && !error && <><Card><Skeleton lines={6} /></Card><Card><Skeleton lines={4} /></Card></>}
       {d && (
         <>
-          <Card title="Latest disclosures" sub="Newest filings first" pad={false}>
+          <Card title="Latest disclosures" sub="Stock trades, most recent first" pad={false}>
             <TradeTable trades={(d.recent || []).slice(0, 30)} showTicker />
           </Card>
           <div className="sx-feed-cols">
@@ -229,10 +229,10 @@ export function PublicHome() {
   useEffect(() => { document.title = 'Seli: Insider Trading & Congress Stock Trades Tracker'; }, []);
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
   const goPro = () => openSignUp(clerk, { kind: 'upgrade' });
-  const clusters = [buying?.featured, ...(buying?.more || [])].filter(Boolean).slice(0, 6);
+  const clusters = [buying?.featured, ...(buying?.more || [])].filter(Boolean).slice(0, 9);
 
   return (
-    <div className="sx-page sx-page--feed">
+    <div className="sx-page sx-page--feed sx-home">
       <section className="sx-hero">
         <p className="sx-hero__eyebrow">Insider trading &amp; Congress stock tracker</p>
         <h1 className="sx-hero__title">See what executives and members of Congress are buying with their own money.</h1>
@@ -266,7 +266,7 @@ export function PublicHome() {
           )}
         </Card>
         <div className="sx-feed-stack">
-          <Card title="Latest from Congress" sub="STOCK Act disclosures, newest first" pad={false}
+          <Card title="Latest from Congress" sub="STOCK Act disclosures, most recent trades" pad={false}
             action={<a href="/congress" className="sx-link" onClick={navClick('/congress')}>See all <Icon name="arrow" size={12} /></a>}>
             {!congress ? <div className="sx-card__body"><Skeleton lines={4} /></div> : (
               <ul className="sx-rows">
