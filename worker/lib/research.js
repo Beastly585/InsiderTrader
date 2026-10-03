@@ -568,7 +568,13 @@ async function leaderboard(ctx, url) {
   if (hit && Date.now() - hit.at < LB_TTL_MS) data = hit.data;
   else if (hit?.promise) data = await hit.promise;
   else {
-    const promise = buildLeaderboard(ctx, years, source);
+    // Memory first, then the copy the daily cron saved to R2, and only then
+    // the live query (5-10s). Fresh Worker instances start with empty memory,
+    // so without R2 a visitor would often wait on the full rebuild.
+    const promise = lbStored(ctx.env, key).then(saved => saved || buildLeaderboard(ctx, years, source).then(d => {
+      lbSave(ctx.env, key, d); // so the next fresh instance doesn't rebuild either
+      return d;
+    }));
     lbCache.set(key, { at: 0, promise });
     try { data = await promise; lbCache.set(key, { at: Date.now(), data }); }
     catch (e) { lbCache.delete(key); throw e; }
@@ -584,6 +590,51 @@ async function leaderboard(ctx, url) {
     by_return: data.by_return.slice(0, pro ? 200 : FREE_ROWS),
     by_buying: data.by_buying.slice(0, pro ? 200 : FREE_ROWS),
   };
+}
+
+// ── Saved leaderboards (R2) ──────────────────────────────────────────────────
+// Prices update once a day, so the board does too. The 6am cron rebuilds every
+// version (refreshLeaderboards) and saves them; requests read the saved copy.
+const LB_KEYS = [1, 2, 5].flatMap(y => ['all', 'corporate', 'congress'].map(s => [y, s]));
+const LB_STALE_MS = 26 * 3600 * 1000; // a missed cron run falls back to a live build
+const lbPath = key => `_internal/leaderboard/${key.replace('|', '-')}.json`;
+
+async function lbStored(env, key) {
+  const bucket = env?.EXPORT_SNAPSHOTS;
+  if (!bucket) return null;
+  try {
+    const obj = await bucket.get(lbPath(key));
+    if (!obj) return null;
+    const data = await obj.json();
+    if (!data?.generated_at || Date.now() - Date.parse(data.generated_at) > LB_STALE_MS) return null;
+    return data;
+  } catch { return null; }
+}
+
+function lbSave(env, key, data) {
+  const bucket = env?.EXPORT_SNAPSHOTS;
+  if (!bucket) return Promise.resolve();
+  return bucket.put(lbPath(key), JSON.stringify(data), { httpMetadata: { contentType: 'application/json' } })
+    .catch(e => console.error('[leaderboard] save failed', key, e.message));
+}
+
+// Called from the daily cron. One version at a time so Neon isn't hit with
+// nine heavy queries at once.
+async function refreshLeaderboards(env, neonFetch, sqlVal) {
+  const ctx = { env, userId: null, isPro: async () => false, deps: { sqlVal }, db: q => neonFetch(env, q).then(r => r.rows || []) };
+  let ok = 0;
+  for (const [years, source] of LB_KEYS) {
+    const key = `${years}|${source}`;
+    try {
+      const data = await buildLeaderboard(ctx, years, source);
+      await lbSave(env, key, data);
+      lbCache.set(key, { at: Date.now(), data });
+      ok++;
+    } catch (e) {
+      console.error('[leaderboard] rebuild failed', key, e.message);
+    }
+  }
+  return { ok, total: LB_KEYS.length };
 }
 
 async function buildLeaderboard(ctx, years, source) {
@@ -668,4 +719,4 @@ async function latest(ctx) {
 
 // Shared with ./public.js (signed-out SEO pages), which calls these with a
 // context that has no user and the free-plan window.
-export { stock, insider, marketFeed, search, leaderboard, tradeOut, TICKER_RE, FREE_DAYS };
+export { stock, insider, marketFeed, search, leaderboard, refreshLeaderboards, tradeOut, TICKER_RE, FREE_DAYS };

@@ -44,7 +44,7 @@ import { sqlVal } from './lib/sql.js';
 import { verifyClerkWebhook } from './lib/clerk-webhook.js';
 import { encryptSecret, decryptSecret } from './lib/crypto.js';
 import { computeSignature } from './lib/snaptrade-sign.js';
-import { handleResearch } from './lib/research.js';
+import { handleResearch, refreshLeaderboards } from './lib/research.js';
 import { handlePublic } from './lib/public.js';
 import * as Sentry from '@sentry/cloudflare';
 // ── Streaming ZIP writer — Archive Utility compatible ─────────────────────
@@ -366,6 +366,14 @@ const workerHandler = {
       console.log('[Scheduled] search_entities refreshed');
     } catch (e) {
       console.error('[Scheduled] search_entities refresh failed:', e.message);
+    }
+    // Rebuild and save every leaderboard version so visitors read a saved copy
+    // instead of waiting 5-10s on the live query.
+    try {
+      const lb = await refreshLeaderboards(env, neonFetch, sqlVal);
+      console.log('[Scheduled] leaderboards rebuilt:', JSON.stringify(lb));
+    } catch (e) {
+      console.error('[Scheduled] leaderboard rebuild threw:', e.message);
     }
     try {
       const pruned = await prunePortfolioLinks(env);
