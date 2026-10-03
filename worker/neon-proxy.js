@@ -380,6 +380,11 @@ const workerHandler = {
     } catch (e) {
       console.error('[Scheduled] ingestion health check threw:', String(e), e?.stack?.slice(0, 500));
     }
+    try {
+      await checkCongressHealth(env);
+    } catch (e) {
+      console.error('[Scheduled] congress health check threw:', String(e));
+    }
     console.log('[Scheduled] tick done');
   },
 
@@ -1333,6 +1338,47 @@ async function checkIngestionHealth(env) {
     } catch {}
   }
   console.log(`[IngestionHealth] Alert sent — last filing ${lastFiling}, ${daysSince} days ago`);
+}
+
+// Same idea for fetch_political_trades.py. The check above can't catch a
+// broken Congress import, because Form 4s keep the overall newest date fresh.
+// Members file every few days, so 10 days with nothing new means the scraper
+// is broken (the Senate/House sites change their pages now and then).
+async function checkCongressHealth(env) {
+  if (!env.RESEND_API_KEY) return;
+  const result = await neonFetch(env,
+    `SELECT MAX(filing_date) AS last FROM public.filings
+      WHERE transaction_code LIKE 'CONGRESS%' AND filing_date <= CURRENT_DATE`);
+  const raw = result?.rows?.[0]?.last;
+  if (!raw) return;
+  const last = String(raw).slice(0, 10);
+  const days = Math.floor((Date.now() - new Date(last + 'T12:00:00').getTime()) / 864e5);
+  if (days < 10) return;
+
+  const KEY = '_internal/last-congress-alert.txt';
+  if (env.EXPORT_SNAPSHOTS) {
+    try {
+      const marker = await env.EXPORT_SNAPSHOTS.get(KEY);
+      if (marker && (await marker.text()) === last) return; // already alerted for this gap
+    } catch {}
+  }
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app',
+      to: env.ADMIN_EMAIL || 'admin@seli.app',
+      subject: `Seli Congress import gap: nothing new in ${days} days`,
+      html: `<p>The newest Congress disclosure in the database was filed <strong>${last}</strong> (${days} days ago).</p>
+             <p>Run <code>python fetch_political_trades.py --days 30 --dry-run</code> and check the log. The usual causes are the
+             Senate search changing its login/CSRF flow or the House index URL moving.</p>
+             <p>This alert won't repeat until new disclosures come in and a new gap starts.</p>`,
+    }),
+  });
+  if (env.EXPORT_SNAPSHOTS) {
+    try { await env.EXPORT_SNAPSHOTS.put(KEY, last); } catch {}
+  }
+  console.log(`[CongressHealth] Alert sent — last ${last}, ${days} days ago`);
 }
 
 // ── Guest CSV Checkout — no auth required ────────────────────────────────
@@ -4157,7 +4203,7 @@ async function handleCreateSubscription(request, env, origin) {
     if (row?.status === 'past_due') {
       return corsResponse({
         error: 'past_due',
-        message: "Your last payment didn't go through. Update your payment method to keep Pro active.",
+        message: "Your last payment didn't go through. Use the \"update your payment method\" link in Stripe's email to keep Pro, or email admin@seli.app and we'll sort it out.",
       }, 409, origin, env);
     }
 

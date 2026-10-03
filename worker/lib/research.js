@@ -270,15 +270,16 @@ async function insider(ctx, raw) {
   if (!raw.trim()) return { __status: 400, error: 'Missing name' };
   const N = sqlVal(raw);
   const date = 'COALESCE(f.transaction_date, f.filing_date)';
-  const rows = await ctx.db(`
+  // The plan check runs alongside the main query instead of after it: one
+  // fewer database round trip before the page can render.
+  const [rows, pro] = await Promise.all([ctx.db(`
     SELECT f.accession_number, f.cik_issuer, f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship,
            f.transaction_code, f.transaction_type, f.is_open_market, f.is_routine, f.shares::float AS shares,
            f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
            f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date
       FROM public.filings f
      WHERE f.insider_name = ${N} AND f.transaction_type IN ('buy','sell')
-     ORDER BY ${date} DESC LIMIT 800`);
-  const pro = await ctx.isPro();
+     ORDER BY ${date} DESC LIMIT 800`), ctx.isPro()]);
   if (!rows.length) return { raw, known: false, pro };
 
   const tickers = [...new Set(rows.map(r => r.ticker).filter(t => t && TICKER_RE.test(t)))];
