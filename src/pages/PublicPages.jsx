@@ -122,9 +122,9 @@ function PopularStocks() {
 
 const FOOT_LINKS = [['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
 
-function PublicFooter({ logoSrc }) {
+export function PublicFooter({ logoSrc, className = '' }) {
   return (
-    <footer className="sx-pub__foot">
+    <footer className={`sx-pub__foot ${className}`}>
       <a className="sx-pub__foot-logo" href="/" onClick={navClick('/')}>{logoSrc && <img src={logoSrc} alt="" />}<span>Seli</span></a>
       <nav className="sx-pub__foot-links" aria-label="Footer">
         {FOOT_LINKS.map(([label, path]) => <a key={path} href={path}>{label}</a>)}

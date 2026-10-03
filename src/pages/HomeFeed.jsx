@@ -25,10 +25,12 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
 
   return (
     <div className="sx-page sx-page--feed">
-      <div className="sx-feed-hello">
-        <h1 className="sx-feed-hello__title">{hello}</h1>
-        <p className="sx-feed-hello__sub">What company insiders and members of Congress did with their own money.</p>
-      </div>
+      <header className="sx-head sx-head--page">
+        <div className="sx-head__main">
+          <h1 className="sx-head__title">{hello}</h1>
+          <p className="sx-head__desc">What company insiders and members of Congress did with their own money.</p>
+        </div>
+      </header>
 
       {error && !d && <ErrorNote message={error} onRetry={reload} />}
       {!d && !error && <><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={6} /></Card></>}
@@ -127,65 +129,57 @@ function Yours({ d, watchlist }) {
   const quietPeople = take(quietPeopleAll);
   const hidden = total - (active.length + activePeople.length + quiet.length + quietPeople.length);
   const movedHidden = activeAll.length + activePeopleAll.length - active.length - activePeople.length;
+  const Stock = ({ s }) => {
+    const b = s.recent_buys || {}, sl = s.recent_sells || {};
+    return (
+      <li className="sx-row sx-row--yours">
+        <StockLink ticker={s.ticker} />
+        <div className="sx-row__main">
+          <div className="sx-row__title">{s.company}{s.held && <Chip tone="accent">You hold this</Chip>}</div>
+          {s.lines.slice(0, 2).map((l, i) => <div key={i} className="sx-row__sub">{l}</div>)}
+        </div>
+        <div className="sx-row__end">
+          {b.n > 0 && <span className="sx-row__amt sx-up">+{money(b.v)}</span>}
+          {sl.n > 0 && <span className="sx-row__amt sx-down">−{money(sl.v)}</span>}
+          {!b.n && !sl.n && <span className="sx-row__quiet">Quiet</span>}
+          {(b.n > 0 || sl.n > 0) && <span className="sx-row__meta">{[b.n && plural(b.n, 'buy'), sl.n && plural(sl.n, 'sale')].filter(Boolean).join(' · ')}</span>}
+        </div>
+      </li>
+    );
+  };
+  const Person = ({ p }) => {
+    const t = p.recent[0] || p.last;
+    const initials = (p.name || '').split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+    return (
+      <li className="sx-row sx-row--yours">
+        <span className="sx-avatar-sm" aria-hidden="true">{initials}</span>
+        <div className="sx-row__main">
+          <div className="sx-row__title"><InsiderLink raw={p.raw}>{p.name}</InsiderLink>{p.role && <span className="sx-row__role">{p.role}</span>}</div>
+          {p.recent.length > 0
+            ? p.recent.slice(0, 3).map((r, i) => (
+              <div key={i} className="sx-row__sub">
+                {r.type === 'buy' ? 'Bought' : 'Sold'} {r.congress ? congressRange(r.value) : money(r.value)} of <StockLink ticker={r.ticker} plain /> {ago(r.date)}
+              </div>))
+            : <div className="sx-row__sub">{t ? <>Last trade: {t.type === 'buy' ? 'bought' : 'sold'} {money(t.value)} of <StockLink ticker={t.ticker} plain /> {ago(t.date)}</> : 'No open-market trades on record'}</div>}
+        </div>
+        <div className="sx-row__end">
+          {p.recent.length > 0 && t
+            ? <span className={`sx-row__amt ${t.type === 'buy' ? 'sx-up' : 'sx-down'}`}>{t.type === 'buy' ? '+' : '−'}{t.congress ? congressRange(t.value) : money(t.value)}</span>
+            : <span className="sx-row__quiet">Quiet</span>}
+        </div>
+      </li>
+    );
+  };
   return (
-    <Card title="Your stocks and people" sub="Last 14 days" className="sx-yours"
+    <Card title="Your stocks and people" sub={active.length || activePeople.length ? 'Newest activity first · last 14 days' : 'Nothing new in the last 14 days'} pad={false}
       action={<Link to="/watchlist" className="sx-link">Watchlist <Icon name="arrow" size={12} /></Link>}>
-      {!active.length && !activePeople.length && <p className="sx-lead">Nothing new in the last two weeks. Here's where each one stands.</p>}
-      <ul className="sx-yours__list">
-        {active.map(s => (
-          <li key={s.ticker} className="sx-yours__item">
-            <div className="sx-yours__head">
-              <StockLink ticker={s.ticker} />
-              <span className="sx-yours__co">{s.company}</span>
-              {s.held && <Chip tone="accent">You hold this</Chip>}
-              {s.recent_buys.n > 0 && <Chip tone="buy">{plural(s.recent_buys.n, 'buy')} · {money(s.recent_buys.v)}</Chip>}
-              {s.recent_sells.n > 0 && <Chip tone="sell">{plural(s.recent_sells.n, 'sale')} · {money(s.recent_sells.v)}</Chip>}
-            </div>
-            {s.lines.slice(0, 2).map((l, i) => <p key={i} className={i === 0 ? 'sx-yours__line' : 'sx-yours__line sx-muted'}>{l}</p>)}
-          </li>
-        ))}
-        {activePeople.map(p => (
-          <li key={p.raw} className="sx-yours__item">
-            <div className="sx-yours__head">
-              <InsiderLink raw={p.raw} className="sx-strong">{p.name}</InsiderLink>
-              <span className="sx-yours__co">{p.role}</span>
-            </div>
-            {p.recent.slice(0, 3).map((t, i) => (
-              <p key={i} className="sx-yours__line">
-                {t.type === 'buy' ? 'Bought' : 'Sold'} <b className={t.type === 'buy' ? 'sx-up' : 'sx-down'}>{t.congress ? congressRange(t.value) : money(t.value)}</b> of <StockLink ticker={t.ticker} /> {ago(t.date)}.
-              </p>
-            ))}
-          </li>
-        ))}
+      <ul className="sx-rows">
+        {/* New activity first (stocks, then people), then the quiet ones. */}
+        {active.map(s => <Stock key={s.ticker} s={s} />)}
+        {activePeople.map(p => <Person key={p.raw} p={p} />)}
+        {quiet.map(s => <Stock key={s.ticker} s={s} />)}
+        {quietPeople.map(p => <Person key={p.raw} p={p} />)}
       </ul>
-      {/* Quiet ones still say something: 12-month picture and the last insider buy. */}
-      {(quiet.length > 0 || quietPeople.length > 0) && (
-        <ul className={`sx-yours__list${active.length || activePeople.length ? ' sx-yours__list--quiet' : ''}`}>
-          {quiet.map(s => (
-            <li key={s.ticker} className="sx-yours__item sx-yours__item--quiet">
-              <div className="sx-yours__head">
-                <StockLink ticker={s.ticker} />
-                <span className="sx-yours__co">{s.company}</span>
-                {s.held && <Chip tone="accent">You hold this</Chip>}
-                <Chip>No trades in 14 days</Chip>
-              </div>
-              {s.lines.slice(0, 2).map((l, i) => <p key={i} className={`sx-yours__line${i ? ' sx-muted' : ''}`}>{l}</p>)}
-            </li>
-          ))}
-          {quietPeople.map(p => (
-            <li key={p.raw} className="sx-yours__item sx-yours__item--quiet">
-              <div className="sx-yours__head">
-                <InsiderLink raw={p.raw} className="sx-strong">{p.name}</InsiderLink>
-                {p.role && <span className="sx-yours__co">{p.role}</span>}
-                <Chip>No trades in 14 days</Chip>
-              </div>
-              <p className="sx-yours__line sx-muted">
-                {p.last ? <>Last trade: {p.last.type === 'buy' ? 'bought' : 'sold'} {money(p.last.value)} of <StockLink ticker={p.last.ticker} /> {ago(p.last.date)}.</> : 'No open-market trades on record.'}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
       {(hidden > 0 || (expanded && total > YOURS_PREVIEW)) && (
         <button className="sx-more" onClick={() => setExpanded(e => !e)} aria-expanded={expanded}>
           {expanded ? 'Show less'
@@ -209,7 +203,7 @@ function Pulse({ p }) {
 
 function Featured({ c, watchlist }) {
   return (
-    <Card className="sx-featured" title="Featured filing this week" sub="Picked by how many insiders bought, their roles, trade size and stake change. A summary of what was filed, not a recommendation.">
+    <Card className="sx-featured" title="Featured filing this week" sub="The week's most notable insider buying. A summary of what was filed, not a recommendation.">
       <div className="sx-featured__head">
         <div>
           <StockLink ticker={c.ticker} className="sx-tk--lg" />
@@ -231,11 +225,10 @@ function Featured({ c, watchlist }) {
         ))}
         {c.more_buyers > 0 && <li className="sx-muted">+ {plural(c.more_buyers, 'more insider')}</li>}
       </ul>
-      <div className="sx-about">
-        <div className="sx-about__label">About this filing</div>
-        <p>{c.context}</p>
+      <div className="sx-featured__foot">
+        <Link to={stockPath(c.ticker)} className="sx-link">See every {c.ticker} insider trade <Icon name="arrow" size={12} /></Link>
+        {c.context && <p className="sx-note">{c.context}</p>}
       </div>
-      <Link to={stockPath(c.ticker)} className="sx-link">See every {c.ticker} insider trade <Icon name="arrow" size={12} /></Link>
     </Card>
   );
 }

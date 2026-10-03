@@ -44,7 +44,7 @@ import { sqlVal } from './lib/sql.js';
 import { verifyClerkWebhook } from './lib/clerk-webhook.js';
 import { encryptSecret, decryptSecret } from './lib/crypto.js';
 import { computeSignature } from './lib/snaptrade-sign.js';
-import { handleResearch, refreshLeaderboards } from './lib/research.js';
+import { handleResearch, refreshLeaderboards, ensureLeaderboards } from './lib/research.js';
 import { handlePublic } from './lib/public.js';
 import * as Sentry from '@sentry/cloudflare';
 // ── Streaming ZIP writer — Archive Utility compatible ─────────────────────
@@ -309,6 +309,13 @@ const workerHandler = {
         await neonFetch(env, 'SELECT 1');
       } catch (e) {
         console.error('[Scheduled] keep-alive ping failed:', e.message);
+      }
+      // Fill in at most one missing/stale saved leaderboard per tick.
+      try {
+        const built = await ensureLeaderboards(env, neonFetch, sqlVal);
+        if (built) console.log('[Scheduled] leaderboard built:', built);
+      } catch (e) {
+        console.error('[Scheduled] leaderboard ensure failed:', e.message);
       }
       return;
     }

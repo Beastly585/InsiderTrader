@@ -22,7 +22,7 @@ import InsiderPage from './pages/InsiderPage.jsx';
 import HomeFeed from './pages/HomeFeed.jsx';
 import WatchlistPage from './pages/WatchlistPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
-import { PublicShell, CongressPage, InsiderBuyingPage, PublicHome, usePublicWatchlist } from './pages/PublicPages.jsx';
+import { PublicShell, PublicFooter, CongressPage, InsiderBuyingPage, PublicHome, usePublicWatchlist } from './pages/PublicPages.jsx';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
@@ -7232,12 +7232,7 @@ function AppInner() {
           {page === 'watchlist' && <WatchlistPage watchlist={watchlist} portfolioTickers={billingPro ? portfolioTickers : []} onUpgrade={onUpgrade} alertsMasterOn={alertsMaster} />}
           {page === 'account' && <AccountPage user={user} onUpgrade={onUpgrade} dark={dark} setDark={setDark} />}
         </main>
-        <footer className="ws-footer">
-          <span>Private Beta · Not financial advice.</span>
-          <a href="/help" target="_blank" rel="noreferrer">Help</a>
-          <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
-          <a href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
-        </footer>
+        <PublicFooter logoSrc={logoSimple} className="sx-app-foot" />
         {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={billingPro} onClose={() => watchlist.setShowUpgrade(null)} />}
         {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={billingPro} onClose={() => setShowUpgradeModal(null)} />}
       </div>

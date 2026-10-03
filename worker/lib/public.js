@@ -129,7 +129,7 @@ async function congressHub(ctx) {
        ORDER BY ${DATE} DESC, f.filing_date DESC
        LIMIT 60`),
     ctx.db(`
-      SELECT f.ticker, MAX(f.company_name) AS company_name,
+      SELECT f.ticker, (ARRAY_AGG(f.company_name ORDER BY (COALESCE(f.transaction_code, '') LIKE 'CONGRESS%'), f.filing_date DESC))[1] AS company_name,
              COUNT(DISTINCT f.insider_name)::int AS members,
              COUNT(*) FILTER (WHERE f.transaction_type = 'buy')::int AS buys,
              COUNT(*) FILTER (WHERE f.transaction_type = 'sell')::int AS sells

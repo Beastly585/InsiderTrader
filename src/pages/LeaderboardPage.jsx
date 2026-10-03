@@ -100,6 +100,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
         {pro
           ? <Segmented size="sm" value={years} onChange={setYears} options={[{ value: 1, label: '1Y' }, { value: 2, label: '2Y' }, { value: 5, label: '5Y' }]} />
           : <span className="sx-muted sx-small">Last 12 months</span>}
+        {loading && data && <span className="sx-muted sx-small" role="status">Updating…</span>}
       </div>
 
       <Card pad={false}>

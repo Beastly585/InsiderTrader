@@ -95,7 +95,7 @@ async function search(ctx, qRaw) {
     const fName = tokens.map(t => `lower(insider_name) LIKE ${sqlVal('%' + likeEsc(t) + '%')}`).join(' AND ');
     [stocks, people] = await Promise.all([
       ctx.db(`
-        SELECT ticker AS key, MAX(company_name) AS label, COUNT(*)::int AS n, MAX(filing_date) AS last_date
+        SELECT ticker AS key, (ARRAY_AGG(company_name ORDER BY (COALESCE(transaction_code, '') LIKE 'CONGRESS%'), filing_date DESC))[1] AS label, COUNT(*)::int AS n, MAX(filing_date) AS last_date
           FROM public.filings
          WHERE filing_date >= CURRENT_DATE - 1095 AND ticker IS NOT NULL
            AND (${up ? `ticker LIKE ${upLike} OR ` : ''}lower(company_name) LIKE ${coLike})
@@ -149,7 +149,7 @@ async function statusFor(ctx, tickers, windowDays) {
        ORDER BY f.ticker, COALESCE(f.transaction_date, f.filing_date) DESC, f.value DESC NULLS LAST`),
     ctx.db(`
       SELECT DISTINCT ON (f.ticker) f.ticker, f.company_name FROM public.filings f
-       WHERE f.ticker = ANY(${arr}) AND f.company_name IS NOT NULL ORDER BY f.ticker, f.filing_date DESC`),
+       WHERE f.ticker = ANY(${arr}) AND f.company_name IS NOT NULL ORDER BY f.ticker, (COALESCE(f.transaction_code, '') LIKE 'CONGRESS%'), f.filing_date DESC`),
     ctx.db(`
       SELECT f.ticker, f.transaction_type, COUNT(DISTINCT f.accession_number)::int AS n, COALESCE(SUM(f.value), 0)::float AS v
         FROM public.filings f
@@ -185,7 +185,8 @@ async function stock(ctx, ticker) {
   // Pro-sized window and the free window is applied afterwards in JS.
   const [pro, meta, trades, older, people, prices, status] = await Promise.all([
     ctx.isPro(),
-    ctx.db(`SELECT company_name, sector, cik_issuer FROM public.filings f WHERE ticker = ${T} ORDER BY filing_date DESC LIMIT 1`),
+    // The company's own Form 4 name beats a Congress disclosure's asset text.
+    ctx.db(`SELECT company_name, sector, cik_issuer FROM public.filings f WHERE ticker = ${T} ORDER BY (COALESCE(f.transaction_code, '') LIKE 'CONGRESS%'), filing_date DESC LIMIT 1`),
     ctx.db(`
       SELECT f.accession_number, f.cik_issuer, f.insider_name, f.insider_title, f.relationship, f.transaction_code,
              f.transaction_type, f.is_open_market, f.is_routine, f.shares::float AS shares,
@@ -283,16 +284,27 @@ async function insider(ctx, raw) {
   if (!rows.length) return { raw, known: false, pro };
 
   const tickers = [...new Set(rows.map(r => r.ticker).filter(t => t && TICKER_RE.test(t)))];
-  const buys = rows.filter(r => r.is_open_market && r.transaction_type === 'buy' && r.price > 0);
-  const firstBuy = buys.map(r => asDate(r.trade_date)).filter(Boolean).sort()[0];
-  const [latest, spy] = await Promise.all([
+  // Congress disclosures have no price per share, so their buys are scored
+  // from the close on the trade date (same rule as the leaderboard).
+  const omBuys = rows.filter(r => r.is_open_market && r.transaction_type === 'buy');
+  const needPx = omBuys.filter(r => !(r.price > 0) && isCongress(r) && r.ticker && TICKER_RE.test(r.ticker) && asDate(r.trade_date)).slice(0, 400);
+  const firstBuy = omBuys.filter(r => r.price > 0 || needPx.includes(r)).map(r => asDate(r.trade_date)).filter(Boolean).sort()[0];
+  const [latest, spy, entry] = await Promise.all([
     tickers.length ? ctx.db(`
       SELECT t.ticker, p.close, p.date FROM unnest(${sqlList(tickers, sqlVal)}) AS t(ticker)
       LEFT JOIN LATERAL (SELECT close::float AS close, date FROM public.prices_history
                           WHERE ticker = t.ticker ORDER BY date DESC LIMIT 1) p ON true`).catch(() => []) : [],
     firstBuy ? ctx.db(`SELECT date, close::float AS close FROM public.benchmark_prices
                          WHERE symbol = 'SPY' AND date >= ${sqlVal(firstBuy)}::date - 7 ORDER BY date`).catch(() => []) : [],
+    needPx.length ? ctx.db(`
+      SELECT t.i::int AS i, p.close FROM unnest(${sqlList(needPx.map(r => r.ticker), sqlVal)},
+                                                ${sqlList(needPx.map(r => asDate(r.trade_date)), sqlVal)}::date[]) WITH ORDINALITY AS t(ticker, d, i)
+      LEFT JOIN LATERAL (SELECT close::float AS close FROM public.prices_history
+                          WHERE ticker = t.ticker AND date <= t.d AND date >= t.d - 7 ORDER BY date DESC LIMIT 1) p ON true`).catch(() => []) : [],
   ]);
+  const entryPx = new Map();
+  for (const e of entry) if (e.close != null) entryPx.set(needPx[e.i - 1], num(e.close));
+  const buys = omBuys.map(r => (r.price > 0 ? r : entryPx.has(r) ? { ...r, price: entryPx.get(r) } : null)).filter(Boolean);
   const now = Object.fromEntries(latest.filter(r => r.close != null).map(r => [r.ticker, num(r.close)]));
   const spyDates = spy.map(r => asDate(r.date));
   const spyClose = spy.map(r => num(r.close));
@@ -637,17 +649,62 @@ async function refreshLeaderboards(env, neonFetch, sqlVal) {
   return { ok, total: LB_KEYS.length };
 }
 
+// Called on the 4-minute keep-alive tick: rebuilds at most ONE saved version
+// that's missing or stale. After a deploy every filter combination is ready
+// within ~40 minutes, and a missed 6am run heals itself the same way.
+async function ensureLeaderboards(env, neonFetch, sqlVal) {
+  const bucket = env?.EXPORT_SNAPSHOTS;
+  if (!bucket) return null;
+  for (const [years, source] of LB_KEYS) {
+    const key = `${years}|${source}`;
+    let fresh = false;
+    try {
+      const head = await bucket.head(lbPath(key));
+      fresh = !!head && Date.now() - new Date(head.uploaded).getTime() < LB_STALE_MS - 3600 * 1000;
+    } catch { /* treat as missing */ }
+    if (fresh) continue;
+    const ctx = { env, userId: null, isPro: async () => false, deps: { sqlVal }, db: q => neonFetch(env, q).then(r => r.rows || []) };
+    const data = await buildLeaderboard(ctx, years, source);
+    await lbSave(env, key, data);
+    lbCache.set(key, { at: Date.now(), data });
+    return key;
+  }
+  return null;
+}
+
 async function buildLeaderboard(ctx, years, source) {
   const sourceClause = source === 'congress' ? `AND f.transaction_code LIKE 'CONGRESS%'`
     : source === 'corporate' ? `AND (f.transaction_code IS NULL OR f.transaction_code NOT LIKE 'CONGRESS%')` : '';
   const buy = `f.transaction_type = 'buy' AND f.is_open_market`;
-  const priced = `${buy} AND f.price_per_share > 0 AND l.close IS NOT NULL AND ABS((l.close - f.price_per_share) / f.price_per_share) < 3`;
+  // f.px is the entry price. Form 4s report one; STOCK Act disclosures don't,
+  // so Congress buys use the stock's close on the trade date (or the last
+  // close within a week before it). Without this no member could ever be
+  // scored, and the Congress tab was always empty.
+  const priced = `${buy} AND f.px > 0 AND l.close IS NOT NULL AND ABS((l.close - f.px) / f.px) < 3`;
   const rows = await ctx.db(`
     WITH latest AS (
       SELECT DISTINCT ON (ticker) ticker, close::float AS close
         FROM public.prices_history ORDER BY ticker, date DESC
     ), spy_now AS (
       SELECT close::float AS close FROM public.benchmark_prices WHERE symbol = 'SPY' ORDER BY date DESC LIMIT 1
+    ), base AS (
+      SELECT f.insider_name, f.insider_title, f.transaction_code, f.relationship, f.transaction_type,
+             f.is_open_market, f.ticker, f.value, COALESCE(f.transaction_date, f.filing_date) AS d,
+             COALESCE(NULLIF(f.price_per_share, 0)::float, ep.close) AS px
+        FROM public.filings f
+        LEFT JOIN LATERAL (
+          SELECT close::float AS close FROM public.prices_history
+           WHERE f.transaction_code LIKE 'CONGRESS%' AND f.transaction_type = 'buy'
+             AND COALESCE(f.price_per_share, 0) = 0 AND f.ticker IS NOT NULL
+             AND ticker = f.ticker
+             AND date <= COALESCE(f.transaction_date, f.filing_date)
+             AND date >= COALESCE(f.transaction_date, f.filing_date) - 7
+           ORDER BY date DESC LIMIT 1
+        ) ep ON true
+       WHERE f.insider_name IS NOT NULL
+         AND f.transaction_type IN ('buy', 'sell')
+         AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - ${Number(years) * 365}
+         ${sourceClause}
     )
     SELECT f.insider_name,
            MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
@@ -655,26 +712,22 @@ async function buildLeaderboard(ctx, years, source) {
            COUNT(*) FILTER (WHERE ${buy})::int AS om_buys,
            COALESCE(SUM(f.value) FILTER (WHERE ${buy} AND f.value < 50000000000), 0)::float AS bought_value,
            (ARRAY_AGG(DISTINCT f.ticker) FILTER (WHERE f.ticker IS NOT NULL))[1:3] AS tickers,
-           COUNT(*) FILTER (WHERE ${priced} AND ABS((l.close - f.price_per_share) / f.price_per_share) >= 0.05)::int AS priced,
-           COUNT(*) FILTER (WHERE ${priced} AND l.close >= f.price_per_share * 1.05)::int AS wins,
+           COUNT(*) FILTER (WHERE ${priced} AND ABS((l.close - f.px) / f.px) >= 0.05)::int AS priced,
+           COUNT(*) FILTER (WHERE ${priced} AND l.close >= f.px * 1.05)::int AS wins,
            COUNT(*) FILTER (WHERE ${priced})::int AS scored,
-           AVG((l.close - f.price_per_share) / f.price_per_share * 100) FILTER (WHERE ${priced}) AS avg_return,
+           AVG((l.close - f.px) / f.px * 100) FILTER (WHERE ${priced}) AS avg_return,
            AVG((sn.close - st.close) / st.close * 100) FILTER (WHERE ${priced} AND st.close IS NOT NULL) AS avg_spy,
-           AVG((l.close - f.price_per_share) / f.price_per_share * 100) FILTER (WHERE ${priced} AND st.close IS NOT NULL) AS avg_return_matched
-      FROM public.filings f
+           AVG((l.close - f.px) / f.px * 100) FILTER (WHERE ${priced} AND st.close IS NOT NULL) AS avg_return_matched
+      FROM base f
       LEFT JOIN latest l ON l.ticker = f.ticker
       CROSS JOIN spy_now sn
       -- One-time filter: this lookup only runs for open-market buys.
       LEFT JOIN LATERAL (
         SELECT close::float AS close FROM public.benchmark_prices
          WHERE f.transaction_type = 'buy' AND f.is_open_market AND symbol = 'SPY'
-           AND date <= COALESCE(f.transaction_date, f.filing_date)
+           AND date <= f.d
          ORDER BY date DESC LIMIT 1
       ) st ON true
-     WHERE f.insider_name IS NOT NULL
-       AND f.transaction_type IN ('buy', 'sell')
-       AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - ${Number(years) * 365}
-       ${sourceClause}
      GROUP BY f.insider_name
     HAVING COUNT(*) FILTER (WHERE ${buy}) >= 2`);
 
@@ -719,4 +772,4 @@ async function latest(ctx) {
 
 // Shared with ./public.js (signed-out SEO pages), which calls these with a
 // context that has no user and the free-plan window.
-export { stock, insider, marketFeed, search, leaderboard, refreshLeaderboards, tradeOut, TICKER_RE, FREE_DAYS };
+export { stock, insider, marketFeed, search, leaderboard, refreshLeaderboards, ensureLeaderboards, tradeOut, TICKER_RE, FREE_DAYS };
