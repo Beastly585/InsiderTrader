@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
 db/update_recent_prices.py
-Updates prices_history for tickers that appeared in filings from the last N days.
+Updates prices_history with the latest close for EVERY ticker Seli tracks.
+
+It used to save only tickers with a filing in the last 3 days. Everything else
+kept whatever close it had the last time it was active, so a stock with an
+insider buy last year and nothing since showed a stale "current" price, and
+leaderboard / since-buy returns for it were wrong. The grouped-daily call below
+already returns the whole market, so saving every tracked ticker costs nothing
+extra from Polygon; it's one bulk insert.
 
 Uses Polygon's grouped-daily endpoint — ONE request returns the whole market's
 closing prices for a session, instead of one request per ticker. The old version
@@ -34,16 +41,28 @@ except ImportError:
     import psycopg2
     conn = psycopg2.connect(DATABASE_URL)
 
-cutoff = (date.today() - timedelta(days=LOOKBACK_DAYS)).isoformat()
+# Every ticker that appears in filings (Form 4 and Congress). Uses the
+# search_entities index (one row per ticker) when it exists, which is far
+# cheaper than a DISTINCT over the whole filings table.
 with conn.cursor() as cur:
+    try:
+        cur.execute("SELECT key FROM public.search_entities WHERE kind = 'stock'")
+        tickers = {r[0] for r in cur.fetchall()}
+    except Exception:
+        conn.rollback()
+        cur.execute("SELECT DISTINCT ticker FROM public.filings WHERE ticker IS NOT NULL AND ticker <> ''")
+        tickers = {r[0] for r in cur.fetchall()}
+    # Plus anything filed in the last few days that the daily index refresh
+    # hasn't picked up yet.
+    cutoff = (date.today() - timedelta(days=LOOKBACK_DAYS)).isoformat()
     cur.execute("""
         SELECT DISTINCT ticker FROM public.filings
-        WHERE ticker IS NOT NULL AND ticker != ''
+        WHERE ticker IS NOT NULL AND ticker <> ''
           AND COALESCE(filing_date, transaction_date) >= %s
     """, (cutoff,))
-    tickers = {r[0] for r in cur.fetchall()}
+    tickers |= {r[0] for r in cur.fetchall()}
 
-print(f"Tracking {len(tickers)} tickers from the last {LOOKBACK_DAYS} days")
+print(f"Tracking {len(tickers)} tickers")
 
 
 def fetch_grouped_bars(start: date, max_lookback: int = 10):
@@ -90,24 +109,28 @@ print(f"Using session {session_date} — {len(bars)} tickers reported market-wid
 
 bar_by_ticker = {b["T"]: b for b in bars if "T" in b}
 
-written = 0; skipped = 0
-with conn.cursor() as cur:
-    for ticker in sorted(tickers):
-        bar = bar_by_ticker.get(ticker)
-        if not bar:
-            skipped += 1; continue
-        close, ts = bar.get("c"), bar.get("t")
-        if not close or not ts:
-            skipped += 1; continue
-        bar_date = date.fromtimestamp(ts / 1000)
-        cur.execute("""
-            INSERT INTO public.prices_history (ticker, date, close)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
-        """, (ticker, bar_date, round(float(close), 4)))
-        written += 1
+rows_t, rows_d, rows_c = [], [], []
+skipped = 0
+for ticker in sorted(tickers):
+    bar = bar_by_ticker.get(ticker)
+    if not bar:
+        skipped += 1; continue
+    close, ts = bar.get("c"), bar.get("t")
+    if not close or not ts:
+        skipped += 1; continue
+    rows_t.append(ticker)
+    rows_d.append(date.fromtimestamp(ts / 1000))
+    rows_c.append(round(float(close), 4))
 
+# One statement for thousands of rows instead of a round trip per ticker.
+with conn.cursor() as cur:
+    cur.execute("""
+        INSERT INTO public.prices_history (ticker, date, close)
+        SELECT * FROM unnest(%s::text[], %s::date[], %s::numeric[])
+        ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
+    """, (rows_t, rows_d, rows_c))
 conn.commit()
+written = len(rows_t)
 
 # Refresh the benchmark table too, from the SAME grouped-daily response
 # already fetched above — not a second API call. This is what keeps

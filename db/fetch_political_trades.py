@@ -107,6 +107,16 @@ def parse_amount(s: Optional[str]) -> Optional[float]:
     nums = [float(n.replace(",","")) for n in re.findall(r'[\d,]+', str(s))]
     return round(sum(nums)/len(nums), 2) if nums else None
 
+def unique_accession(base: str, seen: dict) -> str:
+    """Same doc + ticker + date + buy/sell can legitimately appear more than once
+    (spouse and joint accounts, several lots). Without a suffix the later ones
+    were silently dropped as duplicates. The first keeps the plain ID so rows
+    already in the DB still match; repeats get -2, -3 in PDF order, which is
+    stable from run to run."""
+    n = seen.get(base, 0) + 1
+    seen[base] = n
+    return base if n == 1 else f"{base}-{n}"
+
 def member_slug(name: str) -> str:
     return re.sub(r'[^a-z0-9]', '-', name.lower().strip())[:40].strip('-')
 
@@ -265,6 +275,7 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
         return []
 
     trades  = []
+    seen_acc: dict = {}
     member  = meta.get("name", "Unknown")
     filed   = meta.get("filed")
     doc_id  = meta.get("doc_id", "")
@@ -345,7 +356,7 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
         tt, tc, tc_label = classify_tx(tx_type)
         tc_label += " (House)"
         ticker_safe = re.sub(r'[^A-Z0-9]', '', ticker or '')[:6] or f"t{len(trades)}"
-        accession   = f"house-{doc_id}-{ticker_safe}-{tx_date}-{tc}"
+        accession   = unique_accession(f"house-{doc_id}-{ticker_safe}-{tx_date}-{tc}", seen_acc)
 
         fn_parts = [f"Amount: {amount}"]
         if owner: fn_parts.append(f"Owner: {owner}")
@@ -566,6 +577,7 @@ def parse_senate_html(html: str, meta: dict) -> list[CongressTrade]:
     if not HAS_BS4: return []
 
     trades  = []
+    seen_acc: dict = {}
     member  = meta.get("name", "Unknown")
     filed   = meta.get("filed")
     ptr_url = meta.get("ptr_url", "")
@@ -631,7 +643,7 @@ def parse_senate_html(html: str, meta: dict) -> list[CongressTrade]:
                 clean_ticker = None
 
             ticker_safe = re.sub(r'[^A-Z0-9]', '', clean_ticker or '')[:6] or f"t{len(trades)}"
-            accession   = f"senate-{url_id}-{ticker_safe}-{tx_date}-{tc}"
+            accession   = unique_accession(f"senate-{url_id}-{ticker_safe}-{tx_date}-{tc}", seen_acc)
 
             fn_parts = []
             if amount:  fn_parts.append(f"Amount: {amount}")

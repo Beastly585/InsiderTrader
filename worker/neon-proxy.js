@@ -310,6 +310,14 @@ const workerHandler = {
       } catch (e) {
         console.error('[Scheduled] keep-alive ping failed:', e.message);
       }
+      // Start the GitHub ingest runs. GitHub's own scheduler dropped or
+      // delayed them by hours; this cron fires on time.
+      try {
+        const started = await dispatchIngest(env, new Date(event.scheduledTime || Date.now()));
+        if (started) console.log('[Scheduled] ingest dispatched:', started);
+      } catch (e) {
+        console.error('[Scheduled] ingest dispatch failed:', e.message);
+      }
       // Fill in at most one missing/stale saved leaderboard per tick.
       try {
         const built = await ensureLeaderboards(env, neonFetch, sqlVal);
@@ -1284,6 +1292,54 @@ async function buildExportCSV(env) {
   }
 }
 
+
+// ── Ingest scheduler (starts .github/workflows/ingest.yml) ─────────────────
+// Runs on the 4-minute tick. The tick lands in each half hour's first four
+// minutes exactly once (minutes 0-3 and 30-33), so each slot fires one run.
+// All times UTC, matching the tiers documented in ingest.yml:
+//   08:00 every day          wide  (4 days back, prices, Congress)
+//   12:00 weekdays           pre   (2 days back, prices, tweet cards)
+//   13:30-20:30 weekdays     poll  (every 30 min, 1 day back, instant alerts)
+//   21:00 weekdays           post  (1 day back, prices, tweet cards)
+// Needs: GH_DISPATCH_TOKEN (secret; fine-grained token, this repo only,
+// Actions: read & write) and GH_REPO (var, "owner/repo").
+export function ingestTierFor(now) {
+  const h = now.getUTCHours(), m = now.getUTCMinutes(), dow = now.getUTCDay();
+  if (m % 30 >= 4) return null;
+  const slot = h * 60 + (m < 30 ? 0 : 30);
+  const weekday = dow >= 1 && dow <= 5;
+  if (slot === 8 * 60) return 'wide';
+  if (!weekday) return null;
+  if (slot === 12 * 60) return 'pre';
+  if (slot === 21 * 60) return 'post';
+  if (slot >= 13 * 60 + 30 && slot <= 20 * 60 + 30) return 'poll';
+  return null;
+}
+
+async function dispatchIngest(env, now) {
+  const tier = ingestTierFor(now);
+  if (!tier) return null;
+  if (!env.GH_DISPATCH_TOKEN || !env.GH_REPO) {
+    console.warn('[Ingest] GH_DISPATCH_TOKEN / GH_REPO not set; GitHub backup schedules only');
+    return null;
+  }
+  const res = await fetch(`https://api.github.com/repos/${env.GH_REPO}/actions/workflows/ingest.yml/dispatches`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.GH_DISPATCH_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'seli-worker',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ref: env.GH_REF || 'main', inputs: { tier } }),
+  });
+  if (res.status !== 204) {
+    // 401 = token expired or wrong; 404 = wrong repo name or token can't see it.
+    throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  }
+  return tier;
+}
 
 // ── Dead-man's-switch: ingestion health check ───────────────────────────────
 // Runs inside the scheduled handler. Checks if the most recent filing in the

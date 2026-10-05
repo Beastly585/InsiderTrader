@@ -1,33 +1,52 @@
 name: Ingest Form 4 Filings
 
+# How runs start
+# ───────────────
+# GitHub's own scheduler is "best effort": runs set for :00/:15/:30/:45 were
+# delayed for hours or dropped (weekend runs started 5-6 hours late, weekday
+# polling ran a handful of times instead of every 15 minutes). So the
+# Cloudflare Worker's 4-minute cron starts the runs instead, through
+# workflow_dispatch with a `tier` input. See dispatchIngest() in
+# worker/neon-proxy.js.
+#
+# Tiers (UTC, weekdays unless noted)
+#   poll  every 30 min, 13:30-20:30   Form 4s from the last day, then alerts
+#   pre   12:00                       Form 4s 2 days back, prices, tweet cards
+#   post  21:00                       Form 4s 1 day back, prices, tweet cards
+#   wide  08:00 every day             Form 4s 4 days back, prices, Congress
+#
+# The two schedules below are a backup in case the Worker can't reach GitHub
+# (e.g. its token expired). Each one first checks whether the Worker started a
+# run in the last 3 hours and stops right away if so, so they cost ~1 minute.
+#
+# Actions minutes: this repo is private on the free plan (2,000 min/month).
+# 30-minute polling keeps everything (ingest + emails + tests) around 1,400.
+
 on:
   schedule:
-    # ── TIER A: Market-hours polling ──────────────────────────────────────
-    - cron: '30,45 13 * * 1-5'
-    - cron: '0,15,30,45 14-19 * * 1-5'
-    - cron: '0 20 * * 1-5'
-
-    # ── TIER B: Pre-market ────────────────────────────────────────────────
-    - cron: '0 12 * * 1-5'
-
-    # ── TIER C: Post-market ───────────────────────────────────────────────
-    - cron: '0 21 * * 1-5'
-
-    # ── TIER D: Daily wide safety net ─────────────────────────────────────
-    - cron: '0 8 * * *'
+    - cron: '37 9 * * *'      # backup for "wide" (08:00)
+    - cron: '37 13 * * 1-5'   # backup for "pre"  (12:00)
 
   workflow_dispatch:
     inputs:
-      days_back:
-        description: 'Number of days to look back (default: 3)'
+      tier:
+        description: 'poll / pre / post / wide (set by the Worker; leave blank for a manual run)'
         required: false
-        default: '3'
+        default: ''
+      days_back:
+        description: 'Manual runs: days to look back (default 3)'
+        required: false
+        default: ''
+      congress:
+        description: 'Manual runs: also run the Congress import (true/false)'
+        required: false
+        default: 'false'
       dry_run:
-        description: 'Dry run only — parse but do not write to DB'
+        description: 'Dry run: parse but do not write to the DB or send email'
         required: false
         default: 'false'
       test_tweets:
-        description: 'Preview tweet candidates without posting'
+        description: 'Preview tweet candidates without emailing them'
         required: false
         default: 'false'
 
@@ -35,65 +54,95 @@ concurrency:
   group: ingest
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  actions: read   # the backup check reads this workflow's recent runs
+
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ github.event.schedule == '0 8 * * *' && 25 || 15 }}
+    timeout-minutes: 25
 
     steps:
+      # Backup runs only: stop if the Worker already started a run recently.
+      - name: Skip backup if the Worker is running things
+        id: backup
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LAST=$(gh api "repos/${{ github.repository }}/actions/workflows/ingest.yml/runs?event=workflow_dispatch&per_page=1" --jq '.workflow_runs[0].created_at // empty')
+          if [ -n "$LAST" ] && [ $(( $(date -u +%s) - $(date -u -d "$LAST" +%s) )) -lt 10800 ]; then
+            echo "Worker started a run at $LAST; backup not needed."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Worker run in the last 3 hours (last: ${LAST:-never}). Running the backup."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
+        if: steps.backup.outputs.skip != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python 3.11
+        if: steps.backup.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
       - name: Install dependencies
+        if: steps.backup.outputs.skip != 'true'
         run: |
           pip install --upgrade pip
           pip install "psycopg[binary]" requests python-dotenv lxml
 
-      - name: Determine DAYS_BACK for this run
+      # The tier comes from what started the run, never from the clock. A
+      # delayed run used to see the "wrong" hour and skip prices.
+      - name: Decide what this run does
         id: vars
+        if: steps.backup.outputs.skip != 'true'
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          IN_TIER: ${{ github.event.inputs.tier }}
+          IN_DAYS: ${{ github.event.inputs.days_back }}
+          IN_CONGRESS: ${{ github.event.inputs.congress }}
         run: |
-          if [ -n "${{ github.event.inputs.days_back }}" ]; then
-            echo "days_back=${{ github.event.inputs.days_back }}" >> "$GITHUB_OUTPUT"
-            echo "update_prices=true" >> "$GITHUB_OUTPUT"
-          else
-            HOUR_UTC=$(date -u +%H)
-            MIN_UTC=$(date -u +%M)
-            DOW=$(date -u +%u)
+          TIER="$IN_TIER"
+          if [ "$SCHEDULE" = "37 9 * * *" ]; then TIER=wide; fi
+          if [ "$SCHEDULE" = "37 13 * * 1-5" ]; then TIER=pre; fi
+          if [ -z "$TIER" ]; then TIER=manual; fi
 
-            if [ "$HOUR_UTC" = "08" ]; then
-              echo "days_back=4" >> "$GITHUB_OUTPUT"
-              echo "update_prices=true" >> "$GITHUB_OUTPUT"
-            elif [ "$HOUR_UTC" = "12" ]; then
-              echo "days_back=2" >> "$GITHUB_OUTPUT"
-              echo "update_prices=true" >> "$GITHUB_OUTPUT"
-            elif [ "$HOUR_UTC" = "21" ]; then
-              echo "days_back=1" >> "$GITHUB_OUTPUT"
-              echo "update_prices=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "days_back=1" >> "$GITHUB_OUTPUT"
-              echo "update_prices=false" >> "$GITHUB_OUTPUT"
-            fi
-          fi
+          case "$TIER" in
+            poll)   DAYS=1; PRICES=false; CONGRESS=false ;;
+            pre)    DAYS=2; PRICES=true;  CONGRESS=false ;;
+            post)   DAYS=1; PRICES=true;  CONGRESS=false ;;
+            wide)   DAYS=4; PRICES=true;  CONGRESS=true  ;;
+            *)      DAYS="${IN_DAYS:-3}"; PRICES=true; CONGRESS="${IN_CONGRESS:-false}" ;;
+          esac
+
+          echo "tier=$TIER" >> "$GITHUB_OUTPUT"
+          echo "days_back=$DAYS" >> "$GITHUB_OUTPUT"
+          echo "update_prices=$PRICES" >> "$GITHUB_OUTPUT"
+          echo "congress=$CONGRESS" >> "$GITHUB_OUTPUT"
+          echo "Tier: $TIER  days_back=$DAYS  prices=$PRICES  congress=$CONGRESS"
 
       - name: Run Form 4 ingestion
+        if: steps.backup.outputs.skip != 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           USER_AGENT_EMAIL: ${{ secrets.USER_AGENT_EMAIL }}
           DAYS_BACK: ${{ steps.vars.outputs.days_back }}
-          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          # fetch_filings_neon.py only treats "1" as a dry run. Passing the
+          # input straight through ("true") used to write to the DB anyway.
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
           MAX_WORKERS: '2'
         run: |
           cd db
           python fetch_filings_neon.py
 
       - name: Send instant alerts
-        if: success()
+        if: success() && steps.backup.outputs.skip != 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -101,15 +150,14 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           WORKER_API_KEY: ${{ secrets.WORKER_API_KEY }}
           NEON_PROXY_URL: ${{ secrets.NEON_PROXY_URL }}
-          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          # This script expects "true"/"false" (unlike the others).
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && 'true' || 'false' }}
         run: |
           cd db
           python send_instant_alerts.py
 
       - name: Generate signal cards for Twitter
-        # Runs on Tier B/C/D — generates branded signal cards + tweet text
-        # and emails them to you. Save the card image, copy the text, post.
-        if: success() && steps.vars.outputs.update_prices == 'true'
+        if: success() && steps.backup.outputs.skip != 'true' && steps.vars.outputs.update_prices == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -117,8 +165,9 @@ jobs:
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
           APP_URL: ${{ secrets.APP_URL }}
           MAX_CARDS: '2'
-          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
-          TEST_PREVIEW: ${{ github.event.inputs.test_tweets || 'false' }}
+          # post_signal_tweet.py only treats "1" as on.
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
+          TEST_PREVIEW: ${{ github.event.inputs.test_tweets == 'true' && '1' || '0' }}
         run: |
           cd db
           if [ -f post_signal_tweet.py ]; then
@@ -128,7 +177,7 @@ jobs:
           fi
 
       - name: Update price history
-        if: success() && steps.vars.outputs.update_prices == 'true'
+        if: success() && steps.backup.outputs.skip != 'true' && steps.vars.outputs.update_prices == 'true' && github.event.inputs.dry_run != 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
@@ -138,4 +187,21 @@ jobs:
             python update_recent_prices.py
           else
             echo "update_recent_prices.py not found, skipping"
+          fi
+
+      # Congress disclosures, once a day. 30 days back so a Senate outage (its
+      # site returns 503 during maintenance) is caught up the next day; PTRs
+      # already in the DB are skipped, so this is quick on a normal day.
+      # Runs even if an earlier step failed, so a Form 4 problem doesn't stop it.
+      - name: Congress trades (House + Senate)
+        if: ${{ !cancelled() && steps.backup.outputs.skip != 'true' && steps.vars.outputs.congress == 'true' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          pip install beautifulsoup4 pdfplumber
+          cd db
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            python fetch_political_trades.py --days 30 --dry-run
+          else
+            python fetch_political_trades.py --days 30
           fi
