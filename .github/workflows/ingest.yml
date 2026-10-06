@@ -10,7 +10,7 @@ name: Ingest Form 4 Filings
 # worker/neon-proxy.js.
 #
 # Tiers (UTC, weekdays unless noted)
-#   poll  every 30 min, 13:30-20:30   Form 4s from the last day, then alerts
+#   poll  hourly at :30, 13:30-20:30  Form 4s from the last day, then alerts
 #   pre   12:00                       Form 4s 2 days back, prices, tweet cards
 #   post  21:00                       Form 4s 1 day back, prices, tweet cards
 #   wide  08:00 every day             Form 4s 4 days back, prices, Congress
@@ -20,7 +20,7 @@ name: Ingest Form 4 Filings
 # run in the last 3 hours and stops right away if so, so they cost ~1 minute.
 #
 # Actions minutes: this repo is private on the free plan (2,000 min/month).
-# 30-minute polling keeps everything (ingest + emails + tests) around 1,400.
+# Hourly polling keeps everything (ingest + emails + tests) around 1,300.
 
 on:
   schedule:
