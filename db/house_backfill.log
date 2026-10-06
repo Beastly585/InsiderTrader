@@ -1,0 +1,372 @@
+=== House, last 90 days ===
+08:39:47  INFO     ════════════════════════════════════════════════════════════════
+08:39:47  INFO       Congressional Trades Scraper
+08:39:47  INFO       Range: 2026-07-08 → 2026-10-06  (90 days)
+08:39:47  INFO       House: yes  Senate: no  Dry run: False
+08:39:47  INFO     ════════════════════════════════════════════════════════════════
+08:39:47  INFO     Loading existing congressional accessions…
+08:39:49  INFO       44,657 already in DB
+08:39:49  INFO     
+── House of Representatives ──
+08:39:49  INFO       Downloading House 2026 index…
+08:39:50  INFO       House 2026: 658 PTR filings in index
+08:39:50  INFO       House: 56/658 PTRs in date range
+08:40:20  INFO         House PDF 20/56 — 76 trades
+08:40:50  INFO         House PDF 40/56 — 109 trades
+08:41:13  INFO         House PDF 56/56 — 143 trades
+08:41:15  INFO       House total: 143 new trades
+08:41:15  INFO     
+Total: 143 trades  (69 buys, 74 sells)
+08:41:15  INFO     
+Top buys by value:
+08:41:15  INFO       Nancy Pelosi                   (House ) BE      ~$ 1,000,001  2026-07-24
+08:41:15  INFO       Nancy Pelosi                   (House ) BE      ~$ 1,000,001  2026-07-24
+08:41:15  INFO       Nancy Pelosi                   (House ) BE      ~$   500,001  2026-07-28
+08:41:15  INFO       Nancy Pelosi                   (House ) BE      ~$   500,001  2026-07-28
+08:41:15  INFO       Nancy Pelosi                   (House ) INTC    ~$   500,001  2026-07-24
+08:41:15  INFO       Nancy Pelosi                   (House ) —       ~$   500,001  2026-07-27
+08:41:15  INFO       Steve Cohen                    (House ) —       ~$   250,001  2026-08-21
+08:41:15  INFO       Steve Cohen                    (House ) —       ~$   250,001  2026-08-21
+08:41:17  INFO       Wrote batch 1: 143 rows (143 total)
+08:41:17  INFO     
+✓ 143 congressional trades written to Neon
+08:41:17  INFO       Filter: WHERE transaction_code LIKE 'CONGRESS%'
+08:41:17  INFO     ════════════════════════════════════════════════════════════════
+=== House, last 365 days ===
+08:41:17  INFO     ════════════════════════════════════════════════════════════════
+08:41:17  INFO       Congressional Trades Scraper
+08:41:17  INFO       Range: 2025-10-06 → 2026-10-06  (365 days)
+08:41:17  INFO       House: yes  Senate: no  Dry run: False
+08:41:17  INFO     ════════════════════════════════════════════════════════════════
+08:41:17  INFO     Loading existing congressional accessions…
+08:41:19  INFO       44,800 already in DB
+08:41:19  INFO     
+── House of Representatives ──
+08:41:19  INFO       Downloading House 2025 index…
+08:41:20  INFO       House 2025: 1229 PTR filings in index
+08:41:20  INFO       Downloading House 2026 index…
+08:41:20  INFO       House 2026: 658 PTR filings in index
+08:41:20  INFO       House: 780/1887 PTRs in date range
+08:41:47  INFO         House PDF 20/780 — 0 trades
+08:42:15  INFO         House PDF 40/780 — 0 trades
+08:42:43  INFO         House PDF 60/780 — 0 trades
+08:43:11  INFO         House PDF 80/780 — 0 trades
+08:43:39  INFO         House PDF 100/780 — 0 trades
+08:44:09  INFO         House PDF 120/780 — 0 trades
+08:44:37  INFO         House PDF 140/780 — 0 trades
+08:45:06  INFO         House PDF 160/780 — 0 trades
+08:45:35  INFO         House PDF 180/780 — 0 trades
+08:46:04  INFO         House PDF 200/780 — 0 trades
+08:46:33  INFO         House PDF 220/780 — 0 trades
+08:47:01  INFO         House PDF 240/780 — 0 trades
+08:47:29  INFO         House PDF 260/780 — 0 trades
+08:47:57  INFO         House PDF 280/780 — 0 trades
+08:48:25  INFO         House PDF 300/780 — 0 trades
+08:48:53  INFO         House PDF 320/780 — 0 trades
+08:49:21  INFO         House PDF 340/780 — 0 trades
+08:49:49  INFO         House PDF 360/780 — 0 trades
+08:50:18  INFO         House PDF 380/780 — 0 trades
+08:50:46  INFO         House PDF 400/780 — 0 trades
+08:51:15  INFO         House PDF 420/780 — 0 trades
+08:51:43  INFO         House PDF 440/780 — 0 trades
+08:52:12  INFO         House PDF 460/780 — 0 trades
+08:52:40  INFO         House PDF 480/780 — 0 trades
+08:53:09  INFO         House PDF 500/780 — 0 trades
+08:53:38  INFO         House PDF 520/780 — 0 trades
+08:54:06  INFO         House PDF 540/780 — 0 trades
+08:54:34  INFO         House PDF 560/780 — 0 trades
+08:55:03  INFO         House PDF 580/780 — 0 trades
+08:55:32  INFO         House PDF 600/780 — 0 trades
+08:56:01  INFO         House PDF 620/780 — 0 trades
+08:56:31  INFO         House PDF 640/780 — 0 trades
+08:57:00  INFO         House PDF 660/780 — 0 trades
+08:57:29  INFO         House PDF 680/780 — 0 trades
+08:57:57  INFO         House PDF 700/780 — 0 trades
+08:58:25  INFO         House PDF 720/780 — 0 trades
+08:58:55  INFO         House PDF 740/780 — 0 trades
+08:59:24  INFO         House PDF 760/780 — 0 trades
+08:59:52  INFO         House PDF 780/780 — 0 trades
+08:59:54  INFO       House total: 0 new trades
+08:59:54  INFO     
+Total: 0 trades  (0 buys, 0 sells)
+08:59:54  INFO     No new trades found.
+=== House, last 730 days ===
+08:59:54  INFO     ════════════════════════════════════════════════════════════════
+08:59:54  INFO       Congressional Trades Scraper
+08:59:54  INFO       Range: 2024-10-06 → 2026-10-06  (730 days)
+08:59:54  INFO       House: yes  Senate: no  Dry run: False
+08:59:54  INFO     ════════════════════════════════════════════════════════════════
+08:59:54  INFO     Loading existing congressional accessions…
+08:59:56  INFO       44,800 already in DB
+08:59:56  INFO     
+── House of Representatives ──
+08:59:56  INFO       Downloading House 2024 index…
+08:59:57  INFO       House 2024: 905 PTR filings in index
+08:59:57  INFO       Downloading House 2025 index…
+08:59:58  INFO       House 2025: 1229 PTR filings in index
+08:59:58  INFO       Downloading House 2026 index…
+08:59:58  INFO       House 2026: 658 PTR filings in index
+08:59:58  INFO       House: 1451/2792 PTRs in date range
+09:00:25  INFO         House PDF 20/1451 — 0 trades
+09:00:53  INFO         House PDF 40/1451 — 0 trades
+09:01:21  INFO         House PDF 60/1451 — 0 trades
+09:01:49  INFO         House PDF 80/1451 — 0 trades
+09:02:19  INFO         House PDF 100/1451 — 0 trades
+09:02:47  INFO         House PDF 120/1451 — 0 trades
+09:03:16  INFO         House PDF 140/1451 — 0 trades
+09:03:44  INFO         House PDF 160/1451 — 0 trades
+09:04:13  INFO         House PDF 180/1451 — 0 trades
+09:04:41  INFO         House PDF 200/1451 — 0 trades
+09:05:09  INFO         House PDF 220/1451 — 0 trades
+09:05:38  INFO         House PDF 240/1451 — 0 trades
+09:06:06  INFO         House PDF 260/1451 — 0 trades
+09:06:34  INFO         House PDF 280/1451 — 0 trades
+09:07:03  INFO         House PDF 300/1451 — 0 trades
+09:07:33  INFO         House PDF 320/1451 — 0 trades
+09:08:03  INFO         House PDF 340/1451 — 0 trades
+09:08:32  INFO         House PDF 360/1451 — 0 trades
+09:09:01  INFO         House PDF 380/1451 — 0 trades
+09:09:31  INFO         House PDF 400/1451 — 0 trades
+09:10:00  INFO         House PDF 420/1451 — 0 trades
+09:10:29  INFO         House PDF 440/1451 — 0 trades
+09:10:58  INFO         House PDF 460/1451 — 0 trades
+09:11:27  INFO         House PDF 480/1451 — 0 trades
+09:11:56  INFO         House PDF 500/1451 — 0 trades
+09:12:25  INFO         House PDF 520/1451 — 0 trades
+09:12:55  INFO         House PDF 540/1451 — 0 trades
+09:13:24  INFO         House PDF 560/1451 — 0 trades
+09:13:53  INFO         House PDF 580/1451 — 1 trades
+09:14:23  INFO         House PDF 600/1451 — 1 trades
+09:14:52  INFO         House PDF 620/1451 — 1 trades
+09:15:21  INFO         House PDF 640/1451 — 1 trades
+09:15:51  INFO         House PDF 660/1451 — 1 trades
+09:16:22  INFO         House PDF 680/1451 — 1 trades
+09:16:53  INFO         House PDF 700/1451 — 1 trades
+09:17:22  INFO         House PDF 720/1451 — 1 trades
+09:17:52  INFO         House PDF 740/1451 — 1 trades
+09:18:21  INFO         House PDF 760/1451 — 1 trades
+09:18:50  INFO         House PDF 780/1451 — 1 trades
+09:19:20  INFO         House PDF 800/1451 — 1 trades
+09:19:49  INFO         House PDF 820/1451 — 1 trades
+09:20:19  INFO         House PDF 840/1451 — 1 trades
+09:20:48  INFO         House PDF 860/1451 — 1 trades
+09:21:17  INFO         House PDF 880/1451 — 1 trades
+09:21:46  INFO         House PDF 900/1451 — 1 trades
+09:22:17  INFO         House PDF 920/1451 — 1 trades
+09:22:46  INFO         House PDF 940/1451 — 1 trades
+09:23:16  INFO         House PDF 960/1451 — 1 trades
+09:23:45  INFO         House PDF 980/1451 — 1 trades
+09:24:14  INFO         House PDF 1000/1451 — 1 trades
+09:24:42  INFO         House PDF 1020/1451 — 1 trades
+09:25:11  INFO         House PDF 1040/1451 — 1 trades
+09:25:41  INFO         House PDF 1060/1451 — 1 trades
+09:26:14  INFO         House PDF 1080/1451 — 1 trades
+09:26:42  INFO         House PDF 1100/1451 — 1 trades
+09:27:10  INFO         House PDF 1120/1451 — 1 trades
+09:27:38  INFO         House PDF 1140/1451 — 1 trades
+09:28:07  INFO         House PDF 1160/1451 — 1 trades
+09:28:36  INFO         House PDF 1180/1451 — 1 trades
+09:29:04  INFO         House PDF 1200/1451 — 1 trades
+09:29:33  INFO         House PDF 1220/1451 — 1 trades
+09:30:01  INFO         House PDF 1240/1451 — 1 trades
+09:30:29  INFO         House PDF 1260/1451 — 1 trades
+09:30:56  INFO         House PDF 1280/1451 — 1 trades
+09:31:26  INFO         House PDF 1300/1451 — 1 trades
+09:31:55  INFO         House PDF 1320/1451 — 1 trades
+09:32:24  INFO         House PDF 1340/1451 — 1 trades
+09:32:52  INFO         House PDF 1360/1451 — 1 trades
+09:33:21  INFO         House PDF 1380/1451 — 1 trades
+09:33:48  INFO         House PDF 1400/1451 — 1 trades
+09:34:16  INFO         House PDF 1420/1451 — 1 trades
+09:34:44  INFO         House PDF 1440/1451 — 1 trades
+09:35:00  INFO         House PDF 1451/1451 — 1 trades
+09:35:01  INFO       House total: 1 new trades
+09:35:01  INFO     
+Total: 1 trades  (1 buys, 0 sells)
+09:35:01  INFO     
+Top buys by value:
+09:35:01  INFO       Brandon Gill                   (House ) IBIT    ~$    50,001  2025-07-17
+09:35:02  INFO       Wrote batch 1: 1 rows (1 total)
+09:35:02  INFO     
+✓ 1 congressional trades written to Neon
+09:35:02  INFO       Filter: WHERE transaction_code LIKE 'CONGRESS%'
+09:35:02  INFO     ════════════════════════════════════════════════════════════════
+=== House, last 1095 days ===
+09:35:03  INFO     ════════════════════════════════════════════════════════════════
+09:35:03  INFO       Congressional Trades Scraper
+09:35:03  INFO       Range: 2023-10-07 → 2026-10-06  (1095 days)
+09:35:03  INFO       House: yes  Senate: no  Dry run: False
+09:35:03  INFO     ════════════════════════════════════════════════════════════════
+09:35:03  INFO     Loading existing congressional accessions…
+09:35:05  INFO       44,801 already in DB
+09:35:05  INFO     
+── House of Representatives ──
+09:35:05  INFO       Downloading House 2023 index…
+09:35:06  INFO       House 2023: 1013 PTR filings in index
+09:35:06  INFO       Downloading House 2024 index…
+09:35:07  INFO       House 2024: 905 PTR filings in index
+09:35:07  INFO       Downloading House 2025 index…
+09:35:08  INFO       House 2025: 1229 PTR filings in index
+09:35:08  INFO       Downloading House 2026 index…
+09:35:08  INFO       House 2026: 658 PTR filings in index
+09:35:08  INFO       House: 2114/3805 PTRs in date range
+09:35:35  INFO         House PDF 20/2114 — 0 trades
+09:36:03  INFO         House PDF 40/2114 — 0 trades
+09:36:31  INFO         House PDF 60/2114 — 0 trades
+09:37:00  INFO         House PDF 80/2114 — 0 trades
+09:37:28  INFO         House PDF 100/2114 — 0 trades
+09:37:56  INFO         House PDF 120/2114 — 0 trades
+09:38:24  INFO         House PDF 140/2114 — 0 trades
+09:38:52  INFO         House PDF 160/2114 — 0 trades
+09:39:20  INFO         House PDF 180/2114 — 0 trades
+09:39:49  INFO         House PDF 200/2114 — 0 trades
+09:40:17  INFO         House PDF 220/2114 — 0 trades
+09:40:45  INFO         House PDF 240/2114 — 0 trades
+09:41:14  INFO         House PDF 260/2114 — 0 trades
+09:41:43  INFO         House PDF 280/2114 — 0 trades
+09:42:11  INFO         House PDF 300/2114 — 0 trades
+09:42:39  INFO         House PDF 320/2114 — 0 trades
+09:43:07  INFO         House PDF 340/2114 — 0 trades
+09:43:35  INFO         House PDF 360/2114 — 0 trades
+09:44:03  INFO         House PDF 380/2114 — 0 trades
+09:44:31  INFO         House PDF 400/2114 — 0 trades
+09:44:59  INFO         House PDF 420/2114 — 0 trades
+09:45:29  INFO         House PDF 440/2114 — 0 trades
+09:45:57  INFO         House PDF 460/2114 — 0 trades
+09:46:25  INFO         House PDF 480/2114 — 0 trades
+09:46:53  INFO         House PDF 500/2114 — 0 trades
+09:47:21  INFO         House PDF 520/2114 — 0 trades
+09:47:49  INFO         House PDF 540/2114 — 0 trades
+09:48:17  INFO         House PDF 560/2114 — 0 trades
+09:48:45  INFO         House PDF 580/2114 — 0 trades
+09:49:14  INFO         House PDF 600/2114 — 0 trades
+09:49:42  INFO         House PDF 620/2114 — 0 trades
+09:50:10  INFO         House PDF 640/2114 — 0 trades
+09:50:38  INFO         House PDF 660/2114 — 0 trades
+09:51:09  INFO         House PDF 680/2114 — 0 trades
+09:51:37  INFO         House PDF 700/2114 — 0 trades
+09:52:05  INFO         House PDF 720/2114 — 0 trades
+09:52:35  INFO         House PDF 740/2114 — 0 trades
+09:53:03  INFO         House PDF 760/2114 — 0 trades
+09:53:33  INFO         House PDF 780/2114 — 0 trades
+09:54:01  INFO         House PDF 800/2114 — 0 trades
+09:54:30  INFO         House PDF 820/2114 — 0 trades
+09:54:58  INFO         House PDF 840/2114 — 0 trades
+09:55:26  INFO         House PDF 860/2114 — 0 trades
+09:55:54  INFO         House PDF 880/2114 — 0 trades
+09:56:22  INFO         House PDF 900/2114 — 0 trades
+09:56:50  INFO         House PDF 920/2114 — 0 trades
+09:57:19  INFO         House PDF 940/2114 — 0 trades
+09:57:48  INFO         House PDF 960/2114 — 0 trades
+09:58:18  INFO         House PDF 980/2114 — 0 trades
+09:58:48  INFO         House PDF 1000/2114 — 0 trades
+09:59:18  INFO         House PDF 1020/2114 — 0 trades
+09:59:48  INFO         House PDF 1040/2114 — 0 trades
+10:00:17  INFO         House PDF 1060/2114 — 0 trades
+10:00:47  INFO         House PDF 1080/2114 — 0 trades
+10:01:15  INFO         House PDF 1100/2114 — 0 trades
+10:01:45  INFO         House PDF 1120/2114 — 0 trades
+10:02:15  INFO         House PDF 1140/2114 — 0 trades
+10:02:44  INFO         House PDF 1160/2114 — 0 trades
+10:03:14  INFO         House PDF 1180/2114 — 0 trades
+10:03:43  INFO         House PDF 1200/2114 — 0 trades
+10:04:14  INFO         House PDF 1220/2114 — 0 trades
+10:04:44  INFO         House PDF 1240/2114 — 0 trades
+10:05:14  INFO         House PDF 1260/2114 — 0 trades
+10:05:45  INFO         House PDF 1280/2114 — 0 trades
+10:06:14  INFO         House PDF 1300/2114 — 0 trades
+10:06:43  INFO         House PDF 1320/2114 — 0 trades
+10:07:15  INFO         House PDF 1340/2114 — 0 trades
+10:07:46  INFO         House PDF 1360/2114 — 0 trades
+10:08:15  INFO         House PDF 1380/2114 — 0 trades
+10:08:45  INFO         House PDF 1400/2114 — 0 trades
+10:09:14  INFO         House PDF 1420/2114 — 0 trades
+10:09:44  INFO         House PDF 1440/2114 — 0 trades
+10:10:13  INFO         House PDF 1460/2114 — 0 trades
+10:10:42  INFO         House PDF 1480/2114 — 0 trades
+10:11:12  INFO         House PDF 1500/2114 — 0 trades
+10:11:42  INFO         House PDF 1520/2114 — 0 trades
+10:12:11  INFO         House PDF 1540/2114 — 0 trades
+10:12:40  INFO         House PDF 1560/2114 — 0 trades
+10:13:08  INFO         House PDF 1580/2114 — 0 trades
+10:13:35  INFO         House PDF 1600/2114 — 0 trades
+10:14:03  INFO         House PDF 1620/2114 — 0 trades
+10:14:31  INFO         House PDF 1640/2114 — 0 trades
+10:15:00  INFO         House PDF 1660/2114 — 0 trades
+10:15:30  INFO         House PDF 1680/2114 — 0 trades
+10:16:00  INFO         House PDF 1700/2114 — 0 trades
+10:16:30  INFO         House PDF 1720/2114 — 0 trades
+10:17:02  INFO         House PDF 1740/2114 — 0 trades
+10:17:32  INFO         House PDF 1760/2114 — 0 trades
+10:18:02  INFO         House PDF 1780/2114 — 0 trades
+10:18:33  INFO         House PDF 1800/2114 — 0 trades
+10:19:02  INFO         House PDF 1820/2114 — 0 trades
+10:19:32  INFO         House PDF 1840/2114 — 0 trades
+10:20:02  INFO         House PDF 1860/2114 — 0 trades
+10:20:31  INFO         House PDF 1880/2114 — 0 trades
+10:21:01  INFO         House PDF 1900/2114 — 0 trades
+10:21:30  INFO         House PDF 1920/2114 — 0 trades
+10:22:01  INFO         House PDF 1940/2114 — 0 trades
+10:22:33  INFO         House PDF 1960/2114 — 0 trades
+10:23:04  INFO         House PDF 1980/2114 — 0 trades
+10:23:34  INFO         House PDF 2000/2114 — 0 trades
+10:24:05  INFO         House PDF 2020/2114 — 0 trades
+10:24:36  INFO         House PDF 2040/2114 — 0 trades
+10:25:06  INFO         House PDF 2060/2114 — 0 trades
+10:25:36  INFO         House PDF 2080/2114 — 0 trades
+10:26:06  INFO         House PDF 2100/2114 — 0 trades
+10:26:27  INFO         House PDF 2114/2114 — 0 trades
+10:26:28  INFO       House total: 0 new trades
+10:26:28  INFO     
+Total: 0 trades  (0 buys, 0 sells)
+10:26:28  INFO     No new trades found.
+=== House, last 1460 days ===
+10:26:29  INFO     ════════════════════════════════════════════════════════════════
+10:26:29  INFO       Congressional Trades Scraper
+10:26:29  INFO       Range: 2022-10-07 → 2026-10-06  (1460 days)
+10:26:29  INFO       House: yes  Senate: no  Dry run: False
+10:26:29  INFO     ════════════════════════════════════════════════════════════════
+10:26:29  INFO     Loading existing congressional accessions…
+10:26:31  INFO       44,801 already in DB
+10:26:31  INFO     
+── House of Representatives ──
+10:26:31  INFO       Downloading House 2022 index…
+10:26:32  INFO       House 2022: 1088 PTR filings in index
+10:26:32  INFO       Downloading House 2023 index…
+10:26:33  INFO       House 2023: 1013 PTR filings in index
+10:26:33  INFO       Downloading House 2024 index…
+10:26:34  INFO       House 2024: 905 PTR filings in index
+10:26:34  INFO       Downloading House 2025 index…
+10:26:34  INFO       House 2025: 1229 PTR filings in index
+10:26:34  INFO       Downloading House 2026 index…
+10:26:35  INFO       House 2026: 658 PTR filings in index
+10:26:35  INFO       House: 2698/4893 PTRs in date range
+10:27:04  INFO         House PDF 20/2698 — 0 trades
+10:27:33  INFO         House PDF 40/2698 — 0 trades
+10:28:03  INFO         House PDF 60/2698 — 0 trades
+10:28:33  INFO         House PDF 80/2698 — 0 trades
+10:29:02  INFO         House PDF 100/2698 — 0 trades
+10:29:31  INFO         House PDF 120/2698 — 0 trades
+10:30:02  INFO         House PDF 140/2698 — 0 trades
+10:30:33  INFO         House PDF 160/2698 — 0 trades
+10:31:03  INFO         House PDF 180/2698 — 0 trades
+10:31:33  INFO         House PDF 200/2698 — 0 trades
+10:32:05  INFO         House PDF 220/2698 — 0 trades
+10:32:35  INFO         House PDF 240/2698 — 0 trades
+10:33:06  INFO         House PDF 260/2698 — 0 trades
+10:33:36  INFO         House PDF 280/2698 — 0 trades
+10:34:06  INFO         House PDF 300/2698 — 0 trades
+10:34:36  INFO         House PDF 320/2698 — 0 trades
+10:35:04  INFO         House PDF 340/2698 — 0 trades
+10:35:34  INFO         House PDF 360/2698 — 0 trades
+10:36:04  INFO         House PDF 380/2698 — 0 trades
+10:36:33  INFO         House PDF 400/2698 — 0 trades
+10:37:03  INFO         House PDF 420/2698 — 0 trades
+10:37:33  INFO         House PDF 440/2698 — 0 trades
+10:38:01  INFO         House PDF 460/2698 — 0 trades
+10:38:30  INFO         House PDF 480/2698 — 0 trades
+10:38:59  INFO         House PDF 500/2698 — 0 trades
+10:39:28  INFO         House PDF 520/2698 — 0 trades
+10:39:57  INFO         House PDF 540/2698 — 0 trades
+10:40:27  INFO         House PDF 560/2698 — 0 trades
+10:40:55  INFO         House PDF 580/2698 — 0 trades

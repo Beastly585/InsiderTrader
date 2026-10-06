@@ -1,0 +1,17 @@
+10:50:55  INFO     ════════════════════════════════════════════════════════════════
+10:50:55  INFO       Congressional Trades Scraper
+10:50:55  INFO       Range: 2012-10-08 → 2026-10-05  (5110 days)
+10:50:55  INFO       House: no  Senate: yes  Dry run: False
+10:50:55  INFO     ════════════════════════════════════════════════════════════════
+10:50:55  INFO     Loading existing congressional accessions…
+10:50:59  INFO       44,331 already in DB
+10:50:59  INFO     
+── Senate ──
+10:50:59  INFO       Establishing Senate EFD session…
+10:51:00  INFO       Senate: CSRF token obtained
+10:51:00  INFO       Senate: agreement accepted (200)
+10:51:02  WARNING    Senate 503 — site may be in maintenance
+10:51:02  INFO       Senate: 0 PTR filings found
+10:51:02  INFO     
+Total: 0 trades  (0 buys, 0 sells)
+10:51:02  INFO     No new trades found.

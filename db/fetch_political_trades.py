@@ -90,6 +90,14 @@ def get_sector(t): return TICKER_SECTOR.get((t or "").upper().strip(), "Other")
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
 def safe_date(v: Optional[str]) -> Optional[str]:
+    d = _parse_date(v)
+    # Filers sometimes typo the year (2202, 3031). A date that can't be real
+    # becomes None, and the site falls back to the filing date.
+    if d and not (1990 <= int(d[:4]) <= date.today().year + 1):
+        return None
+    return d
+
+def _parse_date(v: Optional[str]) -> Optional[str]:
     if not v: return None
     v = str(v).strip()
     m = re.match(r'(\d{4})-(\d{2})-(\d{2})', v)

@@ -145,7 +145,11 @@ def safe_date(v) -> Optional[str]:
     """
     if not v: return None
     m = re.match(r'(\d{4}-\d{2}-\d{2})', str(v).strip())
-    return m.group(1) if m else None
+    if not m: return None
+    # A typo'd year (0205, 2205) can't be a real trade date. None makes the
+    # site fall back to the filing date.
+    if not (1990 <= int(m.group(1)[:4]) <= date.today().year + 1): return None
+    return m.group(1)
 
 def xtxt(el, *tags):
     cur = el
