@@ -8,7 +8,7 @@ import { SignInButton, useClerk } from '@clerk/clerk-react';
 import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink } from '../lib/nav.jsx';
 import { plural, shortDate, money, congressRange } from '../lib/text.js';
-import { Card, Skeleton, ErrorNote, Icon } from '../components/ui.jsx';
+import { Card, Skeleton, ErrorNote, Icon, useNarrow } from '../components/ui.jsx';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
 import { TradeTable } from './StockPage.jsx';
@@ -154,7 +154,7 @@ export function CongressPage() {
       {d && (
         <>
           <Card title="Latest disclosures" sub="Stock trades, most recent first" pad={false}>
-            <TradeTable trades={(d.recent || []).slice(0, 30)} showTicker />
+            <TradeTable trades={(d.recent || []).slice(0, 30)} showTicker personLabel="Member" membersOnly />
           </Card>
           <div className="sx-feed-cols">
             <Card title="Members who traded in the last 12 months" pad={false}>
@@ -227,6 +227,7 @@ export function PublicHome() {
   const { data: congress } = useApi('/public/congress');
   const { data: leaders } = useApi('/public/leaderboard?years=1&source=all');
   useEffect(() => { document.title = 'Seli: Insider Trading & Congress Stock Trades Tracker'; }, []);
+  const narrow = useNarrow();
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
   const goPro = () => openSignUp(clerk, { kind: 'upgrade' });
   const clusters = [buying?.featured, ...(buying?.more || [])].filter(Boolean).slice(0, 9);
@@ -237,7 +238,7 @@ export function PublicHome() {
         <p className="sx-hero__eyebrow">Insider trading &amp; Congress stock tracker</p>
         <h1 className="sx-hero__title">See what executives and members of Congress are buying with their own money.</h1>
         <p className="sx-hero__sub">Every SEC Form 4 and STOCK Act filing, explained in plain English. Look up any stock or person, and get an email when someone trades what you own.</p>
-        <div className="sx-hero__search"><SearchBox variant="inline" placeholder="Search a ticker, company, executive or member of Congress" /></div>
+        <div className="sx-hero__search"><SearchBox variant="inline" placeholder={narrow ? 'Search a stock or person' : 'Search a ticker, company, executive or member of Congress'} /></div>
         <div className="sx-hero__cta">
           <button className="sx-btn sx-btn--accent" onClick={signUp}>Get started free</button>
           <span className="sx-muted sx-small">No card needed. Data from SEC EDGAR and congressional disclosures.</span>

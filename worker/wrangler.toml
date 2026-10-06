@@ -43,3 +43,5 @@ bucket_name = "database"
 # which otherwise adds 500ms–2s of cold-start latency to the first real query.
 crons = ["0 6 * * *", "*/4 * * * *"]
 
+[vars]
+GH_REPO = "Beastly585/InsiderTrader"

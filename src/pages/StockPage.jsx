@@ -7,7 +7,7 @@ import { useApi } from '../lib/api.js';
 import { InsiderLink, StockLink, pushRecent } from '../lib/nav.jsx';
 import { money, amount, price, shares, pct, shortDate, ago, plural, codeLabel, edgarCompanyUrl } from '../lib/text.js';
 import { secFilingUrl } from '../edgar.js';
-import { Card, TypeBadge, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, Icon } from '../components/ui.jsx';
+import { Card, TypeBadge, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, Icon, useNarrow } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
 import PriceChart from '../components/PriceChart.jsx';
 
@@ -160,8 +160,50 @@ function StockView({ d, watchlist, onUpgrade, renderProfile }) {
   );
 }
 
-export function TradeTable({ trades, showTicker = false, showInsider = true, showNow = false }) {
+// Phones: one stacked row per trade instead of a squeezed table.
+//   [ticker]  Who / what                  $value
+//             date · role/detail          Buy · +12%
+function TradeList({ trades, showTicker, showInsider, showNow, membersOnly }) {
+  return (
+    <ul className="sx-trows">
+      {trades.map((t, i) => {
+        const since = showNow && t.om && t.type === 'buy' && t.price > 0 && t.now ? (t.now - t.price) / t.price * 100 : null;
+        const role = membersOnly ? '' : t.congress ? 'Congress' : t.role;
+        const detail = !t.om ? codeLabel(t.code) : t.routine ? 'Planned' : '';
+        // Who traded (stock pages), which company (multi-company people), or,
+        // on a one-company insider page, the trade itself.
+        const verb = t.type === 'buy' ? (t.om ? 'Bought' : 'Acquired') : t.type === 'sell' ? (t.om ? 'Sold' : 'Disposed') : 'Traded';
+        const title = showInsider
+          ? <InsiderLink raw={t.raw}>{t.name}</InsiderLink>
+          : showTicker || t.congress || !t.shares
+            ? <span>{t.company || t.ticker || verb}</span>
+            : <span>{verb} {shares(t.shares)} sh{t.price > 0 ? ` at ${price(t.price)}` : ''}</span>;
+        const sub = [shortDate(t.date), showInsider ? role : '', detail].filter(Boolean).join(' · ');
+        return (
+          <li key={`${t.acc}:${i}`} className={`sx-trow${t.om ? '' : ' sx-trow--muted'}`}>
+            {showTicker && (t.ticker ? <StockLink ticker={t.ticker} /> : <span className="sx-trow__asset" title={t.company || ''}>Other</span>)}
+            <div className="sx-trow__main">
+              <div className="sx-trow__title">{title}</div>
+              <div className="sx-trow__sub">{sub}</div>
+            </div>
+            <div className="sx-trow__end">
+              <span className={`sx-trow__amt${t.om ? (t.type === 'buy' ? ' sx-up' : ' sx-down') : ''}`}>{amount(t.value, t.congress)}</span>
+              <span className="sx-trow__meta">
+                <TypeBadge type={t.type} om={t.om} />
+                {since != null && <span className={since >= 0 ? 'sx-up' : 'sx-down'}>{pct(since)}</span>}
+              </span>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function TradeTable({ trades, showTicker = false, showInsider = true, showNow = false, personLabel = 'Insider', membersOnly = false }) {
+  const narrow = useNarrow();
   if (!trades.length) return null;
+  if (narrow) return <TradeList trades={trades} showTicker={showTicker} showInsider={showInsider} showNow={showNow} membersOnly={membersOnly} />;
   return (
     <div className="sx-table-wrap">
       <table className="sx-table">
@@ -169,7 +211,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
           <tr>
             <th>Date</th>
             {showTicker && <th>Stock</th>}
-            {showInsider && <th>Insider</th>}
+            {showInsider && <th>{personLabel}</th>}
             <th>Type</th>
             <th className="sx-r sx-hide-sm">Shares</th>
             <th className="sx-r sx-hide-sm">Price</th>
@@ -189,7 +231,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
                 {showInsider && (
                   <td className="sx-table__who">
                     <InsiderLink raw={t.raw}>{t.name}</InsiderLink>
-                    <span className="sx-table__role">{t.congress ? 'Congress' : t.role}</span>
+                    {!membersOnly && <span className="sx-table__role">{t.congress ? 'Congress' : t.role}</span>}
                   </td>
                 )}
                 <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}</td>

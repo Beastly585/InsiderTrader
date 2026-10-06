@@ -449,7 +449,7 @@ def followed_activity(conn, names: list[str], days: int = 7) -> dict[str, list[d
         k = (r["insider_name"], r["ticker"], r["transaction_type"])
         g = grouped.setdefault(k, {"raw": r["insider_name"], "name": pretty_person(r["insider_name"], is_congress(r)),
                                    "ticker": r["ticker"], "company": pretty_company(r["company_name"]),
-                                   "type": r["transaction_type"], "value": 0.0})
+                                   "type": r["transaction_type"], "value": 0.0, "congress": is_congress(r)})
         g["value"] += r.get("value") or 0
     out: dict[str, list[dict]] = defaultdict(list)
     for (name, _, _), g in grouped.items():

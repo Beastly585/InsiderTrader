@@ -5,7 +5,8 @@ formatting, tracked links, one-click unsubscribe, and the Resend send call.
 
 send_digests.py and send_welcome.py both import from here so the two emails
 look like one product and there's exactly one place that talks to Resend.
-(send_instant_alerts.py can move onto this later; it isn't touched here.)
+send_instant_alerts.py uses it too, with unsub_kind="alerts", so its
+unsubscribe link turns off instant alerts only, not the digests.
 
 Env:
   RESEND_API_KEY      required unless DRY_RUN=true
@@ -416,8 +417,8 @@ DISCLAIMER = ("Seli summarizes public SEC Form 4 and STOCK Act disclosures for i
               "Past insider activity does not predict future stock performance.")
 
 
-def footer(*, reason: str, clerk_user_id: str, manage: bool = True) -> str:
-    unsub = unsubscribe_url(clerk_user_id)
+def footer(*, reason: str, clerk_user_id: str, manage: bool = True, unsub_kind: str = "digest") -> str:
+    unsub = unsubscribe_url(clerk_user_id, unsub_kind)
     links = [a(unsub, "Unsubscribe", MUTED, 500)]
     if manage:
         links.append(a(track("/account#emails", "footer"), "Email settings", MUTED, 500))
@@ -460,14 +461,15 @@ def _preview_write(kind: str, to_email: str, subject: str, html_doc: str) -> Non
 
 
 def send(*, to_email: str, subject: str, html_doc: str, from_name: str, clerk_user_id: str,
-         kind: str, reply_to: str | None = None, from_email: str | None = None, max_retries: int = 3) -> bool:
+         kind: str, reply_to: str | None = None, from_email: str | None = None, max_retries: int = 3,
+         unsub_kind: str = "digest") -> bool:
     _preview_write(kind, to_email, subject, html_doc)
     if DRY_RUN:
         log.info(f"  [DRY RUN] {kind} -> {to_email}: {subject}")
         return True
     if not RESEND_API_KEY:
         log.error("RESEND_API_KEY missing"); return False
-    unsub = unsubscribe_url(clerk_user_id)
+    unsub = unsubscribe_url(clerk_user_id, unsub_kind)
     payload = {
         # Quoted display name: some clients drop an unquoted one and show the bare address.
         "from": f'"{from_name}" <{from_email or FROM_EMAIL}>',

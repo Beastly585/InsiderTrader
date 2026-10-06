@@ -1,5 +1,19 @@
 // src/components/ui.jsx — small building blocks for the research pages.
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+
+// True below a width, kept in sync as the window resizes. Tables use it to
+// switch to stacked rows on phones instead of squeezing columns.
+export function useNarrow(px = 640) {
+  const q = `(max-width: ${px}px)`;
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setNarrow(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, [q]);
+  return narrow;
+}
 
 export function Card({ title, sub, action, children, className = '', id, pad = true }) {
   return (

@@ -22,7 +22,7 @@ const CONGRESS_RANGES = [[1e3, 15e3], [15e3, 50e3], [50e3, 100e3], [100e3, 250e3
 // STOCK Act amounts are ranges; the DB stores the midpoint. Show the range.
 export function congressRange(v) {
   if (v == null) return 'undisclosed';
-  for (const [lo, hi] of CONGRESS_RANGES) if (Number(v) <= hi) return `${money(lo)}–${money(hi)}`;
+  for (const [lo, hi] of CONGRESS_RANGES) if (Number(v) <= hi) return `${money(lo)}–${money(hi).replace('$', '')}`;
   return 'over $50M';
 }
 export const amount = (v, congress) => (congress ? congressRange(v) : money(v));

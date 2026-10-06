@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { InsiderLink, StockLink } from '../lib/nav.jsx';
 import { useApi } from '../lib/api.js';
 import { money, pct, plural } from '../lib/text.js';
-import { Card, Segmented, Skeleton, ErrorNote, Gate, Chip } from '../components/ui.jsx';
+import { Card, Segmented, Skeleton, ErrorNote, Gate, Chip, useNarrow } from '../components/ui.jsx';
 
 const LIST = { rank: 'ranked', hit: 'by_hit', ret: 'by_return', buys: 'by_buying' };
 const signed = (v, d = 1) => `${v >= 0 ? '+' : ''}${Number(v).toFixed(d)}`;
@@ -22,17 +22,6 @@ function headline(r, sort) {
   return { value: r.excess != null ? `${signed(r.excess, 0)} pts` : '—', label: 'vs S&P 500', tone: r.excess == null ? 'sx-muted' : r.excess >= 0 ? 'sx-up' : 'sx-down' };
 }
 
-function useNarrow(px = 640) {
-  const q = `(max-width: ${px}px)`;
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches);
-  useEffect(() => {
-    const m = window.matchMedia(q);
-    const on = () => setNarrow(m.matches);
-    m.addEventListener('change', on);
-    return () => m.removeEventListener('change', on);
-  }, [q]);
-  return narrow;
-}
 
 // Phone layout: one card-like row per person, ranked number on the right.
 function LeaderList({ rows, sort }) {

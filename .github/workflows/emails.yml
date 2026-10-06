@@ -1,19 +1,29 @@
 # .github/workflows/emails.yml
-# Welcome email (daily), weekly digest (Sunday evening), daily digest (Pro, weekdays).
-# Cron is UTC. Times below are for EDT (UTC-4); in winter (EST) they land an hour earlier.
+# Welcome email, Pro daily digest, weekly digest. The only workflow that sends
+# digests (digests.yml was an older duplicate and is gone).
+#
+# How runs start: the Cloudflare Worker starts each job on time through
+# workflow_dispatch (see dispatchScheduled() in worker/neon-proxy.js).
+# GitHub's own scheduler delayed or dropped on-the-hour runs.
+#   daily    12:30 UTC weekdays   Pro daily digest (after the 12:00 pre-market ingest)
+#   welcome  13:00 UTC every day  welcome email for new sign-ups
+#   weekly   22:00 UTC Sunday     weekly digest for everyone
+#
+# Backup: one GitHub schedule a day. If the Worker hasn't started an email run
+# in the last 26 hours, it runs whatever is due. Every script has its own
+# "already sent" guard, so a backup that overlaps a Worker run sends nothing
+# twice (welcome: welcome_sent_at; daily: 18h; weekly: 5 days).
 name: emails
 
 on:
   schedule:
-    - cron: "0 13 * * *"     # welcome      09:00 ET daily
-    - cron: "0 22 * * 0"     # weekly       18:00 ET Sunday
-    - cron: "0 12 * * 1-5"   # daily (Pro)  08:00 ET weekdays
+    - cron: '41 15 * * *'   # backup
   workflow_dispatch:
     inputs:
       job:
-        description: "welcome | weekly | daily"
-        required: true
-        default: weekly
+        description: "welcome | daily | weekly (set by the Worker; blank = whatever is due)"
+        required: false
+        default: ""
       only_email:
         description: "Send only to this address (testing)"
         required: false
@@ -21,6 +31,14 @@ on:
         description: "true = build but don't send"
         required: false
         default: "false"
+
+concurrency:
+  group: emails
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read   # the backup check reads this workflow's recent runs
 
 jobs:
   send:
@@ -40,29 +58,49 @@ jobs:
       WELCOME_REPLY_TO:   ${{ secrets.WELCOME_REPLY_TO }}
       MAILING_ADDRESS:    ${{ secrets.MAILING_ADDRESS }}
       ONLY_EMAIL:         ${{ github.event.inputs.only_email }}
-      DRY_RUN:            ${{ github.event.inputs.dry_run || 'false' }}
+      DRY_RUN:            ${{ github.event.inputs.dry_run == 'true' && 'true' || 'false' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: pip install "psycopg[binary]" requests python-dotenv
-      - name: Pick job
+      - name: Pick jobs
         id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB: ${{ github.event.inputs.job }}
+        working-directory: .
         run: |
-          JOB="${{ github.event.inputs.job }}"
-          if [ -z "$JOB" ]; then
-            case "${{ github.event.schedule }}" in
-              "0 13 * * *")   JOB=welcome ;;
-              "0 22 * * 0")   JOB=weekly ;;
-              "0 12 * * 1-5") JOB=daily ;;
-            esac
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            LAST=$(gh api "repos/${{ github.repository }}/actions/workflows/emails.yml/runs?event=workflow_dispatch&per_page=1" --jq '.workflow_runs[0].created_at // empty')
+            if [ -n "$LAST" ] && [ $(( $(date -u +%s) - $(date -u -d "$LAST" +%s) )) -lt 93600 ]; then
+              echo "Worker started an email run at $LAST; backup not needed."
+              echo "jobs=" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            JOB=""
           fi
-          echo "job=$JOB" >> "$GITHUB_OUTPUT"
-      - if: steps.pick.outputs.job == 'welcome'
+          if [ -z "$JOB" ]; then
+            # Whatever is due today. The scripts skip anyone already sent.
+            DOW=$(date -u +%u)                      # 1=Mon ... 7=Sun
+            JOB="welcome"
+            [ "$DOW" -le 5 ] && JOB="$JOB daily"
+            [ "$DOW" = 7 ] || [ "$DOW" = 1 ] && JOB="$JOB weekly"   # Monday catches a missed Sunday
+          fi
+          echo "Jobs: $JOB"
+          echo "jobs=$JOB" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.pick.outputs.jobs != ''
+      - uses: actions/setup-python@v5
+        if: steps.pick.outputs.jobs != ''
+        with: { python-version: "3.11", cache: "pip" }
+      - run: pip install "psycopg[binary]" requests python-dotenv
+        if: steps.pick.outputs.jobs != ''
+
+      - name: Welcome email
+        if: contains(steps.pick.outputs.jobs, 'welcome')
         run: python send_welcome.py
-      - if: steps.pick.outputs.job == 'weekly'
-        run: python send_digests.py
-        env: { DIGEST_TYPE: weekly }
-      - if: steps.pick.outputs.job == 'daily'
+      - name: Pro daily digest
+        if: ${{ !cancelled() && contains(steps.pick.outputs.jobs, 'daily') }}
         run: python send_digests.py
         env: { DIGEST_TYPE: daily }
+      - name: Weekly digest
+        if: ${{ !cancelled() && contains(steps.pick.outputs.jobs, 'weekly') }}
+        run: python send_digests.py
+        env: { DIGEST_TYPE: weekly }

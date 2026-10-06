@@ -150,6 +150,9 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           WORKER_API_KEY: ${{ secrets.WORKER_API_KEY }}
           NEON_PROXY_URL: ${{ secrets.NEON_PROXY_URL }}
+          # The shared email footer: one-click unsubscribe + mailing address.
+          EMAIL_LINK_SECRET: ${{ secrets.EMAIL_LINK_SECRET }}
+          MAILING_ADDRESS: ${{ secrets.MAILING_ADDRESS }}
           # This script expects "true"/"false" (unlike the others).
           DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && 'true' || 'false' }}
         run: |

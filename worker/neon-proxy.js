@@ -313,10 +313,10 @@ const workerHandler = {
       // Start the GitHub ingest runs. GitHub's own scheduler dropped or
       // delayed them by hours; this cron fires on time.
       try {
-        const started = await dispatchIngest(env, new Date(event.scheduledTime || Date.now()));
-        if (started) console.log('[Scheduled] ingest dispatched:', started);
+        const started = await dispatchScheduled(env, new Date(event.scheduledTime || Date.now()));
+        if (started) console.log('[Scheduled] dispatched:', started);
       } catch (e) {
-        console.error('[Scheduled] ingest dispatch failed:', e.message);
+        console.error('[Scheduled] dispatch failed:', e.message);
       }
       // Fill in at most one missing/stale saved leaderboard per tick.
       try {
@@ -1293,37 +1293,52 @@ async function buildExportCSV(env) {
 }
 
 
-// ── Ingest scheduler (starts .github/workflows/ingest.yml) ─────────────────
-// Runs on the 4-minute tick. The tick lands in each half hour's first four
-// minutes exactly once (minutes 0-3 and 30-33), so each slot fires one run.
-// All times UTC, matching the tiers documented in ingest.yml:
-//   08:00 every day          wide  (4 days back, prices, Congress)
-//   12:00 weekdays           pre   (2 days back, prices, tweet cards)
-//   13:30-20:30 weekdays     poll  (every 30 min, 1 day back, instant alerts)
-//   21:00 weekdays           post  (1 day back, prices, tweet cards)
-// Needs: GH_DISPATCH_TOKEN (secret; fine-grained token, this repo only,
-// Actions: read & write) and GH_REPO (var, "owner/repo").
-export function ingestTierFor(now) {
-  const h = now.getUTCHours(), m = now.getUTCMinutes(), dow = now.getUTCDay();
+// ── GitHub workflow scheduler ───────────────────────────────────────────────
+// GitHub's own cron delayed on-the-hour runs by hours or dropped them, so the
+// 4-minute tick starts the workflows instead. The tick lands in each half
+// hour's first four minutes exactly once (minutes 0-3 and 30-33), so each slot
+// fires one run. All times UTC.
+//   ingest.yml (tier input)
+//     08:00 every day        wide  (4 days back, prices, Congress)
+//     12:00 weekdays         pre   (2 days back, prices, tweet cards)
+//     13:30-20:30 weekdays   poll  (every 30 min, instant alerts)
+//     21:00 weekdays         post  (1 day back, prices, tweet cards)
+//   emails.yml (job input)
+//     12:30 weekdays         daily    Pro daily digest, after the pre-market ingest
+//     13:00 every day        welcome
+//     22:00 Sunday           weekly
+// Needs GH_DISPATCH_TOKEN (secret; fine-grained, this repo only, Actions:
+// read & write) and GH_REPO (var, "owner/repo").
+function slotOf(now) {
+  const m = now.getUTCMinutes();
   if (m % 30 >= 4) return null;
-  const slot = h * 60 + (m < 30 ? 0 : 30);
-  const weekday = dow >= 1 && dow <= 5;
-  if (slot === 8 * 60) return 'wide';
+  return { slot: now.getUTCHours() * 60 + (m < 30 ? 0 : 30), dow: now.getUTCDay() };
+}
+
+export function ingestTierFor(now) {
+  const s = slotOf(now);
+  if (!s) return null;
+  const weekday = s.dow >= 1 && s.dow <= 5;
+  if (s.slot === 8 * 60) return 'wide';
   if (!weekday) return null;
-  if (slot === 12 * 60) return 'pre';
-  if (slot === 21 * 60) return 'post';
-  if (slot >= 13 * 60 + 30 && slot <= 20 * 60 + 30) return 'poll';
+  if (s.slot === 12 * 60) return 'pre';
+  if (s.slot === 21 * 60) return 'post';
+  if (s.slot >= 13 * 60 + 30 && s.slot <= 20 * 60 + 30) return 'poll';
   return null;
 }
 
-async function dispatchIngest(env, now) {
-  const tier = ingestTierFor(now);
-  if (!tier) return null;
-  if (!env.GH_DISPATCH_TOKEN || !env.GH_REPO) {
-    console.warn('[Ingest] GH_DISPATCH_TOKEN / GH_REPO not set; GitHub backup schedules only');
-    return null;
-  }
-  const res = await fetch(`https://api.github.com/repos/${env.GH_REPO}/actions/workflows/ingest.yml/dispatches`, {
+export function emailJobFor(now) {
+  const s = slotOf(now);
+  if (!s) return null;
+  const weekday = s.dow >= 1 && s.dow <= 5;
+  if (weekday && s.slot === 12 * 60 + 30) return 'daily';
+  if (s.slot === 13 * 60) return 'welcome';
+  if (s.dow === 0 && s.slot === 22 * 60) return 'weekly';
+  return null;
+}
+
+async function dispatchWorkflow(env, file, inputs) {
+  const res = await fetch(`https://api.github.com/repos/${env.GH_REPO}/actions/workflows/${file}/dispatches`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.GH_DISPATCH_TOKEN}`,
@@ -1332,13 +1347,29 @@ async function dispatchIngest(env, now) {
       'User-Agent': 'seli-worker',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ ref: env.GH_REF || 'main', inputs: { tier } }),
+    body: JSON.stringify({ ref: env.GH_REF || 'main', inputs }),
   });
   if (res.status !== 204) {
-    // 401 = token expired or wrong; 404 = wrong repo name or token can't see it.
-    throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    // 401 bad/expired token, 403 token lacks Actions write, 404 wrong repo,
+    // 422 the workflow on main doesn't have that input yet.
+    throw new Error(`${file}: GitHub ${res.status}: ${(await res.text()).slice(0, 200)}`);
   }
-  return tier;
+}
+
+async function dispatchScheduled(env, now) {
+  const tier = ingestTierFor(now);
+  const job = emailJobFor(now);
+  if (!tier && !job) return null;
+  if (!env.GH_DISPATCH_TOKEN || !env.GH_REPO) {
+    console.warn('[Dispatch] GH_DISPATCH_TOKEN / GH_REPO not set; GitHub backup schedules only');
+    return null;
+  }
+  const started = [];
+  const errors = [];
+  if (tier) await dispatchWorkflow(env, 'ingest.yml', { tier }).then(() => started.push(`ingest:${tier}`), e => errors.push(e.message));
+  if (job) await dispatchWorkflow(env, 'emails.yml', { job }).then(() => started.push(`emails:${job}`), e => errors.push(e.message));
+  if (errors.length) throw new Error(errors.join(' | '));
+  return started.join(', ');
 }
 
 // ── Dead-man's-switch: ingestion health check ───────────────────────────────

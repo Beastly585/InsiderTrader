@@ -320,7 +320,7 @@ def compose(u: dict, *, weekly: bool, statuses: dict, clusters_by_key: dict, pul
             for g in acts[:3]:
                 verb, color = ("bought", ek.GREEN) if g["type"] == "buy" else ("sold", ek.RED)
                 items += ek.p(f'{ek.a(ek.track(ek.insider_path(g["raw"]), medium, "followed", campaign), ek.esc(g["name"]), ek.TEXT)} '
-                              f'<span style="color:{color};font-weight:600;">{verb} {ek.money(g["value"])}</span> of '
+                              f'<span style="color:{color};font-weight:600;">{verb} {ek.amount(g["value"], g.get("congress", False))}</span> of '
                               f'{ek.ticker_tag(g["ticker"], ek.track(ek.ticker_path(g["ticker"]), medium, "followed", campaign))}', 14, ek.TEXT_2, "0 0 10px")
         watch_html += ek.section("Insiders you follow", items, pad_top=24)
     if port_status:

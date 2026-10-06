@@ -37,10 +37,10 @@ export default function InsiderPage({ raw, watchlist, onUpgrade, publicMode = fa
   return <InsiderView d={d} watchlist={watchlist} onUpgrade={onUpgrade} />;
 }
 
+// Filings with no officer title come through as "Unknown"; never show that.
+const realTitle = t => (t && !/^unknown$/i.test(t.trim()) ? t : '');
+
 function TrackRecord({ r, congress }) {
-  if (congress) {
-    return <p className="sx-muted">Congressional disclosures report a dollar range and often land weeks after the trade, so Seli doesn't score a track record for members of Congress.</p>;
-  }
   if (!r || r.buys_scored < 3) {
     return <p className="sx-muted">Not enough open-market buys with price data to judge a track record{r?.buys_scored ? ` (${plural(r.buys_scored, 'buy')} so far)` : ''}. Seli needs at least 3.</p>;
   }
@@ -55,7 +55,10 @@ function TrackRecord({ r, congress }) {
         {vs && <Stat label="Same periods, S&P 500" value={pct(vs.avg_spy, 1)} sub={`beat it after ${vs.beat} of ${plural(vs.n, 'buy')}`} />}
       </div>
       <p className="sx-note sx-note--flush">
-        Measured from each open-market buy price to the latest close. Buys within 5% either way count as flat and are left out of the hit rate.
+        {congress
+          ? 'Disclosures report a dollar range, not a price, so each buy is measured from the stock\'s close on the trade date to the latest close.'
+          : 'Measured from each open-market buy price to the latest close.'}
+        {' '}Buys within 5% either way count as flat and are left out of the hit rate.
         {vs && vs.n < r.buys_scored ? ` S&P comparison covers the ${vs.n} buys with benchmark data.` : ''} Past trades don't predict future ones.
       </p>
     </>
@@ -79,7 +82,7 @@ function InsiderView({ d, watchlist, onUpgrade }) {
             {d.congress && <Chip tone="accent">Congress</Chip>}
           </div>
           <div className="sx-head__sub">
-            {primary && <span>{d.congress ? (primary.title || 'Member of Congress') : (primary.title || primary.role)}{!d.congress && <> at <StockLink plain ticker={primary.ticker}>{primary.company}</StockLink></>}</span>}
+            {primary && <span>{d.congress ? (realTitle(primary.title) || 'Member of Congress') : (realTitle(primary.title) || primary.role || 'Insider')}{!d.congress && <> at <StockLink plain ticker={primary.ticker}>{primary.company}</StockLink></>}</span>}
             {d.first_trade && <span className="sx-muted">Trades on record {shortDate(d.first_trade, { year: true })} to {shortDate(d.last_trade, { year: true })}</span>}
           </div>
         </div>

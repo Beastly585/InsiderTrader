@@ -54,7 +54,6 @@ load_dotenv(Path(__file__).parent / ".env")
 DATABASE_URL     = os.environ.get("DATABASE_URL", "")
 RESEND_API_KEY   = os.environ.get("RESEND_API_KEY", "")
 FROM_EMAIL       = os.environ.get("ALERTS_FROM_EMAIL", "alerts@mail.seli.app")
-FROM_NAME        = "Seli - Alert"
 APP_URL          = os.environ.get("APP_URL", "https://seli.app")
 DRY_RUN          = os.environ.get("DRY_RUN", "false").lower() == "true"
 BATCH_LIMIT      = 2000  # safety cap — a normal 15-min cycle should be far under this
@@ -72,19 +71,20 @@ if not RESEND_API_KEY and not DRY_RUN:
 
 CSUITE_TITLE_RE = re.compile(r"chief|ceo|cfo|coo|cto|president", re.I)
 
-# Same brand palette as send_digests.py — light theme, pulled from the app's
-# own style.css variables, not invented separately per template.
-C_ACCENT       = "#5A4FE8"
-C_ACCENT_STR   = "#4338C9"
-C_AQUA         = "#3FBFA0"
-C_GREEN        = "#15803D"
-C_RED          = "#C0392B"
-C_TEXT         = "#111827"
-C_TEXT_MUTED   = "#6B7280"
-C_TEXT_FAINT   = "#9CA3AF"
-C_BORDER       = "#E5E7EB"
-C_BG           = "#FFFFFF"
-C_SECTION_BG   = "#F8F7FF"
+# Rendering and sending go through email_kit, same as the digests and the
+# welcome email: same look, plain-text part, one-click unsubscribe header,
+# mailing address in the footer, and retries on 429/5xx.
+import email_kit as ek
+
+REASON_LABEL = {
+    "watchlist_ticker":  "Stock you watch",
+    "portfolio_holding": "In your portfolio",
+    "followed_insider":  "Person you follow",
+    "high_conviction":   "Large executive buy",
+    "reversal":          "Direction change",
+}
+# When one trade matches several settings, show the most specific reason first.
+REASON_ORDER = ["portfolio_holding", "followed_insider", "watchlist_ticker", "reversal", "high_conviction"]
 
 
 def get_connection():
@@ -92,47 +92,6 @@ def get_connection():
         import psycopg; return psycopg.connect(DATABASE_URL)
     except ImportError:
         import psycopg2; return psycopg2.connect(DATABASE_URL)
-
-
-def send_email(to_email: str, subject: str, html: str, max_retries: int = 3) -> bool:
-    if DRY_RUN:
-        log.info(f"  [DRY RUN] would send to {to_email}: {subject}")
-        return True
-    for attempt in range(max_retries):
-        try:
-            r = requests.post(
-                "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-                json={"from": f"{FROM_NAME} <{FROM_EMAIL}>", "to": [to_email], "subject": subject, "html": html},
-                timeout=15,
-            )
-            if r.ok:
-                return True
-            # 429 (rate limited) and 5xx (Resend-side issue) are worth
-            # retrying — a filing gets marked processed regardless of send
-            # outcome below, so a transient failure here previously meant
-            # silent, permanent loss of that specific alert. A genuine 4xx
-            # (bad request, bad key) won't succeed on retry, so fail fast
-            # on those instead of wasting the remaining attempts.
-            retryable = r.status_code == 429 or r.status_code >= 500
-            log.error(f"  Resend error for {to_email} (attempt {attempt+1}/{max_retries}): {r.status_code} {r.text[:200]}")
-            if not retryable:
-                return False
-        except Exception as e:
-            log.error(f"  Send failed for {to_email} (attempt {attempt+1}/{max_retries}): {e}")
-        if attempt < max_retries - 1:
-            time.sleep(2 * (attempt + 1))  # 2s, 4s
-    return False
-
-
-def fmt_money(v):
-    if v is None: return "—"
-    v = float(v)
-    sign = "-" if v < 0 else ""
-    v = abs(v)
-    for div, suf in [(1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")]:
-        if v >= div: return f"{sign}${v/div:,.1f}{suf}"
-    return f"{sign}${v:,.0f}"
 
 
 def fetch_portfolio_tickers() -> dict[str, set[str]]:
@@ -221,125 +180,62 @@ def get_insider_context(conn, insider_name: str, ticker: str, trade_date) -> str
         return ""
 
 
-def build_email(conn, user_email: str, matches: list[dict]) -> tuple[str, str]:
+def is_congress(m: dict) -> bool:
+    return str(m.get("transaction_code") or "").upper().startswith("CONGRESS")
+
+
+def build_email(conn, clerk_user_id: str, matches: list[dict]) -> tuple[str, str]:
+    """One email per user per run. matches are already de-duplicated: one entry
+    per trade, with every reason it matched in m["reasons"]."""
     n = len(matches)
+    first = matches[0]
+    who0 = ek.pretty_person(first["insider_name"], is_congress(first))
     if n == 1:
-        m0 = matches[0]
-        action0 = "buy" if m0["transaction_type"] == "buy" else "sale"
-        subject = f"{m0['ticker']} — insider {action0} filed ({m0['insider_name']})"
+        verb = "bought" if first["transaction_type"] == "buy" else "sold"
+        subject = f"{first['ticker']}: {who0} {verb} {ek.amount(first['value'], is_congress(first))}"
     else:
         tickers = list(dict.fromkeys(m["ticker"] for m in matches))
-        ticker_preview = ", ".join(tickers[:3]) + (f" +{len(tickers)-3}" if len(tickers) > 3 else "")
-        subject = f"{n} insider filings — {ticker_preview}"
+        subject = f"{n} new insider trades: " + ", ".join(tickers[:3]) + (f" +{len(tickers) - 3}" if len(tickers) > 3 else "")
 
     cards = ""
     for m in matches:
-        reason = m["reason"]
-        reason_label = {
-            "watchlist_ticker":   "Watched ticker",
-            "followed_insider":   "Followed insider",
-            "high_conviction":    "Large executive buy",
-            "reversal":           "Direction change",
-            "portfolio_holding":  "In your portfolio",
-        }[reason]
-
-        is_portfolio = reason == "portfolio_holding"
-        color = C_GREEN if m["transaction_type"] == "buy" else C_RED
-        action = "Buy" if m["transaction_type"] == "buy" else "Sell"
-        date_label = m["trade_date"].strftime("%b %d, %Y") if m["trade_date"] else "—"
-        shares_label = f"{m['shares']:,.0f} shares" if m["shares"] is not None else None
-        price_label = f"@ ${m['price_per_share']:,.2f}" if m["price_per_share"] else None
-        detail_bits = " · ".join(b for b in (shares_label, price_label) if b)
-
-        # Context line from trade history
+        cg = is_congress(m)
+        buy = m["transaction_type"] == "buy"
+        who = ek.pretty_person(m["insider_name"], cg)
+        role = "Member of Congress" if cg else ek.short_role(m.get("insider_title"))
+        company = ek.pretty_company(m.get("company_name")) or m["ticker"]
+        amount = ek.amount(m["value"], cg)
+        stock_href = ek.track(ek.ticker_path(m["ticker"]), "alert", m["ticker"])
+        person_href = ek.track(ek.insider_path(m["insider_name"]), "alert", "person")
+        bits = [ek.short_date(m["trade_date"])]
+        if not cg and m.get("shares"):
+            bits.append(f"{m['shares']:,.0f} shares" + (f" at ${m['price_per_share']:,.2f}" if m.get("price_per_share") else ""))
         context = get_insider_context(conn, m["insider_name"], m["ticker"], m["trade_date"])
+        reasons = "".join(ek.chip(REASON_LABEL[r], "accent") for r in m["reasons"])
+        inner = (
+            '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+            f'<td style="vertical-align:top;">{ek.ticker_tag(m["ticker"], stock_href)}'
+            f'<span style="font-family:{ek.FONT};font-size:14px;font-weight:700;color:{ek.TEXT};margin-left:8px;">{ek.esc(company)}</span></td>'
+            f'<td style="vertical-align:top;text-align:right;white-space:nowrap;">{ek.chip(("Buy " if buy else "Sell ") + amount, "buy" if buy else "sell")}</td>'
+            '</tr></table>'
+            + ek.p(f'{ek.a(person_href, ek.esc(who), ek.TEXT, 700)} <span style="color:{ek.MUTED};">· {ek.esc(role)}</span>', 14, ek.TEXT_2, "10px 0 2px")
+            + ek.p(ek.esc(" · ".join(bits)), 12, ek.MUTED, "0 0 8px")
+            + (ek.p(ek.esc(context), 12.5, ek.TEXT_2, "0 0 8px") if context else "")
+            + f'<div>{reasons}</div>'
+        )
+        cards += ek.card(inner, accent_left=ek.ACCENT if "portfolio_holding" in m["reasons"] else "")
 
-        # Portfolio trades get a highlighted left border
-        card_border = f"border-left:4px solid {C_ACCENT};" if is_portfolio else ""
-        portfolio_banner = f'''
-            <div style="background:{C_SECTION_BG};color:{C_ACCENT_STR};font-size:11px;font-weight:700;padding:5px 10px;border-radius:4px;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">
-              You hold {m['ticker']}
-            </div>''' if is_portfolio else ""
-
-        cards += f"""
-    <tr><td style="padding:0 0 10px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid {C_BORDER};border-radius:10px;overflow:hidden;{card_border}">
-        <tr><td style="padding:16px 18px;">
-          {portfolio_banner}
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="vertical-align:top;width:60%;">
-              <a href="{APP_URL}" style="color:{C_ACCENT};font-weight:800;text-decoration:none;font-size:17px;line-height:1.3;letter-spacing:-0.3px;">{m['ticker']}</a>
-              <div style="color:{C_TEXT_MUTED};font-size:12px;line-height:1.4;margin-top:3px;">{m['company_name']}</div>
-            </td>
-            <td style="vertical-align:top;text-align:right;width:40%;">
-              <div style="background:{color};color:#fff;font-weight:700;font-size:13px;padding:5px 12px;border-radius:6px;display:inline-block;">{action} · {fmt_money(m['value'])}</div>
-            </td>
-          </tr></table>
-          <div style="margin-top:12px;padding-top:12px;border-top:1px solid {C_BORDER};">
-            <div style="font-size:13px;color:{C_TEXT};line-height:1.4;font-weight:600;">{m['insider_name']}</div>
-            {f'<div style="font-size:12px;color:{C_TEXT_MUTED};margin-top:1px;">{m["insider_title"]}</div>' if m.get('insider_title') else ''}
-            <div style="font-size:12px;color:{C_TEXT_MUTED};line-height:1.4;margin-top:4px;">
-              {date_label}{f' · {detail_bits}' if detail_bits else ''}
-            </div>
-          </div>
-          {f'''<div style="margin-top:10px;padding:8px 10px;background:#F9FAFB;border-radius:6px;font-size:12px;color:{C_TEXT_MUTED};line-height:1.4;">
-            {context}
-          </div>''' if context else ''}
-          <div style="margin-top:10px;">
-            <span style="display:inline-block;background:{C_SECTION_BG};color:{C_ACCENT_STR};font-size:11px;font-weight:600;padding:4px 10px;border-radius:5px;line-height:1.3;">{reason_label}</span>
-          </div>
-        </td></tr>
-      </table>
-    </td></tr>"""
-
-    preheader = f"{n} insider filing{'s' if n!=1 else ''} matched your alert settings."
-    preheader_pad = "&nbsp;&zwnj;" * 80
-
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Seli — alert</title>
-</head>
-<body style="margin:0;padding:0;background:#F3F4F6;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
-<!--[if mso]><style>table,td{{font-family:Arial,sans-serif;}}</style><![endif]-->
-<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{preheader}{preheader_pad}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
-<tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:{C_BG};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-  <tr><td style="background:linear-gradient(135deg,{C_ACCENT} 0%,{C_ACCENT_STR} 60%,{C_AQUA} 100%);padding:22px 24px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td><span style="color:#ffffff;font-size:20px;font-weight:800;letter-spacing:-0.3px;">Seli</span></td>
-      <td style="text-align:right;"><span style="color:rgba(255,255,255,0.9);font-size:13px;font-weight:600;">Alert</span></td>
-    </tr></table>
-  </td></tr>
-  <tr><td style="padding:22px 22px 10px;">
-    <p style="font-size:15px;color:{C_TEXT};margin:0;font-weight:600;">{n} insider filing{'s' if n!=1 else ''} matched your alert settings</p>
-  </td></tr>
-  <tr><td style="padding:0 22px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-      {cards}
-    </table>
-  </td></tr>
-  <tr><td style="padding:22px;text-align:center;">
-    <a href="{APP_URL}" style="display:inline-block;background:{C_ACCENT};color:#ffffff;font-weight:700;font-size:14px;padding:13px 32px;border-radius:8px;text-decoration:none;">Open Seli →</a>
-  </td></tr>
-  <tr><td style="padding:0 22px 22px;">
-    <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0 0 6px;">
-      You're getting this because you enabled instant alerts in Settings.
-      This is a factual notification of publicly filed insider trading disclosures, not financial advice or a recommendation to buy or sell any security.
-    </p>
-    <p style="color:{C_TEXT_FAINT};font-size:11px;line-height:1.5;margin:0;">
-      <a href="{APP_URL}/settings?section=notifications" style="color:{C_TEXT_MUTED};">Manage email preferences</a>
-    </p>
-  </td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>"""
-    return subject, html
+    body = (ek.section(ek.esc(f"{n} new insider trade{'s' if n != 1 else ''} matched your alerts"),
+                       cards, pad_top=22)
+            + f'<tr><td class="px" style="padding:8px 28px 0;">{ek.button("Open Seli", ek.track("/", "alert", "cta"))}</td></tr>')
+    html_doc = ek.shell(
+        title="Seli alert", label="Alert",
+        preheader=f"{who0} and {n - 1} more" if n > 1 else f"{who0}, {ek.short_date(first['trade_date'])}",
+        body_rows=body,
+        footer_html=ek.footer(reason="You're getting this because instant alerts are on in your Seli settings.",
+                              clerk_user_id=clerk_user_id, unsub_kind="alerts"),
+    )
+    return subject, html_doc
 
 
 def main():
@@ -420,8 +316,21 @@ def main():
 
     per_user_matches: dict[str, list[dict]] = {}
 
+    # One card per trade per user, even when it matches several settings
+    # (a watched ticker you also hold used to appear twice in one email).
+    seen: dict[tuple, dict] = {}
+
     def add_match(uid, filing, reason):
-        per_user_matches.setdefault(uid, []).append({**filing, "reason": reason})
+        key = (uid, filing["accession_number"], filing["ticker"], filing["transaction_type"],
+               filing["trade_date"], filing.get("shares"), filing.get("value"))
+        if key in seen:
+            if reason not in seen[key]["reasons"]:
+                seen[key]["reasons"].append(reason)
+                seen[key]["reasons"].sort(key=REASON_ORDER.index)
+            return
+        m = {**filing, "reasons": [reason]}
+        seen[key] = m
+        per_user_matches.setdefault(uid, []).append(m)
 
     for f in new_filings:
         is_reversal = f["prior_type"] is not None and f["prior_type"] != f["transaction_type"]
@@ -472,8 +381,12 @@ def main():
     expected_notifications = len(per_user_matches)  # one email owed per matching user
     sent = 0
     for uid, matches in per_user_matches.items():
-        subject, html = build_email(conn, email_by_id[uid], matches)
-        if send_email(email_by_id[uid], subject, html):
+        if not email_by_id.get(uid):
+            continue
+        matches.sort(key=lambda m: (m["trade_date"] or datetime.min.date(), m["value"] or 0), reverse=True)
+        subject, html_doc = build_email(conn, uid, matches)
+        if ek.send(to_email=email_by_id[uid], subject=subject, html_doc=html_doc, from_name="Seli Alerts",
+                   clerk_user_id=uid, kind="instant_alert", unsub_kind="alerts"):
             sent += 1
         else:
             for m in matches:
@@ -486,6 +399,9 @@ def main():
         log.warning(f"  {expected_notifications - sent} email(s) failed even after retries — "
                     f"{len(filing_failed)} filing(s) left unprocessed and will be re-checked next run.")
 
+    if ek.DRY_RUN:
+        log.info("DRY RUN: not marking filings as alerted, so a real run still sends them.")
+        safe_to_mark = []
     if safe_to_mark:
         cur.execute("UPDATE public.filings SET alerted_at = now() WHERE accession_number = ANY(%s)",
                     (safe_to_mark,))
