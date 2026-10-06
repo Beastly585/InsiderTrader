@@ -205,28 +205,32 @@ function Featured({ c, watchlist }) {
   return (
     <Card className="sx-featured" title="Featured filing this week" sub="The week's most notable insider buying. A summary of what was filed, not a recommendation.">
       <div className="sx-featured__head">
-        <div>
-          <StockLink ticker={c.ticker} className="sx-tk--lg" />
-          <span className="sx-featured__co">{c.company}</span>
-        </div>
-        <div className="sx-featured__right">
-          <span className="sx-featured__total sx-up">{money(c.total)}</span>
-          <WatchButton watchlist={watchlist} kind="stock" id={c.ticker} compact />
-        </div>
+        <StockLink ticker={c.ticker} className="sx-tk--lg" />
+        <span className="sx-featured__co">{c.company}</span>
+        <span className="sx-featured__total sx-up">{money(c.total)}</span>
+        <WatchButton watchlist={watchlist} kind="stock" id={c.ticker} compact />
       </div>
       <p className="sx-featured__lead">{c.lead}</p>
       {c.facts.length > 0 && <div className="sx-chips">{c.facts.map(f => <Chip key={f.label} tone={f.tone}>{f.label}</Chip>)}</div>}
-      <ul className="sx-buyers">
-        {c.buyers.map(b => (
-          <li key={b.raw}>
-            <span><InsiderLink raw={b.raw} className="sx-strong">{b.name}</InsiderLink> <span className="sx-muted">· {b.role}</span></span>
-            <span>{b.stake && <Chip>{b.stake}</Chip>}<b className="sx-mono sx-up">{money(b.value)}</b></span>
-          </li>
-        ))}
-        {c.more_buyers > 0 && <li className="sx-muted">+ {plural(c.more_buyers, 'more insider')}</li>}
-      </ul>
+      {/* One buyer: the summary above already says who and how much. */}
+      {(c.buyers.length > 1 || c.more_buyers > 0) && (
+        <ul className="sx-buyers">
+          {c.buyers.map(b => (
+            <li key={b.raw}>
+              <span><InsiderLink raw={b.raw} className="sx-strong">{b.name}</InsiderLink> <span className="sx-muted">· {b.role}</span></span>
+              <span>{b.stake && <Chip>{b.stake}</Chip>}<b className="sx-mono sx-up">{money(b.value)}</b></span>
+            </li>
+          ))}
+          {c.more_buyers > 0 && <li className="sx-muted">+ {plural(c.more_buyers, 'more insider')}</li>}
+        </ul>
+      )}
       <div className="sx-featured__foot">
-        <Link to={stockPath(c.ticker)} className="sx-link">See every {c.ticker} insider trade <Icon name="arrow" size={12} /></Link>
+        <div className="sx-featured__links">
+          <Link to={stockPath(c.ticker)} className="sx-link">Every {c.ticker} insider trade <Icon name="arrow" size={12} /></Link>
+          {c.buyers.length === 1 && !c.more_buyers && (
+            <InsiderLink raw={c.buyers[0].raw} className="sx-link">More from {c.buyers[0].name} <Icon name="arrow" size={12} /></InsiderLink>
+          )}
+        </div>
         {c.context && <p className="sx-note">{c.context}</p>}
       </div>
     </Card>
@@ -235,9 +239,9 @@ function Featured({ c, watchlist }) {
 
 function ClusterRow({ c }) {
   const top = c.buyers[0];
-  const facts = c.facts.slice(0, 3).map(f => f.label);
+  const facts = c.facts.slice(0, 2).map(f => f.label);
   return (
-    <li className="sx-row">
+    <li className="sx-row sx-row--cluster">
       <StockLink ticker={c.ticker} />
       <div className="sx-row__main">
         <div className="sx-row__title">{c.company}</div>

@@ -189,6 +189,7 @@ async function stockSitemap(ctx) {
   const rows = await ctx.db(`
     SELECT key, last_date FROM public.search_entities
      WHERE kind = 'stock' AND key ~ '^[A-Z0-9][A-Z0-9.\\-]{0,9}$' AND last_date >= CURRENT_DATE - 1095
+       AND key NOT IN ('NONE', 'NA', 'N.A', 'NULL', 'UNKNOWN', 'TBD', 'NOTICKER')  -- filer placeholders, not real tickers
      ORDER BY n DESC LIMIT ${PER_FILE}`);
   return urlset(rows.map(r => ({ loc: `${SITE}/stock/${encodeURIComponent(r.key)}`, lastmod: day(r.last_date) })));
 }

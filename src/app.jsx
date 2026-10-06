@@ -7163,7 +7163,8 @@ function AppInner() {
   // for a spinner or the landing page.
   if (PUBLIC_PAGES.includes(route.page) && (!isLoaded || !isSignedIn) && !isAboutPath) {
     return (
-      <PublicShell page={route.page} logoSrc={logoSimple} isMobile={isMobileShell}>
+      <PublicShell page={route.page} logoSrc={logoSimple} isMobile={isMobileShell}
+        watchTarget={route.page === 'stock' ? { kind: 'stock', id: route.ticker } : route.page === 'insider' ? { kind: 'person', id: route.raw } : null}>
         {route.page === 'stock' && <StockPage key={route.ticker} ticker={route.ticker} watchlist={publicWatchlist} onUpgrade={publicWatchlist.upgrade} publicMode />}
         {route.page === 'insider' && <InsiderPage key={route.raw} raw={route.raw} watchlist={publicWatchlist} onUpgrade={publicWatchlist.upgrade} publicMode />}
         {route.page === 'congress' && <CongressPage />}

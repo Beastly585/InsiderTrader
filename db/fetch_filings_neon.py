@@ -566,8 +566,27 @@ def run() -> None:
         log.info("Step 3/3  Writing to Neon…")
         total = upsert_to_neon(all_txns)
         log.info(f"          {total} rows written ✓")
+        flag_suspect_trades()
 
     log.info("═"*62); log.info("Done.")
+
+def flag_suspect_trades() -> None:
+    """Take obviously wrong amounts (a typo'd price or share count) out of the
+    open-market counts before alerts go out. The rules live in the database:
+    see db/migrations/2026-10-06_suspect_trades.sql. Never fails the run."""
+    try:
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT public.flag_suspect_trades(CURRENT_DATE - 10)")
+            n = cur.fetchone()[0]
+            conn.commit()
+        finally:
+            conn.close()
+        if n:
+            log.warning(f"          {n} trade(s) with implausible amounts set aside (see public.suspect_trades)")
+    except Exception as e:
+        log.warning(f"  Suspect-trade check skipped: {e}")
 
 if __name__ == "__main__":
     run()

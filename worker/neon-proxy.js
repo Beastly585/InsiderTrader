@@ -1301,7 +1301,8 @@ async function buildExportCSV(env) {
 //   ingest.yml (tier input)
 //     08:00 every day        wide  (4 days back, prices, Congress)
 //     12:00 weekdays         pre   (2 days back, prices, tweet cards)
-//     13:30-20:30 weekdays   poll  (every 30 min, instant alerts)
+//     13:30-20:30 weekdays   poll  (hourly at :30, instant alerts; hourly keeps
+//                            GitHub Actions inside the free 2,000 min/month)
 //     21:00 weekdays         post  (1 day back, prices, tweet cards)
 //   emails.yml (job input)
 //     12:30 weekdays         daily    Pro daily digest, after the pre-market ingest
@@ -1323,7 +1324,7 @@ export function ingestTierFor(now) {
   if (!weekday) return null;
   if (s.slot === 12 * 60) return 'pre';
   if (s.slot === 21 * 60) return 'post';
-  if (s.slot >= 13 * 60 + 30 && s.slot <= 20 * 60 + 30) return 'poll';
+  if (s.slot >= 13 * 60 + 30 && s.slot <= 20 * 60 + 30 && s.slot % 60 === 30) return 'poll';
   return null;
 }
 

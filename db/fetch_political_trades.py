@@ -270,6 +270,12 @@ NOISE_RE  = re.compile(
     re.IGNORECASE
 )
 
+# Why House filings produced no trades, printed at the end of every run.
+# (These used to be debug-only, so a run could fetch 800 filings, get nothing
+# from any of them, and not say why.)
+HOUSE_STATS = {"fetched": 0, "with_trades": 0, "not_found": 0, "http_error": 0,
+               "no_text": 0, "no_rows_matched": 0, "all_already_in_db": 0, "error": 0}
+
 def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
     if not HAS_PDF:
         return []
@@ -289,6 +295,10 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
                     all_lines.extend(text.splitlines())
     except Exception as e:
         log.debug(f"  pdfplumber error {doc_id}: {e}")
+        HOUSE_STATS["error"] += 1
+        return []
+    if not any(l.strip() for l in all_lines):
+        HOUSE_STATS["no_text"] += 1  # scanned paper filing: an image, no text to read
         return []
 
     i = 0
@@ -455,16 +465,33 @@ def fetch_house(from_date: date, to_date: date,
         try:
             r = requests.get(meta["pdf_url"], headers={"User-Agent": UA}, timeout=30)
             if r.status_code == 404:
+                HOUSE_STATS["not_found"] += 1
                 log.debug(f"  404: {meta['pdf_url']}")
                 continue
-            r.raise_for_status()
+            if r.status_code != 200:
+                HOUSE_STATS["http_error"] += 1
+                if HOUSE_STATS["http_error"] <= 3:
+                    log.warning(f"  House PDF {meta['doc_id']}: HTTP {r.status_code}")
+                continue
+            HOUSE_STATS["fetched"] += 1
+            before_no_text = HOUSE_STATS["no_text"]
             trades = parse_house_pdf_text(r.content, meta)
             new = [t for t in trades if t.accession_number not in existing]
+            if new:
+                HOUSE_STATS["with_trades"] += 1
+            elif trades:
+                HOUSE_STATS["all_already_in_db"] += 1
+            elif HOUSE_STATS["no_text"] == before_no_text:
+                HOUSE_STATS["no_rows_matched"] += 1
+                if HOUSE_STATS["no_rows_matched"] <= 3:
+                    log.warning(f"  House PDF {meta['doc_id']} ({meta['year']}): text found but no trade rows matched")
             all_trades.extend(new)
         except Exception as e:
+            HOUSE_STATS["error"] += 1
             log.debug(f"  House error {meta['doc_id']}: {e}")
 
     log.info(f"  House total: {len(all_trades)} new trades")
+    log.info("  House filings: " + ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in HOUSE_STATS.items()))
     return all_trades
 
 # ══════════════════════════════════════════════════════════════════════════════

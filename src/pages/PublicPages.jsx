@@ -15,9 +15,9 @@ import { TradeTable } from './StockPage.jsx';
 import { MarketSections } from './HomeFeed.jsx';
 
 const PUBLIC_LINKS = [
-  { id: 'insiderBuying', label: 'Insider buying', short: 'Buying', path: '/insider-buying' },
-  { id: 'congress', label: 'Congress trades', short: 'Congress', path: '/congress' },
-  { id: 'leaderboard', label: 'Leaderboard', short: 'Leaders', path: '/leaderboard' },
+  { id: 'insiderBuying', label: 'Insider buying', short: 'Insider buys', path: '/insider-buying' },
+  { id: 'congress', label: 'Congress trades', short: 'Congress trades', path: '/congress' },
+  { id: 'leaderboard', label: 'Leaderboard', short: 'Top insiders', path: '/leaderboard' },
 ];
 const POPULAR = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'JPM', 'PLTR', 'AMD'];
 
@@ -41,7 +41,10 @@ export function usePublicWatchlist() {
   }, [clerk]);
 }
 
-export function PublicShell({ page, logoSrc, isMobile, children }) {
+// watchTarget: on a stock or person page, a slim bar under the nav offers
+// alerts for that exact page. Most visitors from X or a shared link land here,
+// not on the home page.
+export function PublicShell({ page, logoSrc, isMobile, watchTarget, children }) {
   const clerk = useClerk();
   const [searchOpen, setSearchOpen] = useState(false);
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
@@ -90,6 +93,15 @@ export function PublicShell({ page, logoSrc, isMobile, children }) {
         </nav>
       )}
       <main className="ws-main sx-pub__main">
+        {/* The page's own Watch button does the signing up; this just says what
+            Seli is and what Watch gets you. */}
+        {watchTarget && (
+          <p className="sx-pub__watchbar">
+            <Icon name="bell" size={14} />
+            <span><b>New to Seli?</b> It tracks insider and Congress trades. Tap <b>Watch</b> to get a free email when {watchTarget.kind === 'stock'
+              ? <>insiders trade <b>{watchTarget.id}</b>.</> : <>this person trades.</>}</span>
+          </p>
+        )}
         <div className="sx-pub__content">{children}</div>
         <SignupBand onSignUp={signUp} />
         <PopularStocks />
@@ -218,6 +230,15 @@ export function InsiderBuyingPage({ watchlist }) {
 }
 
 // ── / for signed-out visitors ────────────────────────────────────────────────
+const WHY = [
+  { icon: 'bell', title: "Don't get blindsided on what you own.",
+    body: 'If the CEO dumps half his shares, you hear about it the same day, not in a news story three weeks later.' },
+  { icon: 'search', title: 'Check before you buy.',
+    body: 'See whether the people running the company are buying or selling before you put your money in.' },
+  { icon: 'user', title: "Follow people who've been right.",
+    body: 'The leaderboard shows which insiders and members of Congress have bought ahead of gains.' },
+];
+
 // The front door: what Seli is, a search box, real data from this week, and
 // pricing. Same look as every other public page, no mock screenshots.
 export function PublicHome() {
@@ -236,12 +257,14 @@ export function PublicHome() {
     <div className="sx-page sx-page--feed sx-home">
       <section className="sx-hero">
         <p className="sx-hero__eyebrow">Insider trading &amp; Congress stock tracker</p>
-        <h1 className="sx-hero__title">See what executives and members of Congress are buying with their own money.</h1>
-        <p className="sx-hero__sub">Every SEC Form 4 and STOCK Act filing, explained in plain English. Look up any stock or person, and get an email when someone trades what you own.</p>
+        <h1 className="sx-hero__title">See what insiders buy with their own money.</h1>
+        <p className="sx-hero__sub">{narrow
+          ? 'Executive and Congress trades in plain English, emailed when they touch your stocks.'
+          : 'Every SEC Form 4 and Congress stock disclosure, explained in plain English. Get an email when someone trades a stock you own.'}</p>
         <div className="sx-hero__search"><SearchBox variant="inline" placeholder={narrow ? 'Search a stock or person' : 'Search a ticker, company, executive or member of Congress'} /></div>
         <div className="sx-hero__cta">
           <button className="sx-btn sx-btn--accent" onClick={signUp}>Get started free</button>
-          <span className="sx-muted sx-small">No card needed. Data from SEC EDGAR and congressional disclosures.</span>
+          {!narrow && <span className="sx-muted sx-small">No card needed. Data from SEC EDGAR and congressional disclosures.</span>}
         </div>
       </section>
 
@@ -302,13 +325,17 @@ export function PublicHome() {
         </div>
       </div>
 
-      <section className="sx-how">
-        <h2 className="sx-section-title">How Seli works</h2>
-        <ol className="sx-how__steps">
-          <li><b>Every filing, same day.</b> Executives, directors, big shareholders and members of Congress have to report their trades. Seli reads every report as it's published.</li>
-          <li><b>In plain English.</b> Each stock and person gets a page that says what they did, how big it was, and whether it's unusual: a first buy in years, several insiders at once, a big stake increase.</li>
-          <li><b>Emailed to you.</b> Watch the stocks you own and the people you trust. Seli emails you when they trade.</li>
-        </ol>
+      <section className="sx-why">
+        <h2 className="sx-section-title">Why use Seli</h2>
+        <ul className="sx-why__list">
+          {WHY.map(w => (
+            <li key={w.icon}>
+              <span className="sx-why__icon"><Icon name={w.icon} size={16} /></span>
+              <div><b>{w.title}</b><p>{w.body}</p></div>
+            </li>
+          ))}
+        </ul>
+        <p className="sx-why__fine">Pulled from SEC and congressional filings the day they're published, and explained in plain English.</p>
       </section>
 
       <section className="sx-plans" id="pricing">
