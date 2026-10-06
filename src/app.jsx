@@ -12,7 +12,7 @@ import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
 import OnboardingFlow from './onboard.jsx';
 import './research.css';
 import { go, stockPath, insiderPath } from './lib/nav.jsx';
-import { clearApiCache, api, useDataSinceYear } from './lib/api.js';
+import { clearApiCache, refreshApi, api, useDataSinceYear } from './lib/api.js';
 import { prettyPerson, prettyCompany, shortDate, plural } from './lib/text.js';
 import { peekIntent, clearIntent } from './lib/intent.js';
 import { SearchBox, SearchOverlay } from './components/Search.jsx';
@@ -147,6 +147,7 @@ function BillingProvider({ children }) {
   const [billingStatus, setBillingStatus] = useState(null);
   const [fetchedPro, setFetchedPro] = useState(null);
   const [fetchedExport, setFetchedExport] = useState(null);
+  const lastPro = useRef(null);
 
   const fetchBilling = useCallback(async () => {
     if (!cfg.NEON_PROXY_URL || !isSignedIn) return;
@@ -156,12 +157,24 @@ function BillingProvider({ children }) {
       if (!res.ok) return;
       const data = await res.json();
       setBillingStatus(data);
-      setFetchedPro(data.plan === 'pro');
+      const nowPro = data.plan === 'pro';
+      // Plan changed while the app was open (just went Pro, or Pro ended):
+      // pages on screen refetch so Pro-only data and limits update without
+      // a page reload.
+      if (lastPro.current !== null && lastPro.current !== nowPro) refreshApi();
+      lastPro.current = nowPro;
+      setFetchedPro(nowPro);
       setFetchedExport(!!data.hasDataExport);
+      return data;
     } catch { }
+    return null;
   }, [isSignedIn]);
 
-  useEffect(() => { fetchBilling(); }, [fetchBilling]);
+  // Re-check whenever Clerk's copy of the plan changes. Checkout reloads the
+  // Clerk user once Stripe's webhook lands, so this is what flips the whole
+  // app to Pro right after paying. Before, the first fetch's "free" stuck
+  // until a page reload.
+  useEffect(() => { fetchBilling(); }, [fetchBilling, clerkPro, clerkExport]);
 
   const pro = fetchedPro !== null ? fetchedPro : clerkPro;
   const hasDataExport = fetchedExport !== null ? fetchedExport : clerkExport;
@@ -188,6 +201,7 @@ const PRO_PRICE_LABEL = '$6.99/mo';
 // fabricating one would be dishonest. That visual slot is an honest
 // trust line instead.
 function UpgradeModal({ feature, pro, onClose }) {
+  const { refreshBilling } = useBilling();
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', h);
@@ -280,6 +294,7 @@ function UpgradeModal({ feature, pro, onClose }) {
   if (statusModal) {
     return (
       <StatusModal
+        type={statusModal.type}
         title={statusModal.title}
         message={statusModal.message}
         onClose={() => { setStatusModal(null); onClose(); }}
@@ -296,9 +311,10 @@ function UpgradeModal({ feature, pro, onClose }) {
           const wasPro = checkoutProduct === 'pro';
           setProcessing(true);
           if (wasPro) {
+            await refreshBilling(); // the rest of the app (nav, limits, pages) flips to Pro now
             setCheckoutProduct(null);
             setProcessing(false);
-            setStatusModal({ type: 'pro', title: "You're a Pro member!" });
+            setStatusModal({ type: 'pro', title: "You're on Pro" });
             return;
           }
           // Data export — the whole point of paying for this is getting the
@@ -450,52 +466,60 @@ function ProcessingModal({ text = 'Finishing up…' }) {
   );
 }
 
-// ─── Status modal — reusable success/confirmation pattern ─────────────────────
-function StatusModal({ type, title, message, onClose }) {
-  const isPro = type === 'pro';
-  const since = useDataSinceYear();
+// ─── Dialogs: Pro welcome, status, cancel ─────────────────────────────────────
+// One look for all three (.sx-dialog in research.css): centered card on
+// desktop, bottom sheet on phones, Escape and a tap outside close it.
+function Dialog({ onClose, busy = false, className = '', children }) {
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape' && !busy) onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose, busy]);
   return (
-    <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
-      <div className="upgrade-modal" style={{ maxWidth: isPro ? 480 : 420, textAlign: 'center', padding: isPro ? '40px 36px 32px' : undefined }}>
-        {isPro ? (
-          <>
-            <div className="logo-mark" style={{ width: 44, height: 44, margin: '0 auto 16px' }}><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <div className="status-modal__icon" style={{ margin: '0 auto 16px' }}><IconCheck style={{ width: 22, height: 22 }} /></div>
-            <div className="upgrade-modal__title" style={{ fontSize: '1.25rem', marginBottom: 8 }}>{title}</div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 24 }}>
-              Your founding member rate is locked in. Here's what's unlocked:
-            </p>
-            <div style={{ textAlign: 'left', background: 'var(--surface-2)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', marginBottom: 24 }}>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[
-                  ['Full historical data', since ? `${since}→present, every open-market insider and Congress trade` : 'Every open-market insider and Congress trade on record'],
-                  ['Portfolio linking', 'Connect your brokerage to see insider activity on your holdings'],
-                  ['Instant alerts', 'Get notified the moment insiders trade your watched tickers'],
-                  ['Full score breakdown', 'See conviction scoring on every signal'],
-                  ['Insiders deep-dive', 'Complete leaderboard with filters and hit-rate analysis'],
-                ].map(([feat, desc]) => (
-                  <li key={feat} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <span style={{ color: 'var(--green-600)', marginTop: 2, flexShrink: 0 }}><IconCheck style={{ width: 14, height: 14 }} /></span>
-                    <span>
-                      <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', display: 'block' }}>{feat}</span>
-                      <span style={{ fontSize: '0.6875rem', color: 'var(--text-3)' }}>{desc}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <button className="upgrade-modal__cta" style={{ width: '100%' }} onClick={onClose}>Start exploring</button>
-          </>
-        ) : (
-          <>
-            <div className="status-modal__icon"><IconCheck style={{ width: 20, height: 20 }} /></div>
-            <div className="upgrade-modal__title" style={{ marginTop: 14 }}>{title}</div>
-            <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5, margin: '8px 0 20px' }}>{message}</p>
-            <button className="upgrade-modal__cta" style={{ margin: 0 }} onClick={onClose}>Done</button>
-          </>
-        )}
+    <div className="upgrade-overlay sx-dialog-wrap" onClick={e => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div className={`sx-dialog ${className}`} role="dialog" aria-modal="true">
+        {!busy && <button className="sx-dialog__x" onClick={onClose} aria-label="Close"><IconClose style={{ width: 12, height: 12 }} /></button>}
+        {children}
       </div>
     </div>
+  );
+}
+
+function StatusModal({ type, title, message, onClose }) {
+  if (type === 'pro') return <ProWelcomeModal onClose={onClose} />;
+  return (
+    <Dialog onClose={onClose}>
+      <div className="sx-dialog__icon sx-dialog__icon--ok"><IconCheck style={{ width: 18, height: 18 }} /></div>
+      <h2 className="sx-dialog__title">{title}</h2>
+      {message && <p className="sx-dialog__text">{message}</p>}
+      <div className="sx-dialog__actions"><button className="sx-btn sx-btn--accent" onClick={onClose}>Done</button></div>
+    </Dialog>
+  );
+}
+
+function ProWelcomeModal({ onClose }) {
+  const since = useDataSinceYear();
+  const toEmails = () => {
+    onClose();
+    go('/account#emails');
+    setTimeout(() => document.getElementById('emails')?.scrollIntoView({ behavior: 'smooth' }), 200);
+  };
+  return (
+    <Dialog onClose={onClose} className="sx-dialog--pro">
+      <div className="sx-dialog__badge">PRO</div>
+      <h2 className="sx-dialog__title">You're on Pro</h2>
+      <p className="sx-dialog__text">Thanks for backing Seli. Here's what just turned on:</p>
+      <ul className="sx-dialog__list">
+        <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Unlimited watching.</b> As many stocks and people as you like.</span></li>
+        <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Same-day alerts.</b> An email when someone you watch files a trade.</span></li>
+        <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Full history.</b> Every trade{since ? ` back to ${since}` : ''}, on every page.</span></li>
+        <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>The full leaderboard.</b> 2 and 5 year views, plus brokerage linking.</span></li>
+      </ul>
+      <div className="sx-dialog__actions">
+        <button className="sx-btn sx-btn--accent" onClick={onClose}>Start exploring</button>
+        <button className="sx-btn sx-btn--ghost" onClick={toEmails}>Set up my emails</button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -694,39 +718,32 @@ function CheckoutForm({ product, onSuccess, onClose }) {
 }
 
 // ─── Cancel-subscription modal — confirmation + optional feedback ─────────────
-function CancelModal({ busy, onConfirm, onClose }) {
+function CancelModal({ busy, periodEnd, onConfirm, onClose }) {
   const [feedback, setFeedback] = useState('');
+  const until = periodEnd ? new Date(periodEnd).toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) : null;
   return (
-    <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay') && !busy) onClose(); }}>
-      <div className="upgrade-modal" style={{ maxWidth: 380 }}>
-        <div className="upgrade-modal__title">Are you sure?</div>
-        <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5, margin: '8px 0 16px', textAlign: 'left' }}>
-          You'll keep Pro access until the end of your current billing period — this doesn't cancel immediately.
-        </p>
-        <label style={{ display: 'block', textAlign: 'left', fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-          Want to leave feedback? (optional)
-        </label>
-        <textarea
-          className="cancel-feedback-input"
-          placeholder="What made you decide to cancel?"
-          value={feedback}
-          onChange={e => setFeedback(e.target.value)}
-          disabled={busy}
-          rows={3}
-        />
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-          <button className="btn btn--ghost" style={{ flex: 1 }} onClick={onClose} disabled={busy}>Go back</button>
-          <button className="settings-danger-btn" style={{ flex: 1 }} onClick={() => onConfirm(feedback)} disabled={busy}>
-            {busy ? 'Working…' : 'Unsubscribe'}
-          </button>
-        </div>
+    <Dialog onClose={onClose} busy={busy}>
+      <h2 className="sx-dialog__title">Cancel Pro?</h2>
+      <p className="sx-dialog__text">
+        You'll keep Pro {until ? <>until <b>{until}</b></> : 'until the end of this billing period'} and won't be charged again.
+        After that you're back on Free: 3 stocks or people and a weekly email.
+      </p>
+      <label className="sx-dialog__label" htmlFor="cancel-feedback">Anything we could do better? (optional)</label>
+      <textarea id="cancel-feedback" className="sx-dialog__input" placeholder="What made you decide to cancel?"
+        value={feedback} onChange={e => setFeedback(e.target.value)} disabled={busy} rows={3} />
+      <div className="sx-dialog__actions sx-dialog__actions--split">
+        <button className="sx-btn sx-btn--accent" onClick={onClose} disabled={busy}>Keep Pro</button>
+        <button className="sx-btn sx-dialog__danger" onClick={() => onConfirm(feedback)} disabled={busy}>
+          {busy ? 'Canceling…' : 'Cancel subscription'}
+        </button>
       </div>
-    </div>
+    </Dialog>
   );
 }
 
 // ─── Billing section (Settings tab) ────────────────────────────────────────────
 function BillingSection({ user }) {
+  const { refreshBilling } = useBilling();
   const [status, setStatus] = useState(null);
   const [loadErr, setLoadErr] = useState(null); // distinct from "no data" — see audit note
   const [busy, setBusy] = useState(false);
@@ -793,11 +810,12 @@ function BillingSection({ user }) {
       }
 
       setConfirmCancel(false);
+      refreshBilling();
       setStatusModal({
         title: 'Subscription canceled',
         message: fresh?.current_period_end
-          ? `You'll keep Pro access until ${new Date(fresh.current_period_end).toLocaleDateString()}, then move to Free automatically.`
-          : `You'll keep Pro access through the end of your current billing period, then move to Free automatically.`,
+          ? `You won't be charged again. Pro stays on until ${new Date(fresh.current_period_end).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}, then your account switches to Free. Changed your mind? Reactivate anytime before then.`
+          : `You won't be charged again. Pro stays on until the end of this billing period, then your account switches to Free.`,
       });
     } catch (e) {
       setActionErr(e.message);
@@ -823,11 +841,12 @@ function BillingSection({ user }) {
         await new Promise(r => setTimeout(r, 1500));
       }
 
+      refreshBilling();
       setStatusModal({
         title: 'Subscription reactivated',
         message: fresh?.current_period_end
-          ? `You're all set — renews automatically on ${new Date(fresh.current_period_end).toLocaleDateString()}.`
-          : `You're all set — your subscription will continue renewing automatically.`,
+          ? `You're all set. Pro renews on ${new Date(fresh.current_period_end).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}.`
+          : `You're all set. Pro keeps renewing monthly.`,
       });
     } catch (e) {
       setActionErr(e.message);
@@ -921,6 +940,7 @@ function BillingSection({ user }) {
       {confirmCancel && (
         <CancelModal
           busy={busy}
+          periodEnd={status.current_period_end}
           onConfirm={handleCancel}
           onClose={() => setConfirmCancel(false)}
         />
@@ -930,6 +950,7 @@ function BillingSection({ user }) {
 
       {statusModal && (
         <StatusModal
+          type={statusModal.type}
           title={statusModal.title}
           message={statusModal.message}
           onClose={() => setStatusModal(null)}
@@ -957,12 +978,13 @@ function BillingSection({ user }) {
                 if (fresh?.plan === 'pro') break;
                 await new Promise(r => setTimeout(r, 1500));
               }
+              await refreshBilling(); // the rest of the app (nav, limits, pages) flips to Pro now
               setCheckoutProduct(null);
               setProcessing(false);
-              setStatusModal({ type: 'pro', title: "You're a Pro member!" });
+              setStatusModal({ type: 'pro', title: "You're on Pro" });
               return;
             }
-            load();
+            load(); refreshBilling();
             try {
               await downloadCSVFromR2('consume', msg => setProgressText(msg));
               setCheckoutProduct(null);

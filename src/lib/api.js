@@ -68,6 +68,14 @@ if (typeof window !== 'undefined' && window.__SELI_PREFETCH__) {
 }
 export function clearApiCache(prefix = '') { for (const k of cache.keys()) if (k.startsWith(prefix)) cache.delete(k); }
 
+// After something that changes what the Worker returns for this user (going
+// Pro, canceling), every page on screen refetches in place. Nothing unmounts,
+// so an open modal (like the "You're on Pro" one) stays put.
+export function refreshApi() {
+  clearApiCache('/api/');
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('seli:refresh'));
+}
+
 // The first year of data Seli has (Pro sees everything since then). One
 // lookup per page load, shared by every "since YEAR" in the app.
 let sincePromise = null;
@@ -102,5 +110,11 @@ export function useApi(path) {
     return () => ctl.abort();
   }, [path]);
   useEffect(() => load(), [load]);
+  useEffect(() => {
+    if (!path || path.startsWith('/public/')) return;
+    const h = () => load();
+    window.addEventListener('seli:refresh', h);
+    return () => window.removeEventListener('seli:refresh', h);
+  }, [load, path]);
   return { ...state, reload: load };
 }
