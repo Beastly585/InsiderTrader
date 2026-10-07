@@ -741,7 +741,7 @@ async function buildLeaderboard(ctx, years, source) {
     return {
       raw: r.insider_name, name: prettyPerson(r.insider_name, !!r.is_congress),
       title: /^unknown$/i.test(r.insider_title || '') ? '' : (r.insider_title || ''), congress: !!r.is_congress,
-      role: r.is_congress ? 'Congress' : shortRole(r.insider_title, null),
+      role: shortRole(r.insider_title, r.is_congress ? 'congress' : null),
       tickers: r.tickers || [], om_buys: omBuys, bought: num(r.bought_value) || 0,
       scored, priced: num(r.priced) || 0, hit_rate: num(r.priced) ? Math.round(num(r.wins) / num(r.priced) * 100) : null,
       avg_return: avgRet, avg_spy: spy, excess,

@@ -772,3 +772,23 @@ body.drawer-open .sx-nav { z-index: 94; }
   .sx-dialog__actions--split { flex-direction: column; }
   .sx-dialog__actions--split .sx-btn { flex: none; }
 }
+
+/* ── Help page: "How are you liking Seli?" ───────────────────────────── */
+.sx-rate { margin: 40px 0 0; padding: 24px; border: 0.5px solid var(--border); border-radius: 14px; background: var(--surface); max-width: 640px; }
+.sx-rate h2 { margin: 0 0 4px; font-size: 18px; font-weight: 700; color: var(--text); }
+.sx-rate > p { margin: 0; font-size: 14px; color: var(--text-2); }
+.sx-rate__stars { display: flex; align-items: center; gap: 2px; margin-top: 14px; }
+.sx-rate__star { border: 0; background: none; padding: 2px 3px; font-size: 30px; line-height: 1; color: var(--border-md, #444); cursor: pointer; transition: color .1s, transform .1s; }
+.sx-rate__star.is-on { color: #f5b301; }
+.sx-rate__star:hover { transform: scale(1.08); }
+.sx-rate__label { margin-left: 10px; font-size: 13px; color: var(--text-2); min-width: 80px; }
+.sx-rate__group { margin-top: 18px; }
+.sx-rate__q { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.sx-rate__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sx-rate__chip { border: 0.5px solid var(--border-md, var(--border)); background: var(--surface-2); color: var(--text-2); border-radius: 999px; padding: 6px 12px; font: 500 13px var(--font, inherit); cursor: pointer; }
+.sx-rate__chip.is-on { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); }
+.sx-rate__note { width: 100%; box-sizing: border-box; margin-top: 16px; padding: 10px 12px; border-radius: 10px; border: 0.5px solid var(--border-md, var(--border)); background: var(--surface-2); color: var(--text); font: inherit; font-size: 14px; resize: vertical; }
+.sx-rate__send { margin-top: 14px; height: 40px; padding: 0 20px; border-radius: 999px; font-weight: 600; }
+.sx-rate__err { margin: 10px 0 0; font-size: 13px; color: var(--red-600, #ef4444); }
+.sx-rate--done p { margin-top: 4px; }
+@media (max-width: 640px) { .sx-rate { padding: 18px 16px; margin-top: 28px; } .sx-rate__star { font-size: 34px; } }

@@ -11,6 +11,9 @@ import { TradeTable } from './StockPage.jsx';
 
 const PAGE = 30;
 
+// Congress filings carry the chamber as the title ("House" or "Senate").
+const chamberOf = c => (/senat/i.test(c?.title || c?.role || '') ? 'Senate' : /house|represent/i.test(c?.title || c?.role || '') ? 'House' : null);
+
 export default function InsiderPage({ raw, watchlist, onUpgrade, publicMode = false }) {
   const { data, error, reload } = useApi(`/${publicMode ? 'public' : 'api'}/insider/${encodeURIComponent(raw)}`);
   const d = data && data.raw === raw ? data : null;
@@ -79,10 +82,10 @@ function InsiderView({ d, watchlist, onUpgrade }) {
         <div className="sx-head__main">
           <div className="sx-head__row">
             <h1 className="sx-head__person">{d.name}</h1>
-            {d.congress && <Chip tone="accent">Congress</Chip>}
+            {d.congress && <Chip tone="accent">{chamberOf(primary) || 'Congress'}</Chip>}
           </div>
           <div className="sx-head__sub">
-            {primary && <span>{d.congress ? (realTitle(primary.title) || 'Member of Congress') : (realTitle(primary.title) || primary.role || 'Insider')}{!d.congress && <> at <StockLink plain ticker={primary.ticker}>{primary.company}</StockLink></>}</span>}
+            {primary && <span>{d.congress ? ({ House: 'U.S. Representative', Senate: 'U.S. Senator' }[chamberOf(primary)] || 'Member of Congress') : (realTitle(primary.title) || primary.role || 'Insider')}{!d.congress && <> at <StockLink plain ticker={primary.ticker}>{primary.company}</StockLink></>}</span>}
             {d.first_trade && <span className="sx-muted">Trades on record {shortDate(d.first_trade, { year: true })} to {shortDate(d.last_trade, { year: true })}</span>}
           </div>
         </div>

@@ -2806,16 +2806,6 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   // Expanded rows — multiple can be open simultaneously
   const [expandedSigs, setExpandedSigs] = useState(new Set()); // Set of tickers
   const [expandedRaws, setExpandedRaws] = useState(new Set()); // Set of indices
-  // Full-screen explore drawer (top-right button)
-  const [drawer, setDrawer] = useState(null); // null | 'signals' | 'insiders' | 'raw'
-
-  // Lock body scroll when a local drawer is open
-  useEffect(() => {
-    if (drawer) document.body.classList.add('drawer-open');
-    else document.body.classList.remove('drawer-open');
-    return () => document.body.classList.remove('drawer-open');
-  }, [drawer]);
-
   const cutoff = useMemo(() => {
     if (days == null) return '2013-01-01'; // matches earliest backfilled data
     const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split('T')[0];
@@ -2896,23 +2886,6 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
     ).sort((a, b) => (b.transactionDate || b.date || '').localeCompare(a.transactionDate || a.date || '')).slice(0, 8);
   }
 
-  // State for seamless drawer handoff — passes selected signal/ticker into the drawer
-  const [drawerInitSignal, setDrawerInitSignal] = useState(null);
-  const [drawerInitTicker, setDrawerInitTicker] = useState(null);
-
-  function openSignalsDrawer(signal) {
-    if (signal?.ticker) { go(stockPath(signal.ticker)); return; }
-    if (isMobile) { onOpenDetail(signal ? { type: 'signal', ...signal } : null, { expand: true }); return; }
-    setDrawerInitSignal(signal ? { type: 'signal', ...signal } : null);
-    setDrawer('signals');
-  }
-  function openRawDrawer(ticker, company) {
-    if (ticker) { go(stockPath(ticker)); return; }
-    if (isMobile) { onOpenDetail(ticker ? { type: 'ticker', ticker, company } : null, { expand: true }); return; }
-    setDrawerInitTicker(ticker ? { type: 'ticker', ticker, company } : null);
-    setDrawer('raw');
-  }
-
   return (
     <div className="ws-page">
       <header className="sx-head sx-head--page ws-data-head">
@@ -2939,15 +2912,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             </button>
           </div>
           <div className="ws-toolbar-right">
-            {/* Opens the correct full drawer for whichever tab is active.
-                Hidden on mobile — the drawer's two-pane layout doesn't work
-                on phone-sized viewports; the inline expand + page navigation
-                already handles mobile well. */}
-            {!isMobile && <button className="ws-toolbar-explore-btn"
-              onClick={() => tab === 'signals' ? openSignalsDrawer(null) : openRawDrawer(null, null)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6" /><path d="M10 14L21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
-              Explore full view
-            </button>}
+
           </div>
         </div>
 
@@ -3162,7 +3127,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                                 return (
                                   <div key={ti} className="ws-row__trade-line">
                                     <span className="ws-row__trade-date ws-data-label">{fmt.dateShort(f.transactionDate || f.date)}</span>
-                                    <span className="ws-row__trade-who">{f.insiderName} <span style={{ color: 'var(--text-3)', fontSize: 10 }}>{f.title ? '· ' + f.title.split(' ').slice(0, 3).join(' ') : ''}</span></span>
+                                    <span className="ws-row__trade-who"><a href={insiderPath(f.insiderName)} className="ws-row__trade-link" onClick={e => { e.stopPropagation(); if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(insiderPath(f.insiderName)); }}>{f.insiderName}</a> <span style={{ color: 'var(--text-3)', fontSize: 10 }}>{f.title ? '· ' + f.title.split(' ').slice(0, 3).join(' ') : ''}</span></span>
                                     <span className={`ws-type-badge${fb ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`} style={{ flexShrink: 0 }}>{fb ? 'Buy' : 'Sell'}</span>
                                     {f.shares && <span className="ws-row__trade-shares" style={{ color: 'var(--text-3)', fontSize: 11 }}>{fmt.number(f.shares)} sh</span>}
                                     <span className={`ws-data-mono${fb ? ' val-buy' : ' val-sell'}`} style={{ marginLeft: 'auto', flexShrink: 0 }}>{fb ? '+' : '−'}{fmt.money(f.value)}</span>
@@ -3173,14 +3138,13 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                             </div>
                           )}
 
-                          {/* Desktop only: phones get the inline expand and nothing else */}
-                          {!isMobile && (
-                            <div className="ws-row__detail-footer">
-                              <button className="ws-row__detail-cta" onClick={() => openSignalsDrawer(s)}>
-                                Open full ↗
-                              </button>
-                            </div>
-                          )}
+                          {/* Deep dives live on the stock page, not a drawer. */}
+                          <div className="ws-row__detail-footer">
+                            <a href={stockPath(s.ticker)} className="ws-row__detail-cta"
+                              onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(stockPath(s.ticker)); }}>
+                              Every {s.ticker} trade →
+                            </a>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3294,14 +3258,21 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                             </div>
                           )}
 
-                          {/* Single CTA: opens raw explore with same filters + this ticker pre-selected */}
-                          {!isMobile && (
-                            <div className="ws-row__detail-footer">
-                              <button className="ws-row__detail-cta" onClick={() => openRawDrawer(f.ticker, f.company)}>
-                                Open full ↗
-                              </button>
-                            </div>
-                          )}
+                          {/* Deep dives live on the stock and person pages, not a drawer. */}
+                          <div className="ws-row__detail-footer">
+                            {f.ticker && (
+                              <a href={stockPath(f.ticker)} className="ws-row__detail-cta"
+                                onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(stockPath(f.ticker)); }}>
+                                Every {f.ticker} trade →
+                              </a>
+                            )}
+                            {f.insiderName && (
+                              <a href={insiderPath(f.insiderName)} className="ws-row__detail-cta"
+                                onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(insiderPath(f.insiderName)); }}>
+                                More from this person →
+                              </a>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3319,36 +3290,6 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
         )}
       </div>
 
-      {/* Full-screen explore drawer — desktop only. On mobile, openSignalsDrawer
-          and openRawDrawer redirect to onOpenDetail instead of setting drawer state,
-          but this guard ensures the drawer never renders on small viewports. */}
-      {!isMobile && (drawer === 'signals' || drawer === 'insiders') && (
-        <InsightsDrawer
-          type={drawer}
-          filings={filings}
-          initialDetail={drawerInitSignal}
-          onClose={() => { setDrawer(null); setDrawerInitSignal(null); }}
-          onSwitchToData={() => { setDrawer(null); setDrawerInitSignal(null); setTimeout(() => setDrawer('raw'), 50); }}
-          sigSort={sigSort} sigDir={sigDir} sigOnSort={onSigSort}
-          ensureFilingsWindow={() => { }} filingsLoading={loading}
-          watchlist={watchlist}
-          initialFilters={{ days, sourceF, sectorF, minStrength: minStr }}
-          pro={pro}
-        />
-      )}
-      {!isMobile && drawer === 'raw' && (
-        <DataDrawer
-          initialDetail={drawerInitTicker || { type: 'data', dataFilters: { days, sectorF, txType, rawRoleF } }}
-          initialDetailStack={[]}
-          filterState={{ days, sectorF, txType, rawRoleF }}
-          onClose={() => { setDrawer(null); setDrawerInitTicker(null); }}
-          onSwitchTab={(tab) => { setDrawer(null); setDrawerInitTicker(null); setTimeout(() => setDrawer(tab === 'signals' ? 'signals' : 'insiders'), 50); }}
-          watchlist={watchlist}
-          portfolioTickers={[]}
-          pro={pro}
-          onUpgrade={onUpgrade}
-        />
-      )}
     </div>
   );
 }
@@ -5534,6 +5475,84 @@ function RedownloadPage() {
   );
 }
 
+// ─── "How are you liking Seli?" — a quick rating at the bottom of Help ─────────
+// Goes through the same /feedback route as the Send feedback modal, so ratings
+// land in the same place (the dashboard's feedback card).
+const RATE_GOOD = ['Email alerts', 'Stock and people pages', 'Leaderboard', 'Congress trades', 'The dataset', 'Plain-English summaries'];
+const RATE_BETTER = ['Senate trades', 'Faster alerts', 'A phone app', 'Better search', 'Price', 'Something was confusing'];
+const RATED_KEY = 'seli_rated_v1';
+
+function RateSeli() {
+  const { isSignedIn } = useAuth();
+  const [stars, setStars] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [good, setGood] = useState([]);
+  const [better, setBetter] = useState([]);
+  const [note, setNote] = useState('');
+  const [state, setState] = useState(() => { try { return localStorage.getItem(RATED_KEY) ? 'done' : 'idle'; } catch { return 'idle'; } });
+  const [err, setErr] = useState(null);
+  const toggle = (list, set, v) => set(list.includes(v) ? list.filter(x => x !== v) : [...list, v]);
+  const LABELS = ['', 'Not for me', 'Meh', "It's OK", 'Pretty good', 'Love it'];
+
+  async function send() {
+    setState('sending'); setErr(null);
+    try {
+      const lines = [`Rating: ${stars}/5 (${LABELS[stars]})`];
+      if (good.length) lines.push(`Working: ${good.join(', ')}`);
+      if (better.length) lines.push(`Would make it better: ${better.join(', ')}`);
+      if (note.trim()) lines.push('', note.trim());
+      const r = await fetch(`${cfg.NEON_PROXY_URL}/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...await getAuthHeaders() },
+        body: JSON.stringify({ summary: `Rating ${stars}/5`, message: lines.join('\n'), page: 'help-rating' }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Something went wrong. Try again in a moment.'); }
+      try { localStorage.setItem(RATED_KEY, String(Date.now())); } catch { /* private mode */ }
+      setState('done');
+    } catch (e) { setErr(e.message); setState('idle'); }
+  }
+
+  if (state === 'done') {
+    return (
+      <section className="sx-rate sx-rate--done">
+        <h2>Thanks for rating Seli</h2>
+        <p>It goes straight to the person building it. Got more to say? Use <b>Send feedback</b> in the account menu anytime.</p>
+      </section>
+    );
+  }
+  const shown = hover || stars;
+  return (
+    <section className="sx-rate" aria-labelledby="rate-title">
+      <h2 id="rate-title">How are you liking Seli?</h2>
+      <p>Takes 10 seconds, and it decides what gets built next.</p>
+      <div className="sx-rate__stars" role="radiogroup" aria-label="Rating" onMouseLeave={() => setHover(0)}>
+        {[1, 2, 3, 4, 5].map(n => (
+          <button key={n} type="button" role="radio" aria-checked={stars === n} aria-label={`${n} star${n > 1 ? 's' : ''}`}
+            className={`sx-rate__star${n <= shown ? ' is-on' : ''}`} onMouseEnter={() => setHover(n)} onClick={() => setStars(n)}>★</button>
+        ))}
+        <span className="sx-rate__label">{LABELS[shown]}</span>
+      </div>
+      {stars > 0 && (
+        <>
+          <div className="sx-rate__group">
+            <div className="sx-rate__q">What's working for you?</div>
+            <div className="sx-rate__chips">{RATE_GOOD.map(v => <button key={v} type="button" className={`sx-rate__chip${good.includes(v) ? ' is-on' : ''}`} onClick={() => toggle(good, setGood, v)}>{v}</button>)}</div>
+          </div>
+          <div className="sx-rate__group">
+            <div className="sx-rate__q">What would make it better?</div>
+            <div className="sx-rate__chips">{RATE_BETTER.map(v => <button key={v} type="button" className={`sx-rate__chip${better.includes(v) ? ' is-on' : ''}`} onClick={() => toggle(better, setBetter, v)}>{v}</button>)}</div>
+          </div>
+          <textarea className="sx-rate__note" rows={3} maxLength={2000} value={note} onChange={e => setNote(e.target.value)} placeholder="Anything else? (optional)" />
+          {err && <p className="sx-rate__err">{err}</p>}
+          {isSignedIn
+            ? <button className="sx-btn sx-btn--accent sx-rate__send" disabled={state === 'sending'} onClick={send}>{state === 'sending' ? 'Sending…' : 'Send rating'}</button>
+            : <SignInButton mode="modal" forceRedirectUrl="/help"><button className="sx-btn sx-btn--accent sx-rate__send">Sign in to send</button></SignInButton>}
+        </>
+      )}
+    </section>
+  );
+}
+
 function HelpCenterPage() {
   const [activeId, setActiveId] = useState(() => {
     const h = window.location.hash.slice(1);
@@ -5575,6 +5594,7 @@ function HelpCenterPage() {
             {section.render()}
           </div>
         </div>
+        <RateSeli />
       </div>
       <footer className="lp-footer">
         <div className="lp-footer__frame">

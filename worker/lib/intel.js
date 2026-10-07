@@ -130,7 +130,8 @@ const ROLE_PATTERNS = [
   [/10%|ten percent/i, '10% owner'], [/director/i, 'Director'],
 ];
 export function shortRole(title, relationship) {
-  if (relationship === 'congress') return 'Congress';
+  // Congress disclosures carry the chamber as the title ("House", "Senate").
+  if (relationship === 'congress') return /senat/i.test(title || '') ? 'Senator' : /house|represent/i.test(title || '') ? 'Representative' : 'Congress';
   const t = title || '';
   for (const [rx, label] of ROLE_PATTERNS) if (rx.test(t)) return label;
   return relationship === 'strong' || relationship === 'medium' ? 'Officer' : 'Insider';
