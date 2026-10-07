@@ -13,7 +13,7 @@ import OnboardingFlow from './onboard.jsx';
 import './research.css';
 import { go, stockPath, insiderPath } from './lib/nav.jsx';
 import { clearApiCache, refreshApi, api, useDataSinceYear } from './lib/api.js';
-import { prettyPerson, prettyCompany, shortDate, plural, memberRole } from './lib/text.js';
+import { prettyPerson, prettyCompany, shortDate, plural, memberRole, memberChamber } from './lib/text.js';
 import { peekIntent, clearIntent } from './lib/intent.js';
 import { SearchBox, SearchOverlay } from './components/Search.jsx';
 import { Icon, Card } from './components/ui.jsx';
@@ -1213,7 +1213,7 @@ function Badge({ type, children }) {
 // Returns the display label for an insider's role, distinguishing
 // congressional insiders from corporate C-suite.
 function insiderRoleLabel(r) {
-  if (r?.is_congress) return { badge: 'rel-strong', label: 'Congress' };
+  if (r?.is_congress) return { badge: 'rel-strong', label: memberChamber({ title: r.insider_title || r.title }) };
   if (r?.relationship === 'strong') return { badge: 'rel-strong', label: 'C-Suite' };
   if (r?.relationship === 'medium') return { badge: 'rel-medium', label: 'Officer' };
   return { badge: 'rel-weak', label: 'Dir' };
@@ -3225,13 +3225,13 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                             <span className="ws-row__chevron ws-row__chevron--lg">{isExp ? '▾' : '▸'}</span>
                             <span className="ticker">{f.ticker}</span>
                           </div>
-                          {isMobile && <div className="ws-mob-sub" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, paddingLeft: 18 }}>{f.insiderName}</div>}
+                          {isMobile && <div className="ws-mob-sub" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, paddingLeft: 18 }}>{prettyPerson(f.insiderName, f.relationship === 'congress')}</div>}
                         </div>
                         {!isMobile && <div className="ws-row__cell ws-row__cell--overflow" style={{ fontSize: 12 }}>{prettyPerson(f.insiderName, f.relationship === 'congress')}</div>}
                         <div className="ws-row__cell ws-row__cell--muted" style={{ fontSize: 11 }}>
                           {fmt.dateShort(f.transactionDate || f.date)}
                         </div>
-                        {!isMobile && <div className="ws-row__cell"><Badge type={`rel-${f.relationship || 'weak'}`}>{f.relationship === 'strong' ? 'C-Suite' : f.relationship === 'medium' ? 'Officer' : 'Dir'}</Badge></div>}
+                        {!isMobile && <div className="ws-row__cell"><Badge type={`rel-${f.relationship === 'congress' ? 'strong' : (f.relationship || 'weak')}`}>{f.relationship === 'congress' ? memberChamber({ title: f.title }) : f.relationship === 'strong' ? 'C-Suite' : f.relationship === 'medium' ? 'Officer' : 'Dir'}</Badge></div>}
                         <div className="ws-row__cell"><span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span></div>
                         {!isMobile && <div className="ws-row__cell ws-row__cell--right">
                           <span className={`ws-row__pos-change${isBuy ? ' val-buy' : ' val-sell'}`}>

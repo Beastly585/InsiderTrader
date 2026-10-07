@@ -54,7 +54,11 @@ export function enrich(raw) {
   // The database provides relationship, sector, and is_open_market for all
   // modern rows — only fall back to client-side computation for legacy rows
   // where these columns are NULL.
-  const rel = raw.relationship || getRel(raw.title, raw.isOfficer);
+  // Congress rows are stored as relationship "strong" (the table only allows
+  // strong/medium/weak), so tag them here from their CONGRESS_* code. Every
+  // badge, filter and name check on the Data page keys off 'congress'.
+  const rel = /^CONGRESS/i.test(raw.transactionCode || '') ? 'congress'
+    : (raw.relationship || getRel(raw.title, raw.isOfficer));
   const value = raw.value != null ? +raw.value
               : (raw.shares && raw.price ? Math.round(raw.shares * +raw.price) : null);
   let signal = 0;
