@@ -2795,6 +2795,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const [minStr, setMinStr] = useState(1);
   const [txType, setTxType] = useState('all');
   const [rawRoleF, setRawRoleF] = useState('');
+  const [minSize, setMinSize] = useState(0);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -2831,8 +2832,10 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const allSignals = useMemo(() => {
     const result = filterAndScoreSignals(filings, { cutoff, sourceF, sectorF, strengthThreshold });
     const q = search.toLowerCase();
-    return result.filter(s => !q || s.ticker.toLowerCase().includes(q) || (s.company || '').toLowerCase().includes(q));
-  }, [filings, cutoff, sourceF, sectorF, strengthThreshold, search]);
+    return result.filter(s => (!q || s.ticker.toLowerCase().includes(q) || (s.company || '').toLowerCase().includes(q))
+      && (txType === 'all' || (txType === 'buy' ? s.netValue > 0 : s.netValue < 0))
+      && Math.abs(s.netValue || 0) >= minSize);
+  }, [filings, cutoff, sourceF, sectorF, strengthThreshold, search, txType, minSize]);
 
   const signals = useMemo(() =>
     [...allSignals].sort((a, b) => {
@@ -2850,12 +2853,16 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
       if (sectorF && f.sector !== sectorF) return false;
       if (txType !== 'all' && f.transactionType !== txType) return false;
       if (rawRoleF && f.relationship !== rawRoleF) return false;
+      const cg = f.relationship === 'congress' || /^CONGRESS/i.test(f.transactionCode || '');
+      if (sourceF === 'political' && !cg) return false;
+      if (sourceF === 'corporate' && cg) return false;
+      if (minSize && (f.value || 0) < minSize) return false;
       if (rawCutoff && (f.transactionDate || f.date || '') < rawCutoff) return false;
       if (rawDateTo && (f.transactionDate || f.date || '') > rawDateTo) return false;
       if (q && !f.ticker?.toLowerCase().includes(q) && !(f.company || '').toLowerCase().includes(q) && !(f.insiderName || '').toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [filings, sectorF, txType, rawRoleF, rawCutoff, rawDateTo, search]);
+  }, [filings, sectorF, txType, rawRoleF, rawCutoff, rawDateTo, search, sourceF, minSize]);
 
   const [rawPage, setRawPage] = useState(1);
   const rawFilings = useMemo(() =>
@@ -2868,8 +2875,8 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
 
   function onSigSort(col) { if (sigSort === col) setSigDir(d => -d); else { setSigSort(col); setSigDir(-1); } }
   function onRawSort(col) { if (rawSort === col) setRawDir(d => -d); else { setRawSort(col); setRawDir(-1); } }
-  const hasFilters = search || sectorF || sourceF || minStr > 1 || days !== 7 || dateFrom || dateTo || (tab === 'raw' && (txType !== 'all' || rawRoleF !== ''));
-  function resetFilters() { setSearch(''); setSectorF(''); setSourceF(''); setMinStr(1); setDays(7); setTxType('all'); setRawRoleF(''); setDateFrom(''); setDateTo(''); }
+  const hasFilters = search || sectorF || sourceF || minStr > 1 || days !== 7 || dateFrom || dateTo || txType !== 'all' || minSize > 0 || rawRoleF !== '';
+  function resetFilters() { setSearch(''); setSectorF(''); setSourceF(''); setMinStr(1); setDays(7); setTxType('all'); setRawRoleF(''); setDateFrom(''); setDateTo(''); setMinSize(0); }
 
   function toggleSig(ticker) {
     setExpandedSigs(prev => { const n = new Set(prev); n.has(ticker) ? n.delete(ticker) : n.add(ticker); return n; });
@@ -2924,7 +2931,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             <p className="ws-summary">
               {tab === 'signals'
                 ? <>{plural(signals.length, 'stock')} · {high} high conviction · net <b className={net >= 0 ? 'val-buy' : 'val-sell'}>{net >= 0 ? '+' : '−'}{fmt.money(Math.abs(net))}</b></>
-                : <>{plural(rawFilings.length, 'trade')} · {new Set(rawFilings.map(f => f.ticker)).size} stocks</>}
+                : <>{plural(allRaw.length, 'trade')} · {plural(new Set(allRaw.map(f => f.ticker)).size, 'stock')}</>}
             </p>
           );
         })()}
@@ -2942,21 +2949,49 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
             </button>}
           </div>
           {(!isMobile || filtersOpen) && <>
+            {/* Same filters, same names, same order on both tabs. Signals adds
+                Conviction; Raw filings adds a custom date range and Role. */}
             <div className="ws-filter-bar__row">
-
-              {tab === 'signals' && <>
-                <div className="ws-filter-group">
-                  <span className="ws-filter-label">Window</span>
-                  <div className="ws-pills">
-                    {[{ v: 1, l: '1d' }, { v: 3, l: '3d' }, { v: 7, l: '7d' }, { v: 30, l: '30d' }, { v: 90, l: '90d' }, { v: null, l: 'All' }].map(o => {
-                      if (!pro && (o.v === null || o.v > 7)) return null;
-                      return <button key={o.l} className={`ws-pill${days === o.v ? ' ws-pill--active' : ''}`} onClick={() => setDays(o.v)}>{o.l}</button>;
-                    })}
-                    {!pro && <button className="ws-pill ws-pill--locked" onClick={() => onUpgrade('full_history')}><IconLock style={{ width: 10, height: 10, marginRight: 3, verticalAlign: '-1px' }} />More</button>}
-                  </div>
+              <div className="ws-filter-group" style={{ borderLeft: 'none', paddingLeft: 0 }}>
+                <span className="ws-filter-label">Date</span>
+                <div className="ws-pills">
+                  {[{ v: 1, l: '1d' }, { v: 3, l: '3d' }, { v: 7, l: '7d' }, { v: 30, l: '30d' }, { v: 90, l: '90d' }, { v: null, l: 'All' }].map(o => {
+                    if (tab === 'signals' && !pro && (o.v === null || o.v > 7)) return null;
+                    return <button key={o.l} className={`ws-pill${days === o.v && !dateFrom ? ' ws-pill--active' : ''}`} onClick={() => { setDays(o.v); setDateFrom(''); setDateTo(''); }}>{o.l}</button>;
+                  })}
+                  {tab === 'signals' && !pro && <button className="ws-pill ws-pill--locked" onClick={() => onUpgrade('full_history')}><IconLock style={{ width: 10, height: 10, marginRight: 3, verticalAlign: '-1px' }} />More</button>}
                 </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Who</span>
+                <div className="ws-pills">
+                  {[['', 'Everyone'], ['corporate', 'Insiders'], ['political', 'Politicians']].map(([v, l]) => (
+                    <button key={v} className={`ws-pill${sourceF === v ? ' ws-pill--active' : ''}`} onClick={() => { setSourceF(v); if (v === 'political') setRawRoleF(''); }}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Side</span>
+                <div className="ws-pills">
+                  {[['all', 'All'], ['buy', tab === 'signals' ? 'Net buying' : 'Buys'], ['sell', tab === 'signals' ? 'Net selling' : 'Sells']].map(([v, l]) => (
+                    <button key={v} className={`ws-pill${txType === v ? ' ws-pill--active' : ''}`} onClick={() => setTxType(v)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="ws-filter-bar__row">
+              <div className="ws-filter-group" style={{ borderLeft: 'none', paddingLeft: 0 }}>
+                <span className="ws-filter-label">Size</span>
+                <div className="ws-pills">
+                  {[[0, 'Any'], [100000, '$100K+'], [1000000, '$1M+']].map(([v, l]) => (
+                    <button key={v} className={`ws-pill${minSize === v ? ' ws-pill--active' : ''}`} onClick={() => setMinSize(v)}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              {tab === 'signals' && (
                 <div className="ws-filter-group">
-                  <span className="ws-filter-label">Strength</span>
+                  <span className="ws-filter-label">Conviction</span>
                   <div className="ws-pills">
                     {[{ v: 1, l: 'Any' }, { v: 2, l: 'Med+' }, { v: 3, l: 'High' }].map(o => (
                       <button key={o.v} className={`ws-pill${minStr === o.v ? ' ws-pill--active' : ''}`}
@@ -2965,17 +3000,25 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                     ))}
                   </div>
                 </div>
-              </>}
-
-              {tab === 'raw' && <>
+              )}
+              {tab === 'raw' && sourceF !== 'political' && (
                 <div className="ws-filter-group">
-                  <span className="ws-filter-label">Date</span>
+                  <span className="ws-filter-label">Role</span>
                   <div className="ws-pills">
-                    {[{ v: 1, l: '1d' }, { v: 7, l: '7d' }, { v: 30, l: '30d' }, { v: null, l: 'All' }].map(o => (
-                      <button key={o.l} className={`ws-pill${days === o.v && !dateFrom ? ' ws-pill--active' : ''}`} onClick={() => { setDays(o.v); setDateFrom(''); setDateTo(''); }}>{o.l}</button>
+                    {[['', 'All'], ['strong', 'C-suite'], ['medium', 'Officer'], ['weak', 'Director & other']].map(([v, l]) => (
+                      <button key={v} className={`ws-pill${rawRoleF === v ? ' ws-pill--active' : ''}`} onClick={() => setRawRoleF(v)}>{l}</button>
                     ))}
                   </div>
                 </div>
+              )}
+              <div className="ws-filter-group">
+                <span className="ws-filter-label">Sector</span>
+                <select className="ws-select" value={sectorF} onChange={e => setSectorF(e.target.value)}>
+                  <option value="">All sectors</option>
+                  {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              {tab === 'raw' && (
                 <div className="ws-filter-group">
                   <span className="ws-filter-label">Range</span>
                   <div className="drawer__date-range">
@@ -2986,43 +3029,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                       onChange={e => { setDateTo(e.target.value); if (e.target.value) setDays(null); }} />
                   </div>
                 </div>
-                <div className="ws-filter-group">
-                  <span className="ws-filter-label">Type</span>
-                  <div className="ws-pills">
-                    {[['all', 'All'], ['buy', 'Buys'], ['sell', 'Sells']].map(([v, l]) => (
-                      <button key={v} className={`ws-pill${txType === v ? ' ws-pill--active' : ''}`} onClick={() => setTxType(v)}>{l}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="ws-filter-group">
-                  <span className="ws-filter-label">Role</span>
-                  <div className="ws-pills">
-                    {[['', 'All'], ['strong', 'C-Suite'], ['medium', 'Officer']].map(([v, l]) => (
-                      <button key={v} className={`ws-pill${rawRoleF === v ? ' ws-pill--active' : ''}`} onClick={() => setRawRoleF(v)}>{l}</button>
-                    ))}
-                  </div>
-                </div>
-              </>}
-            </div>
-
-            <div className="ws-filter-bar__row">
-              {tab === 'signals' && <>
-                <div className="ws-filter-group" style={{ borderLeft: 'none', paddingLeft: 0 }}>
-                  <span className="ws-filter-label">Type</span>
-                  <div className="ws-pills">
-                    {[['', 'All'], ['corporate', 'Corp'], ['political', 'Congress']].map(([v, l]) => (
-                      <button key={v} className={`ws-pill${sourceF === v ? ' ws-pill--active' : ''}`} onClick={() => setSourceF(v)}>{l}</button>
-                    ))}
-                  </div>
-                </div>
-              </>}
-              <div className="ws-filter-group" style={{ borderLeft: tab === 'raw' ? 'none' : '', paddingLeft: tab === 'raw' ? 0 : '' }}>
-                <span className="ws-filter-label">Sector</span>
-                <select className="ws-select" value={sectorF} onChange={e => setSectorF(e.target.value)}>
-                  <option value="">All sectors</option>
-                  {sectors.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
+              )}
               {hasFilters && <button className="ws-clear-btn" onClick={resetFilters}>Clear</button>}
             </div>
           </>}

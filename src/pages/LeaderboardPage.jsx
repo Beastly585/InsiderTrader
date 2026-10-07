@@ -84,7 +84,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
           { value: 'rank', label: 'Track record' }, { value: 'hit', label: 'Hit rate' }, { value: 'ret', label: 'Avg return' }, { value: 'buys', label: 'Most buying' },
         ]} />
         <Segmented size="sm" value={source} onChange={setSource} options={[
-          { value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Executives' }, { value: 'congress', label: 'Congress' },
+          { value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'congress', label: 'Politicians' },
         ]} />
         {pro
           ? <Segmented size="sm" value={years} onChange={setYears} options={[{ value: 1, label: '1Y' }, { value: 2, label: '2Y' }, { value: 5, label: '5Y' }]} />
