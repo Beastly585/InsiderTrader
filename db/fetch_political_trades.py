@@ -404,7 +404,7 @@ def parse_house_pdf_text(pdf_bytes: bytes, meta: dict) -> list[CongressTrade]:
             security_title    = "Stock",
             shares            = None,
             value             = value,
-            relationship      = "strong",
+            relationship      = "strong",  # the filings table only allows strong/medium/weak; Congress rows are identified by transaction_code CONGRESS_*
             sector            = get_sector(ticker),
             footnotes         = " | ".join(fn_parts),
         ))
@@ -557,40 +557,55 @@ def get_senate_session() -> tuple[Optional[requests.Session], Optional[str]]:
 def fetch_senate_index(s: requests.Session, token: str,
                        from_date: date, to_date: date) -> list[dict]:
     endpoint  = f"{SENATE_BASE}/search/report/data/"
-    from_str  = from_date.strftime("%m/%d/%Y")
-    to_str    = to_date.strftime("%m/%d/%Y")
+    # The site wants these exact field names and formats (the same ones its own
+    # search page sends). The old payload ("report_types[]", "filer_type",
+    # dates without a time) got a 503 back even when the site was up.
+    from_str  = from_date.strftime("%m/%d/%Y") + " 00:00:00"
+    to_str    = to_date.strftime("%m/%d/%Y") + " 23:59:59"
     page_size = 100
     start     = 0
     rows      = []
+
+    # Open the search page once (like a browser would) and use the CSRF
+    # token from the session cookie, which is what the endpoint checks.
+    try:
+        s.get(f"{SENATE_BASE}/search/", headers={"Referer": f"{SENATE_BASE}/search/home/"}, timeout=20)
+    except Exception:
+        pass
+    token = s.cookies.get("csrftoken") or s.cookies.get("csrf") or token
 
     while True:
         time.sleep(1.0)
         try:
             r = s.post(endpoint,
                 data={
-                    "csrfmiddlewaretoken":  token,
-                    "report_types[]":       "11",
-                    "filer_type":           "1",
-                    "submitted_start_date": from_str,
-                    "submitted_end_date":   to_str,
                     "start":  str(start),
                     "length": str(page_size),
+                    "report_types":         "[11]",   # 11 = periodic transaction report
+                    "filer_types":          "[1]",    # 1 = sitting senators (leaves out candidates)
+                    "submitted_start_date": from_str,
+                    "submitted_end_date":   to_str,
+                    "candidate_state":      "",
+                    "senator_state":        "",
+                    "office_id":            "",
+                    "first_name":           "",
+                    "last_name":            "",
+                    "csrfmiddlewaretoken":  token,
                 },
                 headers={
                     "Referer":           f"{SENATE_BASE}/search/",
                     "Origin":            SENATE_BASE,
                     "X-CSRFToken":       token,
                     "X-Requested-With":  "XMLHttpRequest",
-                    "Content-Type":      "application/x-www-form-urlencoded; charset=UTF-8",
                 },
                 timeout=30)
         except Exception as e:
             log.error(f"  Senate DataTables error: {e}"); break
 
-        if r.status_code == 503:
-            log.warning("  Senate 503 — site may be in maintenance"); break
         if r.status_code != 200:
-            log.error(f"  Senate status {r.status_code}"); break
+            body = " ".join(r.text.split())[:200]
+            log.error(f"  Senate search {r.status_code}  server={r.headers.get('Server')}  body: {body}")
+            break
 
         try:
             data = r.json()
@@ -606,7 +621,9 @@ def fetch_senate_index(s: requests.Session, token: str,
             first = str(row[0]).strip()
             last  = str(row[1]).strip()
             filed = safe_date(str(row[4]).strip())
-            url_m = re.search(r'href="([^"]+)"', str(row[5]) if len(row) > 5 else "")
+            # Columns: first, last, office, link to the report, date received.
+            # (The link is column 3; this used to read a column 5 that doesn't exist.)
+            url_m = re.search(r'href="([^"]+)"', " ".join(str(c) for c in row))
             ptr   = url_m.group(1) if url_m else None
             if ptr and not ptr.startswith("http"):
                 ptr = SENATE_BASE + ptr
@@ -616,7 +633,7 @@ def fetch_senate_index(s: requests.Session, token: str,
                 "ptr_url": ptr,
             })
 
-        total = data.get("recordsTotal", 0)
+        total = data.get("recordsFiltered", data.get("recordsTotal", 0))
         start += page_size
         log.info(f"    Senate index: {min(start,total)}/{total}")
         if start >= total: break
@@ -659,7 +676,12 @@ def parse_senate_html(html: str, meta: dict) -> list[CongressTrade]:
         ci_ticker  = col("ticker")
         ci_asset   = col("asset name", "asset description", "asset")
         ci_atype   = col("asset type", "type of asset")
-        ci_txtype  = col("transaction type", "type")
+        # The Senate table has both "Asset Type" (Stock, Other...) and "Type"
+        # (Purchase, Sale...). A plain "type" match picked Asset Type first,
+        # so every trade came out as "Stock" and was dropped as 'other'.
+        ci_txtype  = col("transaction type")
+        if ci_txtype is None:
+            ci_txtype = next((j for j, h in enumerate(hdrs) if h.strip() == "type"), None)
         ci_amount  = col("amount")
         ci_comment = col("comment")
 
@@ -718,7 +740,7 @@ def parse_senate_html(html: str, meta: dict) -> list[CongressTrade]:
                 security_title    = asset_type or "Stock",
                 shares            = None,
                 value             = parse_amount(amount),
-                relationship      = "strong",
+                relationship      = "strong",  # the filings table only allows strong/medium/weak; Congress rows are identified by transaction_code CONGRESS_*
                 sector            = get_sector(clean_ticker),
                 footnotes         = " | ".join(fn_parts) or None,
             ))

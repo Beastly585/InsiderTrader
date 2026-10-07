@@ -2860,8 +2860,10 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
       if (!f.isOpenMarket) return false;
       if (sectorF && f.sector !== sectorF) return false;
       if (txType !== 'all' && f.transactionType !== txType) return false;
-      if (rawRoleF && f.relationship !== rawRoleF) return false;
       const cg = f.relationship === 'congress' || /^CONGRESS/i.test(f.transactionCode || '');
+      // Congress rows are stored as relationship "strong", so the role filter
+      // (company roles) has to leave them out explicitly.
+      if (rawRoleF && (cg || f.relationship !== rawRoleF)) return false;
       if (sourceF === 'political' && !cg) return false;
       if (sourceF === 'corporate' && cg) return false;
       if (minSize && (f.value || 0) < minSize) return false;
