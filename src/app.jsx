@@ -2783,7 +2783,7 @@ const _mktListeners = new Set();
 // Each tab gets full tile width so rows are actually readable, unlike
 // the three-column cramped layout. Tabs: Corporate | Congressional | Movers.
 
-function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlist, user, onUpgrade, initialTab }) {
+function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, onOpenDetail, watchlist, user, onUpgrade, initialTab }) {
   const { pro } = useBilling();
   const isMobile = useIsMobile();
 
@@ -2821,6 +2821,14 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
   const rawDateTo = useMemo(() => {
     return dateTo || null; // null = no upper bound (today)
   }, [dateTo]);
+
+  // Load more history when the date filter reaches past what's loaded.
+  useEffect(() => {
+    if (!ensureFilingsWindow) return;
+    let need = days;
+    if (dateFrom) need = Math.ceil((Date.now() - Date.parse(dateFrom + 'T00:00:00Z')) / 86400000) + 1;
+    ensureFilingsWindow(need);
+  }, [days, dateFrom, ensureFilingsWindow]);
 
   const sectors = useMemo(() =>
     [...new Set(filings.map(f => f.sector).filter(s => s && s !== 'Other'))].sort(),
@@ -3038,7 +3046,9 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
         {/* ── SIGNALS TABLE ─────────────────────────────────────────────── */}
         {tab === 'signals' && (
           loading ? <SkeletonRows count={10} /> : signals.length === 0 ? (
-            <div className="ws-empty">No signals match these filters. Try widening the window or clearing filters.</div>
+            <div className="ws-empty">{sourceF === 'political' && days != null && days < 90
+              ? 'No politician trades in this window. Members of Congress report trades up to 45 days late, so try 90d or All.'
+              : 'No signals match these filters. Try widening the date or clearing filters.'}</div>
           ) : (
             <>
               {isMobile && <MobileSort value={sigSort} dir={sigDir} onSort={onSigSort}
@@ -3166,7 +3176,9 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
         {/* ── RAW FILINGS TABLE ─────────────────────────────────────────── */}
         {tab === 'raw' && (
           loading ? <SkeletonRows count={12} /> : rawFilings.length === 0 ? (
-            <div className="ws-empty">No filings match these filters.</div>
+            <div className="ws-empty">{sourceF === 'political' && !dateFrom && days != null && days < 90
+              ? 'No politician trades in this window. Members of Congress report trades up to 45 days late, so try 90d or All.'
+              : 'No filings match these filters.'}</div>
           ) : (
             <>
               {/* Same outer width as signals. 7-col grid: chevron+date | ticker | insider | role | type | ±position | value */}
@@ -7038,6 +7050,11 @@ function AppInner() {
   // pages (home, stock, insider, watchlist) fetch just what they need from
   // the Worker, so this only loads when Data is opened.
   const [filingsWindowDays] = useState(7);
+  // How many days of filings are loaded (null = everything). The Data page
+  // asks for more when you pick a wider date (30d, 90d, All, or an older
+  // custom range). Before, it only ever had 7 days, so wider windows showed
+  // the same rows, and politicians (who report up to 45 days late) showed none.
+  const [loadedDays, setLoadedDays] = useState(7);
   const needsFilings = page === 'dashboard';
   const filingsRequested = useRef(false);
   function enterApp() { }
@@ -7048,6 +7065,13 @@ function AppInner() {
     catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, []);
+
+  const ensureFilingsWindow = useCallback(needed => {
+    const covered = loadedDays === null || (needed !== null && needed <= loadedDays);
+    if (covered) return;
+    setLoadedDays(needed);
+    load(needed);
+  }, [loadedDays, load]);
 
   useEffect(() => {
     // Wait for Clerk: on mobile fresh loads the JWT isn't ready at first.
@@ -7275,7 +7299,7 @@ function AppInner() {
           {page === 'stock' && <StockPage key={route.ticker} ticker={route.ticker} watchlist={watchlist} onUpgrade={onUpgrade}
             renderProfile={(t, cik, company) => <CompanyProfileCard ticker={t} cik={cik} company={company} />} />}
           {page === 'insider' && <InsiderPage key={route.raw} raw={route.raw} watchlist={watchlist} onUpgrade={onUpgrade} />}
-          {page === 'dashboard' && <DashboardPage filings={filings} loading={loading} onDrillSignal={openDetail} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={onUpgrade} />}
+          {page === 'dashboard' && <DashboardPage filings={filings} loading={loading} ensureFilingsWindow={ensureFilingsWindow} onDrillSignal={openDetail} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={onUpgrade} />}
           {page === 'leaderboard' && <LeaderboardPage pro={billingPro} onUpgrade={onUpgrade} />}
           {page === 'congress' && <CongressPage />}
           {page === 'insiderBuying' && <InsiderBuyingPage watchlist={watchlist} />}

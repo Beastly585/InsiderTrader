@@ -66,7 +66,16 @@ DRY_RUN      = os.environ.get("DRY_RUN", "0") == "1"
 HOUSE_SLEEP  = 1.0
 SENATE_SLEEP = 1.5
 
-UA           = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+# A complete browser User-Agent. The old one stopped after "AppleWebKit/537.36",
+# which no real browser sends; the Senate site sits behind Akamai, which is
+# quick to turn away requests that don't look like a browser.
+UA           = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
+BROWSER_HEADERS = {
+    "User-Agent": UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 HOUSE_BASE   = "https://disclosures-clerk.house.gov"
 SENATE_BASE  = "https://efdsearch.senate.gov"
 
@@ -511,13 +520,20 @@ def get_senate_session() -> tuple[Optional[requests.Session], Optional[str]]:
         log.error("  beautifulsoup4 not installed"); return None, None
 
     s = requests.Session()
-    s.headers.update({"User-Agent": UA})
+    s.headers.update(BROWSER_HEADERS)
 
     try:
         r = s.get(f"{SENATE_BASE}/search/home/", timeout=20)
-        r.raise_for_status()
     except Exception as e:
-        log.error(f"  Senate GET failed: {e}"); return None, None
+        log.error(f"  Senate GET failed (network): {e}"); return None, None
+    if r.status_code != 200:
+        # Say exactly what came back, so "site down" and "we're blocked" can
+        # be told apart: Akamai blocks usually say "Access Denied" and carry a
+        # "Reference #"; maintenance pages are 503 with the Senate's own HTML.
+        body = " ".join(r.text.split())[:200]
+        log.error(f"  Senate GET {r.status_code}  server={r.headers.get('Server')}  "
+                  f"retry-after={r.headers.get('Retry-After')}  body: {body}")
+        return None, None
 
     soup  = BeautifulSoup(r.text, "html.parser")
     tok   = soup.find("input", {"name": "csrfmiddlewaretoken"})
