@@ -13,7 +13,7 @@ import OnboardingFlow from './onboard.jsx';
 import './research.css';
 import { go, stockPath, insiderPath } from './lib/nav.jsx';
 import { clearApiCache, refreshApi, api, useDataSinceYear } from './lib/api.js';
-import { prettyPerson, prettyCompany, shortDate, plural } from './lib/text.js';
+import { prettyPerson, prettyCompany, shortDate, plural, memberRole } from './lib/text.js';
 import { peekIntent, clearIntent } from './lib/intent.js';
 import { SearchBox, SearchOverlay } from './components/Search.jsx';
 import { Icon, Card } from './components/ui.jsx';
@@ -3192,7 +3192,7 @@ function DashboardPage({ filings, loading, onDrillSignal, onOpenDetail, watchlis
                             <span className={`ws-mrow__amt${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(Math.abs(f.value || 0))}</span>
                           </div>
                           <div className="ws-mrow__sub">
-                            <span className="ws-mrow__name">{prettyPerson(f.insiderName, f.relationship === 'congress')}<span className="ws-mrow__role"> · {f.relationship === 'congress' ? 'Congress' : f.relationship === 'strong' ? 'C-suite' : f.relationship === 'medium' ? 'Officer' : 'Director'}</span></span>
+                            <span className="ws-mrow__name">{prettyPerson(f.insiderName, f.relationship === 'congress')}<span className="ws-mrow__role"> · {f.relationship === 'congress' ? memberRole({ title: f.title }) : f.relationship === 'strong' ? 'C-suite' : f.relationship === 'medium' ? 'Officer' : 'Director'}</span></span>
                             <span className="ws-mrow__date">{shortDate(f.transactionDate || f.date)}</span>
                           </div>
                         </div>

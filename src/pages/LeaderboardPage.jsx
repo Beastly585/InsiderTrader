@@ -7,12 +7,12 @@
 import React, { useEffect, useState } from 'react';
 import { InsiderLink, StockLink } from '../lib/nav.jsx';
 import { useApi } from '../lib/api.js';
-import { money, pct, plural } from '../lib/text.js';
+import { money, pct, plural, memberRole, memberChamber } from '../lib/text.js';
 import { Card, Segmented, Skeleton, ErrorNote, Gate, Chip, useNarrow } from '../components/ui.jsx';
 
 const LIST = { rank: 'ranked', hit: 'by_hit', ret: 'by_return', buys: 'by_buying' };
 const signed = (v, d = 1) => `${v >= 0 ? '+' : ''}${Number(v).toFixed(d)}`;
-const roleOf = r => (r.congress ? (r.role || 'Congress') : r.role || (/^unknown$/i.test(r.title || '') ? '' : r.title) || 'Insider');
+const roleOf = r => (r.congress ? memberRole(r) : r.role || (/^unknown$/i.test(r.title || '') ? '' : r.title) || 'Insider');
 
 // The number a row is ranked by, so the list always leads with it.
 function headline(r, sort) {
@@ -41,7 +41,7 @@ function LeaderList({ rows, sort }) {
             <div className="sx-lb__main">
               <InsiderLink raw={r.raw} className="sx-lb__name">{r.name}</InsiderLink>
               <div className="sx-lb__who">
-                {r.congress ? <Chip tone="accent">{r.role || 'Congress'}</Chip> : <span>{roleOf(r)}</span>}
+                {r.congress ? <Chip tone="accent">{memberChamber(r)}</Chip> : <span>{roleOf(r)}</span>}
                 {(r.tickers || []).slice(0, 2).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
               </div>
               <div className="sx-lb__stats">{bits.join(' · ')}</div>
@@ -119,7 +119,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
                       <td className="sx-table__who">
                         <InsiderLink raw={r.raw}>{r.name}</InsiderLink>
                         <span className="sx-table__role">
-                          {r.congress ? <Chip tone="accent">{r.role || 'Congress'}</Chip> : roleOf(r)}
+                          {r.congress ? <Chip tone="accent">{memberChamber(r)}</Chip> : roleOf(r)}
                           {(r.tickers || []).slice(0, 3).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
                         </span>
                       </td>

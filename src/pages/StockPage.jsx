@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { InsiderLink, StockLink, pushRecent } from '../lib/nav.jsx';
-import { money, amount, price, shares, pct, shortDate, ago, plural, codeLabel, edgarCompanyUrl } from '../lib/text.js';
+import { money, amount, price, shares, pct, shortDate, ago, plural, codeLabel, edgarCompanyUrl, memberRole } from '../lib/text.js';
 import { secFilingUrl } from '../edgar.js';
 import { Card, TypeBadge, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, Icon, useNarrow } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
@@ -139,7 +139,7 @@ function StockView({ d, watchlist, onUpgrade, renderProfile }) {
                   <li key={p.raw} className="sx-people__row">
                     <div className="sx-people__who">
                       <InsiderLink raw={p.raw} className="sx-people__name">{p.name}</InsiderLink>
-                      <span className="sx-people__role">{p.congress ? (p.role || 'Congress') : p.role !== 'Insider' ? p.role : (p.title || 'Insider')}</span>
+                      <span className="sx-people__role">{p.congress ? memberRole(p) : p.role !== 'Insider' ? p.role : (p.title || 'Insider')}</span>
                     </div>
                     <div className="sx-people__nums">
                       {/* Congress reports ranges, so summing them would invent a number: show counts. */}
@@ -168,7 +168,7 @@ function TradeList({ trades, showTicker, showInsider, showNow, membersOnly }) {
     <ul className="sx-trows">
       {trades.map((t, i) => {
         const since = showNow && t.om && t.type === 'buy' && t.price > 0 && t.now ? (t.now - t.price) / t.price * 100 : null;
-        const role = membersOnly ? '' : t.congress ? (t.role || 'Congress') : t.role;
+        const role = membersOnly ? '' : t.congress ? memberRole(t) : t.role;
         const detail = !t.om ? codeLabel(t.code) : t.routine ? 'Planned' : '';
         // Who traded (stock pages), which company (multi-company people), or,
         // on a one-company insider page, the trade itself.
@@ -231,7 +231,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
                 {showInsider && (
                   <td className="sx-table__who">
                     <InsiderLink raw={t.raw}>{t.name}</InsiderLink>
-                    {!membersOnly && <span className="sx-table__role">{t.congress ? (t.role || 'Congress') : t.role}</span>}
+                    {!membersOnly && <span className="sx-table__role">{t.congress ? memberRole(t) : t.role}</span>}
                   </td>
                 )}
                 <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}</td>

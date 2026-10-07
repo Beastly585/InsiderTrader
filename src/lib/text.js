@@ -179,3 +179,19 @@ export function prettyPerson(name, isCongress = false) {
 
 // Companies, funds and trusts that file as 'insiders' (e.g. 10% owners).
 export const isEntityName = name => ENTITY_RE.test(name || '');
+
+// A member of Congress's label: "Representative" or "Senator". Congress filings
+// carry the chamber as the title ("House", "Senate"). Works on the Worker's new
+// role values and on older cached ones that just say "Congress".
+export function memberRole(x) {
+  const r = x?.role || '';
+  if (r && r !== 'Congress') return r;
+  const t = `${x?.title || ''} ${x?.insider_title || ''} ${x?.insiderTitle || ''}`;
+  return /senat/i.test(t) ? 'Senator' : /house|represent/i.test(t) ? 'Representative' : 'Congress';
+}
+
+// Short form for badges: "House" or "Senate".
+export function memberChamber(x) {
+  const r = memberRole(x);
+  return r === 'Senator' ? 'Senate' : r === 'Representative' ? 'House' : 'Congress';
+}
