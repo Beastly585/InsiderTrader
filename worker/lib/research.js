@@ -191,7 +191,8 @@ async function stock(ctx, ticker) {
       SELECT f.accession_number, f.cik_issuer, f.insider_name, f.insider_title, f.relationship, f.transaction_code,
              f.transaction_type, f.is_open_market, f.is_routine, f.shares::float AS shares,
              f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
-             f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date
+             f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date,
+             f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class
         FROM public.filings f
        WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} >= DATE '2013-01-01'
        ORDER BY ${date} DESC, f.value DESC NULLS LAST LIMIT 400`),
@@ -252,6 +253,17 @@ async function stock(ctx, ticker) {
   };
 }
 
+// Foreign companies often report two share classes in one Form 4: the local
+// shares (e.g. Pampa's Buenos Aires shares at $3.10) and the US-listed ADS the
+// ticker refers to (one PAM ADS = 25 local shares, ~$78). The dollar amount is
+// right either way, but the per-share price isn't comparable with the ticker's
+// price. This flags the local-share rows: not an ADS/ADR row themselves, in a
+// filing that also has one.
+const ADS_RE = `'(depositary|\\mADS\\M|\\mADR\\M)'`;
+export const OTHER_CLASS_SQL = a => `(COALESCE(${a}.security_title, '') !~* ${ADS_RE}
+  AND EXISTS (SELECT 1 FROM public.filings g WHERE g.accession_number = ${a}.accession_number
+              AND g.security_title ~* ${ADS_RE}))`;
+
 function tradeOut(r) {
   const cg = isCongress(r);
   return {
@@ -261,6 +273,7 @@ function tradeOut(r) {
     type: r.transaction_type, code: r.transaction_code, om: !!r.is_open_market, routine: r.is_routine,
     shares: num(r.shares), price: num(r.price), value: num(r.value), pct: num(r.pct), owned_after: num(r.owned_after),
     filed: asDate(r.filing_date), date: asDate(r.trade_date),
+    ...(r.other_class ? { other_class: true, security: r.security_title || '' } : {}),
   };
 }
 
@@ -277,7 +290,8 @@ async function insider(ctx, raw) {
     SELECT f.accession_number, f.cik_issuer, f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship,
            f.transaction_code, f.transaction_type, f.is_open_market, f.is_routine, f.shares::float AS shares,
            f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
-           f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date
+           f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date,
+           f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class
       FROM public.filings f
      WHERE f.insider_name = ${N} AND f.transaction_type IN ('buy','sell')
      ORDER BY ${date} DESC LIMIT 800`), ctx.isPro()]);
@@ -286,7 +300,7 @@ async function insider(ctx, raw) {
   const tickers = [...new Set(rows.map(r => r.ticker).filter(t => t && TICKER_RE.test(t)))];
   // Congress disclosures have no price per share, so their buys are scored
   // from the close on the trade date (same rule as the leaderboard).
-  const omBuys = rows.filter(r => r.is_open_market && r.transaction_type === 'buy');
+  const omBuys = rows.filter(r => r.is_open_market && r.transaction_type === 'buy' && !r.other_class);
   const needPx = omBuys.filter(r => !(r.price > 0) && isCongress(r) && r.ticker && TICKER_RE.test(r.ticker) && asDate(r.trade_date)).slice(0, 400);
   const firstBuy = omBuys.filter(r => r.price > 0 || needPx.includes(r)).map(r => asDate(r.trade_date)).filter(Boolean).sort()[0];
   const [latest, spy, entry] = await Promise.all([
@@ -347,11 +361,11 @@ async function insider(ctx, raw) {
     const c = byT.get(r.ticker);
     const d = asDate(r.trade_date);
     if (!c.last || d > c.last) c.last = d; // rows are newest-first, so first seen = latest title
-    if (c.owned == null && r.owned_after != null) c.owned = num(r.owned_after);
+    if (c.owned == null && r.owned_after != null && !r.other_class) c.owned = num(r.owned_after);
     if (!r.is_open_market) { c.other++; continue; }
     if (r.transaction_type === 'buy') {
       c.buys++; c.buy_v += num(r.value) || 0;
-      if (r.price > 0 && r.shares > 0) { c.cost += r.price * r.shares; c.costShares += num(r.shares); }
+      if (r.price > 0 && r.shares > 0 && !r.other_class) { c.cost += r.price * r.shares; c.costShares += num(r.shares); }
     } else { c.sells++; c.sell_v += num(r.value) || 0; }
   }
   const companies = [...byT.values()].map(c => {

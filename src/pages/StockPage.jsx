@@ -160,6 +160,15 @@ function StockView({ d, watchlist, onUpgrade, renderProfile }) {
   );
 }
 
+// Return since a buy. Not shown for local-share rows of foreign companies
+// (their price isn't in the ticker's units) or for moves over 300%, which
+// almost always mean a split or a different share class, not a real gain.
+function sinceBuy(t, showNow) {
+  if (!showNow || !t.om || t.type !== 'buy' || !(t.price > 0) || !t.now || t.other_class) return null;
+  const r = (t.now - t.price) / t.price;
+  return Math.abs(r) >= 3 ? null : r * 100;
+}
+
 // Phones: one stacked row per trade instead of a squeezed table.
 //   [ticker]  Who / what                  $value
 //             date · role/detail          Buy · +12%
@@ -167,7 +176,7 @@ function TradeList({ trades, showTicker, showInsider, showNow, membersOnly }) {
   return (
     <ul className="sx-trows">
       {trades.map((t, i) => {
-        const since = showNow && t.om && t.type === 'buy' && t.price > 0 && t.now ? (t.now - t.price) / t.price * 100 : null;
+        const since = sinceBuy(t, showNow);
         const role = membersOnly ? '' : t.congress ? memberRole(t) : t.role;
         const detail = !t.om ? codeLabel(t.code) : t.routine ? 'Planned' : '';
         // Who traded (stock pages), which company (multi-company people), or,
@@ -177,7 +186,7 @@ function TradeList({ trades, showTicker, showInsider, showNow, membersOnly }) {
           ? <InsiderLink raw={t.raw}>{t.name}</InsiderLink>
           : showTicker || t.congress || !t.shares
             ? <span>{t.company || t.ticker || verb}</span>
-            : <span>{verb} {shares(t.shares)} sh{t.price > 0 ? ` at ${price(t.price)}` : ''}</span>;
+            : <span>{verb} {shares(t.shares)} {t.other_class ? 'local shares' : 'sh'}{t.price > 0 ? ` at ${price(t.price)}` : ''}</span>;
         const sub = [shortDate(t.date), showInsider ? role : '', detail].filter(Boolean).join(' · ');
         return (
           <li key={`${t.acc}:${i}`} className={`sx-trow${t.om ? '' : ' sx-trow--muted'}`}>
@@ -223,7 +232,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
         <tbody>
           {trades.map((t, i) => {
             const url = secFilingUrl(t.acc, t.cik);
-            const since = showNow && t.om && t.type === 'buy' && t.price > 0 && t.now ? (t.now - t.price) / t.price * 100 : null;
+            const since = sinceBuy(t, showNow);
             return (
               <tr key={`${t.acc}:${i}`} className={t.om ? '' : 'sx-table__muted'}>
                 <td className="sx-nowrap">{shortDate(t.date)}</td>
@@ -236,7 +245,9 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
                 )}
                 <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}</td>
                 <td className="sx-r sx-mono sx-hide-sm">{t.congress ? '—' : shares(t.shares)}</td>
-                <td className="sx-r sx-mono sx-hide-sm">{t.congress ? '—' : price(t.price)}</td>
+                <td className="sx-r sx-mono sx-hide-sm">{t.congress ? '—' : t.other_class
+                  ? <span className="sx-otherclass" title={`${t.security || 'Local shares'}: priced per local share, not per ${t.ticker || 'US'} ADS. The dollar value is correct.`}>{price(t.price)}<small>local</small></span>
+                  : price(t.price)}</td>
                 <td className={`sx-r sx-mono sx-strong${t.om ? (t.type === 'buy' ? ' sx-up' : ' sx-down') : ''}`}>{amount(t.value, t.congress)}</td>
                 {showNow
                   ? <td className={`sx-r sx-mono ${since == null ? 'sx-muted' : since >= 0 ? 'sx-up' : 'sx-down'}`}>{since == null ? '—' : pct(since)}</td>

@@ -1849,8 +1849,11 @@ const safeWebUrl = u => { try { const v = String(u || '').trim(); const x = new 
 function CompanyProfileCard({ ticker, cik, company }) {
   const { profile, metrics, desc, loading } = useCompanyProfile(ticker, cik);
 
-  const mktCap = profile?.marketCapitalization
-    ? `$${(profile.marketCapitalization / 1000).toFixed(1)}B`
+  // Finnhub reports market cap in the listing's own currency (a Buenos Aires
+  // listing comes back in pesos), so only show it as dollars when it is.
+  const capUsd = profile?.marketCapitalization && (!profile.currency || profile.currency === 'USD');
+  const mktCap = capUsd
+    ? (profile.marketCapitalization >= 1e6 ? `$${(profile.marketCapitalization / 1e6).toFixed(2)}T` : `$${(profile.marketCapitalization / 1000).toFixed(1)}B`)
     : null;
   const w52hi = metrics?.['52WeekHigh'] ? `$${Number(metrics['52WeekHigh']).toFixed(2)}` : null;
   const w52lo = metrics?.['52WeekLow'] ? `$${Number(metrics['52WeekLow']).toFixed(2)}` : null;

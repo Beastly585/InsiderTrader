@@ -792,3 +792,10 @@ body.drawer-open .sx-nav { z-index: 94; }
 .sx-rate__err { margin: 10px 0 0; font-size: 13px; color: var(--red-600, #ef4444); }
 .sx-rate--done p { margin-top: 4px; }
 @media (max-width: 640px) { .sx-rate { padding: 18px 16px; margin-top: 28px; } .sx-rate__star { font-size: 34px; } }
+
+/* Price chart: shown when the stock's price history is shorter than the range picked. */
+.sx-chart__note { margin: -2px 0 6px; font-size: 12px; color: var(--text-3); }
+
+/* Local-share price on a foreign company's ADS page (e.g. $3.10 per Buenos Aires share vs $78 per PAM ADS). */
+.sx-otherclass { cursor: help; border-bottom: 1px dotted var(--text-3); }
+.sx-otherclass small { margin-left: 4px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
