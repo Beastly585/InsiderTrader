@@ -62,6 +62,12 @@ HEADERS = {
 
 # ── Retry-aware GET ────────────────────────────────────────────────────────────
 
+import threading
+_last = threading.local()   # last HTTP status per worker thread, for error messages
+
+def last_status() -> str:
+    return getattr(_last, "status", "no response")
+
 def sec_get(url: str, params: dict = None, timeout: int = 25,
             max_retries: int = 3) -> Optional[requests.Response]:
     # Worst case per URL now: min(65,90)+min(130,90)+min(195,90) = 270s (4.5min)
@@ -75,9 +81,12 @@ def sec_get(url: str, params: dict = None, timeout: int = 25,
         time.sleep(INTER_REQUEST_SLEEP)
         try:
             r = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
+            _last.status = f"HTTP {r.status_code}"
         except requests.exceptions.Timeout:
+            _last.status = "timeout"
             time.sleep(min(5 * (attempt + 1), MAX_BACKOFF)); continue
         except Exception as e:
+            _last.status = f"{type(e).__name__}"
             log.debug(f"Request error: {e}"); time.sleep(5); continue
 
         if r.status_code == 200:   return r
@@ -268,8 +277,18 @@ def _efts_one_range(start_date: str, end_date: str, seen_ids: set[str]) -> tuple
             cik_padded = accession.split("-")[0]
             cik        = re.sub(r"^0+", "", cik_padded)
             nodash     = accession.replace("-", "")
-            xml_url    = (f"{EDGAR_BASE_URL}/Archives/edgar/data/"
-                          f"{cik_padded}/{nodash}/{xml_filename}") if xml_filename else None
+            # The accession prefix is whoever submitted the filing. For most
+            # Form 4s that's a filing agent (Workiva, Broadridge, Donnelley,
+            # EdgarAgents...), and SEC only serves the files under the CIKs of
+            # the companies/people in the filing, so the prefix URL 404s.
+            # Try the filing's own CIKs (from EFTS) first, the prefix last.
+            folder_ciks = []
+            for c in (src.get("ciks") or []) + [cik_padded]:
+                c = re.sub(r"^0+", "", str(c))
+                if c and c not in folder_ciks: folder_ciks.append(c)
+            xml_urls   = [f"{EDGAR_BASE_URL}/Archives/edgar/data/{c}/{nodash}/{xml_filename}"
+                          for c in folder_ciks] if xml_filename else []
+            xml_url    = xml_urls[0] if xml_urls else None
             all_hits.append({
                 "accession":        accession,
                 "cik":              cik,
@@ -277,6 +296,7 @@ def _efts_one_range(start_date: str, end_date: str, seen_ids: set[str]) -> tuple
                 "period_of_report": src.get("period_of_report"),    # period covered by the report
                 "entity_name":      src.get("entity_name",""),
                 "xml_url":          xml_url,
+                "xml_urls":         xml_urls,
             })
 
         total = data.get("hits",{}).get("total",{})
@@ -459,11 +479,16 @@ class FetchFailed(Exception):
 def process_one(meta: dict) -> tuple[str, list[Transaction]]:
     accession = meta["accession"]
     cik       = meta["cik"]
-    xml_url   = meta.get("xml_url")
-    if not xml_url:
+    urls      = meta.get("xml_urls") or ([meta["xml_url"]] if meta.get("xml_url") else [])
+    if not urls:
         return accession, []
-    r = sec_get(xml_url, timeout=25)
-    if r is None: raise FetchFailed(xml_url)
+    r = None
+    for u in urls:
+        # One quick try per folder when the answer is a plain 404, so a wrong
+        # folder doesn't cost the full retry budget.
+        r = sec_get(u, timeout=25, max_retries=3)
+        if r is not None or last_status() != "HTTP 404": break
+    if r is None: raise FetchFailed(f"{last_status()} {urls[-1] if len(urls) == 1 else urls[0]}")
     txns = parse_form4_xml(r.text, accession, cik,
                            fallback_filing_date    = meta.get("file_date"),
                            fallback_period         = meta.get("period_of_report"),

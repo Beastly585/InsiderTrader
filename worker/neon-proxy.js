@@ -318,6 +318,15 @@ const workerHandler = {
       } catch (e) {
         console.error('[Scheduled] dispatch failed:', e.message);
       }
+      // Dead-man's switch: once a day, at the first tick after 2pm ET, check
+      // that Form 4, House and Senate data are all still arriving.
+      try {
+        const t = new Date(event.scheduledTime || Date.now());
+        const et = new Date(t.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        if (et.getHours() === 14 && et.getMinutes() < 4) await checkIngestionHealth(env, t);
+      } catch (e) {
+        console.error('[Scheduled] ingestion health check threw:', String(e), e?.stack?.slice(0, 500));
+      }
       // Fill in at most one missing/stale saved leaderboard per tick.
       try {
         const built = await ensureLeaderboards(env, neonFetch, sqlVal);
@@ -396,13 +405,8 @@ const workerHandler = {
     } catch (e) {
       console.error('[Scheduled] brokerage cleanup threw:', e.message);
     }
-    // Dead-man's-switch: alert if no new filings have landed in 48 hours
-    // on a weekday. Prevents silent ingestion gaps from going unnoticed.
-    try {
-      await checkIngestionHealth(env);
-    } catch (e) {
-      console.error('[Scheduled] ingestion health check threw:', String(e), e?.stack?.slice(0, 500));
-    }
+    // The ingestion health check moved to the */4 branch (once a day at
+    // 2pm ET); at 6am UTC it could never run.
     try {
       await checkCongressHealth(env);
     } catch (e) {
@@ -1380,67 +1384,76 @@ async function dispatchScheduled(env, now) {
 // Uses R2 to track when the last alert was sent to avoid spamming every tick.
 //
 // Setup: add ADMIN_EMAIL as a Worker secret (wrangler secret put ADMIN_EMAIL)
-async function checkIngestionHealth(env) {
+async function checkIngestionHealth(env, now = new Date()) {
   if (!env.RESEND_API_KEY) return;
   const adminEmail = env.ADMIN_EMAIL || 'admin@seli.app';
 
-  // Only check on weekdays (ET) after 9am — no filings expected on weekends
-  const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const dayOfWeek = nowET.getDay();
-  if (dayOfWeek === 0 || dayOfWeek === 6) return;
-  if (nowET.getHours() < 9) return;
+  // Runs from the */4 cron once a day at 2pm ET on weekdays (see scheduled()).
+  // It used to run from the 6am UTC cron and return early before 9am ET,
+  // which is always true at 6am UTC, so it never ran. It also checked every
+  // row, so the daily House import kept it looking healthy while the Form 4
+  // ingest could be dead.
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const dow = et.getDay();
+  if (dow === 0 || dow === 6) return;
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const today = ymd(et);
+  const prev = new Date(et); prev.setDate(prev.getDate() - (dow === 1 ? 3 : 1));
+  const prevBizDay = ymd(prev);
+  const daysAgo = n => { const d = new Date(et); d.setDate(d.getDate() - n); return ymd(d); };
 
-  const result = await neonFetch(env,
-    `SELECT MAX(filing_date) AS last_filing FROM public.filings`
-  );
-  // neonFetch returns { rows }. This used to read result[0], which is always
-  // undefined, so the alert could never fire.
-  const raw = result?.rows?.[0]?.last_filing;
-  if (!raw) return;
-  const lastFiling = String(raw).slice(0, 10);
+  const r = await neonFetch(env, `
+    SELECT MAX(filing_date) FILTER (WHERE COALESCE(transaction_code, '') NOT LIKE 'CONGRESS%')           AS form4,
+           MAX(filing_date) FILTER (WHERE transaction_code LIKE 'CONGRESS%' AND insider_title = 'House')  AS house,
+           MAX(filing_date) FILTER (WHERE transaction_code LIKE 'CONGRESS%' AND insider_title = 'Senate') AS senate
+      FROM public.filings
+     WHERE filing_date >= CURRENT_DATE - 120`);
+  const row = r?.rows?.[0] || {};
+  const day = v => (v ? String(v).slice(0, 10) : null);
+  const form4 = day(row.form4), house = day(row.house), senate = day(row.senate);
 
-  const lastDate = new Date(lastFiling + 'T12:00:00');
-  const hoursSince = (Date.now() - lastDate.getTime()) / (1000 * 60 * 60);
-  if (hoursSince < 48) return;
+  const problems = [];
+  // Hundreds of Form 4s land every business day. Nothing today by 2pm AND
+  // nothing on the previous business day means the ingest is down. Requiring
+  // both keeps market holidays from setting it off.
+  if (!form4 || form4 < prevBizDay) {
+    problems.push({ key: `form4:${form4}`, text: `<strong>Form 4 ingest:</strong> newest insider filing is from ${form4 || 'more than 120 days ago'}. Check the ingest workflow runs on GitHub and the Worker dispatch log.` });
+  }
+  if (!house || house < daysAgo(10)) {
+    problems.push({ key: `house:${house}`, text: `<strong>House import:</strong> newest House trade was filed ${house || 'more than 120 days ago'}. The daily political trades run may be failing.` });
+  }
+  if (!senate || senate < daysAgo(30)) {
+    problems.push({ key: `senate:${senate}`, text: `<strong>Senate import:</strong> newest Senate trade was filed ${senate || 'more than 120 days ago'}. This one runs from your Mac: <code>python fetch_political_trades.py --senate --days 60</code>` });
+  }
+  if (!problems.length) return;
 
-  // Check R2 for last alert — avoid spamming on every cron tick
+  // Email once per gap, not every day the gap continues.
+  const signature = problems.map(p => p.key).join('|');
+  const MARKER = '_internal/last-ingestion-alert.txt';
   if (env.EXPORT_SNAPSHOTS) {
     try {
-      const marker = await env.EXPORT_SNAPSHOTS.get('_internal/last-ingestion-alert.txt');
-      if (marker) {
-        const markerText = await marker.text();
-        if (markerText === lastFiling) return; // already alerted for this gap
-      }
+      const marker = await env.EXPORT_SNAPSHOTS.get(MARKER);
+      if (marker && (await marker.text()) === signature) return;
     } catch {}
   }
 
-  // Send the alert
-  const daysSince = Math.floor(hoursSince / 24);
-  await fetch('https://api.resend.com/emails', {
+  const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from: env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app',
       to: adminEmail,
-      subject: `Seli ingestion gap: no new filings in ${daysSince} days`,
-      html: `<p>The most recent filing in the database is from <strong>${lastFiling}</strong> (${daysSince} days ago).</p>
-             <p>This likely means the ingestion cron has stopped running or is failing silently. Check:</p>
-             <ul>
-               <li>fetch_filings_neon.py — is the daily cron running?</li>
-               <li>SEC EDGAR — is the source actually publishing new filings?</li>
-               <li>Neon — any connection issues?</li>
-             </ul>
-             <p>This alert will not repeat until the gap is resolved and a new one occurs.</p>`,
+      subject: `Seli data check: ${problems.length} feed${problems.length > 1 ? 's' : ''} behind`,
+      html: `<p>Checked ${today} at 2pm ET.</p><ul>${problems.map(p => `<li>${p.text}</li>`).join('')}</ul>
+             <p>You'll get this again only if the situation changes.</p>`,
     }),
   });
+  if (!resp.ok) throw new Error(`Resend ${resp.status}`);
 
-  // Mark this gap as alerted in R2
   if (env.EXPORT_SNAPSHOTS) {
-    try {
-      await env.EXPORT_SNAPSHOTS.put('_internal/last-ingestion-alert.txt', lastFiling);
-    } catch {}
+    try { await env.EXPORT_SNAPSHOTS.put(MARKER, signature); } catch {}
   }
-  console.log(`[IngestionHealth] Alert sent — last filing ${lastFiling}, ${daysSince} days ago`);
+  console.log(`[IngestionHealth] Alert sent: ${signature}`);
 }
 
 // Same idea for fetch_political_trades.py. The check above can't catch a
@@ -3757,6 +3770,48 @@ async function syncClerkMetadata(env, clerkUserId, metadataPatch) {
   }
 }
 
+// Cancels every still-billing Stripe subscription for a user whose Clerk
+// account was deleted. Looks at the subscription saved on their row plus
+// anything else on their Stripe customer (an older duplicate would
+// otherwise keep billing). Throws if Stripe can't be reached so the caller
+// can ask Clerk to retry. A subscription that's already gone is fine.
+async function cancelStripeForDeletedUser(env, clerkUserId) {
+  if (!env.STRIPE_SECRET_KEY) return;
+  const res = await neonFetch(env,
+    `SELECT stripe_customer_id, stripe_subscription_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+  const row = res.rows?.[0];
+  if (!row || (!row.stripe_customer_id && !row.stripe_subscription_id)) return;
+
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
+    httpClient: Stripe.createFetchHttpClient(),
+    apiVersion: '2024-06-20',
+  });
+
+  const DONE = new Set(['canceled', 'incomplete_expired']);
+  const ids = new Set();
+  const seen = new Map();
+  if (row.stripe_customer_id) {
+    const list = await stripe.subscriptions.list({ customer: row.stripe_customer_id, status: 'all', limit: 100 });
+    for (const s of list.data || []) {
+      seen.set(s.id, s.status);
+      if (!DONE.has(s.status)) ids.add(s.id);
+    }
+  }
+  const saved = row.stripe_subscription_id;
+  if (saved && !DONE.has(seen.get(saved))) ids.add(saved);
+  for (const id of ids) {
+    try {
+      await stripe.subscriptions.cancel(id);
+      console.log(`[Worker] user.deleted: canceled Stripe subscription ${id} for ${clerkUserId}`);
+    } catch (e) {
+      // Already canceled or never existed: nothing left to stop.
+      if (e?.code === 'resource_missing' || /cancel(l)?ed subscription/i.test(e?.message || '')) continue;
+      throw e;
+    }
+  }
+}
+
 // Two prices both grant Pro access: STRIPE_PRICE_PRO (the standard $11.99
 // price) and STRIPE_PRICE_BETA (the $6.99 first-25-users price). They map
 // to the same 'pro' plan — no separate feature tier, just different prices
@@ -3813,7 +3868,20 @@ async function handleStripeWebhook(request, env) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        const sub = event.data.object;
+        // Stripe doesn't deliver events in order, and retries can show up
+        // late. The payload is a snapshot from when the event was created,
+        // so a delayed "updated: active" arriving after "deleted" used to put
+        // a canceled user back on Pro. Read the subscription's state as it
+        // is right now and write that instead. If Stripe can't be reached,
+        // throw: the 500 makes Stripe retry later.
+        let sub = event.data.object;
+        try {
+          sub = await stripe.subscriptions.retrieve(sub.id);
+        } catch (e) {
+          if (e?.code !== 'resource_missing') throw e;
+          // Gone from Stripe entirely: treat it as canceled.
+          sub = { ...sub, status: 'canceled' };
+        }
         const priceId = sub.items?.data?.[0]?.price?.id;
         // current_period_end/start were removed from the top-level Subscription
         // object in Stripe's Basil API version (2025-03-31) and moved to the
@@ -3822,7 +3890,10 @@ async function handleStripeWebhook(request, env) {
         // reading it directly here was producing `to_timestamp(undefined)`,
         // invalid SQL that Neon rejected. neonFetch() now throws on that
         // instead of swallowing it, but the real fix is reading the right field.
-        const periodEnd = sub.items?.data?.[0]?.current_period_end || null;
+        // The webhook payload uses the endpoint's (newer) API version, while
+        // the retrieve above uses this client's pinned 2024-06-20 version,
+        // which still has the field at the top level. Accept either.
+        const periodEnd = sub.items?.data?.[0]?.current_period_end || sub.current_period_end || null;
         const clerkUserId = sub.metadata?.clerk_user_id;
         if (!clerkUserId) break; // shouldn't happen — we always set this on creation
 
@@ -3840,7 +3911,9 @@ async function handleStripeWebhook(request, env) {
         //   1. This event is for a non-live subscription
         //   2. Neon already has a row for this user
         //   3. That row points to a DIFFERENT subscription that IS live
-        if (!isLiveNow && event.type !== 'customer.subscription.deleted') {
+        // This now applies to "deleted" too: an old subscription's deleted
+        // event used to wipe out a newer live subscription's row.
+        if (!isLiveNow) {
           const existing = await neonFetch(env,
             `SELECT stripe_subscription_id, status FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
           );
@@ -3849,10 +3922,18 @@ async function handleStripeWebhook(request, env) {
             console.log('[Worker] Skipping stale subscription event:', sub.id, '(current active:', existingRow.stripe_subscription_id, ')');
             break;
           }
+          // No row at all: the account was deleted (its subscription gets
+          // canceled on the way out) or never got as far as checkout. There's
+          // no access to take away, and writing a row would bring back a
+          // user who no longer exists.
+          if (!existingRow) {
+            console.log('[Worker] Ignoring non-live subscription event with no matching user row:', sub.id);
+            break;
+          }
         }
 
         let plan;
-        if (event.type === 'customer.subscription.deleted' || !isLiveNow) {
+        if (!isLiveNow) {
           plan = 'free';
         } else {
           // Live right now — but don't blindly re-derive plan from the
@@ -4144,6 +4225,18 @@ async function handleClerkWebhook(request, env) {
   if (!/^user_[A-Za-z0-9]+$/.test(clerkUserId)) {
     console.error('[Worker] user.deleted event had a malformed data.id, refusing to touch the database:', clerkUserId);
     return new Response(JSON.stringify({ error: 'Malformed user id' }), { status: 400 });
+  }
+
+  // Stop billing first. Deleting the account used to remove our
+  // subscriptions row but leave the Stripe subscription running, so a
+  // deleted user kept getting charged and we lost the ID needed to find it.
+  // If Stripe can't be reached, return 500 so Clerk retries the webhook
+  // instead of deleting the row that points at the subscription.
+  try {
+    await cancelStripeForDeletedUser(env, clerkUserId);
+  } catch (e) {
+    console.error('[Worker] user.deleted: could not cancel Stripe subscription, will retry:', e.message);
+    return new Response(JSON.stringify({ error: 'Stripe cancel failed' }), { status: 500 });
   }
 
   try {
