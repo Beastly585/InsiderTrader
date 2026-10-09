@@ -82,9 +82,11 @@ def sec_get(url: str, params: dict = None, timeout: int = 25,
 
         if r.status_code == 200:   return r
         if r.status_code == 404:   return None
-        if r.status_code == 429:
+        # SEC usually answers too many requests with 403 ("Request Rate
+        # Threshold Exceeded"), not 429. Both get the same backoff.
+        if r.status_code in (403, 429):
             wait = min(65 * (attempt + 1), MAX_BACKOFF)
-            log.warning(f"429 — waiting {wait}s"); time.sleep(wait); continue
+            log.warning(f"{r.status_code} from SEC, waiting {wait}s"); time.sleep(wait); continue
         if r.status_code in (500, 502, 503, 504):
             time.sleep(min(10 * (attempt + 1), MAX_BACKOFF)); continue
         return None
@@ -206,9 +208,27 @@ class Transaction:
 
 # ── EDGAR EFTS: list filings ───────────────────────────────────────────────────
 
-def edgar_get_accessions(start_date: str, end_date: str) -> list[dict]:
+# EFTS stops paging at 10,000 results per query. One day of Form 4s is well
+# under that; several days in a busy week can get close. So ask one day at a
+# time, and report whether every day came back in full.
+EFTS_MAX_RESULTS = 10_000
+
+def edgar_get_accessions(start_date: str, end_date: str) -> tuple[list[dict], list[str]]:
+    """Returns (filings, problems). problems is empty when the list is complete."""
+    hits_all: list[dict] = []
+    seen: set[str] = set()
+    problems: list[str] = []
+    d, end = date.fromisoformat(start_date), date.fromisoformat(end_date)
+    while d <= end:
+        if d.weekday() < 5:  # EDGAR doesn't accept filings on weekends
+            hits, problem = _efts_one_range(d.isoformat(), d.isoformat(), seen)
+            hits_all.extend(hits)
+            if problem: problems.append(problem)
+        d += timedelta(days=1)
+    return hits_all, problems
+
+def _efts_one_range(start_date: str, end_date: str, seen_ids: set[str]) -> tuple[list[dict], Optional[str]]:
     all_hits: list[dict] = []
-    seen_ids: set[str] = set()
     offset, page_size = 0, 100  # EDGAR EFTS returns 100/page regardless of what
                                   # we assume — this was previously 40, causing
                                   # each request to overlap the last one by 60
@@ -220,12 +240,13 @@ def edgar_get_accessions(start_date: str, end_date: str) -> list[dict]:
                   "size":page_size}  # explicit — don't rely on EDGAR's default
         r = sec_get(EDGAR_EFTS_URL, params=params, timeout=30)
         if r is None:
-            log.error(f"EDGAR EFTS failed at offset {offset}")
-            break
+            log.error(f"EDGAR EFTS failed for {start_date} at offset {offset}")
+            return all_hits, f"EFTS stopped answering for {start_date} after {offset} results"
         try:
             data = r.json()
         except Exception as e:
-            log.error(f"EFTS JSON parse error: {e}"); break
+            log.error(f"EFTS JSON parse error: {e}")
+            return all_hits, f"EFTS sent unreadable data for {start_date} at offset {offset}"
 
         hits = data.get("hits", {}).get("hits", [])
         if not hits: break
@@ -260,12 +281,14 @@ def edgar_get_accessions(start_date: str, end_date: str) -> list[dict]:
 
         total = data.get("hits",{}).get("total",{})
         if isinstance(total, dict): total = total.get("value", 0)
-        log.info(f"  EFTS offset={offset}: {len(hits)} hits, {new_this_page} new (total: {total})")
+        log.info(f"  EFTS {start_date} offset={offset}: {len(hits)} hits, {new_this_page} new (total: {total})")
 
         offset += page_size
         if len(hits) < page_size: break
+        if offset >= EFTS_MAX_RESULTS:
+            return all_hits, f"{start_date} has more than {EFTS_MAX_RESULTS:,} results; EFTS won't page further"
 
-    return all_hits
+    return all_hits, None
 
 # ── XML parser ─────────────────────────────────────────────────────────────────
 
@@ -308,8 +331,14 @@ def parse_form4_xml(xml_text, accession, cik, fallback_filing_date=None, fallbac
             if fid and fn.text: footnotes[fid] = fn.text.strip()
 
     def rfn(el):
+        # Footnote refs look like <footnoteId id="F1"/> and usually sit inside
+        # a field (price, shares, date), not directly on the transaction, so
+        # search the whole transaction and read the id attribute.
         if el is None: return None
-        ids   = [c.text.strip() for c in el.findall("footnoteId") if c.text]
+        ids = []
+        for c in el.iter("footnoteId"):
+            i = (c.get("id") or c.text or "").strip()
+            if i and i not in ids: ids.append(i)
         texts = [footnotes[i] for i in ids if i in footnotes]
         return "; ".join(texts) if texts else None
 
@@ -424,6 +453,9 @@ def parse_form4_xml(xml_text, accession, cik, fallback_filing_date=None, fallbac
 
 # ── Worker ─────────────────────────────────────────────────────────────────────
 
+class FetchFailed(Exception):
+    """The filing's XML couldn't be downloaded (as opposed to having no rows)."""
+
 def process_one(meta: dict) -> tuple[str, list[Transaction]]:
     accession = meta["accession"]
     cik       = meta["cik"]
@@ -431,7 +463,7 @@ def process_one(meta: dict) -> tuple[str, list[Transaction]]:
     if not xml_url:
         return accession, []
     r = sec_get(xml_url, timeout=25)
-    if r is None: return accession, []
+    if r is None: raise FetchFailed(xml_url)
     txns = parse_form4_xml(r.text, accession, cik,
                            fallback_filing_date    = meta.get("file_date"),
                            fallback_period         = meta.get("period_of_report"),
@@ -443,7 +475,8 @@ def process_one(meta: dict) -> tuple[str, list[Transaction]]:
 UPSERT_SQL = f"""
 INSERT INTO public.filings ({", ".join(COLUMNS)})
 VALUES ({", ".join(["%s"]*len(COLUMNS))})
-ON CONFLICT (accession_number, COALESCE(transaction_date, '1900-01-01'::date), COALESCE(shares, -1), transaction_code)
+ON CONFLICT (accession_number, COALESCE(transaction_date, '1900-01-01'::date), COALESCE(shares, -1), transaction_code,
+             COALESCE(is_derivative, false), COALESCE(price_per_share, -1), COALESCE(shares_owned_after, -1))
 DO UPDATE SET
     company_name=EXCLUDED.company_name, ticker=EXCLUDED.ticker,
     insider_name=EXCLUDED.insider_name, insider_title=EXCLUDED.insider_title,
@@ -459,7 +492,11 @@ DO UPDATE SET
     sector=EXCLUDED.sector, relationship=EXCLUDED.relationship,
     footnotes=EXCLUDED.footnotes, updated_at=now()
 """
-# Fixed via db/migrations/006_filings_dedup_fix.sql — the ON CONFLICT target
+# The key is filings_dedup_v2_idx (db/migrations/2026-10-09_dedup_key_v2.sql).
+# is_derivative, price and shares-owned-after keep split lots of one sale
+# (same day, same share count) and the two halves of an option exercise from
+# overwriting each other.
+# Originally fixed via db/migrations/006_filings_dedup_fix.sql — the ON CONFLICT target
 # above now matches an expression-based unique index that COALESCEs both
 # transaction_date and shares to sentinel values, since NULL in either column
 # previously made Postgres' conflict matching silently never fire (NULL != NULL
@@ -510,9 +547,10 @@ def run() -> None:
     log.info("═"*62)
 
     log.info("Step 1/3  Querying EDGAR EFTS…")
-    meta_list = edgar_get_accessions(start_date, end_date)
+    meta_list, problems = edgar_get_accessions(start_date, end_date)
     log.info(f"          {len(meta_list)} filings")
-    if not meta_list: log.info("Nothing to do."); return
+    if not meta_list:
+        log.info("Nothing to do."); finish(problems); return
 
     # ── Dedup: skip filings already in Neon ──────────────────────────────
     # SEC Form 4 XML is immutable once published — re-fetching a filing we
@@ -543,11 +581,13 @@ def run() -> None:
         except Exception as e:
             log.warning(f"  Dedup check failed ({e}) — fetching all {len(meta_list)}")
 
-    if not meta_list: log.info("All filings already ingested."); return
+    if not meta_list:
+        log.info("All filings already ingested."); finish(problems); return
 
     log.info(f"Step 2/3  Parsing XML ({MAX_WORKERS} workers)…")
     all_txns: list[Transaction] = []
-    failed = 0
+    failed = 0        # downloaded but couldn't be parsed
+    fetch_failed = 0  # couldn't be downloaded (SEC throttling, timeouts)
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         futures = {pool.submit(process_one, m): m for m in meta_list}
@@ -555,13 +595,24 @@ def run() -> None:
             try:
                 _, txns = fut.result()
                 all_txns.extend(txns)
+            except FetchFailed as e:
+                fetch_failed += 1; log.warning(f"  {futures[fut]['accession']}: download failed ({e})")
             except Exception as e:
-                failed += 1; log.debug(f"  {futures[fut]['accession']}: {e}")
+                failed += 1; log.warning(f"  {futures[fut]['accession']}: {type(e).__name__}: {e}")
             if i % 100 == 0 or i == len(meta_list):
                 log.info(f"  {i}/{len(meta_list)} filings — {len(all_txns)} transactions")
 
-    log.info(f"          {len(all_txns)} parsed, {failed} failed")
-    if not all_txns: log.info("Nothing to write."); return
+    log.info(f"          {len(all_txns)} parsed, {fetch_failed} downloads failed, {failed} unparseable")
+    # A handful of failures is normal noise and gets retried next run (failed
+    # filings have no rows, so they aren't skipped). More than that means SEC
+    # is throttling us or something is broken.
+    n = len(meta_list)
+    if fetch_failed > max(5, n * 0.10):
+        problems.append(f"{fetch_failed} of {n} filings couldn't be downloaded")
+    if failed > max(5, n * 0.05):
+        problems.append(f"{failed} of {n} filings couldn't be parsed")
+    if not all_txns:
+        log.info("Nothing to write."); finish(problems); return
 
     if DRY_RUN:
         log.info("Step 3/3  DRY RUN — sample:")
@@ -572,7 +623,28 @@ def run() -> None:
         log.info(f"          {total} rows written ✓")
         flag_suspect_trades()
 
-    log.info("═"*62); log.info("Done.")
+    finish(problems)
+
+def finish(problems: list[str]) -> None:
+    """Everything that could be fetched has been written by now. If the run
+    was incomplete, say so loudly. On GitHub this sets an output that a last
+    step turns into a red run (so the alert and price steps still run first);
+    anywhere else it exits 1."""
+    log.info("═"*62)
+    if not problems:
+        log.info("Done."); return
+    for p in problems:
+        log.error(f"INCOMPLETE: {p}")
+    gh_out, gh_sum = os.environ.get("GITHUB_OUTPUT"), os.environ.get("GITHUB_STEP_SUMMARY")
+    if gh_sum:
+        with open(gh_sum, "a") as f:
+            f.write("### Form 4 ingest was incomplete\n" + "".join(f"- {p}\n" for p in problems)
+                    + "\nEverything that could be fetched was saved. Missing filings are retried on the next run.\n")
+    if gh_out:
+        with open(gh_out, "a") as f:
+            f.write("incomplete=true\n")
+    else:
+        sys.exit(1)
 
 def flag_suspect_trades() -> None:
     """Take obviously wrong amounts (a typo'd price or share count) out of the

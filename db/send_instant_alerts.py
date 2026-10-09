@@ -266,8 +266,14 @@ def main():
           -- Tier D safety-net lookback (4 days) with a small buffer,
           -- while staying nowhere near old enough to let backfilled
           -- history through as if it just happened.
-          AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - INTERVAL '5 days'
-        ORDER BY COALESCE(f.transaction_date, f.filing_date)
+          --
+          -- The guard is on the FILING date: "is this news?" Using the trade
+          -- date silently dropped every Form 4 filed 6+ days after the trade
+          -- (late filers) and almost every Congress disclosure, which are
+          -- filed weeks after the trade by law. Backfilled history still
+          -- can't get through, because its filing dates are old too.
+          AND COALESCE(f.filing_date, f.transaction_date) >= CURRENT_DATE - INTERVAL '5 days'
+        ORDER BY COALESCE(f.filing_date, f.transaction_date), COALESCE(f.transaction_date, f.filing_date)
         LIMIT %s
     """, (BATCH_LIMIT,))
     cols = [d.name for d in cur.description]

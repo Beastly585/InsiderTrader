@@ -194,7 +194,7 @@ class CongressTrade:
     shares_owned_before: Optional[float] = None
     pct_owned_change: Optional[float]    = None
     direct_ownership: bool       = True
-    relationship: str            = "congress"
+    relationship: str            = "strong"   # the table only allows strong/medium/weak
     sector: Optional[str]        = None
     footnotes: Optional[str]     = None
 
@@ -206,8 +206,8 @@ class CongressTrade:
         return tuple(d[c] for c in COLUMNS)
 
 # ── DB ──────────────────────────────────────────────────────────────────────────
-# ON CONFLICT target must exactly match the expression-based unique index from
-# 006_filings_dedup_fix.sql. This matters MORE here than anywhere else — shares
+# ON CONFLICT target must exactly match the unique index filings_dedup_v2_idx
+# (db/migrations/2026-10-09_dedup_key_v2.sql), same as fetch_filings_neon.py. This matters MORE here than anywhere else — shares
 # is always NULL for every row this script ever writes, so without the
 # COALESCE matching the index expression, dedup would silently never fire for
 # ANY congressional trade, relying entirely on the in-memory `existing` check
@@ -215,7 +215,8 @@ class CongressTrade:
 UPSERT_SQL = f"""
 INSERT INTO public.filings ({", ".join(COLUMNS)})
 VALUES ({", ".join(["%s"]*len(COLUMNS))})
-ON CONFLICT (accession_number, COALESCE(transaction_date, '1900-01-01'::date), COALESCE(shares, -1), transaction_code)
+ON CONFLICT (accession_number, COALESCE(transaction_date, '1900-01-01'::date), COALESCE(shares, -1), transaction_code,
+             COALESCE(is_derivative, false), COALESCE(price_per_share, -1), COALESCE(shares_owned_after, -1))
 DO UPDATE SET
     company_name           = EXCLUDED.company_name,
     ticker                 = COALESCE(EXCLUDED.ticker, public.filings.ticker),  -- never blank out a ticker the backfill filled in

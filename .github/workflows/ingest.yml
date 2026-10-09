@@ -128,6 +128,7 @@ jobs:
           echo "Tier: $TIER  days_back=$DAYS  prices=$PRICES  congress=$CONGRESS"
 
       - name: Run Form 4 ingestion
+        id: ingest
         if: steps.backup.outputs.skip != 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -208,3 +209,12 @@ jobs:
           else
             python fetch_political_trades.py --days 30
           fi
+
+      # The ingest saves whatever it could fetch and lets alerts and prices
+      # run. If SEC throttled it or EFTS stopped early, it says so here and
+      # the run turns red, so GitHub emails you instead of showing green.
+      - name: Fail if the Form 4 ingest was incomplete
+        if: ${{ !cancelled() && steps.ingest.outputs.incomplete == 'true' }}
+        run: |
+          echo "::error::Form 4 ingest was incomplete. See the summary and the 'Run Form 4 ingestion' log."
+          exit 1
