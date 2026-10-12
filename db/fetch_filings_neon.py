@@ -52,6 +52,7 @@ END_DATE_OVERRIDE   = os.environ.get("END_DATE")
 
 EDGAR_EFTS_URL  = "https://efts.sec.gov/LATEST/search-index"
 EDGAR_BASE_URL  = "https://www.sec.gov"
+CHUNK               = int(os.environ.get("CHUNK", "500"))  # filings fetched per save
 INTER_REQUEST_SLEEP = 0.5   # 4 workers × 1 req/0.15s ≈ 6.7 req/sec (limit is 10)
 
 HEADERS = {
@@ -161,6 +162,24 @@ def safe_date(v) -> Optional[str]:
     # site fall back to the filing date.
     if not (1990 <= int(m.group(1)[:4]) <= date.today().year + 1): return None
     return m.group(1)
+
+# Filers type the trading symbol by hand, so it arrives as "BRK-B", "BF/B",
+# "NASDAQ: AAPL", "GOOGL, GOOG", "$TSLA", "aapl " ... The old check rejected
+# anything but plain letters, and those trades lost their ticker (gone from
+# stock pages and alerts). Class shares are stored with a dot (BRK.B), the
+# form the rest of the site already uses.
+_EXCHANGE_PREFIX = re.compile(r'^(?:NYSE(?:\s*(?:AMERICAN|ARCA|MKT))?|NASDAQ(?:GS|GM|CM)?|AMEX|OTC(?:QX|QB|MKTS)?|CBOE|TSX|NYSEAMERICAN)\s*[:\-]\s*')
+_NOT_A_TICKER = {'NONE', 'NULL', 'NA', 'N/A', 'TBD', 'NOTICKER', 'UNKNOWN', 'N.A'}
+
+def normalize_ticker(raw) -> Optional[str]:
+    if not raw: return None
+    t = str(raw).upper().strip().strip('"\'$')
+    if t in _NOT_A_TICKER: return None
+    t = _EXCHANGE_PREFIX.sub('', t)
+    t = re.split(r'[,;]|\s+AND\s+|\s{2,}', t)[0].strip()     # "GOOGL, GOOG" -> GOOGL
+    t = re.sub(r'\s*[-/ ]\s*(?=[A-Z]{1,2}$)', '.', t)         # BRK-B, BF/B, BRK B -> BRK.B
+    if t in _NOT_A_TICKER: return None
+    return t if re.match(r'^[A-Z]{1,6}(\.[A-Z]{1,2})?$', t) else None
 
 def xtxt(el, *tags):
     cur = el
@@ -371,8 +390,7 @@ def parse_form4_xml(xml_text, accession, cik, fallback_filing_date=None, fallbac
     # single dot for share classes like BRK.A), otherwise there's genuinely
     # no ticker for this filing and it should be null, not a placeholder
     # word stored as if it were a real symbol.
-    _t = tr.upper().strip() if tr else None
-    ticker = _t if _t and re.match(r'^[A-Z]{1,6}(\.[A-Z]{1,2})?$', _t) and _t not in ('NONE','NULL','NA','TBD') else None
+    ticker = normalize_ticker(tr)
     cik_issuer = xtxt(ie,"issuerCik")
 
     owners = root.findall("reportingOwner") or root.findall(".//reportingOwner")
@@ -546,10 +564,10 @@ def upsert_to_neon(transactions: list[Transaction], batch_size: int = 500) -> in
         for i in range(0, len(transactions), batch_size):
             batch = transactions[i:i+batch_size]
             cur.executemany(UPSERT_SQL, [t.to_tuple() for t in batch])
-            conn.commit()  # commit per-batch — if the job gets killed later,
-                            # everything committed so far is still safe in the DB
             written += len(batch)
-            log.info(f"  Batch {i//batch_size+1}: {len(batch)} rows ({written} total)")
+        # One commit for the whole chunk, so a filing's rows are saved together
+        # or not at all (run() saves in chunks, so this stays small).
+        conn.commit()
     except Exception:
         conn.rollback()
         raise
@@ -609,44 +627,53 @@ def run() -> None:
     if not meta_list:
         log.info("All filings already ingested."); finish(problems); return
 
-    log.info(f"Step 2/3  Parsing XML ({MAX_WORKERS} workers)…")
-    all_txns: list[Transaction] = []
+    # Fetch and save in chunks. A backfill over months is tens of thousands of
+    # filings: saving as it goes means a crash or Ctrl-C loses at most one
+    # chunk, and a re-run skips everything already saved. Each chunk is saved
+    # in one transaction, so a filing is never left half-written (a filing
+    # with any rows counts as done and is skipped next time).
+    log.info(f"Step 2/3  Fetching and saving ({MAX_WORKERS} workers, {CHUNK} filings per save)…")
     failed = 0        # downloaded but couldn't be parsed
     fetch_failed = 0  # couldn't be downloaded (SEC throttling, timeouts)
+    parsed = written = 0
+    sample = None
+    n = len(meta_list)
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(process_one, m): m for m in meta_list}
-        for i, fut in enumerate(as_completed(futures), 1):
-            try:
-                _, txns = fut.result()
-                all_txns.extend(txns)
-            except FetchFailed as e:
-                fetch_failed += 1; log.warning(f"  {futures[fut]['accession']}: download failed ({e})")
-            except Exception as e:
-                failed += 1; log.warning(f"  {futures[fut]['accession']}: {type(e).__name__}: {e}")
-            if i % 100 == 0 or i == len(meta_list):
-                log.info(f"  {i}/{len(meta_list)} filings — {len(all_txns)} transactions")
+        for c0 in range(0, n, CHUNK):
+            chunk = meta_list[c0:c0 + CHUNK]
+            txns_chunk: list[Transaction] = []
+            futures = {pool.submit(process_one, m): m for m in chunk}
+            for fut in as_completed(futures):
+                try:
+                    _, txns = fut.result()
+                    txns_chunk.extend(txns)
+                except FetchFailed as e:
+                    fetch_failed += 1; log.warning(f"  {futures[fut]['accession']}: download failed ({e})")
+                except Exception as e:
+                    failed += 1; log.warning(f"  {futures[fut]['accession']}: {type(e).__name__}: {e}")
+            parsed += len(txns_chunk)
+            if txns_chunk and sample is None: sample = txns_chunk[0]
+            if txns_chunk and not DRY_RUN:
+                written += upsert_to_neon(txns_chunk)
+            log.info(f"  {min(c0 + CHUNK, n)}/{n} filings — {parsed} transactions"
+                     + ("" if DRY_RUN else f", {written} saved"))
 
-    log.info(f"          {len(all_txns)} parsed, {fetch_failed} downloads failed, {failed} unparseable")
+    log.info(f"          {parsed} parsed, {fetch_failed} downloads failed, {failed} unparseable")
     # A handful of failures is normal noise and gets retried next run (failed
     # filings have no rows, so they aren't skipped). More than that means SEC
     # is throttling us or something is broken.
-    n = len(meta_list)
     if fetch_failed > max(5, n * 0.10):
         problems.append(f"{fetch_failed} of {n} filings couldn't be downloaded")
     if failed > max(5, n * 0.05):
         problems.append(f"{failed} of {n} filings couldn't be parsed")
-    if not all_txns:
-        log.info("Nothing to write."); finish(problems); return
 
     if DRY_RUN:
-        log.info("Step 3/3  DRY RUN — sample:")
-        log.info(json.dumps(asdict(all_txns[0]), indent=4, default=str))
-    else:
-        log.info("Step 3/3  Writing to Neon…")
-        total = upsert_to_neon(all_txns)
-        log.info(f"          {total} rows written ✓")
-        flag_suspect_trades()
+        if sample: log.info("Step 3/3  DRY RUN — sample:\n" + json.dumps(asdict(sample), indent=4, default=str))
+    elif written:
+        log.info(f"Step 3/3  {written} rows written ✓")
+        # Cover the whole range on a backfill, not just the last 10 days.
+        flag_suspect_trades(min(start_date, (date.today() - timedelta(days=10)).isoformat()))
 
     finish(problems)
 
@@ -671,23 +698,29 @@ def finish(problems: list[str]) -> None:
     else:
         sys.exit(1)
 
-def flag_suspect_trades() -> None:
-    """Take obviously wrong amounts (a typo'd price or share count) out of the
-    open-market counts before alerts go out. The rules live in the database:
-    see db/migrations/2026-10-06_suspect_trades.sql. Never fails the run."""
-    try:
-        conn = get_connection()
+def flag_suspect_trades(since: str) -> None:
+    """Before alerts go out, take two kinds of rows out of the open-market
+    counts (nothing is deleted; the rules live in the database):
+      * duplicate copies of one trade filed separately by related owners
+        (db/migrations/2026-10-12_duplicates_and_bad_prices.sql)
+      * obviously wrong amounts, like a typo'd price or share count
+        (db/migrations/2026-10-06_suspect_trades.sql and later)
+    Never fails the run."""
+    for fn, what in (("flag_duplicate_trades", "duplicate copies of the same trade set aside (see filings.duplicate_of)"),
+                     ("flag_suspect_trades", "trade(s) with implausible amounts set aside (see public.suspect_trades)")):
         try:
-            cur = conn.cursor()
-            cur.execute("SELECT public.flag_suspect_trades(CURRENT_DATE - 10)")
-            n = cur.fetchone()[0]
-            conn.commit()
-        finally:
-            conn.close()
-        if n:
-            log.warning(f"          {n} trade(s) with implausible amounts set aside (see public.suspect_trades)")
-    except Exception as e:
-        log.warning(f"  Suspect-trade check skipped: {e}")
+            conn = get_connection()
+            try:
+                cur = conn.cursor()
+                cur.execute(f"SELECT public.{fn}(%s::date)", (since,))
+                n = cur.fetchone()[0]
+                conn.commit()
+            finally:
+                conn.close()
+            if n:
+                log.warning(f"          {n} {what}")
+        except Exception as e:
+            log.warning(f"  {fn} skipped: {e}")
 
 if __name__ == "__main__":
     run()

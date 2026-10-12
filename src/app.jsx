@@ -1216,7 +1216,13 @@ function insiderRoleLabel(r) {
   if (r?.is_congress) return { badge: 'rel-strong', label: memberChamber({ title: r.insider_title || r.title }) };
   if (r?.relationship === 'strong') return { badge: 'rel-strong', label: 'C-Suite' };
   if (r?.relationship === 'medium') return { badge: 'rel-medium', label: 'Officer' };
-  return { badge: 'rel-weak', label: 'Dir' };
+  return { badge: 'rel-weak', label: weakRoleLabel(r?.insider_title || r?.title) };
+}
+// Funds and holding companies that only check "10% Owner" on the form used
+// to show as "Dir". Anyone who also checks Director stays "Dir".
+function weakRoleLabel(title) {
+  const t = title || '';
+  return /10\s?%|ten percent/i.test(t) && !/director/i.test(t) ? '10% owner' : 'Dir';
 }
 
 // Inline info tooltip — hover to see explanation
@@ -1251,7 +1257,7 @@ const TIPS = {
   // Raw filing columns
   pctPosition: 'How much the insider\'s total holdings changed from this trade. +67% means they increased their position by two-thirds.',
   tradeValue: 'Dollar value of the transaction (shares × price).',
-  role: 'Insider\'s relationship to the company. C-Suite = CEO/CFO/COO/etc. Officer = SVP/VP/GC. Dir = board director or 10% owner.',
+  role: 'Insider\'s relationship to the company. C-Suite = CEO/CFO/COO/etc. Officer = SVP/VP/GC. Dir = board director. 10% owner = an investor or fund holding 10%+ of the company.',
   tradeType: 'Buy = open-market purchase. Sell = open-market sale. Only open-market trades are shown — option exercises and gifts are excluded.',
   // Insider profile
   hitRate: 'Percentage of priced trades where the stock moved in the insider\'s favor within 6 months. Requires 5+ priced trades to display.',
@@ -3234,7 +3240,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                         <div className="ws-row__cell ws-row__cell--muted" style={{ fontSize: 11 }}>
                           {fmt.dateShort(f.transactionDate || f.date)}
                         </div>
-                        {!isMobile && <div className="ws-row__cell"><Badge type={`rel-${f.relationship === 'congress' ? 'strong' : (f.relationship || 'weak')}`}>{f.relationship === 'congress' ? memberChamber({ title: f.title }) : f.relationship === 'strong' ? 'C-Suite' : f.relationship === 'medium' ? 'Officer' : 'Dir'}</Badge></div>}
+                        {!isMobile && <div className="ws-row__cell"><Badge type={`rel-${f.relationship === 'congress' ? 'strong' : (f.relationship || 'weak')}`}>{f.relationship === 'congress' ? memberChamber({ title: f.title }) : f.relationship === 'strong' ? 'C-Suite' : f.relationship === 'medium' ? 'Officer' : weakRoleLabel(f.title)}</Badge></div>}
                         <div className="ws-row__cell"><span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span></div>
                         {!isMobile && <div className="ws-row__cell ws-row__cell--right">
                           <span className={`ws-row__pos-change${isBuy ? ' val-buy' : ' val-sell'}`}>
