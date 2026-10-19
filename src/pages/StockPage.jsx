@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { InsiderLink, StockLink, pushRecent } from '../lib/nav.jsx';
-import { money, amount, price, shares, pct, shortDate, ago, plural, codeLabel, edgarCompanyUrl, memberRole } from '../lib/text.js';
+import { money, amount, price, shares, pct, shortDate, ago, plural, codeLabel, edgarCompanyUrl, memberRole, stockTitle } from '../lib/text.js';
 import { secFilingUrl } from '../edgar.js';
 import { Card, TypeBadge, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, Icon, useNarrow } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
@@ -21,7 +21,7 @@ export default function StockPage({ ticker, watchlist, onUpgrade, renderProfile,
 
   useEffect(() => {
     document.title = publicMode
-      ? `${d?.company ? `${d.company} (${ticker})` : ticker} Insider Trading: Buys & Sells by Executives | Seli`
+      ? stockTitle(ticker, d?.company)
       : `${ticker}${d?.company ? ` · ${d.company}` : ''} insider trading · Seli`;
     if (d?.known && !publicMode) pushRecent({ kind: 'stock', id: ticker, label: ticker, sub: d.company });
   }, [ticker, d?.company, d?.known, publicMode]);

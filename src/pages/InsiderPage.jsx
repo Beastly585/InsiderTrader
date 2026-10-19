@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, pushRecent } from '../lib/nav.jsx';
-import { money, amount, price, shares, pct, shortDate, ago, plural, prettyPerson } from '../lib/text.js';
+import { money, amount, price, shares, pct, shortDate, ago, plural, prettyPerson, personTitle } from '../lib/text.js';
 import { Card, Chip, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
 import { TradeTable } from './StockPage.jsx';
@@ -21,8 +21,7 @@ export default function InsiderPage({ raw, watchlist, onUpgrade, publicMode = fa
   useEffect(() => {
     const who = d?.name || prettyPerson(raw);
     document.title = publicMode
-      ? (d?.congress ? `${who} Stock Trades & STOCK Act Disclosures | Seli`
-        : `${who} Insider Trades${d?.companies?.length ? ` (${d.companies.slice(0, 2).map(c => c.ticker).join(', ')})` : ''}: ${d?.role || 'Insider'} Form 4 Filings | Seli`)
+      ? personTitle(who, { congress: !!d?.congress, ticker: d?.companies?.[0]?.ticker })
       : `${who} · insider trades · Seli`;
     if (d?.known && !publicMode) pushRecent({ kind: 'person', id: raw, label: d.name, sub: [d.role, d.companies[0]?.ticker].filter(Boolean).join(' · ') });
   }, [raw, d?.name, d?.known, d?.congress, d?.role, d?.companies, publicMode]);

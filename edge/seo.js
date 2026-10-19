@@ -13,7 +13,7 @@
 // If the Worker is slow or down, the plain shell is returned unchanged, so a
 // data hiccup can never take the site down.
 
-import { money, congressRange, shortDate, plural, pct, price } from '../src/lib/text.js';
+import { money, congressRange, shortDate, plural, pct, price, PAGE_TITLES, stockTitle, personTitle } from '../src/lib/text.js';
 
 export const SITE = 'https://seli.app';
 const DEFAULT_WORKER = 'https://neon-proxy.beastly-insider-trades.workers.dev';
@@ -88,14 +88,18 @@ export async function renderShell(context, page) {
 }
 
 // Wraps a page builder: fetch data, build the page, never fail the request.
-export async function serve(context, apiPath, build) {
+// fallback: a bare page (right title and canonical, no data) for when the
+// Worker is slow or down. Without it the visitor still gets the app, but
+// Google would see the homepage's title and canonical on this URL and could
+// treat it as a duplicate of the homepage.
+export async function serve(context, apiPath, build, fallback = null) {
   try {
     const { status, data } = await workerJson(context, apiPath);
-    if (!data || status >= 500) return renderShell(context, null);
+    if (!data || status >= 500) return renderShell(context, fallback);
     return renderShell(context, build(data, status));
   } catch (e) {
     console.error('[seo] falling back to plain shell:', e?.message);
-    return renderShell(context, null);
+    try { return await renderShell(context, fallback); } catch { return renderShell(context, null); }
   }
 }
 
@@ -108,11 +112,11 @@ export const crumbs = items => ({
 export function layout(inner) {
   return `<div class="seo-shell">
 <header class="seo-top"><a href="/" class="seo-logo">Seli</a>
-<nav><a href="/insider-buying">Insider buying</a> <a href="/congress">Congress trades</a> <a href="/leaderboard">Leaderboard</a> <a href="/">Sign up free</a></nav></header>
+<nav><a href="/stocks">Stocks</a> <a href="/insider-buying">Insider buying</a> <a href="/congress">Congress trades</a> <a href="/leaderboard">Leaderboard</a> <a href="/">Sign up free</a></nav></header>
 <main class="sx-page">${inner}</main>
 <footer class="seo-foot"><p>Seli tracks SEC Form 4 insider filings and STOCK Act disclosures from members of Congress.
 Data comes from SEC EDGAR and congressional disclosures. Not financial advice.</p>
-<p><a href="/insider-buying">Insider buying this week</a> · <a href="/congress">Congress stock trades</a> · <a href="/about">About the data</a> · <a href="/data-download">Download the dataset</a></p></footer>
+<p><a href="/stocks">All stocks A to Z</a> · <a href="/insider-buying">Insider buying this week</a> · <a href="/congress">Congress stock trades</a> · <a href="/about">About the data</a> · <a href="/data-download">Download the dataset</a></p></footer>
 </div>`;
 }
 
@@ -128,7 +132,7 @@ export function tradeTable(trades, { showTicker = true, showPerson = true, limit
 }
 
 export const cta = what => `<p class="seo-cta"><a href="/">Get free alerts when ${h(what)} files a new trade →</a></p>`;
-export { money, congressRange, shortDate, plural, pct, price, clip };
+export { money, congressRange, shortDate, plural, pct, price, clip, PAGE_TITLES, stockTitle, personTitle };
 
 // Path segments from Pages can arrive encoded or not; decode once, safely.
 export const safeDecode = s => { try { return decodeURIComponent(s); } catch { return s; } };

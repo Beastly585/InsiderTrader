@@ -22,7 +22,7 @@ import InsiderPage from './pages/InsiderPage.jsx';
 import HomeFeed from './pages/HomeFeed.jsx';
 import WatchlistPage from './pages/WatchlistPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
-import { PublicShell, PublicFooter, CongressPage, InsiderBuyingPage, PublicHome, usePublicWatchlist } from './pages/PublicPages.jsx';
+import { PublicShell, PublicFooter, CongressPage, InsiderBuyingPage, StocksPage, PublicHome, usePublicWatchlist } from './pages/PublicPages.jsx';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
@@ -6958,6 +6958,7 @@ function routeFromLocation(loc = window.location) {
   if (a === 'insider' && b) return { page: 'insider', raw: decodeURIComponent(parts.slice(1).join('/')) };
   if (a === 'congress' && !b) return { page: 'congress' };
   if (a === 'insider-buying' && !b) return { page: 'insiderBuying' };
+  if (a === 'stocks' && !b) return { page: 'stocks' };
   if (a === 'data') return { page: 'dashboard' };
   if (a === 'leaderboard') return { page: 'leaderboard' };
   if (a === 'insights' || a === 'insiders') return { page: 'leaderboard', canonical: '/leaderboard' };
@@ -6968,7 +6969,7 @@ function routeFromLocation(loc = window.location) {
 }
 const PAGE_PATHS = { home: '/', dashboard: '/data', data: '/data', signals: '/leaderboard', leaderboard: '/leaderboard', watchlist: '/watchlist', settings: '/account', account: '/account' };
 const PAGE_TITLES = { home: 'Home', dashboard: 'Data', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
-const PUBLIC_PAGES = ['home', 'stock', 'insider', 'congress', 'insiderBuying', 'leaderboard'];
+const PUBLIC_PAGES = ['home', 'stock', 'insider', 'congress', 'insiderBuying', 'leaderboard', 'stocks'];
 const STANDALONE_PATHS = ['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/about', '/onboard'];
 
 import * as Sentry from '@sentry/react';
@@ -7253,6 +7254,7 @@ function AppInner() {
         {route.page === 'insider' && <InsiderPage key={route.raw} raw={route.raw} watchlist={publicWatchlist} onUpgrade={publicWatchlist.upgrade} publicMode />}
         {route.page === 'congress' && <CongressPage />}
         {route.page === 'insiderBuying' && <InsiderBuyingPage watchlist={publicWatchlist} />}
+        {route.page === 'stocks' && <StocksPage />}
         {route.page === 'leaderboard' && <LeaderboardPage pro={false} onUpgrade={publicWatchlist.upgrade} publicMode />}
         {route.page === 'home' && <PublicHome />}
       </PublicShell>
@@ -7314,6 +7316,7 @@ function AppInner() {
           {page === 'leaderboard' && <LeaderboardPage pro={billingPro} onUpgrade={onUpgrade} />}
           {page === 'congress' && <CongressPage />}
           {page === 'insiderBuying' && <InsiderBuyingPage watchlist={watchlist} />}
+          {page === 'stocks' && <StocksPage />}
           {page === 'watchlist' && <WatchlistPage watchlist={watchlist} portfolioTickers={billingPro ? portfolioTickers : []} onUpgrade={onUpgrade} alertsMasterOn={alertsMaster} />}
           {page === 'account' && <AccountPage user={user} onUpgrade={onUpgrade} dark={dark} setDark={setDark} />}
         </main>
@@ -7375,16 +7378,16 @@ function AppErrorFallback({ error }) {
 // homepage." This sets it correctly per route so /about, /data-download, etc.
 // get indexed as separate pages.
 const SEO_TITLES = {
-  '/': 'Seli: Insider Trading & Congress Stock Trades Tracker',
-  '/about': 'How Insider Trades Beat the Market | Research & Methodology — Seli',
-  '/data-download': 'Download SEC Insider Trading Data (CSV) | 10+ Years of Form 4 Filings — Seli',
+  '/': 'Seli: Insider Trading & Congress Stock Tracker',
+  '/about': 'How Seli Scores Insider Trades | Methodology',
+  '/data-download': 'SEC Insider Trading Data (CSV Download) | Seli',
   '/terms': 'Terms of Service — Seli',
   '/privacy': 'Privacy Policy — Seli',
   '/cookies': 'Cookie Policy — Seli',
   '/help': 'Help Center — Seli',
   '/data': 'Insider Trading Signals & Raw SEC Filings | Market Data — Seli',
   '/insights': 'Top Insider Traders Ranked by Performance | Leaderboard — Seli',
-  '/home': 'Seli: Insider Trading & Congress Stock Trades Tracker',
+  '/home': 'Seli: Insider Trading & Congress Stock Tracker',
   '/blog': 'Seli Blog — Insider Trading Intelligence, SEC Form 4 Analysis & Market Signals',
   '/onboard': 'Get Started — Seli',
 };

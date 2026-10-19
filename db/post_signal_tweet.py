@@ -128,6 +128,12 @@ def get_top_signals(conn, limit=5):
             WHERE COALESCE(transaction_date, filing_date) >= %s
               AND is_open_market = true
               AND ticker IS NOT NULL
+              -- Form 4 stock trades only. Congress rows are stored with
+              -- relationship 'strong' (the column only allows strong/medium/
+              -- weak), so without this a member of Congress counted as an
+              -- exec. Option rows aren't share purchases.
+              AND COALESCE(transaction_code, '') NOT LIKE 'CONGRESS%%'
+              AND NOT COALESCE(is_derivative, false)
         ),
         signals AS (
             SELECT
@@ -202,6 +208,8 @@ def get_individual_trades(conn, limit=8):
         FROM public.filings f
         WHERE COALESCE(f.transaction_date, f.filing_date) >= %s
           AND f.is_open_market = true
+          AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%%'   -- see get_top_signals
+          AND NOT COALESCE(f.is_derivative, false)
           AND f.ticker NOT IN (
               SELECT ticker FROM public.tweet_log WHERE tweeted_date = CURRENT_DATE
           )

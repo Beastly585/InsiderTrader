@@ -302,6 +302,9 @@ const workerHandler = {
   // as often as every minute on Workers Free, since it's a cheap no-op
   // once the snapshot is caught up. No browser is waiting on any of this.
   async scheduled(event, env, ctx) {
+    // Cron work can legitimately run long queries; give it 10 minutes
+    // instead of the 45s visitor-request limit in neonFetch.
+    env = { ...env, NEON_TIMEOUT_MS: 600_000 };
     // The */4 cron is a Neon keep-alive — just ping the DB to prevent
     // serverless compute hibernation. Skip the heavy snapshot/CSV work.
     if (event.cron === '*/4 * * * *') {
@@ -1517,7 +1520,8 @@ async function guestOrderRevoked(stripe, paymentIntentId) {
 async function handleGuestCSVCheckout(request, env, origin) {
   try {
     const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: "2024-06-20" });
+    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(),
+    timeout: 20000, apiVersion: "2024-06-20" }); // fail fast instead of hanging (Stripe's default is 80s)
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       allow_promotion_codes: true,
@@ -1552,7 +1556,8 @@ async function handleGuestCSVDownload(request, env, origin, ctx) {
   try {
     const body = await request.json();
     const Stripe = (await import("stripe")).default;
-    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: "2024-06-20" });
+    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(),
+    timeout: 20000, apiVersion: "2024-06-20" }); // fail fast instead of hanging (Stripe's default is 80s)
     let paymentIntent;
     let customerEmail;
     let purchaseDate;
@@ -3567,7 +3572,42 @@ async function handlePortfolioTickersBatch(request, env, origin) {
 // leave the server side. This route requires nothing, checks nothing, and
 // returns exactly one non-sensitive number the landing page needs before
 // anyone has signed in.
+// The oldest-date query scans the whole filings table, and this endpoint is
+// hit on every landing-page and onboarding visit with no sign-in. The answer
+// changes about once a day, so keep it for 6 hours: in memory for this
+// isolate, and in R2 so every isolate shares one copy. (Cloudflare's Cache
+// API would be simpler but does nothing on a workers.dev address.)
+const DATA_STATS_KEY = '_internal/data-stats.json';
+const DATA_STATS_TTL_MS = 6 * 60 * 60 * 1000;
+let dataStatsMemo = null; // { at, body }
 async function handlePublicDataStats(request, env, origin) {
+  const now = Date.now();
+  if (dataStatsMemo && now - dataStatsMemo.at < DATA_STATS_TTL_MS) {
+    return corsResponse(dataStatsMemo.body, 200, origin, env);
+  }
+  if (env.EXPORT_SNAPSHOTS) {
+    try {
+      const obj = await env.EXPORT_SNAPSHOTS.get(DATA_STATS_KEY);
+      if (obj) {
+        const saved = await obj.json();
+        if (saved?.at && now - saved.at < DATA_STATS_TTL_MS && saved.body?.oldest_filing_date) {
+          dataStatsMemo = saved;
+          return corsResponse(saved.body, 200, origin, env);
+        }
+      }
+    } catch { /* fall through and compute */ }
+  }
+  const body = await computePublicDataStats(env);
+  if (body.oldest_filing_date) { // never keep a failed answer
+    dataStatsMemo = { at: now, body };
+    if (env.EXPORT_SNAPSHOTS) {
+      try { await env.EXPORT_SNAPSHOTS.put(DATA_STATS_KEY, JSON.stringify(dataStatsMemo)); } catch {}
+    }
+  }
+  return corsResponse(body, 200, origin, env);
+}
+
+async function computePublicDataStats(env) {
   try {
     const result = await neonFetch(env,
       // Same floor the Data page and stock pages use, so every "since YEAR"
@@ -3588,10 +3628,10 @@ async function handlePublicDataStats(request, env, origin) {
       const r = c.rows?.[0] || {};
       counts = { total_filings: Number(r.total_filings) || null, unique_insiders: Number(r.unique_insiders) || null, companies_covered: Number(r.companies_covered) || null };
     } catch { /* search_entities not built yet */ }
-    return corsResponse({ oldest_filing_date: oldest, ...counts }, 200, origin, env);
+    return { oldest_filing_date: oldest, ...counts };
   } catch (e) {
     console.error('[Worker] handlePublicDataStats failed:', e.message);
-    return corsResponse({ oldest_filing_date: null }, 200, origin, env); // degrade gracefully — the landing page has a hardcoded fallback for this
+    return { oldest_filing_date: null }; // degrade gracefully — the landing page has a hardcoded fallback for this (and a failure isn't cached)
   }
 }
 
@@ -3720,14 +3760,28 @@ async function verifiedUserId(request, env) {
 // (sqlVal now lives in worker/lib/sql.js — imported at the top of this file —
 // so the exact escaping logic under test is the exact logic actually running.)
 
+// How long a query may take before we give up. Without a limit, a slow or
+// stuck Neon left visitors' requests hanging until their browser quit. Cron
+// work (leaderboards, snapshots, view refreshes) is allowed much longer; see
+// scheduled(), which sets NEON_TIMEOUT_MS on its copy of env.
+const NEON_TIMEOUT_MS = 45_000;
+
 async function neonFetch(env, query) {
   const connStr = env.NEON_CONNECTION_STRING;
   const u = new URL(connStr);
-  const resp = await fetch(`https://${u.hostname}/sql`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': connStr },
-    body: JSON.stringify({ query }),
-  });
+  const ms = Number(env.NEON_TIMEOUT_MS) || NEON_TIMEOUT_MS;
+  let resp;
+  try {
+    resp = await fetch(`https://${u.hostname}/sql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Neon-Connection-String': connStr },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(ms),
+    });
+  } catch (e) {
+    if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw new Error(`Neon query timed out after ${ms / 1000}s`);
+    throw e;
+  }
   const text = await resp.text();
   let result;
   try { result = JSON.parse(text); }
@@ -3785,6 +3839,7 @@ async function cancelStripeForDeletedUser(env, clerkUserId) {
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
     httpClient: Stripe.createFetchHttpClient(),
+    timeout: 20000, // fail fast instead of hanging the request (Stripe's default is 80s)
     apiVersion: '2024-06-20',
   });
 
@@ -3846,6 +3901,7 @@ async function handleStripeWebhook(request, env) {
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
     httpClient: Stripe.createFetchHttpClient(),
+    timeout: 20000, // fail fast instead of hanging the request (Stripe's default is 80s)
     apiVersion: '2024-06-20',
   });
 
@@ -4309,7 +4365,8 @@ async function handleCreateSubscription(request, env, origin) {
   }
 
   const Stripe = (await import('stripe')).default;
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(),
+    timeout: 20000, apiVersion: '2024-06-20' }); // fail fast instead of hanging (Stripe's default is 80s)
 
   // Optional promotion code from the client — resolved server-side to a
   // coupon ID so the client never sees or controls the discount directly.
@@ -4507,7 +4564,8 @@ async function handleCreateDataPurchase(request, env, origin) {
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
   const Stripe = (await import('stripe')).default;
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(),
+    timeout: 20000, apiVersion: '2024-06-20' }); // fail fast instead of hanging (Stripe's default is 80s)
 
   try {
     const existing = await neonFetch(env,
@@ -4598,7 +4656,8 @@ async function handleCancelSubscription(request, env, origin) {
   try { body = await request.json(); } catch {} // feedback is optional — missing/invalid body is fine
 
   const Stripe = (await import('stripe')).default;
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(),
+    timeout: 20000, apiVersion: '2024-06-20' }); // fail fast instead of hanging (Stripe's default is 80s)
 
   try {
     const row = await neonFetch(env,
@@ -4639,7 +4698,8 @@ async function handleReactivateSubscription(request, env, origin) {
   if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
 
   const Stripe = (await import('stripe')).default;
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(), apiVersion: '2024-06-20' });
+  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(),
+    timeout: 20000, apiVersion: '2024-06-20' }); // fail fast instead of hanging (Stripe's default is 80s)
 
   try {
     const row = await neonFetch(env,

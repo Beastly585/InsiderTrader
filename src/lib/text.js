@@ -195,3 +195,39 @@ export function memberChamber(x) {
   const r = memberRole(x);
   return r === 'Senator' ? 'Senate' : r === 'Representative' ? 'House' : 'Congress';
 }
+
+// ── Page titles ─────────────────────────────────────────────────────────────
+// One place for the titles of the pages Google indexes, used by both the
+// server-rendered HTML (functions/ + edge/seo.js) and the app after it loads,
+// so the two never disagree. Search results cut titles off around 60
+// characters, so each one is built to fit.
+export const TITLE_MAX = 60;
+export const PAGE_TITLES = {
+  home: 'Seli: Insider Trading & Congress Stock Tracker',
+  congress: 'Congress Stock Trades Tracker | Seli',
+  insiderBuying: 'Insider Buying This Week | Seli',
+  leaderboard: 'Best Insider Traders Leaderboard | Seli',
+  stocks: 'Insider Trading by Stock: A to Z | Seli',
+};
+// Longest piece of `name` (cut at a word) that keeps `pre + name + post` within the limit.
+function fitTitle(pre, name, post) {
+  const room = TITLE_MAX - pre.length - post.length;
+  if (!name || room < 4) return null;
+  if (name.length <= room) return pre + name + post;
+  const cut = name.slice(0, room).replace(/[\s,.&-]+\S*$/, '').trim();
+  return cut.length >= 4 ? pre + cut + post : null;
+}
+// "Apple Inc. (AAPL) Insider Trading | Seli", falling back to
+// "AAPL Insider Trading | Some Long Company" and then "AAPL Insider Trading | Seli".
+export function stockTitle(ticker, company) {
+  const full = `${company} (${ticker}) Insider Trading | Seli`;
+  if (company && full.length <= TITLE_MAX) return full;
+  return (company && fitTitle(`${ticker} Insider Trading | `, company, '')) || `${ticker} Insider Trading | Seli`;
+}
+// "Jensen Huang Insider Trades (NVDA) | Seli" / "Nancy Pelosi Stock Trades | Seli"
+export function personTitle(name, { congress = false, ticker = '' } = {}) {
+  if (congress) return fitTitle('', name, ' Stock Trades | Seli') || `${name} Stock Trades`.slice(0, TITLE_MAX);
+  const withTicker = ticker && `${name} Insider Trades (${ticker}) | Seli`;
+  if (withTicker && withTicker.length <= TITLE_MAX) return withTicker;
+  return fitTitle('', name, ' Insider Trades | Seli') || `${name} Insider Trades`.slice(0, TITLE_MAX);
+}

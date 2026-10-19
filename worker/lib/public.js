@@ -8,6 +8,7 @@
 //   GET /public/insider-buying           this week's insider buying hub
 //   GET /public/search?q=nvda            search box for signed-out visitors
 //   GET /public/leaderboard?source=      top 10 insiders, last 12 months
+//   GET /public/stocks                   A to Z directory of stocks with recent Form 4s
 //   GET /public/sitemap.xml              sitemap index
 //   GET /public/sitemap/{static,stocks,congress,insiders-N}.xml
 //
@@ -75,6 +76,7 @@ export async function handlePublic(request, env, origin, url, deps) {
       return json(q ? await cached(`search|${q}`, TTL.hub, () => search(ctx, q)) : { stocks: [], people: [] }, 200, 300);
     }
     if (parts[1] === 'congress' && !parts[2]) return json(await cached('congress', TTL.hub, () => congressHub(ctx)));
+    if (parts[1] === 'stocks' && !parts[2]) return json(await cached('stocks', TTL.sitemap, () => stocksDirectory(ctx)), 200, 3600);
     if (parts[1] === 'insider-buying' && !parts[2]) {
       const d = await marketFeed(ctx); // has its own 10-minute cache
       return json({ ...d, today: new Date().toISOString().slice(0, 10) }, 200, 300);
@@ -166,10 +168,30 @@ const urlset = urls => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="h
 }\n</urlset>\n`;
 const day = d => asDate(d) || null;
 
-export const STATIC_PATHS = ['/', '/congress', '/insider-buying', '/leaderboard', '/about', '/data-download', '/help', '/terms', '/privacy'];
+export const STATIC_PATHS = ['/', '/stocks', '/congress', '/insider-buying', '/leaderboard', '/about', '/data-download', '/help', '/terms', '/privacy'];
 function staticSitemap() {
   const today = new Date().toISOString().slice(0, 10);
-  return urlset(STATIC_PATHS.map(p => ({ loc: SITE + p, lastmod: ['/', '/congress', '/insider-buying'].includes(p) ? today : null })));
+  return urlset(STATIC_PATHS.map(p => ({ loc: SITE + p, lastmod: ['/', '/stocks', '/congress', '/insider-buying'].includes(p) ? today : null })));
+}
+
+// Which stocks get a sitemap entry and a spot in the /stocks directory: a real
+// ticker with at least one Form 4. Tickers that only appear in Congress
+// disclosures are often not stocks at all (FOMC, fund and bond codes from the
+// PTR text), and the ones that are real have thin pages.
+const STOCK_OK = `e.kind = 'stock' AND e.key ~ '^[A-Z0-9][A-Z0-9.\\-]{0,9}$'
+   AND e.key NOT IN ('NONE', 'NA', 'N.A', 'NULL', 'UNKNOWN', 'TBD', 'NOTICKER', 'FOMC')  -- placeholders, not tickers
+   AND EXISTS (SELECT 1 FROM public.filings f WHERE f.ticker = e.key AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%')`;
+
+async function stocksDirectory(ctx) {
+  const rows = await ctx.db(`
+    SELECT e.key, e.label, e.n, e.last_date FROM public.search_entities e
+     WHERE ${STOCK_OK} AND e.last_date >= CURRENT_DATE - 365
+     ORDER BY e.n DESC LIMIT 1500`);
+  const all = rows.map(r => ({ t: r.key, c: prettyCompany(r.label) || r.key, n: Number(r.n) || 0 }));
+  return {
+    popular: all.slice(0, 40).map(({ t, c }) => ({ t, c })),
+    stocks: all.map(({ t, c }) => ({ t, c })).sort((a, b) => a.t.localeCompare(b.t)),
+  };
 }
 
 const PEOPLE_WHERE = (congress) => `kind = 'person' AND congress = ${congress ? 'true' : 'false'}
@@ -187,10 +209,9 @@ async function sitemapIndex(ctx) {
 
 async function stockSitemap(ctx) {
   const rows = await ctx.db(`
-    SELECT key, last_date FROM public.search_entities
-     WHERE kind = 'stock' AND key ~ '^[A-Z0-9][A-Z0-9.\\-]{0,9}$' AND last_date >= CURRENT_DATE - 1095
-       AND key NOT IN ('NONE', 'NA', 'N.A', 'NULL', 'UNKNOWN', 'TBD', 'NOTICKER')  -- filer placeholders, not real tickers
-     ORDER BY n DESC LIMIT ${PER_FILE}`);
+    SELECT e.key, e.last_date FROM public.search_entities e
+     WHERE ${STOCK_OK} AND e.last_date >= CURRENT_DATE - 1095
+     ORDER BY e.n DESC LIMIT ${PER_FILE}`);
   return urlset(rows.map(r => ({ loc: `${SITE}/stock/${encodeURIComponent(r.key)}`, lastmod: day(r.last_date) })));
 }
 

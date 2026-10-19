@@ -1,5 +1,5 @@
 // /congress — Congress stock trades hub. See edge/seo.js.
-import { serve, layout, tradeTable, crumbs, h, personHref, stockHref, plural, shortDate, SITE } from '../edge/seo.js';
+import { serve, layout, tradeTable, crumbs, h, personHref, stockHref, plural, shortDate, SITE, PAGE_TITLES } from '../edge/seo.js';
 
 export function onRequestGet(context) {
   return serve(context, '/public/congress', d => {
@@ -9,7 +9,7 @@ export function onRequestGet(context) {
     const names = (d.members || []).slice(0, 5).map(m => m.name);
     return {
       canonical: '/congress',
-      title: 'Congress Stock Trades Tracker: Latest STOCK Act Disclosures | Seli',
+      title: PAGE_TITLES.congress,
       description: `What members of Congress are buying and selling, from STOCK Act disclosures, updated daily.${names.length ? ` Latest filers include ${names.join(', ')}.` : ''}`,
       body: layout(`
 <header class="sx-head sx-head--page"><div class="sx-head__main">

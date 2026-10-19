@@ -1,5 +1,5 @@
 // /insider-buying — this week's insider buying hub. See edge/seo.js.
-import { serve, layout, crumbs, h, personHref, stockHref, money, amt, SITE } from '../edge/seo.js';
+import { serve, layout, crumbs, h, personHref, stockHref, money, amt, SITE, PAGE_TITLES } from '../edge/seo.js';
 
 const cluster = c => `<li><a href="${stockHref(c.ticker)}">${h(c.ticker)}</a> ${h(c.company)}: ${h(c.lead || '')} ${
   (c.buyers || []).slice(0, 3).map(b => `<a href="${personHref(b.raw)}">${h(b.name)}</a> (${h(b.role)}, ${h(amt(b.value, b.congress))})`).join(', ')}</li>`;
@@ -12,7 +12,7 @@ export function onRequestGet(context) {
     const top = all.slice(0, 4).map(c => c.ticker);
     return {
       canonical: '/insider-buying',
-      title: 'Insider Buying This Week: Latest CEO & Director Stock Purchases | Seli',
+      title: PAGE_TITLES.insiderBuying,
       description: `The biggest open-market insider stock purchases filed with the SEC this week${top.length ? `, including ${top.join(', ')}` : ''}. Updated every few hours from Form 4 filings.`,
       body: layout(`
 <header class="sx-head sx-head--page"><div class="sx-head__main">

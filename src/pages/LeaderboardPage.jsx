@@ -7,7 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { InsiderLink, StockLink } from '../lib/nav.jsx';
 import { useApi } from '../lib/api.js';
-import { money, pct, plural, memberRole, memberChamber } from '../lib/text.js';
+import { money, pct, plural, memberRole, memberChamber, PAGE_TITLES } from '../lib/text.js';
 import { Card, Segmented, Skeleton, ErrorNote, Gate, Chip, useNarrow } from '../components/ui.jsx';
 
 const LIST = { rank: 'ranked', hit: 'by_hit', ret: 'by_return', buys: 'by_buying' };
@@ -62,7 +62,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
   const [years, setYears] = useState(pro ? 2 : 1);
   const [source, setSource] = useState('all');
   const [sort, setSort] = useState('rank');
-  useEffect(() => { document.title = publicMode ? 'Best Insider Traders: Leaderboard of Insider Buying Track Records | Seli' : 'Insider leaderboard · Seli'; }, [publicMode]);
+  useEffect(() => { document.title = publicMode ? PAGE_TITLES.leaderboard : 'Insider leaderboard · Seli'; }, [publicMode]);
   useEffect(() => { if (!pro && years !== 1) setYears(1); }, [pro]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const narrow = useNarrow();

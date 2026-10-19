@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { SignInButton, useClerk } from '@clerk/clerk-react';
 import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink } from '../lib/nav.jsx';
-import { plural, shortDate, money, congressRange } from '../lib/text.js';
+import { plural, shortDate, money, congressRange, PAGE_TITLES } from '../lib/text.js';
 import { Card, Skeleton, ErrorNote, Icon, useNarrow } from '../components/ui.jsx';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
@@ -127,12 +127,13 @@ function PopularStocks() {
   return (
     <section className="sx-pub__popular" aria-label="Popular stocks">
       <h2>Popular stocks</h2>
-      <p className="sx-pub__tickers">{POPULAR.map(t => <StockLink key={t} ticker={t} />)}</p>
+      <p className="sx-pub__tickers">{POPULAR.map(t => <StockLink key={t} ticker={t} />)}
+        <a href="/stocks" className="sx-link sx-pub__all" onClick={navClick('/stocks')}>All stocks A to Z <Icon name="arrow" size={12} /></a></p>
     </section>
   );
 }
 
-const FOOT_LINKS = [['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
+const FOOT_LINKS = [['All stocks', '/stocks'], ['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
 
 export function PublicFooter({ logoSrc, className = '' }) {
   return (
@@ -150,7 +151,7 @@ export function PublicFooter({ logoSrc, className = '' }) {
 export function CongressPage() {
   const { data: d, error, reload } = useApi('/public/congress');
   const [showAll, setShowAll] = useState(false);
-  useEffect(() => { document.title = 'Congress Stock Trades Tracker: Latest STOCK Act Disclosures | Seli'; }, []);
+  useEffect(() => { document.title = PAGE_TITLES.congress; }, []);
   const members = d?.members || [];
   const shownMembers = showAll ? members : members.slice(0, 24);
   return (
@@ -213,7 +214,7 @@ export function CongressPage() {
 // ── /insider-buying ──────────────────────────────────────────────────────────
 export function InsiderBuyingPage({ watchlist }) {
   const { data: d, error, reload } = useApi('/public/insider-buying');
-  useEffect(() => { document.title = 'Insider Buying This Week: Latest CEO & Director Stock Purchases | Seli'; }, []);
+  useEffect(() => { document.title = PAGE_TITLES.insiderBuying; }, []);
   return (
     <div className="sx-page sx-page--feed">
       <header className="sx-head sx-head--page">
@@ -225,6 +226,71 @@ export function InsiderBuyingPage({ watchlist }) {
       {error && !d && <ErrorNote message={error} onRetry={reload} />}
       {!d && !error && <><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={6} /></Card></>}
       {d && <MarketSections d={d} watchlist={watchlist} />}
+    </div>
+  );
+}
+
+// ── /stocks ──────────────────────────────────────────────────────────────────
+// A to Z directory of every stock with a Form 4 in the last 12 months. Mostly
+// here so every stock page is a click or two from the homepage (for Google as
+// much as for people), plus a quick filter for browsing.
+const letterOf = t => (/^[A-Z]/.test(t) ? t[0] : '#');
+export function StocksPage() {
+  const { data: d, error, reload } = useApi('/public/stocks');
+  const [q, setQ] = useState('');
+  useEffect(() => { document.title = PAGE_TITLES.stocks; }, []);
+  const groups = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const list = (d?.stocks || []).filter(s => !needle || s.t.toLowerCase().startsWith(needle) || s.c.toLowerCase().includes(needle));
+    const m = new Map();
+    for (const s of list) { const k = letterOf(s.t); if (!m.has(k)) m.set(k, []); m.get(k).push(s); }
+    return [...m.entries()];
+  }, [d, q]);
+  const jumpTo = k => e => {
+    e.preventDefault();
+    document.getElementById(`letter-${k === '#' ? 'num' : k}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  return (
+    <div className="sx-page sx-stocks">
+      <header className="sx-head sx-head--page">
+        <div className="sx-head__main">
+          <h1 className="sx-head__title">Insider trading by stock</h1>
+          <p className="sx-head__desc">Every stock with an SEC Form 4 insider filing in the last 12 months{d?.stocks ? ` (${d.stocks.length.toLocaleString('en-US')})` : ''}. Pick a company to see which executives and directors are buying or selling.</p>
+        </div>
+      </header>
+      {error && !d && <ErrorNote message={error} onRetry={reload} />}
+      {!d && !error && <Card><Skeleton lines={8} /></Card>}
+      {d && (
+        <>
+          {(d.popular || []).length > 0 && (
+            <Card title="Most active" sub="Stocks with the most insider filings">
+              <p className="sx-pub__tickers">{d.popular.slice(0, 24).map(s => <StockLink key={s.t} ticker={s.t} title={s.c} />)}</p>
+            </Card>
+          )}
+          <div className="sx-stocks__bar">
+            <div className="sx-search__field sx-stocks__filter">
+              <span className="sx-search__icon"><Icon name="search" size={14} /></span>
+              <input className="sx-search__input" type="search" value={q} onChange={e => setQ(e.target.value)}
+                placeholder="Filter by ticker or company" aria-label="Filter stocks by ticker or company" />
+            </div>
+            {!q && (
+              <nav className="sx-stocks__jump" aria-label="Jump to letter">
+                {groups.map(([k]) => <a key={k} href={`#letter-${k === '#' ? 'num' : k}`} onClick={jumpTo(k)}>{k}</a>)}
+              </nav>
+            )}
+          </div>
+          {groups.map(([k, list]) => (
+            <Card key={k} id={`letter-${k === '#' ? 'num' : k}`} title={k} className="sx-stocks__group">
+              <ul className="sx-stocks__grid">
+                {list.map(s => (
+                  <li key={s.t}><StockLink ticker={s.t} /><span className="sx-stocks__co">{s.c}</span></li>
+                ))}
+              </ul>
+            </Card>
+          ))}
+          {!groups.length && <p className="sx-muted">No stocks match "{q}".</p>}
+        </>
+      )}
     </div>
   );
 }
@@ -247,7 +313,7 @@ export function PublicHome() {
   const { data: buying } = useApi('/public/insider-buying');
   const { data: congress } = useApi('/public/congress');
   const { data: leaders } = useApi('/public/leaderboard?years=1&source=all');
-  useEffect(() => { document.title = 'Seli: Insider Trading & Congress Stock Trades Tracker'; }, []);
+  useEffect(() => { document.title = PAGE_TITLES.home; }, []);
   const narrow = useNarrow();
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
   const goPro = () => openSignUp(clerk, { kind: 'upgrade' });
@@ -262,6 +328,7 @@ export function PublicHome() {
           ? 'Executive and Congress trades in plain English, emailed when they touch your stocks.'
           : 'Every SEC Form 4 and Congress stock disclosure, explained in plain English. Get an email when someone trades a stock you own.'}</p>
         <div className="sx-hero__search"><SearchBox variant="inline" placeholder={narrow ? 'Search a stock or person' : 'Search a ticker, company, executive or member of Congress'} /></div>
+        <p className="sx-hero__browse">or <a href="/stocks" className="sx-link" onClick={navClick('/stocks')}>browse every stock A to Z</a></p>
         <div className="sx-hero__cta">
           <button className="sx-btn sx-btn--accent" onClick={signUp}>Get started free</button>
           {!narrow && <span className="sx-muted sx-small">No card needed. Data from SEC EDGAR and congressional disclosures.</span>}

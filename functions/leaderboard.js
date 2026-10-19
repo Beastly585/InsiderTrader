@@ -1,5 +1,5 @@
 // /leaderboard — top insiders by how their buys did vs the S&P 500.
-import { serve, layout, crumbs, h, personHref, stockHref, plural, SITE } from '../edge/seo.js';
+import { serve, layout, crumbs, h, personHref, stockHref, plural, SITE, PAGE_TITLES } from '../edge/seo.js';
 
 export function onRequestGet(context) {
   return serve(context, '/public/leaderboard?years=1&source=all', d => {
@@ -9,7 +9,7 @@ export function onRequestGet(context) {
     const top = (d.ranked || []).slice(0, 3).map(r => r.name);
     return {
       canonical: '/leaderboard',
-      title: 'Best Insider Traders: Leaderboard of Insider Buying Track Records | Seli',
+      title: PAGE_TITLES.leaderboard,
       description: `Which company insiders' stock purchases have beaten the S&P 500 over the last 12 months${top.length ? `, led by ${top.join(', ')}` : ''}. Ranked from SEC Form 4 filings.`,
       body: layout(`
 <header class="sx-head sx-head--page"><div class="sx-head__main"><h1 class="sx-head__title">Insider leaderboard</h1>

@@ -1,9 +1,20 @@
 // /stock/:ticker — see edge/seo.js for how these pages work.
-import { serve, renderShell, price, layout, tradeTable, crumbs, cta, h, personHref, money, plural, shortDate, clip, SITE } from '../../edge/seo.js';
+import { serve, renderShell, price, layout, tradeTable, crumbs, cta, h, personHref, money, plural, shortDate, clip, SITE, stockTitle } from '../../edge/seo.js';
 
 export function onRequestGet(context) {
   const t = String(context.params.ticker || '').toUpperCase();
-  if (!/^[A-Z0-9][A-Z0-9.\-]{0,9}$/.test(t)) return renderShell(context, null);
+  if (!/^[A-Z0-9][A-Z0-9.\-]{0,9}$/.test(t)) {
+    return renderShell(context, {
+      status: 404, noindex: true, canonical: '/stocks', title: 'Stock not found | Seli',
+      description: 'That is not a ticker symbol Seli tracks.',
+      body: layout('<h1 class="sx-head__title">Stock not found</h1><p><a href="/stocks">Browse every stock Seli tracks</a>.</p>'),
+    });
+  }
+  const fallback = {
+    canonical: `/stock/${t}`, title: stockTitle(t),
+    description: `Insider buying and selling in ${t} from SEC Form 4 filings, updated daily.`,
+    body: layout(`<h1 class="sx-head__title">${h(t)} insider trading</h1><p>Every open-market stock purchase and sale by ${h(t)} executives, directors and large shareholders, from SEC Form 4 filings.</p>`),
+  };
   return serve(context, `/public/stock/${encodeURIComponent(t)}`, (d, status) => {
     if (status === 404 || !d.known) {
       return {
@@ -35,7 +46,7 @@ ${cta(`an insider at ${d.company}`)}`);
       : `Insider buying and selling at ${d.company} (${t}) from SEC Form 4 filings, updated daily.`;
     return {
       canonical: `/stock/${t}`,
-      title: `${name} Insider Trading: Buys & Sells by Executives | Seli`,
+      title: stockTitle(t, d.company),
       description: desc,
       body,
       prefetch: { path: `/public/stock/${t}`, data: d },
@@ -45,5 +56,5 @@ ${cta(`an insider at ${d.company}`)}`);
           description: clip(desc), about: { '@type': 'Corporation', name: d.company, tickerSymbol: t } },
       ],
     };
-  });
+  }, fallback);
 }

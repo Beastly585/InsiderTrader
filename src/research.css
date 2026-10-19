@@ -799,3 +799,20 @@ body.drawer-open .sx-nav { z-index: 94; }
 /* Local-share price on a foreign company's ADS page (e.g. $3.10 per Buenos Aires share vs $78 per PAM ADS). */
 .sx-otherclass { cursor: help; border-bottom: 1px dotted var(--text-3); }
 .sx-otherclass small { margin-left: 4px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+
+/* ── /stocks directory ── */
+.sx-hero__browse { margin: 8px 0 0; font-size: 13px; color: var(--text-3); }
+.sx-pub__all { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; font-size: 13px; white-space: nowrap; }
+.sx-stocks__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 4px 0 12px; }
+.sx-stocks__filter { flex: 0 1 320px; min-width: 200px; }
+.sx-stocks__jump { display: flex; flex-wrap: wrap; gap: 2px; }
+.sx-stocks__jump a { min-width: 22px; padding: 3px 4px; text-align: center; font: 600 12px var(--font-mono); color: var(--text-2); text-decoration: none; border-radius: var(--radius-sm); }
+.sx-stocks__jump a:hover { background: var(--surface-2); color: var(--accent); }
+.sx-stocks__group { scroll-margin-top: 72px; }
+.sx-stocks__grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; }
+.sx-stocks__grid li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sx-stocks__co { font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+@media (max-width: 600px) {
+  .sx-stocks__filter { flex-basis: 100%; }
+  .sx-stocks__grid { grid-template-columns: 1fr; }
+}
