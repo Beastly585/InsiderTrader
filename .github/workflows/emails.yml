@@ -8,6 +8,8 @@
 #   daily    12:30 UTC weekdays   Pro daily digest (after the 12:00 pre-market ingest)
 #   welcome  13:00 UTC every day  welcome email for new sign-ups
 #   weekly   22:00 UTC Sunday     weekly digest for everyone
+# Every run also does the lifecycle emails (send_lifecycle.py). They mostly
+# go from the hourly ingest runs; this covers weekends.
 #
 # Backup: one GitHub schedule a day. If the Worker hasn't started an email run
 # in the last 26 hours, it runs whatever is due. Every script has its own
@@ -104,3 +106,7 @@ jobs:
         if: ${{ !cancelled() && contains(steps.pick.outputs.jobs, 'weekly') }}
         run: python send_digests.py
         env: { DIGEST_TYPE: weekly }
+      - name: Lifecycle emails
+        if: ${{ !cancelled() && steps.pick.outputs.jobs != '' }}
+        continue-on-error: true
+        run: python send_lifecycle.py

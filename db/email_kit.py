@@ -335,7 +335,7 @@ def p(text_html: str, size: int = 15, color: str = TEXT_2, margin: str = "0 0 14
 
 
 def a(href: str, label_html: str, color: str = ACCENT, weight: int = 600) -> str:
-    return f'<a href="{esc(href)}" style="color:{color};font-weight:{weight};text-decoration:none;">{label_html}</a>'
+    return f'<a href="{esc(href)}" style="font-family:{FONT};color:{color};font-weight:{weight};text-decoration:none;">{label_html}</a>'
 
 
 def ticker_tag(ticker: str, href: str) -> str:
@@ -359,7 +359,7 @@ def button(label: str, href: str, secondary: bool = False) -> str:
 def section(title: str, inner_html: str, kicker: str = "", pad_top: int = 28) -> str:
     k = (f'<div style="font-family:{FONT};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;'
          f'color:{ACCENT};margin:0 0 6px;">{esc(kicker)}</div>') if kicker else ""
-    return (f'<tr><td style="padding:{pad_top}px 28px 0;">{k}'
+    return (f'<tr><td class="px" style="padding:{pad_top}px 28px 0;">{k}'
             f'<div style="font-family:{FONT};font-size:18px;font-weight:800;color:{TEXT};letter-spacing:-.3px;margin:0 0 12px;">{title}</div>'
             f'{inner_html}</td></tr>')
 
@@ -412,9 +412,8 @@ def shell(*, title: str, preheader: str, label: str, body_rows: str, footer_html
 </html>"""
 
 
-DISCLAIMER = ("Seli summarizes public SEC Form 4 and STOCK Act disclosures for informational purposes only. "
-              "Nothing in this email is investment advice or a recommendation to buy, sell or hold any security. "
-              "Past insider activity does not predict future stock performance.")
+DISCLAIMER = ("Seli summarizes public SEC Form 4 and STOCK Act filings. It's information, not investment advice, "
+              "and past insider trades don't predict how a stock will do.")
 
 
 def footer(*, reason: str, clerk_user_id: str, manage: bool = True, unsub_kind: str = "digest") -> str:
@@ -500,6 +499,118 @@ def send(*, to_email: str, subject: str, html_doc: str, from_name: str, clerk_us
         if attempt < max_retries - 1:
             time.sleep(2 * (attempt + 1))
     return False
+
+
+# ── Send log and frequency rules ─────────────────────────────────────────────
+# Every email is recorded in public.email_log (db/migrations/2026-10-19_email_log.sql),
+# which is what lets each sender follow the house rules:
+#
+#   1. Only send when there's something new for this person. Quiet = no email
+#      (the weekly digest is the one exception: a once-a-week "here's where your
+#      stocks stand" is what people signed up for).
+#   2. Never tell someone the same thing twice. A trade that already went out as
+#      an instant alert is a one-liner in the next digest, not a full repeat.
+#   3. One scheduled email a day at most. The daily digest skips the day a
+#      weekly one went out.
+#   4. Sales pitches have a cooldown (the Pro nudge shows at most once every
+#      4 weeks), and Pro users never see one.
+#   5. Event-based (lifecycle) emails check cooldown() before sending and log
+#      what they sent, so a new one slots in without stepping on the others.
+#
+# All of this degrades safely: if the table doesn't exist yet, nothing is
+# logged and every check answers "not sent before".
+_log_warned = False
+
+
+def _log_ok(conn, e) -> None:
+    global _log_warned
+    try:
+        conn.rollback()
+    except Exception:
+        pass
+    if not _log_warned:
+        log.warning(f"email_log unavailable ({e}); run db/migrations/2026-10-19_email_log.sql")
+        _log_warned = True
+
+
+def log_sent(conn, clerk_user_id: str, kind: str, refs=None) -> None:
+    """Record a send. refs: things the email covered (accession numbers for an
+    alert), one row each, so later emails can tell what this person already knows."""
+    if DRY_RUN or conn is None:
+        return
+    refs = sorted({r for r in (refs or []) if r}) or [None]
+    try:
+        cur = conn.cursor()
+        for r in refs:
+            cur.execute("INSERT INTO public.email_log (clerk_user_id, kind, ref) VALUES (%s, %s, %s)", (clerk_user_id, kind, r))
+        conn.commit(); cur.close()
+    except Exception as e:
+        _log_ok(conn, e)
+
+
+def cooldown(conn, clerk_user_id: str, kind, days: float) -> bool:
+    """True if this kind of email (or any of a list of kinds) went to this
+    person within the last `days`."""
+    kinds = [kind] if isinstance(kind, str) else list(kind)
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT 1 FROM public.email_log WHERE clerk_user_id = %s AND kind = ANY(%s)
+                        AND sent_at > now() - make_interval(secs => %s) LIMIT 1""", (clerk_user_id, kinds, days * 86400))
+        hit = cur.fetchone() is not None
+        cur.close()
+        return hit
+    except Exception as e:
+        _log_ok(conn, e)
+        return False
+
+
+def already_sent(conn, clerk_user_id: str, kind: str, ref: str | None = None) -> bool:
+    """True if this email (for this ref, when given) was ever sent to this person.
+    Unlike cooldown(), this raises if the log can't be read: callers that send
+    "once only" emails must not guess."""
+    cur = conn.cursor()
+    if ref is None:
+        cur.execute("SELECT 1 FROM public.email_log WHERE clerk_user_id = %s AND kind = %s LIMIT 1", (clerk_user_id, kind))
+    else:
+        cur.execute("SELECT 1 FROM public.email_log WHERE clerk_user_id = %s AND kind = %s AND ref = %s LIMIT 1",
+                    (clerk_user_id, kind, ref))
+    hit = cur.fetchone() is not None
+    cur.close()
+    return hit
+
+
+def log_ready(conn) -> bool:
+    """Whether email_log exists and can be read."""
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM public.email_log LIMIT 1")
+        cur.fetchall(); cur.close()
+        return True
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def alerted_refs(conn, clerk_user_ids: list[str], since_days: int = 10) -> dict[str, set[str]]:
+    """{user: accession numbers they've already been sent as instant alerts}."""
+    if not clerk_user_ids:
+        return {}
+    try:
+        cur = conn.cursor()
+        cur.execute("""SELECT clerk_user_id, ref FROM public.email_log
+                        WHERE kind = 'alert' AND ref IS NOT NULL AND clerk_user_id = ANY(%s)
+                          AND sent_at > now() - make_interval(days => %s)""", (clerk_user_ids, since_days))
+        out: dict[str, set[str]] = {}
+        for uid, ref in cur.fetchall():
+            out.setdefault(uid, set()).add(ref)
+        cur.close()
+        return out
+    except Exception as e:
+        _log_ok(conn, e)
+        return {}
 
 
 def get_connection(database_url: str | None = None):

@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 import re
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 
 from email_kit import as_date, money, plural, pretty_company, pretty_person, short_role
 
@@ -41,6 +41,38 @@ def _rows(cur):
 
 def is_congress(r: dict) -> bool:
     return r.get("relationship") == "congress" or (r.get("transaction_code") or "").upper().startswith("CONGRESS")
+
+
+# ── Windows ──────────────────────────────────────────────────────────────────
+# Every digest covers a range of COMPLETE filing days. The daily digest used
+# to look at filings dated today, which at 7am is a handful of early filings,
+# so it showed almost nothing and compared that against full days ("86% less
+# buying than usual"). Daily now covers the last full filing day before today
+# (Friday on a Monday, the day before a holiday after one).
+def last_filing_day(conn, today: date | None = None) -> date:
+    today = today or date.today()
+    cur = conn.cursor()
+    cur.execute("""SELECT MAX(filing_date) FROM public.filings
+                    WHERE filing_date < %s AND filing_date >= %s
+                      AND COALESCE(transaction_code, '') NOT LIKE 'CONGRESS%%'""", (today, today - timedelta(days=10)))
+    d = cur.fetchone()[0]
+    cur.close()
+    if d:
+        return as_date(d)
+    d = today - timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
+def digest_window(conn, weekly: bool, today: date | None = None) -> dict:
+    """{start, end, label, period}: label reads naturally after 'insiders bought ...'."""
+    today = today or date.today()
+    if weekly:
+        return {"start": today - timedelta(days=6), "end": today, "label": "this week", "period": "week"}
+    d = last_filing_day(conn, today)
+    label = "yesterday" if (today - d).days == 1 else f"on {d:%A}"
+    return {"start": d, "end": d, "label": label, "period": "day"}
 
 
 # ── Buys filed in the window ─────────────────────────────────────────────────
@@ -60,19 +92,19 @@ SELECT f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship
  WHERE f.is_open_market = true
    AND f.transaction_type = 'buy'
    AND f.ticker IS NOT NULL
-   AND f.filing_date >  CURRENT_DATE - %(days)s
-   AND f.filing_date <= CURRENT_DATE
+   AND f.filing_date BETWEEN %(start)s AND %(end)s
    -- late filings for old trades aren't news
-   AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - (%(days)s + 45)
+   AND COALESCE(f.transaction_date, f.filing_date) >= %(start)s::date - 45
+   AND f.duplicate_of IS NULL
    AND COALESCE(f.value, 0) >= %(min_value)s
    -- sub-$1 stocks: tiny dollar amounts, huge percent swings, mostly noise
    AND (f.price_per_share IS NULL OR f.price_per_share >= 1)
 """
 
 
-def week_buys(conn, days: int = 7, min_value: float = 10_000) -> list[dict]:
+def week_buys(conn, start: date, end: date, min_value: float = 10_000) -> list[dict]:
     cur = conn.cursor()
-    cur.execute(WEEK_BUYS_SQL, {"days": days, "min_value": min_value})
+    cur.execute(WEEK_BUYS_SQL, {"start": start, "end": end, "min_value": min_value})
     rows = _rows(cur)
     cur.close()
     return rows
@@ -210,10 +242,11 @@ def cluster_facts(c: dict) -> list[tuple[str, str]]:
         f.append((f"{_roles_phrase(c['csuite'])} buying", "buy"))
     elif c["congress"]:
         f.append(("Member of Congress", "accent"))
-    fb = c["first_buy"]
+    # "First buy on record" and "Non-routine" were true of nearly every row,
+    # so they stopped meaning anything. Only a real break in pattern shows.
+    fb = [b for b in c["first_buy"] if b["gap_years"]]
     if fb:
-        g = fb[0]["gap_years"]
-        f.append((f"First buy in {round(g)} yrs" if g else "First buy on record", "accent"))
+        f.append((f"First buy in {round(fb[0]['gap_years'])} yrs", "accent"))
     # Same person the lead sentence is about, so the chip and the sentence agree.
     lead = c["buyers"][0]
     stakes = [b for b in c["buyers"] if b["stake"]]
@@ -222,8 +255,6 @@ def cluster_facts(c: dict) -> list[tuple[str, str]]:
     elif stakes:
         top = max(stakes, key=lambda b: (b["pct"] or 0))
         f.append((f'{top["stake"]} ({top["role"]})', "neutral"))
-    if c["nonroutine"]:
-        f.append(("Non-routine", "neutral"))
     f.append((f"{money(c['total'])} total", "neutral"))
     return f[:5]
 
@@ -235,7 +266,7 @@ def lead_sentence(c: dict) -> str:
     role = top["role"]
     role_bit = "a member of Congress" if role == "Congress" else ("a 10% owner" if role == "10% owner" else f"the {role}" if role in CSUITE_ROLES or role in ("Chair", "General Counsel") else f"a {role.lower()}")
     if c["n_insiders"] >= 2:
-        s = f"{c['n_insiders']} insiders at {c['company']} bought {money(c['total'])} of stock this week. The biggest check came from {who}, {role_bit}, at {money(top['value'])}"
+        s = f"{c['n_insiders']} insiders at {c['company']} bought {money(c['total'])} of stock. The biggest check came from {who}, {role_bit}, at {money(top['value'])}"
     else:
         s = f"{who}, {role_bit} at {c['company']}, bought {money(top['value'])} of stock on the open market"
     if top["pct"] is not None and top["pct"] >= 5:
@@ -275,45 +306,51 @@ def filing_context(c: dict) -> str:
 
 # ── Market pulse ─────────────────────────────────────────────────────────────
 PULSE_SQL = """
-SELECT ((CURRENT_DATE - f.filing_date) / %(days)s)::int AS bucket,
-       f.transaction_type,
+SELECT f.filing_date AS d, f.transaction_type,
        COUNT(DISTINCT f.accession_number) AS n,
        COALESCE(SUM(f.value), 0)::float  AS v
   FROM public.filings f
  WHERE f.is_open_market = true
    AND f.transaction_type IN ('buy', 'sell')
    AND f.ticker IS NOT NULL
-   AND f.filing_date >  CURRENT_DATE - %(days)s * 13
-   AND f.filing_date <= CURRENT_DATE
+   AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%%'
+   AND f.filing_date BETWEEN %(since)s AND %(end)s
  GROUP BY 1, 2
 """
 
 
-def market_pulse(conn, days: int = 7) -> dict | None:
+def market_pulse(conn, start: date, end: date, weekly: bool) -> dict | None:
+    """This window's open-market buys and sales vs the 12 windows before it.
+    Daily compares against the previous 12 FILING days (weekends and holidays
+    have no filings and don't count); weekly against the previous 12 weeks."""
+    span = (end - start).days + 1
+    since = end - timedelta(days=span * 13 + (20 if not weekly else 0))
     cur = conn.cursor()
-    cur.execute(PULSE_SQL, {"days": days})
+    cur.execute(PULSE_SQL, {"since": since, "end": end})
     rows = _rows(cur)
     cur.close()
-    # CURRENT_DATE - filing_date is 0..days*13-1; bucket 0 = the latest window
-    now = {"buy": (0, 0.0), "sell": (0, 0.0)}
-    hist = defaultdict(lambda: {"buy": 0, "sell": 0})
+    buckets: dict = defaultdict(lambda: {"buy": [0, 0.0], "sell": [0, 0.0]})
     for r in rows:
-        b = r["bucket"]
-        if b == 0:
-            now[r["transaction_type"]] = (r["n"], r["v"])
-        elif 1 <= b <= 12:
-            hist[b][r["transaction_type"]] = r["n"]
-    if now["buy"][0] + now["sell"][0] == 0:
+        d = as_date(r["d"])
+        key = d if not weekly else (end - d).days // 7  # 0 = this week
+        buckets[key][r["transaction_type"]][0] += r["n"]
+        buckets[key][r["transaction_type"]][1] += r["v"]
+    now_key = end if not weekly else 0
+    now = buckets.get(now_key)
+    if not now or now["buy"][0] + now["sell"][0] == 0:
         return None
-    weeks = [hist[b] for b in range(1, 13) if hist[b]["buy"] + hist[b]["sell"] > 0]
-    avg_buy = sum(w["buy"] for w in weeks) / len(weeks) if weeks else None
+    if weekly:
+        hist = [buckets[k] for k in range(1, 13) if k in buckets]
+    else:
+        hist = [buckets[k] for k in sorted((k for k in buckets if k < end), reverse=True)[:12]]
+    hist = [h for h in hist if h["buy"][0] + h["sell"][0] > 0]
     out = {"buy_n": now["buy"][0], "buy_v": now["buy"][1], "sell_n": now["sell"][0], "sell_v": now["sell"][1],
-           "avg_buy_n": avg_buy, "vs_avg": None, "verdict": None}
-    if avg_buy and len(weeks) >= 4:
-        ratio = out["buy_n"] / avg_buy
-        out["vs_avg"] = ratio - 1
-        out["verdict"] = ("more buying than usual" if ratio >= 1.2 else
-                          "less buying than usual" if ratio <= 0.8 else "a normal amount of buying")
+           "avg_buy_n": None, "verdict": None}
+    if len(hist) >= 4:
+        avg = sum(h["buy"][0] for h in hist) / len(hist)
+        out["avg_buy_n"] = avg
+        ratio = out["buy_n"] / avg if avg else 1
+        out["verdict"] = "more" if ratio >= 1.25 else "fewer" if ratio <= 0.75 else "normal"
     return out
 
 
@@ -326,6 +363,7 @@ SELECT f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship
  WHERE f.ticker = ANY(%(tickers)s)
    AND f.is_open_market = true
    AND f.transaction_type IN ('buy', 'sell')
+   AND f.duplicate_of IS NULL
    AND f.filing_date <= CURRENT_DATE
    AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - 380
 """
@@ -366,13 +404,14 @@ def _agg(rows: list[dict]) -> dict:
             p["last"] = td
     people = sorted(per.values(), key=lambda x: x["value"], reverse=True)
     return {"n": len({r["accession_number"] for r in rows}), "v": sum(r.get("value") or 0 for r in rows),
-            "insiders": len(people), "people": people}
+            "insiders": len(people), "people": people, "accs": {r["accession_number"] for r in rows}}
 
 
-def ticker_status(conn, tickers: list[str], window_days: int = 7, today: date | None = None) -> dict[str, dict]:
-    """{ticker: status}. window = 'recent' activity (7 for weekly digest, 1 for
-    daily, 90 for the welcome email). 12-month totals and the last-ever buy
-    come along regardless so quiet tickers still get a useful line."""
+def ticker_status(conn, tickers: list[str], start: date, end: date, today: date | None = None) -> dict[str, dict]:
+    """{ticker: status}. 'recent' = filed between start and end (the digest's
+    window, or the last 90 days for the welcome email). 12-month totals and
+    the last-ever buy come along regardless so quiet tickers still get a
+    useful line."""
     tickers = sorted({t.upper() for t in tickers if t})
     if not tickers:
         return {}
@@ -401,7 +440,7 @@ def ticker_status(conn, tickers: list[str], window_days: int = 7, today: date | 
         rs = by_t.get(t, [])
         corp = [r for r in rs if not is_congress(r)]
         cong = [r for r in rs if is_congress(r)]
-        is_recent = lambda r: as_date(r["filing_date"]) and (today - as_date(r["filing_date"])).days < window_days
+        is_recent = lambda r: as_date(r["filing_date"]) and start <= as_date(r["filing_date"]) <= end
         in_year = lambda r: as_date(r["trade_date"]) and (today - as_date(r["trade_date"])).days <= 365
         lb = last_buys.get(t)
         out[t] = {
@@ -428,20 +467,21 @@ def ticker_status(conn, tickers: list[str], window_days: int = 7, today: date | 
 # ── Followed insiders ────────────────────────────────────────────────────────
 FOLLOWED_SQL = """
 SELECT f.insider_name, f.insider_title, f.relationship, f.transaction_code, f.ticker, f.company_name,
-       f.transaction_type, f.value::float AS value, f.filing_date,
+       f.transaction_type, f.value::float AS value, f.filing_date, f.accession_number,
        COALESCE(f.transaction_date, f.filing_date) AS trade_date
   FROM public.filings f
  WHERE f.insider_name = ANY(%(names)s)
    AND f.is_open_market = true AND f.transaction_type IN ('buy', 'sell')
-   AND f.filing_date > CURRENT_DATE - %(days)s AND f.filing_date <= CURRENT_DATE
+   AND f.filing_date BETWEEN %(start)s AND %(end)s
+   AND f.duplicate_of IS NULL
 """
 
 
-def followed_activity(conn, names: list[str], days: int = 7) -> dict[str, list[dict]]:
+def followed_activity(conn, names: list[str], start: date, end: date) -> dict[str, list[dict]]:
     if not names:
         return {}
     cur = conn.cursor()
-    cur.execute(FOLLOWED_SQL, {"names": sorted(set(names)), "days": days})
+    cur.execute(FOLLOWED_SQL, {"names": sorted(set(names)), "start": start, "end": end})
     rows = _rows(cur)
     cur.close()
     grouped: dict[tuple, dict] = {}
@@ -449,12 +489,24 @@ def followed_activity(conn, names: list[str], days: int = 7) -> dict[str, list[d
         k = (r["insider_name"], r["ticker"], r["transaction_type"])
         g = grouped.setdefault(k, {"raw": r["insider_name"], "name": pretty_person(r["insider_name"], is_congress(r)),
                                    "ticker": r["ticker"], "company": pretty_company(r["company_name"]),
-                                   "type": r["transaction_type"], "value": 0.0, "congress": is_congress(r)})
+                                   "type": r["transaction_type"], "value": 0.0, "congress": is_congress(r), "accs": set()})
         g["value"] += r.get("value") or 0
+        g["accs"].add(r["accession_number"])
     out: dict[str, list[dict]] = defaultdict(list)
     for (name, _, _), g in grouped.items():
         out[name].append(g)
     return out
+
+
+def holding_phrase(pct, sold: bool) -> str:
+    """', about 4% of their shares' for a sale, ', growing their stake 8%' for a buy."""
+    if pct is None or pct < 1:
+        return ""
+    if sold:
+        return ", more than half of their shares" if pct >= 50 else f", about {pct:.0f}% of their shares"
+    if pct >= 100:
+        return f", growing their stake {1 + pct / 100:.1f}x".replace(".0x", "x")
+    return f", growing their stake {pct:.0f}%" if pct >= 5 else ""
 
 
 def summarize_people(people: list[dict], limit: int = 1) -> str:

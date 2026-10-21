@@ -160,6 +160,26 @@ jobs:
           cd db
           python send_instant_alerts.py
 
+      # Emails triggered by what someone did: unfinished checkout, cancel
+      # confirmation, "Pro ends soon", empty watchlist. Each one goes once and
+      # the script skips quiet hours itself. A problem here never fails the
+      # ingest run.
+      - name: Lifecycle emails
+        if: ${{ !cancelled() && steps.backup.outputs.skip != 'true' && github.event.inputs.dry_run != 'true' }}
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTS_FROM_EMAIL: ${{ secrets.ALERTS_FROM_EMAIL }}
+          APP_URL: ${{ secrets.APP_URL }}
+          NEON_PROXY_URL: ${{ secrets.NEON_PROXY_URL }}
+          EMAIL_LINK_SECRET: ${{ secrets.EMAIL_LINK_SECRET }}
+          MAILING_ADDRESS: ${{ secrets.MAILING_ADDRESS }}
+          WELCOME_REPLY_TO: ${{ secrets.WELCOME_REPLY_TO }}
+        run: |
+          cd db
+          python send_lifecycle.py
+
       - name: Generate signal cards for Twitter
         if: success() && steps.backup.outputs.skip != 'true' && steps.vars.outputs.update_prices == 'true'
         env:

@@ -75,6 +75,7 @@ CSUITE_TITLE_RE = re.compile(r"chief|ceo|cfo|coo|cto|president", re.I)
 # welcome email: same look, plain-text part, one-click unsubscribe header,
 # mailing address in the footer, and retries on 429/5xx.
 import email_kit as ek
+import insider_intel as ii
 
 REASON_LABEL = {
     "watchlist_ticker":  "Stock you watch",
@@ -167,13 +168,10 @@ def get_insider_context(conn, insider_name: str, ticker: str, trade_date) -> str
             if months_gap and months_gap >= 6:
                 parts.append(f"First open-market trade in {months_gap} months")
         elif total <= 1:
-            parts.append("First recorded open-market trade on this ticker")
+            parts.append("Their first open-market trade in this stock on record")
 
         if cluster_count >= 2:
             parts.append(f"{cluster_count + 1} insiders trading this week")
-
-        if total and total >= 5:
-            parts.append(f"{total} total trades on record")
 
         return " · ".join(parts) if parts else ""
     except Exception:
@@ -182,6 +180,17 @@ def get_insider_context(conn, insider_name: str, ticker: str, trade_date) -> str
 
 def is_congress(m: dict) -> bool:
     return str(m.get("transaction_code") or "").upper().startswith("CONGRESS")
+
+
+def sec_filing_url(m: dict) -> str | None:
+    """The filing on SEC's site, so anyone can check the source. Uses the
+    company's folder; the accession prefix is often a filing agent's, whose
+    folder doesn't have it."""
+    cik = str(m.get("cik_issuer") or "").lstrip("0")
+    acc = str(m.get("accession_number") or "")
+    if not cik.isdigit() or not re.fullmatch(r"\d{10}-\d{2}-\d{6}", acc):
+        return None
+    return f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc.replace('-', '')}/"
 
 
 def build_email(conn, clerk_user_id: str, matches: list[dict]) -> tuple[str, str]:
@@ -207,32 +216,44 @@ def build_email(conn, clerk_user_id: str, matches: list[dict]) -> tuple[str, str
         amount = ek.amount(m["value"], cg)
         stock_href = ek.track(ek.ticker_path(m["ticker"]), "alert", m["ticker"])
         person_href = ek.track(ek.insider_path(m["insider_name"]), "alert", "person")
-        bits = [ek.short_date(m["trade_date"])]
+        verb = "bought" if buy else "sold"
+        what = f"{verb} {amount}" + ("" if cg else ii.holding_phrase(m.get("pct"), not buy))
+        dates = f"Traded {ek.short_date(m['trade_date'])}"
+        if m.get("filing_date") and ek.as_date(m["filing_date"]) != ek.as_date(m["trade_date"]):
+            dates += f", {'disclosed' if cg else 'filed'} {ek.short_date(m['filing_date'])}"
+        bits = [dates]
         if not cg and m.get("shares"):
             bits.append(f"{m['shares']:,.0f} shares" + (f" at ${m['price_per_share']:,.2f}" if m.get("price_per_share") else ""))
-        context = get_insider_context(conn, m["insider_name"], m["ticker"], m["trade_date"])
+        if cg:
+            bits.append("Congress reports a range, not an exact amount")
+        context = "" if cg else get_insider_context(conn, m["insider_name"], m["ticker"], m["trade_date"])
         reasons = "".join(ek.chip(REASON_LABEL[r], "accent") for r in m["reasons"])
+        sec = sec_filing_url(m) if not cg else None
         inner = (
             '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
             f'<td style="vertical-align:top;">{ek.ticker_tag(m["ticker"], stock_href)}'
             f'<span style="font-family:{ek.FONT};font-size:14px;font-weight:700;color:{ek.TEXT};margin-left:8px;">{ek.esc(company)}</span></td>'
             f'<td style="vertical-align:top;text-align:right;white-space:nowrap;">{ek.chip(("Buy " if buy else "Sell ") + amount, "buy" if buy else "sell")}</td>'
             '</tr></table>'
-            + ek.p(f'{ek.a(person_href, ek.esc(who), ek.TEXT, 700)} <span style="color:{ek.MUTED};">· {ek.esc(role)}</span>', 14, ek.TEXT_2, "10px 0 2px")
-            + ek.p(ek.esc(" · ".join(bits)), 12, ek.MUTED, "0 0 8px")
-            + (ek.p(ek.esc(context), 12.5, ek.TEXT_2, "0 0 8px") if context else "")
-            + f'<div>{reasons}</div>'
+            + ek.p(f'{ek.a(person_href, ek.esc(who), ek.TEXT, 700)} <span style="color:{ek.MUTED};">({ek.esc(role)})</span> {ek.esc(what)}.', 14, ek.TEXT_2, "10px 0 4px")
+            + ek.p(ek.esc(" · ".join(bits)), 12, ek.MUTED, "0 0 6px")
+            + (ek.p(ek.esc(context) + ".", 13, ek.TEXT_2, "0 0 8px") if context else "")
+            + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td>{reasons}</td>'
+            + (f'<td style="text-align:right;white-space:nowrap;vertical-align:top;font-size:12px;line-height:1.4;">{ek.a(sec, "View on SEC &rarr;", ek.MUTED, 600)}</td>' if sec else "")
+            + '</tr></table>'
         )
         cards += ek.card(inner, accent_left=ek.ACCENT if "portfolio_holding" in m["reasons"] else "")
 
-    body = (ek.section(ek.esc(f"{n} new insider trade{'s' if n != 1 else ''} matched your alerts"),
-                       cards, pad_top=22)
-            + f'<tr><td class="px" style="padding:8px 28px 0;">{ek.button("Open Seli", ek.track("/", "alert", "cta"))}</td></tr>')
+    title = "New insider trade" if n == 1 else f"{n} new insider trades"
+    body = (ek.section(ek.esc(title), cards, pad_top=22)
+            + f'<tr><td class="px" style="padding:8px 28px 0;">'
+            + ek.p(f'You get these because alerts are on for these stocks and people. '
+                   f'{ek.a(ek.track("/account#emails", "alert", "settings"), "Change what you get alerts for")}.', 12, ek.MUTED, "0") + "</td></tr>")
     html_doc = ek.shell(
         title="Seli alert", label="Alert",
         preheader=f"{who0} and {n - 1} more" if n > 1 else f"{who0}, {ek.short_date(first['trade_date'])}",
         body_rows=body,
-        footer_html=ek.footer(reason="You're getting this because instant alerts are on in your Seli settings.",
+        footer_html=ek.footer(reason="Instant alerts are on in your Seli settings.",
                               clerk_user_id=clerk_user_id, unsub_kind="alerts"),
     )
     return subject, html_doc
@@ -245,7 +266,8 @@ def main():
     cur.execute("""
         SELECT f.accession_number, f.ticker, f.company_name, f.insider_name, f.insider_title,
                f.transaction_type, f.transaction_code, f.value, f.is_open_market,
-               f.shares, f.price_per_share,
+               f.shares, f.price_per_share, f.cik_issuer, f.filing_date,
+               f.pct_owned_change::float AS pct,
                COALESCE(f.transaction_date, f.filing_date) AS trade_date,
                (SELECT p.transaction_type FROM public.filings p
                 WHERE p.insider_name = f.insider_name AND p.ticker = f.ticker
@@ -255,6 +277,7 @@ def main():
                ) AS prior_type
         FROM public.filings f
         WHERE f.alerted_at IS NULL AND f.is_open_market = true
+          AND f.duplicate_of IS NULL
           -- Recency guard — the actual permanent fix for the backfill
           -- flood. alerted_at IS NULL only means "never been considered
           -- by this script," not "just happened" — a bulk historical
@@ -391,9 +414,11 @@ def main():
             continue
         matches.sort(key=lambda m: (m["trade_date"] or datetime.min.date(), m["value"] or 0), reverse=True)
         subject, html_doc = build_email(conn, uid, matches)
-        if ek.send(to_email=email_by_id[uid], subject=subject, html_doc=html_doc, from_name="Seli Alerts",
+        if ek.send(to_email=email_by_id[uid], subject=subject, html_doc=html_doc, from_name="Seli",
                    clerk_user_id=uid, kind="instant_alert", unsub_kind="alerts"):
             sent += 1
+            # The next digest reads this so it doesn't repeat these trades.
+            ek.log_sent(conn, uid, "alert", [m["accession_number"] for m in matches])
         else:
             for m in matches:
                 filing_failed.add(m["accession_number"])

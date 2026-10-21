@@ -6,13 +6,10 @@ up 10+ hours ago and hasn't had it yet, so it lands the morning after signup:
 inside the window where new users currently vanish, and before their first
 Sunday digest.
 
-Short note from Kevin in four clearly separated sections:
-  1. Welcome           what Seli is, and that we only email if they've opted in
-  2. What you're following   one factual line per watchlist ticker (or an
-                       "add tickers" button if empty)
-  3. What happens next exactly which emails they're set to get, based on
-                       their real settings, and where to change it
-  4. Need help?        reply / support address
+A short note from Kevin that looks like one: no section labels or stat
+boxes. One line per stock they picked (or an "Add your stocks" button if they
+haven't), one sentence on exactly which emails they'll get from their real
+settings, and how to reach him.
 
   python send_welcome.py                 # normal daily run
   BACKFILL=true python send_welcome.py   # also users who signed up before this
@@ -31,7 +28,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from datetime import date
+from datetime import date, timedelta
 
 import requests
 
@@ -102,66 +99,43 @@ def sync_from_clerk(conn) -> int:
 
 
 # ── Pieces ──────────────────────────────────────────────────────────────────
-def block(kicker: str, title: str, inner: str, first: bool = False) -> str:
-    """One clearly separated section: divider, small label, heading, content."""
-    rule = "" if first else f'<div style="height:1px;background:{ek.BORDER};margin:0 0 22px;line-height:1px;font-size:1px;">&nbsp;</div>'
-    return (f'<tr><td class="px" style="padding:{22 if first else 26}px 28px 0;">{rule}'
-            f'<div style="font-family:{ek.FONT};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{ek.ACCENT};margin:0 0 4px;">{ek.esc(kicker)}</div>'
-            f'<div style="font-family:{ek.FONT};font-size:18px;font-weight:800;color:{ek.TEXT};letter-spacing:-.3px;margin:0 0 10px;">{ek.esc(title)}</div>'
-            f'{inner}</td></tr>')
-
-
-def follow_row(s: dict) -> str:
-    """One ticker, up to three lines of plain fact, most meaningful first.
-    Corporate insiders (exact amounts) lead; Congress (ranges) gets its own line.
-    Tiny or stale buys never headline a ticker that has real selling or buying."""
+# A note from a person, so it looks like one: no section labels, no stat
+# boxes, one button at most. The only "data" is a line per stock they chose.
+def follow_line(s: dict) -> str:
+    """One stock, one plain line: the most useful thing we know."""
     href = ek.track(ek.ticker_path(s["ticker"]), MEDIUM, "following")
-    yb, ys, lb, rb, yc = s["yr_buys"], s["yr_sells"], s["last_buy"], s["recent_buys"], s["yr_congress"]
-    lines = []
+    yb, ys, lb, rb = s["yr_buys"], s["yr_sells"], s["last_buy"], s["recent_buys"]
     if not s["known"]:
-        lines.append("No insider filings on record yet.")
+        line = "No insider filings on record yet. You'll hear when the first one comes in."
+    elif rb["n"]:
+        line = f"Insiders bought {ek.money(rb['v'])} in the last 90 days ({ek.plural(rb['insiders'], 'insider')})."
+    elif lb and ys["n"]:
+        line = (f"Insiders sold {ek.money(ys['v'])} over the last year. The last insider buy was "
+                f"{ek.ago(lb['date'])} ({lb['name']}, {ek.money(lb['value'])}).")
+    elif lb:
+        line = f"Quiet lately. The last insider buy was {ek.ago(lb['date'])} ({lb['name']}, {ek.money(lb['value'])})."
+    elif ys["n"]:
+        line = f"Insiders sold {ek.money(ys['v'])} over the last year, with no open-market buys."
     else:
-        if rb["n"]:
-            lines.append(f"Insiders bought {ek.money(rb['v'])} in the last 90 days "
-                         f"({ek.plural(rb['n'], 'buy')}, {ek.plural(rb['insiders'], 'insider')}).")
-        elif yb["n"] and yb["v"] >= 100_000:
-            lines.append(f"Insiders bought {ek.money(yb['v'])} over the last 12 months ({ek.plural(yb['n'], 'buy')}).")
-        if ys["n"]:
-            no_buys = "" if yb["n"] else " No open-market buys."
-            lines.append(f"Insiders sold {ek.money(ys['v'])} over the last 12 months ({ek.plural(ys['n'], 'sale')}).{no_buys}")
-        if not lines:
-            lines.append("No open-market insider trades in the last 12 months.")
-        if lb and not rb["n"]:
-            lines.append(f"Last insider buy: {lb['name']} ({lb['role']}), {ek.money(lb['value'])}, {ek.ago(lb['date'])}.")
-        elif not lb:
-            lines.append("No open-market insider buys on record.")
-        if yc["n"]:
-            c = yc["latest"]
-            verb = "bought" if c["type"] == "buy" else "sold"
-            more = f" ({ek.plural(yc['n'], 'trade')} in 12 months)" if yc["n"] > 1 else ""
-            lines.append(f"Congress: {c['name']} {verb} {ek.congress_range(c['value'])}, {ek.ago(c['date'])}{more}.")
+        line = "No open-market insider trades in the last year."
     return (f'<tr><td style="padding:10px 0;border-top:1px solid {ek.BORDER};">'
             f'{ek.ticker_tag(s["ticker"], href)}'
             f'<span style="font-family:{ek.FONT};font-size:13px;color:{ek.MUTED};margin-left:8px;">{ek.esc(s["company"])}</span>'
-            + "".join(ek.p(ek.esc(l), 13, ek.TEXT_2 if n == 0 else ek.MUTED, "6px 0 0") for n, l in enumerate(lines))
-            + "</td></tr>")
+            + ek.p(ek.esc(line), 14, ek.TEXT_2, "6px 0 0") + "</td></tr>")
 
 
-def email_plan(u: dict) -> list[str]:
-    """Plain sentences describing exactly what this person has turned on."""
+def email_plan(u: dict) -> str:
+    """One sentence on exactly what they'll get, from their real settings."""
     on = []
     if u.get("weekly_digest"):
-        on.append("a weekly digest on Sunday evenings covering insider activity on your watchlist and the week's notable insider buying")
+        on.append("a short email on Sunday evenings")
     if u.get("pro") and u.get("daily_digest"):
-        on.append("a daily digest on weekday mornings")
+        on.append("a daily brief on weekday mornings when something new comes in")
     if u.get("pro") and u.get("instant_any"):
         on.append("an alert the day an insider files on something you've set alerts for")
     if not on:
-        return ["All Seli emails are off for you, so this is the only one you'll get unless you turn something on."]
-    lines = ["You're set to get " + (on[0] if len(on) == 1 else ", ".join(on[:-1]) + " and " + on[-1]) + ". That's it."]
-    if u.get("pro") and not u.get("instant_any"):
-        lines.append("You're on Pro, so same-day alerts are available too. They're off until you turn them on.")
-    return lines
+        return "Your Seli emails are all off, so this is the only one you'll get unless you turn something on."
+    return "From here you'll get " + (on[0] if len(on) == 1 else ", ".join(on[:-1]) + " and " + on[-1]) + ". Nothing else."
 
 
 def compose(u: dict, statuses: dict, backfill: bool, today: date) -> tuple[str, str]:
@@ -170,43 +144,30 @@ def compose(u: dict, statuses: dict, backfill: bool, today: date) -> tuple[str, 
     P = lambda html, **kw: ek.p(html, **{"size": 15, "color": ek.TEXT_2, **kw})
     settings = ek.track("/account#emails", MEDIUM, "settings")
 
-    # 1. Welcome
-    hello = P(f"Hey {ek.esc(name) if name else 'there'},", margin="0 0 12px")
-    if backfill:
-        hello += P("Kevin here, I built Seli. You signed up a while back, so here's a quick hello and a rundown of how things work now.")
-    else:
-        hello += P("Thanks for signing up. I'm Kevin, I built Seli.")
-    hello += P("Seli tracks the stock trades that company insiders and members of Congress are required to disclose, "
-               "and lays them out so they're easy to read. We won't fill up your inbox: you only hear from us if you've "
-               "turned on a digest or alerts.", margin="0")
-    rows = block("Welcome", "Welcome to Seli", hello, first=True)
+    body = P(f"Hey {ek.esc(name) if name else 'there'},", margin="0 0 14px")
+    body += (P("Kevin here. I built Seli, and you signed up a while back, so here's a quick hello.") if backfill
+             else P("Thanks for signing up. I'm Kevin, and I built Seli."))
+    body += P("Executives, directors and members of Congress have to report when they buy or sell their own company's stock. "
+              "Seli reads every one of those filings and tells you, in plain English, when it touches a stock you care about.")
 
-    # 2. What you're following
     if watch:
-        tbl = "".join(follow_row(s) for s in watch)
-        inner = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">{tbl}</table>'
-                 + ek.p(ek.a(ek.track("/watchlist", MEDIUM, "watchlist"), "Open your watchlist &rarr;"), 13, ek.ACCENT, "12px 0 0"))
+        body += P("Here's where the stocks you're watching stand:", margin="4px 0 4px")
+        body += f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">{"".join(follow_line(s) for s in watch)}</table>'
     else:
-        limit = "Add as many as you like." if u.get("pro") else "Free accounts can watch up to 3 stocks or people."
+        limit = "" if u.get("pro") else " (up to 3 on the free plan)"
         target = "/watchlist" if u.get("onboarded_at") else "/onboard"
-        inner = (P(f"Nothing yet. Add the tickers you own or keep an eye on and Seli will track insider filings on them. {limit}", margin="0 0 14px")
-                 + ek.button("Add tickers", ek.track(target, MEDIUM, "add_tickers")))
-    rows += block("Your watchlist", "What you're following", inner)
+        body += P(f"You're not watching anything yet. Add the stocks you own or are thinking about{limit}, and that's what Seli will keep an eye on.",
+                  margin="0 0 14px")
+        body += f'<div style="margin:0 0 20px;">{ek.button("Add your stocks", ek.track(target, MEDIUM, "add_tickers"))}</div>'
 
-    # 3. What happens next
-    nxt = "".join(P(ek.esc(l), margin="0 0 10px") for l in email_plan(u))
-    nxt += P(f"You can change any of this in {ek.a(settings, 'Account')}, or unsubscribe with the link at the bottom of any email.", margin="0")
-    rows += block("Next", "What happens next", nxt)
+    body += P(ek.esc(email_plan(u)) + f" You can change that any time in {ek.a(settings, 'your settings')}.")
+    reach = f"just reply or write to {ek.a('mailto:' + REPLY_TO, ek.esc(REPLY_TO))}" if REPLY_TO else "just reply to this email"
+    body += P(f"If something's confusing or broken, or there's a feature you want, {reach}. It comes straight to me.", margin="0 0 18px")
+    body += P("Kevin", margin="0", weight=600, color=ek.TEXT)
 
-    # 4. Support
-    reach = (f"reply to this email or write to {ek.a('mailto:' + REPLY_TO, ek.esc(REPLY_TO))}" if REPLY_TO
-             else "just reply to this email")
-    help_html = (P(f"Questions, something broken, or a feature you want? {reach[0].upper() + reach[1:]}. It comes straight to me and I read every one.", margin="0 0 16px")
-                 + P("Kevin", margin="0", weight=600, color=ek.TEXT))
-    rows += block("Support", "Need help?", help_html)
-
-    subject = "Welcome to Seli"
-    preheader = "What you're following, what to expect, and how to reach me."
+    rows = f'<tr><td class="px" style="padding:22px 28px 0;">{body}</td></tr>'
+    subject = "Welcome to Seli" if not watch else f"Welcome to Seli: where {', '.join(s['ticker'] for s in watch[:3])} stand"
+    preheader = "A quick hello, and what you'll hear from us." if not watch else "What insiders have done in the stocks you picked."
     html_doc = ek.shell(title=subject, preheader=preheader, label="Welcome", body_rows=rows,
                         footer_html=ek.footer(reason="You're getting this because you signed up for Seli.",
                                               clerk_user_id=u["clerk_user_id"]))
@@ -253,7 +214,7 @@ def main():
     cur.close()
 
     today = date.today()
-    statuses = ii.ticker_status(conn, sorted({t for u in by_id.values() for t in u["tickers"]}), window_days=90, today=today)
+    statuses = ii.ticker_status(conn, sorted({t for u in by_id.values() for t in u["tickers"]}), today - timedelta(days=90), today, today=today)
 
     sent = failed = 0
     for u in by_id.values():
@@ -265,6 +226,7 @@ def main():
                      from_name="Kevin at Seli", from_email=FROM_EMAIL, reply_to=REPLY_TO, kind="welcome")
         if ok:
             sent += 1
+            ek.log_sent(conn, u["clerk_user_id"], "welcome")
             if not ek.DRY_RUN:
                 c2 = conn.cursor()
                 c2.execute("UPDATE public.user_preferences SET welcome_sent_at = now() WHERE clerk_user_id = %s", (u["clerk_user_id"],))
