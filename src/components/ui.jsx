@@ -1,5 +1,6 @@
 // src/components/ui.jsx — small building blocks for the research pages.
 import React, { useEffect, useState } from 'react';
+import { useApi } from '../lib/api.js';
 
 // True below a width, kept in sync as the window resizes. Tables use it to
 // switch to stacked rows on phones instead of squeezing columns.
@@ -121,4 +122,39 @@ export function Icon({ name, size = 16, ...rest }) {
     case 'info': return <svg {...p}><circle cx="12" cy="12" r="9" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>;
     default: return null;
   }
+}
+
+
+// "Checked SEC filings 12 min ago": when the ingest last finished a complete
+// pass over today's filings (GET /public/freshness, from the ingest_runs
+// table). Hidden until there's a run to show. Long gaps are normal at night
+// and on weekends, when SEC isn't publishing, so past a few hours it gives
+// the time instead of a growing "N hours ago".
+export function freshText(iso, now = Date.now()) {
+  const at = new Date(iso).getTime();
+  if (!Number.isFinite(at)) return null;
+  const min = Math.max(0, Math.round((now - at) / 60000));
+  if (min < 2) return 'Checked SEC filings just now';
+  if (min < 60) return `Checked SEC filings ${min} min ago`;
+  if (min < 180) return `Checked SEC filings ${Math.round(min / 60)} hr ago`;
+  const et = d => new Date(d).toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+  const time = new Date(at).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+  const day = et(at) === et(now) ? 'today'
+    : et(at) === et(now - 864e5) ? 'yesterday'
+      : new Date(at).toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long' });
+  return `Last checked SEC filings ${day} at ${time} ET`;
+}
+
+export function Freshness({ className = '' }) {
+  const { data } = useApi('/public/freshness');
+  const [, tick] = useState(0);
+  useEffect(() => { const t = setInterval(() => tick(n => n + 1), 60000); return () => clearInterval(t); }, []);
+  const text = data?.checked_at ? freshText(data.checked_at) : null;
+  if (!text) return null;
+  const recent = Date.now() - new Date(data.checked_at).getTime() < 3 * 3600e3;
+  return (
+    <span className={`sx-fresh ${className}`} title={new Date(data.checked_at).toLocaleString()}>
+      <span className={`sx-fresh__dot${recent ? ' sx-fresh__dot--live' : ''}`} aria-hidden="true" />{text}
+    </span>
+  );
 }

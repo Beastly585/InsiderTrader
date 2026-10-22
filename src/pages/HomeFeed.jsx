@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link, stockPath } from '../lib/nav.jsx';
 import { money, congressRange, ago, plural } from '../lib/text.js';
-import { Card, Chip, Skeleton, ErrorNote, Icon } from '../components/ui.jsx';
+import { Card, Chip, Skeleton, ErrorNote, Icon, Freshness } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
 import { SearchBox } from '../components/Search.jsx';
 
@@ -29,6 +29,7 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
         <div className="sx-head__main">
           <h1 className="sx-head__title">{hello}</h1>
           <p className="sx-head__desc">What company insiders and members of Congress did with their own money.</p>
+          <Freshness />
         </div>
       </header>
 

@@ -226,13 +226,14 @@ class Transaction:
     pct_owned_change: Optional[float]=None;   direct_ownership: bool=True
     relationship: Optional[str]=None;  sector: Optional[str]=None
     footnotes: Optional[str]=None
+    planned: Optional[bool]=None   # 10b5-1 plan (open-market trades only); see mark_planned()
 
-    def to_tuple(self):
+    def to_tuple(self, columns=None):
         d = asdict(self)
         for k in ("shares","price_per_share","value",
                   "shares_owned_after","shares_owned_before","pct_owned_change"):
             if d[k] is not None: d[k] = round(d[k], 4)
-        return tuple(d[c] for c in COLUMNS)
+        return tuple(d[c] for c in (columns or COLUMNS))
 
 # ── EDGAR EFTS: list filings ───────────────────────────────────────────────────
 
@@ -333,6 +334,29 @@ def _efts_one_range(start_date: str, end_date: str, seen_ids: set[str]) -> tuple
 
 def _sanitize(text):
     return re.sub(r'&(?!amp;|lt;|gt;|apos;|quot;|#\d+;|#x[0-9a-fA-F]+;)', '&amp;', text)
+
+# ── 10b5-1 plans ───────────────────────────────────────────────────────────────
+# A trade made under a 10b5-1 plan was scheduled months earlier, so it says
+# little about what the insider thinks of the stock today. Filings say so in
+# a footnote ("effected pursuant to a Rule 10b5-1 trading plan adopted on
+# ...") and, on forms filed since April 2023, a checkbox (aff10b5One). Same
+# footnote rule as public.mark_planned_trades() in
+# db/migrations/2026-10-22_ingest_runs_and_planned.sql, which marks old rows.
+_PLAN_RE     = re.compile(r"10b5-?1", re.I)
+_NOT_PLAN_RE = re.compile(r"\bnot\b[^.;]{0,40}10b5-?1", re.I)
+
+def plan_mentioned(text: Optional[str]) -> bool:
+    return bool(text and _PLAN_RE.search(text) and not _NOT_PLAN_RE.search(text))
+
+def mark_planned(txns: list, checkbox: bool, remarks: Optional[str]) -> None:
+    """Open-market buys/sales only. If any of them has a 10b5-1 footnote, those
+    are the planned ones (a filing can mix plan and non-plan trades). If none
+    do but the checkbox is ticked or the remarks mention a plan, they all are."""
+    om = [t for t in txns if t.transaction_code in ("P", "S")]
+    by_note = {id(t) for t in om if plan_mentioned(t.footnotes)}
+    whole = checkbox or plan_mentioned(remarks)
+    for t in om:
+        t.planned = (id(t) in by_note) if by_note else whole
 
 def parse_form4_xml(xml_text, accession, cik, fallback_filing_date=None, fallback_period=None, fallback_company=None):
     # fallback_filing_date: the real EDGAR file acceptance date from EFTS metadata
@@ -487,6 +511,8 @@ def parse_form4_xml(xml_text, accession, cik, fallback_filing_date=None, fallbac
                 shares_owned_after=oa,shares_owned_before=sb,pct_owned_change=pct,
                 direct_ownership=(di or "D")=="D",footnotes=fn))
 
+    checkbox = (xtxt(root, "aff10b5One") or "").strip().lower() in ("1", "true")
+    mark_planned(txns, checkbox, xtxt(root, "remarks"))
     return txns
 
 # ── Worker ─────────────────────────────────────────────────────────────────────
@@ -515,9 +541,10 @@ def process_one(meta: dict) -> tuple[str, list[Transaction]]:
 
 # ── DB ──────────────────────────────────────────────────────────────────────────
 
-UPSERT_SQL = f"""
-INSERT INTO public.filings ({", ".join(COLUMNS)})
-VALUES ({", ".join(["%s"]*len(COLUMNS))})
+def build_upsert(columns: list[str]) -> str:
+    return f"""
+INSERT INTO public.filings ({", ".join(columns)})
+VALUES ({", ".join(["%s"]*len(columns))})
 ON CONFLICT (accession_number, COALESCE(transaction_date, '1900-01-01'::date), COALESCE(shares, -1), transaction_code,
              COALESCE(is_derivative, false), COALESCE(price_per_share, -1), COALESCE(shares_owned_after, -1))
 DO UPDATE SET
@@ -533,8 +560,12 @@ DO UPDATE SET
     shares_owned_before=EXCLUDED.shares_owned_before,
     pct_owned_change=EXCLUDED.pct_owned_change,
     sector=EXCLUDED.sector, relationship=EXCLUDED.relationship,
-    footnotes=EXCLUDED.footnotes, updated_at=now()
+    footnotes=EXCLUDED.footnotes,{" planned=EXCLUDED.planned," if "planned" in columns else ""} updated_at=now()
 """
+
+# filings.planned comes from db/migrations/2026-10-22_ingest_runs_and_planned.sql.
+# Until that has been run, the column isn't written (see db_columns()).
+UPSERT_SQL = build_upsert(COLUMNS)
 # The key is filings_dedup_v2_idx (db/migrations/2026-10-09_dedup_key_v2.sql).
 # is_derivative, price and shares-owned-after keep split lots of one sale
 # (same day, same share count) and the two halves of an option exercise from
@@ -556,6 +587,55 @@ def get_connection():
     except ImportError:
         import psycopg2; return psycopg2.connect(DATABASE_URL)
 
+# What run() found in the database: columns to write, and whether the
+# ingest_runs table exists. Defaults are the pre-2026-10-22 schema.
+WRITE_COLUMNS = list(COLUMNS)
+HAS_RUN_LOG = False
+
+def check_schema() -> None:
+    """Write filings.planned and log the run only once
+    db/migrations/2026-10-22_ingest_runs_and_planned.sql has been run, so
+    deploying this before the migration can't break the ingest."""
+    global WRITE_COLUMNS, UPSERT_SQL, HAS_RUN_LOG
+    try:
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("""SELECT table_name, column_name FROM information_schema.columns
+                            WHERE table_schema = 'public'
+                              AND ((table_name = 'filings' AND column_name = 'planned') OR table_name = 'ingest_runs')""")
+            found = cur.fetchall()
+        finally:
+            conn.close()
+    except Exception as e:
+        log.warning(f"  Schema check failed ({e}); writing the basic columns only"); return
+    if any(t == 'filings' for t, _ in found):
+        WRITE_COLUMNS = list(COLUMNS) + ["planned"]
+        UPSERT_SQL = build_upsert(WRITE_COLUMNS)
+    else:
+        log.info("  filings.planned not there yet (db/migrations/2026-10-22_ingest_runs_and_planned.sql); skipping it")
+    HAS_RUN_LOG = any(t == 'ingest_runs' for t, _ in found)
+
+def record_run(stats: dict, problems: list[str]) -> None:
+    """One row in ingest_runs per finished run. Feeds the site's "checked SEC
+    N min ago" line and the weekly numbers email. Never fails the run."""
+    if DRY_RUN or not DATABASE_URL or not HAS_RUN_LOG or not stats:
+        return
+    try:
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO public.ingest_runs
+                             (start_date, end_date, filings_found, new_filings, rows_written, ok, problems)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                        (stats.get("start"), stats.get("end"), stats.get("found", 0), stats.get("new", 0),
+                         stats.get("written", 0), not problems, "; ".join(problems) or None))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        log.warning(f"  Couldn't log the run to ingest_runs: {e}")
+
 def upsert_to_neon(transactions: list[Transaction], batch_size: int = 500) -> int:
     conn = get_connection()
     written = 0
@@ -563,7 +643,7 @@ def upsert_to_neon(transactions: list[Transaction], batch_size: int = 500) -> in
         cur = conn.cursor()
         for i in range(0, len(transactions), batch_size):
             batch = transactions[i:i+batch_size]
-            cur.executemany(UPSERT_SQL, [t.to_tuple() for t in batch])
+            cur.executemany(UPSERT_SQL, [t.to_tuple(WRITE_COLUMNS) for t in batch])
             written += len(batch)
         # One commit for the whole chunk, so a filing's rows are saved together
         # or not at all (run() saves in chunks, so this stays small).
@@ -589,11 +669,15 @@ def run() -> None:
     log.info(f"  Range: {start_date} → {end_date}  Workers: {MAX_WORKERS}  Dry: {DRY_RUN}")
     log.info("═"*62)
 
+    if not DRY_RUN and DATABASE_URL:
+        check_schema()
+
     log.info("Step 1/3  Querying EDGAR EFTS…")
     meta_list, problems = edgar_get_accessions(start_date, end_date)
     log.info(f"          {len(meta_list)} filings")
+    stats = {"start": start_date, "end": end_date, "found": len(meta_list), "new": len(meta_list), "written": 0}
     if not meta_list:
-        log.info("Nothing to do."); finish(problems); return
+        log.info("Nothing to do."); finish(problems, stats); return
 
     # ── Dedup: skip filings already in Neon ──────────────────────────────
     # SEC Form 4 XML is immutable once published — re-fetching a filing we
@@ -618,6 +702,7 @@ def run() -> None:
             conn.close()
             before = len(meta_list)
             meta_list = [m for m in meta_list if m["accession"] not in existing]
+            stats["new"] = len(meta_list)
             skipped = before - len(meta_list)
             if skipped:
                 log.info(f"          {skipped} already in DB, {len(meta_list)} new to fetch")
@@ -625,7 +710,7 @@ def run() -> None:
             log.warning(f"  Dedup check failed ({e}) — fetching all {len(meta_list)}")
 
     if not meta_list:
-        log.info("All filings already ingested."); finish(problems); return
+        log.info("All filings already ingested."); finish(problems, stats); return
 
     # Fetch and save in chunks. A backfill over months is tens of thousands of
     # filings: saving as it goes means a crash or Ctrl-C loses at most one
@@ -675,14 +760,16 @@ def run() -> None:
         # Cover the whole range on a backfill, not just the last 10 days.
         flag_suspect_trades(min(start_date, (date.today() - timedelta(days=10)).isoformat()))
 
-    finish(problems)
+    stats["written"] = written
+    finish(problems, stats)
 
-def finish(problems: list[str]) -> None:
+def finish(problems: list[str], stats: Optional[dict] = None) -> None:
     """Everything that could be fetched has been written by now. If the run
     was incomplete, say so loudly. On GitHub this sets an output that a last
     step turns into a red run (so the alert and price steps still run first);
     anywhere else it exits 1."""
     log.info("═"*62)
+    record_run(stats, problems)
     if not problems:
         log.info("Done."); return
     for p in problems:

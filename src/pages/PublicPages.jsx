@@ -8,7 +8,7 @@ import { SignInButton, useClerk } from '@clerk/clerk-react';
 import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink } from '../lib/nav.jsx';
 import { plural, shortDate, money, congressRange, PAGE_TITLES } from '../lib/text.js';
-import { Card, Skeleton, ErrorNote, Icon, useNarrow } from '../components/ui.jsx';
+import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness } from '../components/ui.jsx';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
 import { TradeTable } from './StockPage.jsx';
@@ -221,6 +221,7 @@ export function InsiderBuyingPage({ watchlist }) {
         <div className="sx-head__main">
           <h1 className="sx-head__title">Insider buying this week</h1>
           <p className="sx-head__desc">Executives and directors buying their own company's stock with their own money, from SEC Form 4 filings in the last 7 days. Grants and option exercises are left out.</p>
+          <Freshness />
         </div>
       </header>
       {error && !d && <ErrorNote message={error} onRetry={reload} />}
@@ -333,6 +334,7 @@ export function PublicHome() {
           <button className="sx-btn sx-btn--accent" onClick={signUp}>Get started free</button>
           <span className="sx-muted sx-small">{narrow ? 'Free. No card needed.' : 'No card needed. Data from SEC EDGAR and congressional disclosures.'}</span>
         </div>
+        <Freshness />
       </section>
 
       <div className="sx-feed-cols">

@@ -175,12 +175,30 @@ function statusOut(s) {
 }
 
 // ── Stock page ───────────────────────────────────────────────────────────────
+// Was this open-market trade made under a 10b5-1 plan (set up months ahead)?
+// filings.planned arrives with db/migrations/2026-10-22_ingest_runs_and_planned.sql.
+// Until that's been run, pages fall back to is_routine as before, so
+// deploying this first can't break them. Checked once per Worker instance
+// (a "not there yet" answer is re-checked after 10 minutes).
+let _plannedSql = null, _plannedAt = 0;
+async function plannedSql(ctx) {
+  if (_plannedSql && (_plannedSql !== 'f.is_routine' || Date.now() - _plannedAt < 600000)) return _plannedSql;
+  try {
+    const r = await ctx.db(`SELECT 1 FROM information_schema.columns
+                             WHERE table_schema = 'public' AND table_name = 'filings' AND column_name = 'planned'`);
+    _plannedSql = r.length ? 'COALESCE(f.planned, f.is_routine)' : 'f.is_routine';
+  } catch { _plannedSql = 'f.is_routine'; }
+  _plannedAt = Date.now();
+  return _plannedSql;
+}
+
 async function stock(ctx, ticker) {
   const { sqlVal } = ctx.deps;
   if (!TICKER_RE.test(ticker)) return { __status: 400, error: 'That doesn\'t look like a ticker' };
   const T = sqlVal(ticker);
   const date = 'COALESCE(f.transaction_date, f.filing_date)';
   const in1y = `${date} >= CURRENT_DATE - ${FREE_DAYS}`;
+  const PLANNED = await plannedSql(ctx);
   // Everything runs in parallel, including the plan check. Queries fetch the
   // Pro-sized window and the free window is applied afterwards in JS.
   const [pro, meta, trades, older, people, prices, status] = await Promise.all([
@@ -189,7 +207,7 @@ async function stock(ctx, ticker) {
     ctx.db(`SELECT company_name, sector, cik_issuer FROM public.filings f WHERE ticker = ${T} ORDER BY (COALESCE(f.transaction_code, '') LIKE 'CONGRESS%'), filing_date DESC LIMIT 1`),
     ctx.db(`
       SELECT f.accession_number, f.cik_issuer, f.insider_name, f.insider_title, f.relationship, f.transaction_code,
-             f.transaction_type, f.is_open_market, f.is_routine, f.shares::float AS shares,
+             f.transaction_type, f.is_open_market, ${PLANNED} AS is_routine, f.shares::float AS shares,
              f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
              f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date,
              f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class
@@ -284,11 +302,12 @@ async function insider(ctx, raw) {
   if (!raw.trim()) return { __status: 400, error: 'Missing name' };
   const N = sqlVal(raw);
   const date = 'COALESCE(f.transaction_date, f.filing_date)';
+  const PLANNED = await plannedSql(ctx);
   // The plan check runs alongside the main query instead of after it: one
   // fewer database round trip before the page can render.
   const [rows, pro] = await Promise.all([ctx.db(`
     SELECT f.accession_number, f.cik_issuer, f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship,
-           f.transaction_code, f.transaction_type, f.is_open_market, f.is_routine, f.shares::float AS shares,
+           f.transaction_code, f.transaction_type, f.is_open_market, ${PLANNED} AS is_routine, f.shares::float AS shares,
            f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
            f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date,
            f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class
@@ -413,10 +432,11 @@ async function loadWatchlist(ctx) {
 async function peopleActivity(ctx, names, days) {
   const { sqlVal } = ctx.deps;
   if (!names.length) return [];
+  const PLANNED = await plannedSql(ctx);
   const [rows, last] = await Promise.all([ctx.db(`
     SELECT DISTINCT ON (f.insider_name, f.accession_number, f.ticker, f.transaction_type)
            f.accession_number, f.cik_issuer, f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship,
-           f.transaction_code, f.transaction_type, f.is_open_market, f.is_routine, f.shares::float AS shares,
+           f.transaction_code, f.transaction_type, f.is_open_market, ${PLANNED} AS is_routine, f.shares::float AS shares,
            f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
            f.shares_owned_after::float AS owned_after, f.filing_date, COALESCE(f.transaction_date, f.filing_date) AS trade_date
       FROM public.filings f
@@ -468,6 +488,7 @@ async function marketFeed(ctx) {
   if (feedCache.data && Date.now() - feedCache.at < FEED_TTL_MS) return feedCache.data;
   if (feedCache.promise) return feedCache.promise;
   feedCache.promise = (async () => {
+    const PLANNED = await plannedSql(ctx);
     const [buys, sells, pulseRows] = await Promise.all([
       ctx.db(`
         SELECT f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship, f.transaction_code,
@@ -491,14 +512,16 @@ async function marketFeed(ctx) {
                MODE() WITHIN GROUP (ORDER BY f.relationship) AS relationship,
                MAX(f.transaction_code) AS transaction_code,
                SUM(f.value)::float AS value, COUNT(*)::int AS n, MAX(COALESCE(f.transaction_date, f.filing_date)) AS trade_date,
-               BOOL_AND(f.is_routine) AS planned
+               BOOL_AND(${PLANNED}) AS planned
           FROM public.filings f
          WHERE f.is_open_market = true AND f.transaction_type = 'sell' AND f.ticker IS NOT NULL
            AND f.filing_date > CURRENT_DATE - 7 AND f.filing_date <= CURRENT_DATE
            AND COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%'
            AND f.value < 50000000000
          GROUP BY f.ticker, f.insider_name
-         ORDER BY SUM(f.value) DESC NULLS LAST LIMIT 6`),
+         -- Unplanned sales first: a sale set up months ahead in a 10b5-1 plan
+         -- says less than an insider deciding to sell now.
+         ORDER BY COALESCE(BOOL_AND(${PLANNED}), false), SUM(f.value) DESC NULLS LAST LIMIT 6`),
       ctx.db(`
         SELECT ((CURRENT_DATE - f.filing_date) / 7)::int AS bucket, f.transaction_type,
                COUNT(DISTINCT f.accession_number)::int AS n, COALESCE(SUM(f.value), 0)::float AS v

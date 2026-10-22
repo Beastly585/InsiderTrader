@@ -816,3 +816,10 @@ body.drawer-open .sx-nav { z-index: 94; }
   .sx-stocks__filter { flex-basis: 100%; }
   .sx-stocks__grid { grid-template-columns: 1fr; }
 }
+
+/* "Checked SEC filings N min ago" (Freshness in components/ui.jsx) */
+.sx-fresh { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.sx-fresh__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; }
+.sx-fresh__dot--live { background: var(--green-600); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-600) 18%, transparent); }
+.sx-head .sx-fresh { margin-top: 8px; }
+.sx-hero .sx-fresh { margin-top: 14px; }

@@ -202,6 +202,8 @@ def build_email(conn, clerk_user_id: str, matches: list[dict]) -> tuple[str, str
     if n == 1:
         verb = "bought" if first["transaction_type"] == "buy" else "sold"
         subject = f"{first['ticker']}: {who0} {verb} {ek.amount(first['value'], is_congress(first))}"
+        if first.get("planned") is True and not is_congress(first):
+            subject += " (planned)"
     else:
         tickers = list(dict.fromkeys(m["ticker"] for m in matches))
         subject = f"{n} new insider trades: " + ", ".join(tickers[:3]) + (f" +{len(tickers) - 3}" if len(tickers) > 3 else "")
@@ -227,17 +229,22 @@ def build_email(conn, clerk_user_id: str, matches: list[dict]) -> tuple[str, str
         if cg:
             bits.append("Congress reports a range, not an exact amount")
         context = "" if cg else get_insider_context(conn, m["insider_name"], m["ticker"], m["trade_date"])
+        planned = (not cg and m.get("planned") is True)
+        planned_note = ("Made under a trading plan the insider set up in advance (a 10b5-1 plan), "
+                        "so it says less about how they see the stock today.") if planned else ""
         reasons = "".join(ek.chip(REASON_LABEL[r], "accent") for r in m["reasons"])
         sec = sec_filing_url(m) if not cg else None
         inner = (
             '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
             f'<td style="vertical-align:top;">{ek.ticker_tag(m["ticker"], stock_href)}'
             f'<span style="font-family:{ek.FONT};font-size:14px;font-weight:700;color:{ek.TEXT};margin-left:8px;">{ek.esc(company)}</span></td>'
-            f'<td style="vertical-align:top;text-align:right;white-space:nowrap;">{ek.chip(("Buy " if buy else "Sell ") + amount, "buy" if buy else "sell")}</td>'
+            f'<td style="vertical-align:top;text-align:right;white-space:nowrap;">{ek.chip(("Buy " if buy else "Sell ") + amount, "buy" if buy else "sell")}'
+            + (f'<br>{ek.chip("Planned", "neutral")}' if planned else '') + '</td>'
             '</tr></table>'
             + ek.p(f'{ek.a(person_href, ek.esc(who), ek.TEXT, 700)} <span style="color:{ek.MUTED};">({ek.esc(role)})</span> {ek.esc(what)}.', 14, ek.TEXT_2, "10px 0 4px")
             + ek.p(ek.esc(" · ".join(bits)), 12, ek.MUTED, "0 0 6px")
             + (ek.p(ek.esc(context) + ".", 13, ek.TEXT_2, "0 0 8px") if context else "")
+            + (ek.p(ek.esc(planned_note), 13, ek.MUTED, "0 0 8px") if planned_note else "")
             + f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td>{reasons}</td>'
             + (f'<td style="text-align:right;white-space:nowrap;vertical-align:top;font-size:12px;line-height:1.4;">{ek.a(sec, "View on SEC &rarr;", ek.MUTED, 600)}</td>' if sec else "")
             + '</tr></table>'
@@ -263,11 +270,16 @@ def main():
     conn = get_connection()
     cur = conn.cursor()
 
+    # filings.planned (10b5-1) comes from db/migrations/2026-10-22_ingest_runs_and_planned.sql;
+    # until that's run, every trade reads as not planned.
+    cur.execute("""SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'filings' AND column_name = 'planned'""")
+    planned_sql = "f.planned" if cur.fetchone() else "NULL::boolean"
     cur.execute("""
         SELECT f.accession_number, f.ticker, f.company_name, f.insider_name, f.insider_title,
                f.transaction_type, f.transaction_code, f.value, f.is_open_market,
                f.shares, f.price_per_share, f.cik_issuer, f.filing_date,
-               f.pct_owned_change::float AS pct,
+               f.pct_owned_change::float AS pct, /*PLANNED*/ AS planned,
                COALESCE(f.transaction_date, f.filing_date) AS trade_date,
                (SELECT p.transaction_type FROM public.filings p
                 WHERE p.insider_name = f.insider_name AND p.ticker = f.ticker
@@ -298,7 +310,7 @@ def main():
           AND COALESCE(f.filing_date, f.transaction_date) >= CURRENT_DATE - INTERVAL '5 days'
         ORDER BY COALESCE(f.filing_date, f.transaction_date), COALESCE(f.transaction_date, f.filing_date)
         LIMIT %s
-    """, (BATCH_LIMIT,))
+    """.replace("/*PLANNED*/", planned_sql), (BATCH_LIMIT,))
     cols = [d.name for d in cur.description]
     new_filings = [dict(zip(cols, row)) for row in cur.fetchall()]
 

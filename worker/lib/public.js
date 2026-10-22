@@ -9,6 +9,7 @@
 //   GET /public/search?q=nvda            search box for signed-out visitors
 //   GET /public/leaderboard?source=      top 10 insiders, last 12 months
 //   GET /public/stocks                   A to Z directory of stocks with recent Form 4s
+//   GET /public/freshness                when the ingest last checked SEC (the "checked N min ago" line)
 //   GET /public/sitemap.xml              sitemap index
 //   GET /public/sitemap/{static,stocks,congress,insiders-N}.xml
 //
@@ -77,6 +78,7 @@ export async function handlePublic(request, env, origin, url, deps) {
     }
     if (parts[1] === 'congress' && !parts[2]) return json(await cached('congress', TTL.hub, () => congressHub(ctx)));
     if (parts[1] === 'stocks' && !parts[2]) return json(await cached('stocks', TTL.sitemap, () => stocksDirectory(ctx)), 200, 3600);
+    if (parts[1] === 'freshness' && !parts[2]) return json(await cached('freshness', 60 * 1000, () => freshness(ctx)), 200, 60);
     if (parts[1] === 'insider-buying' && !parts[2]) {
       const d = await marketFeed(ctx); // has its own 10-minute cache
       return json({ ...d, today: new Date().toISOString().slice(0, 10) }, 200, 300);
@@ -94,6 +96,22 @@ export async function handlePublic(request, env, origin, url, deps) {
   } catch (e) {
     console.error('[Worker] public route failed:', url.pathname, e.message);
     return json({ error: 'Something went wrong loading this. Try again in a moment.' }, 500, 0);
+  }
+}
+
+// ── Freshness ────────────────────────────────────────────────────────────────
+// The last complete ingest run that looked at today's filings (written by
+// db/fetch_filings_neon.py into ingest_runs). A manual backfill of old dates
+// doesn't count. null until db/migrations/2026-10-22_ingest_runs_and_planned.sql
+// has been run, and the site simply hides the line.
+async function freshness(ctx) {
+  try {
+    const [r] = await ctx.db(`
+      SELECT max(finished_at) AS checked_at FROM public.ingest_runs
+       WHERE ok AND end_date >= CURRENT_DATE - 1`);
+    return { checked_at: r?.checked_at ? new Date(r.checked_at).toISOString() : null };
+  } catch {
+    return { checked_at: null };
   }
 }
 

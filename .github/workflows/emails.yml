@@ -106,6 +106,14 @@ jobs:
         if: ${{ !cancelled() && contains(steps.pick.outputs.jobs, 'weekly') }}
         run: python send_digests.py
         env: { DIGEST_TYPE: weekly }
+      # Your own Sunday numbers email (signups, Pro, ingest health). Goes to
+      # the OPS_EMAIL secret, or WELCOME_REPLY_TO if that isn't set.
+      - name: Weekly numbers (to Kevin)
+        if: ${{ !cancelled() && contains(steps.pick.outputs.jobs, 'weekly') }}
+        continue-on-error: true
+        run: python send_weekly_metrics.py
+        env:
+          OPS_EMAIL: ${{ secrets.OPS_EMAIL || secrets.WELCOME_REPLY_TO }}
       - name: Lifecycle emails
         if: ${{ !cancelled() && steps.pick.outputs.jobs != '' }}
         continue-on-error: true

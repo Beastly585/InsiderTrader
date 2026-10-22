@@ -1,338 +1,105 @@
 #!/usr/bin/env python3
 """
 db/backfill_prices.py
-─────────────────────────────────────────────────────────────────────────────
-Backfills daily closing prices for all tickers in public.filings into a
-lean prices_history table: (ticker, date, close) — ~30 MB for 2 years.
+Fills prices_history with a daily close for every tracked ticker, for every
+trading day in the last N days. One-time job (safe to stop and re-run).
 
-This enables accurate 30/60/90-day return calculations per trade, which
-powers insider trader profiles and hit-rate scoring.
+Why: the nightly job only saves the latest close, so most stocks only have
+prices for the days someone happened to trade them, plus the last couple of
+weeks. Stock-page charts look sparse, and 1Y / 3Y show the same short line as
+3M because there's no older data to draw.
 
-Polygon free tier: 5 req/min — one call per ticker fetches ALL dates at once.
-Runtime: ~2 min per 10 tickers = ~100 min for 500 tickers. Run once.
-Subsequent runs only fetch missing dates (incremental).
+Uses Polygon's grouped-daily endpoint: one request = the whole market for one
+day. Free tier: 5 requests/minute and about 2 years of history, so 2 years is
+~500 trading days, ~1.7 hours. Days that are already filled in are skipped,
+so you can stop it (Ctrl-C) and start it again any time.
 
-Usage:
-    python backfill_prices.py                  # all tickers, from earliest trade
-    python backfill_prices.py --from 2024-01-01  # override start date
-    python backfill_prices.py --tickers AAPL,NVDA,MSFT  # specific tickers
-    python backfill_prices.py --dry-run        # show what would be fetched
-
-Environment (db/.env):
-    DATABASE_URL       postgresql://...
-    POLYGON_API_KEY    your_key_here
-─────────────────────────────────────────────────────────────────────────────
+    cd db
+    python backfill_prices.py              # last 730 days (free-tier limit)
+    python backfill_prices.py --days 90    # quick test
 """
-from __future__ import annotations
-
-import os, time, sys, logging, argparse
+import argparse, os, sys, time
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Optional
 
 import requests
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
-
-logging.basicConfig(level=logging.INFO,
-    format="%(asctime)s  %(levelname)-7s  %(message)s", datefmt="%H:%M:%S")
-log = logging.getLogger(__name__)
-
 DATABASE_URL    = os.environ.get("DATABASE_URL", "")
 POLYGON_API_KEY = os.environ.get("POLYGON_API_KEY", "")
-SLEEP           = 12.5   # 5 req/min free tier — 1 req per 12.5s to be safe
+SLEEP           = float(os.environ.get("POLYGON_SLEEP", "12.5"))  # 5/min on the free tier
 
-# ── DB ─────────────────────────────────────────────────────────────────────────
+ap = argparse.ArgumentParser()
+ap.add_argument("--days", type=int, default=730)
+args = ap.parse_args()
 
-def get_conn():
+if not DATABASE_URL or not POLYGON_API_KEY:
+    sys.exit("DATABASE_URL and POLYGON_API_KEY are required (db/.env).")
+
+try:
+    import psycopg
+    conn = psycopg.connect(DATABASE_URL)
+except ImportError:
+    import psycopg2
+    conn = psycopg2.connect(DATABASE_URL)
+
+with conn.cursor() as cur:
     try:
-        import psycopg; return psycopg.connect(DATABASE_URL)
-    except ImportError:
-        import psycopg2; return psycopg2.connect(DATABASE_URL)
+        cur.execute("SELECT key FROM public.search_entities WHERE kind = 'stock'")
+        tickers = {r[0] for r in cur.fetchall()}
+    except Exception:
+        conn.rollback()
+        cur.execute("SELECT DISTINCT ticker FROM public.filings WHERE ticker IS NOT NULL AND ticker <> ''")
+        tickers = {r[0] for r in cur.fetchall()}
+    # Days that already have most tickers filled in get skipped.
+    cur.execute("""SELECT date, COUNT(*) FROM public.prices_history
+                    WHERE date >= CURRENT_DATE - %s GROUP BY date""", (args.days,))
+    have = {d: n for d, n in cur.fetchall()}
+print(f"Tracking {len(tickers):,} tickers")
 
-def ensure_table():
-    """
-    Create prices_history if it doesn't exist.
-    Separate from public.prices (current prices) — this stores daily history.
-    """
-    conn = get_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS public.prices_history (
-                    ticker  text    NOT NULL,
-                    date    date    NOT NULL,
-                    close   numeric(16,4) NOT NULL,
-                    PRIMARY KEY (ticker, date)
-                );
-                CREATE INDEX IF NOT EXISTS idx_ph_ticker_date
-                    ON public.prices_history (ticker, date);
-            """)
-        conn.commit()
-        log.info("prices_history table ready")
-    finally:
-        conn.close()
+full = max(50, int(len(tickers) * 0.5))
+days = [date.today() - timedelta(days=k) for k in range(1, args.days + 1)]
+todo = [d for d in days if d.weekday() < 5 and have.get(d, 0) < full]
+print(f"{len(todo)} weekdays to fetch (of {sum(1 for d in days if d.weekday() < 5)}); "
+      f"about {len(todo) * SLEEP / 60:.0f} minutes at {60 / SLEEP:.0f} requests/minute\n")
 
-def get_ticker_coverage() -> dict[str, Optional[date]]:
-    """
-    Returns {ticker: max_date_in_prices_history} for all tickers that
-    already have some history. Used to skip re-fetching covered dates.
-    """
-    conn = get_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT ticker, MAX(date)
-                FROM public.prices_history
-                GROUP BY ticker
-            """)
-            return {r[0]: r[1] for r in cur.fetchall()}
-    finally:
-        conn.close()
-
-def get_tickers_and_starts() -> list[tuple[str, date]]:
-    """
-    For each ticker in filings, find the earliest open-market buy date.
-    That's the furthest back we need price history for return calculations.
-    Returns [(ticker, earliest_transaction_date), ...] sorted by ticker.
-    """
-    conn = get_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    ticker,
-                    MIN(transaction_date)::date AS earliest
-                FROM public.filings
-                WHERE ticker IS NOT NULL
-                  AND ticker != ''
-                  AND is_open_market = true
-                  AND transaction_date IS NOT NULL
-                  AND transaction_date >= '2000-01-01'
-                GROUP BY ticker
-                ORDER BY ticker
-            """)
-            return [(r[0], r[1]) for r in cur.fetchall()]
-    finally:
-        conn.close()
-
-def write_bars(ticker: str, bars: list[tuple[date, float]]) -> int:
-    """
-    Bulk upsert (ticker, date, close) rows. Fresh connection per ticker
-    to avoid SSL timeout on long runs.
-    """
-    if not bars:
-        return 0
-    conn = get_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.executemany(
-                """
-                INSERT INTO public.prices_history (ticker, date, close)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (ticker, date) DO UPDATE
-                    SET close = EXCLUDED.close
-                """,
-                [(ticker, d, c) for d, c in bars]
-            )
-        conn.commit()
-        return len(bars)
-    finally:
-        conn.close()
-
-# ── Polygon.io ─────────────────────────────────────────────────────────────────
-
-def fetch_daily_bars(ticker: str, from_date: date, to_date: date,
-                     retries: int = 4) -> list[tuple[date, float]]:
-    """
-    Fetch all daily closing prices for a ticker between from_date and to_date.
-    One API call returns the full range — very efficient vs per-day calls.
-
-    Polygon endpoint: GET /v2/aggs/ticker/{ticker}/range/1/day/{from}/{to}
-    Free tier supports this endpoint with full history.
-    Returns [(date, close), ...] sorted ascending.
-    """
-    url = (
-        f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/day"
-        f"/{from_date.isoformat()}/{to_date.isoformat()}"
-    )
-    params = {
-        "adjusted": "true",
-        "sort":     "asc",
-        "limit":    "50000",   # max bars per call — covers 200 years at daily
-        "apiKey":   POLYGON_API_KEY,
-    }
-
-    for attempt in range(retries):
-        time.sleep(SLEEP)
+written = 0
+for n, d in enumerate(todo, 1):
+    while True:
         try:
-            r = requests.get(url, params=params, timeout=30)
-        except Exception as e:
-            log.debug(f"{ticker}: request error — {e}")
-            time.sleep(10); continue
-
+            r = requests.get(f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{d.isoformat()}",
+                             params={"apiKey": POLYGON_API_KEY, "adjusted": "true"}, timeout=30)
+        except requests.exceptions.RequestException as e:
+            print(f"  {d}: network error ({e}), retrying in 30s"); time.sleep(30); continue
         if r.status_code == 429:
-            wait = 65 * (attempt + 1)
-            log.warning(f"{ticker}: rate limited — waiting {wait}s")
-            time.sleep(wait); continue
-        if r.status_code == 403:
-            log.error("Polygon API key invalid")
-            return []
-        if r.status_code == 404:
-            log.debug(f"{ticker}: not found on Polygon")
-            return []
-        if not r.ok:
-            log.debug(f"{ticker}: HTTP {r.status_code}")
-            return []
+            print(f"  {d}: rate limited, waiting 60s"); time.sleep(60); continue
+        break
 
-        try:
-            data = r.json()
-        except Exception:
-            log.debug(f"{ticker}: bad JSON response")
-            return []
+    if r.status_code in (401, 403):
+        print(f"\n{d}: HTTP {r.status_code}. Your Polygon plan doesn't reach this far back. "
+              f"Stopping here; everything newer is saved.")
+        break
+    if not r.ok:
+        print(f"  {d}: HTTP {r.status_code}, skipping"); time.sleep(SLEEP); continue
 
-        results = data.get("results", [])
-        if not results:
-            # Polygon returns empty results for tickers with no data in range
-            return []
+    bars = r.json().get("results") or []
+    rows_t, rows_c = [], []
+    for b in bars:
+        t, c = b.get("T"), b.get("c")
+        if t in tickers and c:
+            rows_t.append(t); rows_c.append(round(float(c), 4))
+    if rows_t:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO public.prices_history (ticker, date, close)
+                SELECT t, %s::date, c FROM unnest(%s::text[], %s::numeric[]) AS x(t, c)
+                ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
+            """, (d, rows_t, rows_c))
+        conn.commit()
+        written += len(rows_t)
+    print(f"  [{n}/{len(todo)}] {d}: {len(rows_t):,} closes{'' if bars else ' (market closed)'}")
+    time.sleep(SLEEP)
 
-        bars = []
-        for bar in results:
-            ts = bar.get("t")   # Unix ms timestamp
-            c  = bar.get("c")   # closing price
-            if ts is None or c is None:
-                continue
-            bar_date = date.fromtimestamp(ts / 1000)
-            bars.append((bar_date, round(float(c), 4)))
-
-        return bars
-
-    return []
-
-# ── Main ───────────────────────────────────────────────────────────────────────
-
-def main():
-    ap = argparse.ArgumentParser(description="Backfill daily price history from Polygon")
-    ap.add_argument("--from",     dest="date_from", type=str,
-                    help="Override start date (YYYY-MM-DD). Default: earliest trade per ticker.")
-    ap.add_argument("--tickers",  type=str,
-                    help="Comma-separated list of specific tickers, e.g. AAPL,NVDA")
-    ap.add_argument("--dry-run",  action="store_true",
-                    help="Print what would be fetched without hitting Polygon")
-    args = ap.parse_args()
-
-    if not DATABASE_URL:
-        log.error("DATABASE_URL not set in db/.env"); sys.exit(1)
-    if not POLYGON_API_KEY and not args.dry_run:
-        log.error("POLYGON_API_KEY not set in db/.env"); sys.exit(1)
-
-    today = date.today()
-
-    # Setup
-    ensure_table()
-
-    # Get coverage already in DB
-    coverage = get_ticker_coverage()
-    log.info(f"  {len(coverage)} tickers already have some price history")
-
-    # Get tickers + their earliest trade date
-    if args.tickers:
-        ticker_list = [t.strip().upper() for t in args.tickers.split(",")]
-        # Use 2024-01-01 as default start for manual tickers
-        tickers_starts = [(t, date(2024, 1, 1)) for t in ticker_list]
-    else:
-        tickers_starts = get_tickers_and_starts()
-
-    log.info(f"  {len(tickers_starts)} tickers to process")
-
-    # Apply --from override
-    global_from = None
-    if args.date_from:
-        try:
-            global_from = date.fromisoformat(args.date_from)
-        except ValueError:
-            log.error(f"Invalid --from date: {args.date_from}"); sys.exit(1)
-
-    log.info("═"*60)
-    log.info(f"  Price History Backfill")
-    log.info(f"  Tickers: {len(tickers_starts)}")
-    log.info(f"  Dry run: {args.dry_run}")
-    log.info(f"  Rate:    1 req/{SLEEP}s (Polygon free tier)")
-    log.info(f"  ETA:     ~{int(len(tickers_starts)*SLEEP/60)} minutes")
-    log.info("═"*60)
-
-    total_rows = 0
-    skipped    = 0
-    errors     = 0
-
-    for i, (ticker, earliest_trade) in enumerate(tickers_starts, 1):
-
-        # Determine fetch range
-        fetch_from = global_from or earliest_trade
-
-        # If we already have history for this ticker, only fetch missing tail
-        if ticker in coverage:
-            existing_max = coverage[ticker]
-            if isinstance(existing_max, str):
-                existing_max = date.fromisoformat(str(existing_max))
-            if existing_max >= today - timedelta(days=1):
-                # Already up to date
-                skipped += 1
-                log.debug(f"  [{i}/{len(tickers_starts)}] {ticker}: up to date (max {existing_max})")
-                continue
-            # Only fetch the gap
-            fetch_from = existing_max + timedelta(days=1)
-
-        # Nothing to fetch if fetch_from is in the future
-        if fetch_from > today:
-            skipped += 1
-            continue
-
-        log.info(f"  [{i}/{len(tickers_starts)}] {ticker}: {fetch_from} → {today}")
-
-        if args.dry_run:
-            days_span = (today - fetch_from).days
-            log.info(f"    DRY RUN: would fetch ~{days_span} calendar days")
-            continue
-
-        bars = fetch_daily_bars(ticker, fetch_from, today)
-
-        if bars:
-            written = write_bars(ticker, bars)
-            total_rows += written
-            log.info(f"    ✓ {written} bars written (${bars[-1][1]:.2f} latest close)")
-        else:
-            log.debug(f"    {ticker}: no data returned")
-            errors += 1
-
-    log.info(f"\n{'═'*60}")
-    log.info(f"  Done.")
-    log.info(f"  Rows written: {total_rows:,}")
-    log.info(f"  Skipped (up to date): {skipped}")
-    log.info(f"  No data / errors:     {errors}")
-    log.info("═"*60)
-
-    if not args.dry_run and total_rows > 0:
-        # Show DB size
-        conn = get_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT
-                        COUNT(DISTINCT ticker)  AS tickers,
-                        COUNT(*)                AS total_rows,
-                        pg_size_pretty(pg_relation_size('public.prices_history')) AS table_size,
-                        MIN(date)               AS earliest,
-                        MAX(date)               AS latest
-                    FROM public.prices_history
-                """)
-                r = cur.fetchone()
-                log.info(f"\n  prices_history: {r[0]} tickers · {r[1]:,} rows · {r[2]}")
-                log.info(f"  Date range: {r[3]} → {r[4]}")
-        finally:
-            conn.close()
-
-
-if __name__ == "__main__":
-    main()
+conn.close()
+print(f"\nDone. {written:,} closes written. Charts pick them up right away.")
