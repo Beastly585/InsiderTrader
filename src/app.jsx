@@ -214,20 +214,19 @@ function UpgradeModal({ feature, pro, onClose }) {
   const [processing, setProcessing] = useState(false); // true for the gap between payment succeeding and the confirmation being ready
   const [progressText, setProgressText] = useState(null); // live row-count updates during a large export
 
-  // Direct checkout: skip the comparison modal and go straight to Stripe.
-  // Explicit: 'data_export_direct' and 'pro_direct' always go direct.
-  // Mobile: ANY Pro-intent feature skips the comparison modal on phones —
-  // there isn't enough screen space for Free vs Pro side-by-side, and the
-  // user already clicked a contextual "Go Pro" / "Upgrade" button so they
-  // know what they're buying. The comparison is still useful on desktop
-  // where it's a side-by-side layout and the trigger might be less specific.
-  const isMobileModal = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
-  const proIntentFeatures = ['default', 'watchlist', 'watchlist_ticker', 'watchlist_insider', 'notifications', 'portfolio', 'full_history'];
+  // Direct checkout: 'pro_direct' (an explicit "Go Pro" button) and
+  // 'data_export_direct' skip the pitch and open the card form. Everything
+  // else, on phones too, shows the short pitch first: those open when someone
+  // hits a limit (adding a 4th stock, a locked "More"), so a card form would
+  // be the first thing they see without knowing what Pro is. The pitch is a
+  // compact bottom sheet on phones.
   useEffect(() => {
     if (feature === 'data_export_direct') setCheckoutProduct('data_export');
     else if (feature === 'pro_direct') setCheckoutProduct('pro');
-    else if (isMobileModal && proIntentFeatures.includes(feature)) setCheckoutProduct('pro');
   }, [feature]);
+  // Start loading Stripe.js now, so the card form is ready by the time
+  // they press the button.
+  useEffect(() => { getStripePromise().catch(() => {}); }, []);
 
   // Outcome-oriented messages — tell the user what changes for them, not
   // what features they unlock.
@@ -236,10 +235,10 @@ function UpgradeModal({ feature, pro, onClose }) {
   const FEATURE_MESSAGES = {
     watchlist_ticker: "You're watching 3 things, the free limit. Pro watches as many stocks and people as you like, and emails you the same day they file.",
     watchlist_insider: "You're watching 3 things, the free limit. Pro watches as many stocks and people as you like, and emails you the same day they file.",
-    notifications: 'Set it and forget it. Pro sends you email digests and instant alerts — you only open Seli when something happens.',
+    notifications: 'Pro emails you the same day someone you watch files a trade, plus a daily brief. You only open Seli when something happens.',
     portfolio: "Link your brokerage and Seli watches every stock you own. You'll hear about insider trades in what you own the same day they're filed.",
-    data_export: 'Get a one-time CSV export of the full historical dataset — no subscription required.',
-    full_history: `Free shows 12 months. Pro unlocks the full picture — every filing ${sinceText}, so you see the patterns that matter.`,
+    data_export: 'The full historical dataset as CSV. One payment, no subscription.',
+    full_history: `Free shows 12 months. Pro shows every filing ${sinceText}, so you can see patterns that only show up over years.`,
     default: 'Tell Seli what to watch. It does the rest.',
   };
   const subtitle = FEATURE_MESSAGES[feature] || FEATURE_MESSAGES.default;
@@ -252,7 +251,7 @@ function UpgradeModal({ feature, pro, onClose }) {
       title: 'Never miss a trade again',
       outcomes: [
         { step: '1', text: 'Pick the stocks, insiders, or politicians you care about' },
-        { step: '2', text: 'Seli monitors every Form 4 — 24/7, automatically' },
+        { step: '2', text: 'Seli checks every new SEC filing through the day' },
         { step: '3', text: 'Get an email the same day they file' },
       ],
       cta: 'Start watching',
@@ -269,7 +268,7 @@ function UpgradeModal({ feature, pro, onClose }) {
     personalize: {
       title: 'Make it yours',
       outcomes: [
-        { step: '1', text: 'Link your brokerage — Seli watches your portfolio' },
+        { step: '1', text: 'Link your brokerage and Seli watches what you hold' },
         { step: '2', text: 'Follow insiders and get notified when they trade' },
         { step: '3', text: 'Your watchlist, your alerts, one view' },
       ],
@@ -306,7 +305,7 @@ function UpgradeModal({ feature, pro, onClose }) {
     return (
       <CheckoutModal
         product={checkoutProduct}
-        onClose={() => { setCheckoutProduct(null); if (feature === 'data_export_direct' || feature === 'pro_direct' || (isMobileModal && proIntentFeatures.includes(feature))) onClose(); }}
+        onClose={() => { setCheckoutProduct(null); if (feature === 'data_export_direct' || feature === 'pro_direct') onClose(); }}
         onSuccess={async () => {
           const wasPro = checkoutProduct === 'pro';
           setProcessing(true);
@@ -349,17 +348,17 @@ function UpgradeModal({ feature, pro, onClose }) {
           <div className="upgrade-narrative__header">
             <div className="logo-mark upgrade-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <h2 className="upgrade-narrative__title">Own the data</h2>
-            <p className="upgrade-narrative__sub">The only place to get every SEC Form 4 filing in one clean CSV. No scraping, no cleaning, no API — just download and go.</p>
+            <p className="upgrade-narrative__sub">Every open-market insider and Congress trade{since ? ` since ${since}` : ''} in clean CSV files. No scraping, no cleaning, no API. Download and go.</p>
           </div>
 
           <div className="upgrade-narrative__outcomes">
             <div className="upgrade-narrative__outcome">
               <span className="upgrade-narrative__step-num">1</span>
-              <span className="upgrade-narrative__outcome-text">Every insider filing on record — one click, one file</span>
+              <span className="upgrade-narrative__outcome-text">One CSV file per year, linked to the original SEC filing</span>
             </div>
             <div className="upgrade-narrative__outcome">
               <span className="upgrade-narrative__step-num">2</span>
-              <span className="upgrade-narrative__outcome-text">Opens in Excel, Google Sheets, Python, R — whatever you use</span>
+              <span className="upgrade-narrative__outcome-text">Opens in Excel, Google Sheets, Python or R</span>
             </div>
             <div className="upgrade-narrative__outcome">
               <span className="upgrade-narrative__step-num">3</span>
@@ -368,7 +367,7 @@ function UpgradeModal({ feature, pro, onClose }) {
           </div>
 
           <div className="upgrade-narrative__cta-section">
-            <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('data_export')}>Download — $39.99 one-time</button>
+            <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('data_export')}>Download for $39.99</button>
           </div>
 
           <div className="upgrade-modal__trust">
@@ -405,7 +404,7 @@ function UpgradeModal({ feature, pro, onClose }) {
         {/* Price + CTA */}
         <div className="upgrade-narrative__cta-section">
           <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('pro')}>
-            {variant.cta} — {PRO_PRICE_LABEL}
+            {variant.cta} · {PRO_PRICE_LABEL}
           </button>
         </div>
 
@@ -415,7 +414,7 @@ function UpgradeModal({ feature, pro, onClose }) {
         </div>
 
         <button className="upgrade-narrative__alt-link" onClick={() => setCheckoutProduct('data_export')}>
-          Or just the dataset — $39.99 one-time →
+          Or just the dataset, $39.99 one time →
         </button>
       </div>
     </div>
@@ -423,28 +422,85 @@ function UpgradeModal({ feature, pro, onClose }) {
 }
 
 // ─── Checkout (Stripe Elements) ────────────────────────────────────────────────
-// Handles BOTH products — Pro subscription and the one-time data export.
-// Same component either way: the backend returns a client_secret regardless
-// of whether it's backing a Subscription's PaymentIntent or a standalone one,
-// and Elements mounts the right payment UI automatically from that secret.
+// Handles BOTH products: the Pro subscription and the one-time data export.
+//
+// The card form shows as soon as Stripe.js has loaded. Nothing is created in
+// Stripe until the person presses the pay button (Stripe's "deferred intent"
+// flow): elements.submit() checks the card fields, then the Worker creates the
+// subscription or payment and returns its client secret, then confirmPayment()
+// charges it. This used to run the other way round, creating a Stripe
+// subscription the moment the form opened and only then loading Stripe.js, so
+// every open sat on a spinner for a few seconds and left an unpaid
+// 'incomplete' subscription behind whenever someone looked and closed it.
 let _stripePromise = null;
 function getStripePromise() {
-  if (!_stripePromise) _stripePromise = loadStripe(cfg.STRIPE_PUBLISHABLE_KEY);
+  if (!_stripePromise) {
+    _stripePromise = loadStripe(cfg.STRIPE_PUBLISHABLE_KEY);
+    // A failed load (offline, a content blocker on js.stripe.com) is cached
+    // by loadStripe, so drop it and let the next attempt try again.
+    _stripePromise.catch(() => { _stripePromise = null; });
+  }
   return _stripePromise;
 }
 
-const PRODUCT_COPY = {
-  pro: {
+const PRO_PRICE_CENTS = 699;      // keep in step with PRO_PRICE_DISPLAY and the Stripe price
+const DATA_PRICE_CENTS = 3999;
+
+function productCopy(product, since) {
+  return product === 'pro' ? {
     title: 'Seli Pro', price: `${PRO_PRICE_DISPLAY}/month`, endpoint: '/billing/create-subscription',
-    subtitle: 'Full insider data, real-time alerts, and your own watchlist — in one view.',
-    features: ['Full historical data', 'Portfolio linking', 'Instant alerts'],
-  },
-  data_export: {
-    title: 'Own the data', price: '$39.99 one-time', endpoint: '/billing/create-data-purchase',
-    subtitle: 'Every SEC Form 4 filing in one clean CSV — download and go.',
-    features: ['Every filing on record', 'Delivered as CSV', 'Re-purchase anytime for a fresh pull'],
-  },
-};
+    subtitle: 'Know the same day insiders trade the stocks you care about.',
+    features: ['Watch as many stocks and people as you like', 'Same-day email alerts and a daily brief', `Full history${since ? `, back to ${since}` : ''}`],
+    button: `Subscribe for ${PRO_PRICE_DISPLAY}/month`,
+    note: 'Billed monthly. Cancel anytime in Settings, under Billing.',
+    mode: 'subscription', amount: PRO_PRICE_CENTS,
+  } : {
+    title: 'Seli dataset', price: '$39.99 one time', endpoint: '/billing/create-data-purchase',
+    subtitle: `Every open-market insider and Congress trade${since ? ` since ${since}` : ''}, as CSV.`,
+    features: ['One CSV file per year', 'Linked to the original SEC filing', 'Buy again later for a fresh pull'],
+    button: 'Pay $39.99',
+    note: 'One-time charge. No subscription.',
+    mode: 'payment', amount: DATA_PRICE_CENTS,
+  };
+}
+
+// Stripe draws the card form inside its own frame, where this page's CSS
+// variables don't exist. Passing 'var(--surface)' (as this used to) is an
+// invalid color there, and the form was always on Stripe's dark theme, so it
+// clashed in light mode. Read the real colors of the current theme instead.
+function stripeAppearance() {
+  const root = document.documentElement;
+  const cs = getComputedStyle(root);
+  const dark = root.getAttribute('data-theme') !== 'light';
+  const v = (name, fallback) => (cs.getPropertyValue(name) || '').trim() || fallback;
+  const accent = v('--accent', dark ? '#7C6FFF' : '#5A4FE8');
+  const border = v('--border-md', dark ? 'rgba(255,255,255,0.12)' : 'rgba(15,15,30,0.18)');
+  return {
+    theme: dark ? 'night' : 'stripe',
+    labels: 'above',
+    variables: {
+      colorPrimary: accent,
+      colorBackground: v('--surface', dark ? '#111318' : '#FFFFFF'),
+      colorText: v('--text', dark ? '#ECEDF2' : '#12131A'),
+      colorTextSecondary: v('--text-2', dark ? '#9295A6' : '#52546A'),
+      colorTextPlaceholder: v('--text-3', dark ? '#5E6175' : '#8F91A8'),
+      colorDanger: v('--red-600', dark ? '#F06060' : '#C0392B'),
+      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      // 16px stops iPhones zooming the page in when a card field is tapped.
+      fontSizeBase: '16px',
+      borderRadius: '10px',
+      spacingUnit: '4px',
+    },
+    rules: {
+      '.Input': { backgroundColor: v('--surface-2', dark ? '#181B23' : '#F7F8FA'), border: `1px solid ${border}`, boxShadow: 'none' },
+      '.Input:focus': { border: `1px solid ${accent}`, boxShadow: `0 0 0 1px ${accent}` },
+      '.Label': { fontSize: '13px', fontWeight: '500' },
+      '.Tab': { border: `1px solid ${border}`, boxShadow: 'none' },
+      '.Tab--selected': { border: `1px solid ${accent}` },
+    },
+  };
+}
+const STRIPE_FONTS = [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap' }];
 
 // ─── Confirm dialog — reusable "are you sure?" pattern ────────────────────────
 // ─── Processing modal — covers the real gap between "payment succeeded"
@@ -524,67 +580,31 @@ function ProWelcomeModal({ onClose }) {
 }
 
 function CheckoutModal({ product, onClose, onSuccess }) {
-  const { user } = useUser();
-  const [clientSecret, setClientSecret] = useState(null);
-  const [error, setError] = useState(null);
-  // True only for the reactivation path below — there's no payment step,
-  // just a wait for Stripe's webhook to land.
-  const [reactivating, setReactivating] = useState(false);
-  const copy = PRODUCT_COPY[product];
-
+  const since = useDataSinceYear();
+  const copy = productCopy(product, since);
+  const [stripePromise] = useState(() => getStripePromise());
+  const [loadFailed, setLoadFailed] = useState(false);
+  useEffect(() => { stripePromise.catch(() => setLoadFailed(true)); }, [stripePromise]);
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
-        const res = await fetch(`${cfg.NEON_PROXY_URL}${copy.endpoint}`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ email: user?.primaryEmailAddress?.emailAddress }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || 'Could not start checkout');
-        if (data.reactivated) {
-          // An existing subscription was resumed server-side instead of a
-          // new one being created (see handleCreateSubscription's
-          // reactivation path) — there's no payment to confirm, so this
-          // skips the Elements/card form entirely. But it still has to wait
-          // out the same webhook race CheckoutForm.handleConfirm() below
-          // already handles for a normal payment: Stripe's API call
-          // returning doesn't mean Clerk's publicMetadata (what the rest of
-          // the app reads to know someone's Pro) is updated yet — only the
-          // async customer.subscription.updated webhook does that. Calling
-          // onSuccess() immediately here, as an earlier version of this fix
-          // did, meant "You're a Pro member!" could show before the backend
-          // had actually caught up — leaving Settings > Billing still
-          // showing Free/Upgrade right after, and a second click correctly
-          // (but confusingly) hitting the "already have one" guard.
-          if (cancelled) return;
-          setReactivating(true);
-          for (let attempt = 0; attempt < 6; attempt++) {
-            await new Promise(r => setTimeout(r, 1500));
-            const fresh = await user?.reload().catch(() => null);
-            if (fresh?.publicMetadata?.plan === 'pro') break;
-          }
-          if (cancelled) return;
-          setReactivating(false);
-          onSuccess && onSuccess();
-          return;
-        }
-        if (!cancelled) setClientSecret(data.clientSecret);
-      } catch (e) {
-        if (!cancelled) setError(e.message);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [product]);
+    const h = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
+  // Read once per open, so the form matches whichever theme is on now.
+  const options = useMemo(() => ({
+    mode: copy.mode, amount: copy.amount, currency: 'usd',
+    // Must match payment_method_types on what the Worker creates. Apple Pay
+    // and Google Pay still show: they're cards.
+    paymentMethodTypes: ['card'],
+    appearance: stripeAppearance(), fonts: STRIPE_FONTS, loader: 'never',
+  }), [product]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
-      <div className="checkout-modal checkout-modal--landscape">
+      <div className="checkout-modal checkout-modal--landscape" role="dialog" aria-modal="true" aria-label={copy.title}>
         <button className="upgrade-modal__close" onClick={onClose} aria-label="Close"><IconClose style={{ width: 12, height: 12 }} /></button>
 
-        {/* Left — product info, stays constant regardless of payment state */}
+        {/* Left (top on phones): what they're buying */}
         <div className="checkout-modal__info">
           <div className="logo-mark checkout-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
           <div className="checkout-modal__info-title">{copy.title}</div>
@@ -596,54 +616,19 @@ function CheckoutModal({ product, onClose, onSuccess }) {
             ))}
           </ul>
           <div className="checkout-modal__trust">
-            <IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Secure checkout via Stripe
+            <IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Secure checkout by Stripe. Seli never sees your card.
           </div>
         </div>
 
-        {/* Right — payment form */}
+        {/* Right (below on phones): the card form */}
         <div className="checkout-modal__pay">
-          {error && <div className="checkout-error">{
-            error.includes('No such customer') || error.includes('customer')
-              ? 'Your account needs a quick reset before checkout. Please sign out, sign back in, and try again.'
-              : error
-          } — <button className="checkout-retry" onClick={onClose}>close and try again</button></div>}
-
-          {!error && !reactivating && !clientSecret && (
-            <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center' }}><Spinner /></div>
-          )}
-
-          {!error && reactivating && (
-            <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              <Spinner />
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-2)' }}>Reactivating your subscription…</p>
+          {loadFailed ? (
+            <div className="checkout-form-error">
+              The payment form couldn't load. Check your connection, or allow js.stripe.com if you use a content blocker, then <button className="checkout-retry" onClick={onClose}>close and try again</button>
             </div>
-          )}
-
-          {!error && !reactivating && clientSecret && (
-            <Elements stripe={getStripePromise()} options={{
-              clientSecret,
-              appearance: {
-                theme: 'night',
-                variables: {
-                  colorPrimary: '#7c5cfc',
-                  colorBackground: 'var(--surface, #1a1a2e)',
-                  colorText: 'var(--text, #e2e2e8)',
-                  colorDanger: '#ef4444',
-                  fontFamily: 'Inter, system-ui, sans-serif',
-                  borderRadius: '8px',
-                  spacingUnit: '4px',
-                },
-                rules: {
-                  '.Input': { backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' },
-                  '.Input:focus': { border: '1px solid #7c5cfc', boxShadow: '0 0 0 1px #7c5cfc' },
-                  '.Label': { color: 'rgba(255,255,255,0.6)', fontSize: '0.8125rem', fontWeight: '500' },
-                  '.Tab': { backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' },
-                  '.Tab--selected': { backgroundColor: '#7c5cfc', border: '1px solid #7c5cfc', color: '#fff' },
-                  '.Tab:hover': { border: '1px solid rgba(255,255,255,0.2)' },
-                },
-              },
-            }}>
-              <CheckoutForm product={product} onSuccess={onSuccess} onClose={onClose} />
+          ) : (
+            <Elements stripe={stripePromise} options={options}>
+              <CheckoutForm product={product} copy={copy} onSuccess={onSuccess} />
             </Elements>
           )}
         </div>
@@ -652,68 +637,108 @@ function CheckoutModal({ product, onClose, onSuccess }) {
   );
 }
 
-function CheckoutForm({ product, onSuccess, onClose }) {
+// Plan/purchase flags reach the app through Clerk metadata, which the Stripe
+// webhook updates a moment after the payment goes through. Wait for that
+// (up to ~9s) so the app doesn't show Free right after someone paid.
+async function waitForBilling(user, product) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await new Promise(r => setTimeout(r, 1500));
+    const fresh = await user?.reload().catch(() => null);
+    const ok = product === 'pro' ? fresh?.publicMetadata?.plan === 'pro' : fresh?.publicMetadata?.hasDataExport === true;
+    if (ok) return;
+  }
+}
+
+function checkoutErrorText(msg) {
+  if (/customer/i.test(msg || '')) return 'Your account needs a quick reset before checkout. Sign out, sign back in, and try again.';
+  return msg || 'Something went wrong. Please try again.';
+}
+
+function CheckoutForm({ product, copy, onSuccess }) {
   const stripe = useStripe();
   const elements = useElements();
   const { user } = useUser();
+  const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  // The client secret from the first press. If the card is declined, the
+  // retry confirms the same payment with the new card instead of creating a
+  // second subscription.
+  const secretRef = useRef(null);
 
   async function handleConfirm() {
-    if (!stripe || !elements) return;
+    if (!stripe || !elements || submitting || syncing) return;
     setSubmitting(true);
     setFormError(null);
 
+    // 1. Check the card fields before anything is created.
+    const { error: fieldError } = await elements.submit();
+    if (fieldError) { setFormError(fieldError.message); setSubmitting(false); return; }
+
+    // 2. Create the subscription / payment (once).
+    let clientSecret = secretRef.current;
+    if (!clientSecret) {
+      let data = {};
+      try {
+        const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+        const res = await fetch(`${cfg.NEON_PROXY_URL}${copy.endpoint}`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ email: user?.primaryEmailAddress?.emailAddress }),
+        });
+        data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || data.error || 'Could not start checkout');
+      } catch (e) {
+        setFormError(checkoutErrorText(e.message)); setSubmitting(false); return;
+      }
+      if (data.reactivated) {
+        // They had Pro set to cancel: the Worker resumed it, no charge.
+        setSubmitting(false); setSyncing(true);
+        await waitForBilling(user, product);
+        setSyncing(false);
+        onSuccess && onSuccess();
+        return;
+      }
+      clientSecret = secretRef.current = data.clientSecret;
+    }
+
+    // 3. Charge it. 3-D Secure, if the bank asks for it, opens in Stripe's own popup.
     const { error } = await stripe.confirmPayment({
-      elements,
+      elements, clientSecret,
       confirmParams: { return_url: window.location.href },
       redirect: 'if_required',
     });
+    if (error) { setFormError(error.message); setSubmitting(false); return; }
 
-    if (error) {
-      setFormError(error.message);
-      setSubmitting(false);
-      return;
-    }
-
-    // Payment succeeded client-side, but the webhook that actually grants
-    // access runs async on Stripe's side — Clerk's metadata isn't updated
-    // yet at this exact moment. Poll for it instead of leaving the UI stale
-    // until the user manually reloads the page.
     setSubmitting(false);
     setSyncing(true);
-    const wantsPro = product === 'pro';
-    for (let attempt = 0; attempt < 6; attempt++) {
-      await new Promise(r => setTimeout(r, 1500));
-      const fresh = await user?.reload().catch(() => null);
-      const ok = wantsPro
-        ? fresh?.publicMetadata?.plan === 'pro'
-        : fresh?.publicMetadata?.hasDataExport === true;
-      if (ok) break;
-    }
+    await waitForBilling(user, product);
     setSyncing(false);
     onSuccess && onSuccess();
   }
 
   return (
-    <>
-      <PaymentElement />
-      {formError && <div className="checkout-error">{formError}</div>}
-      <button
-        className="upgrade-modal__cta"
-        disabled={!stripe || submitting || syncing}
-        onClick={handleConfirm}
-        style={{ marginTop: 16 }}
-      >
-        {submitting ? 'Processing…' : syncing ? 'Confirming…' : (product === 'pro' ? 'Go Pro' : 'Buy export')}
-      </button>
-      <div className="upgrade-modal__note">
-        {product === 'pro'
-          ? 'Cancel anytime from Settings → Billing.'
-          : 'One-time charge. You can re-purchase later for a fresh pull.'}
+    <form className="checkout-form" onSubmit={e => { e.preventDefault(); handleConfirm(); }}>
+      {!ready && (
+        <div className="checkout-skel" aria-label="Loading the payment form">
+          <span className="checkout-skel__label" /><span className="checkout-skel__input" />
+          <span className="checkout-skel__row"><span><span className="checkout-skel__label" /><span className="checkout-skel__input" /></span><span><span className="checkout-skel__label" /><span className="checkout-skel__input" /></span></span>
+          <span className="checkout-skel__label" /><span className="checkout-skel__input" />
+        </div>
+      )}
+      <div className={ready ? 'checkout-pe' : 'checkout-pe checkout-pe--loading'}>
+        <PaymentElement onReady={() => setReady(true)} options={{ layout: 'tabs' }} />
       </div>
-    </>
+      {formError && <div className="checkout-form-error" role="alert">{formError}</div>}
+      <button
+        type="submit"
+        className="upgrade-modal__cta checkout-form__pay"
+        disabled={!stripe || !ready || submitting || syncing}
+      >
+        {submitting ? 'Processing…' : syncing ? 'Confirming…' : copy.button}
+      </button>
+      <div className="upgrade-modal__note">{copy.note}</div>
+    </form>
   );
 }
 

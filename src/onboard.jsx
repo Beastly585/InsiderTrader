@@ -1,6 +1,12 @@
 // src/onboard.jsx — Interactive onboarding flow for new Seli users
 // Lives at seli.app/onboard — full-screen, no main nav, immersive.
-// Skippable at any time. Writes to real watchlist on step 6.
+// Skippable at any time. Three steps: pick what to watch, emails, done.
+//
+// It used to open with four explainer screens (welcome stats, who insiders
+// are, reading a filing, the score) before anyone picked a stock, so the one
+// thing that makes Seli useful came fifth of seven. The explainers are still
+// below (StepWelcome, StepInsiderTypes, StepReadingFiling, StepConviction);
+// add their names back to FLOW to bring them back.
 import React, { useState, useEffect, useRef } from 'react';
 import cfg from './config.js';
 import { api } from './lib/api.js';
@@ -9,7 +15,10 @@ import { SCORE_TIERS, prettyPerson } from './lib/text.js';
 // Styles live at the bottom of style.css (ob-* prefix) — no separate import needed.
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const TOTAL_STEPS = 7;
+const FLOW = ['watchlist', 'notifications', 'ready'];
+const TOTAL_STEPS = FLOW.length;
+// New key: a step number saved under the old 7-step flow means something else now.
+const STEP_KEY = 'seli_onboard_step_v2';
 
 // Popular tickers for the quick-add grid (step 6)
 const POPULAR_TICKERS = [
@@ -378,9 +387,9 @@ function StepWatchlist({ watchlist, onNext }) {
   return (
     <div className="ob-step ob-step--watchlist">
       <div className="ob-step__header">
-        <span className="ob-step__eyebrow">Get personal</span>
-        <h2 className="ob-step__title">What do you want to watch?</h2>
-        <p className="ob-step__subtitle">Stocks you own or follow, or people you want to keep tabs on. They show up first in the app and in your email.{limit ? ` Free accounts watch up to ${limit}.` : ''}</p>
+        <span className="ob-step__eyebrow">Welcome to Seli</span>
+        <h2 className="ob-step__title">What should Seli watch for you?</h2>
+        <p className="ob-step__subtitle">Pick stocks you own or are thinking about, or people to keep tabs on. You'll get an email when insiders trade them.{limit ? ` Free accounts watch up to ${limit}.` : ''}</p>
       </div>
 
       <div className="ob-watchlist__search-wrap">
@@ -571,7 +580,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
   const [step, setStep] = useState(() => {
     // Resume from last step if user refreshed mid-flow
     try {
-      const saved = localStorage.getItem('seli_onboard_step');
+      const saved = localStorage.getItem(STEP_KEY);
       if (saved != null) return Math.min(parseInt(saved, 10) || 0, TOTAL_STEPS - 1);
     } catch {}
     return 0;
@@ -601,7 +610,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
 
   // Persist current step
   useEffect(() => {
-    try { localStorage.setItem('seli_onboard_step', String(step)); } catch {}
+    try { localStorage.setItem(STEP_KEY, String(step)); } catch {}
   }, [step]);
 
   // Scroll to top on step change
@@ -609,8 +618,9 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
     if (containerRef.current) containerRef.current.scrollTo(0, 0);
   }, [step]);
 
-  // Load data for steps 1 & 2 on mount
+  // Data for the explainer steps, only when one of them is in the flow.
   useEffect(() => {
+    if (!FLOW.some(f => f === 'welcome' || f === 'insider_types')) return;
     // Aggregate stats
     fetch(`${cfg.NEON_PROXY_URL}/public/data-stats`)
       .then(r => r.ok ? r.json() : null)
@@ -641,7 +651,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
   useEffect(() => {
     try {
       if (window.posthog) {
-        window.posthog.capture('onboarding_step_viewed', { step, step_name: STEP_NAMES[step] });
+        window.posthog.capture('onboarding_step_viewed', { step, step_name: FLOW[step], flow: 'v2' });
         if (step === 0) window.posthog.capture('onboarding_started');
       }
     } catch {}
@@ -653,7 +663,7 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
 
   function handleComplete() {
     reportOnboardDone(false);
-    try { localStorage.removeItem('seli_onboard_step'); } catch {}
+    try { localStorage.removeItem(STEP_KEY); } catch {}
     try {
       if (window.posthog) {
         window.posthog.capture('onboarding_completed', { tickers_added: watchlist.tickers.length, people_added: (watchlist.insiders || []).length });
@@ -664,10 +674,10 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
 
   function handleSkip() {
     reportOnboardDone(true);
-    try { localStorage.removeItem('seli_onboard_step'); } catch {}
+    try { localStorage.removeItem(STEP_KEY); } catch {}
     try {
       if (window.posthog) {
-        window.posthog.capture('onboarding_skipped', { last_step: step, step_name: STEP_NAMES[step] });
+        window.posthog.capture('onboarding_skipped', { last_step: step, step_name: FLOW[step], flow: 'v2' });
       }
     } catch {}
     onSkip();
@@ -717,15 +727,15 @@ export default function OnboardingFlow({ user, watchlist, pro, onComplete, onSki
       </div>
 
       {/* Steps */}
-      {step === 0 && <StepWelcome stats={stats} onNext={goNext} />}
-      {step === 1 && <StepInsiderTypes sampleFilings={sampleFilings} onNext={goNext} />}
-      {step === 2 && <StepReadingFiling onNext={goNext} />}
-      {step === 3 && <StepConviction onNext={goNext} />}
-      {step === 4 && <StepWatchlist watchlist={watchlist} onNext={goNext} />}
-      {step === 5 && <StepNotifications user={user} pro={pro} onNext={goNext} digestOn={digestOn} onDigestChange={setDigestOn} />}
-      {step === 6 && <StepReady watchlist={watchlist} onComplete={handleComplete} />}
+      {FLOW[step] === 'welcome' && <StepWelcome stats={stats} onNext={goNext} />}
+      {FLOW[step] === 'insider_types' && <StepInsiderTypes sampleFilings={sampleFilings} onNext={goNext} />}
+      {FLOW[step] === 'standout' && <StepReadingFiling onNext={goNext} />}
+      {FLOW[step] === 'score' && <StepConviction onNext={goNext} />}
+      {FLOW[step] === 'watchlist' && <StepWatchlist watchlist={watchlist} onNext={goNext} />}
+      {FLOW[step] === 'notifications' && <StepNotifications user={user} pro={pro} onNext={goNext} digestOn={digestOn} onDigestChange={setDigestOn} />}
+      {FLOW[step] === 'ready' && <StepReady watchlist={watchlist} onComplete={handleComplete} />}
     </div>
   );
 }
 
-const STEP_NAMES = ['welcome', 'insider_types', 'standout', 'score', 'watchlist', 'notifications', 'ready'];
+

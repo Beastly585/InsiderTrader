@@ -2812,11 +2812,33 @@ td { padding:7px 11px; vertical-align:middle; }
   border-top: 0.5px solid var(--border);
 }
 .checkout-modal__pay {
-  flex: 1; padding: 44px 32px 28px; min-width: 0;
-  max-height: 80vh; overflow-y: auto;
-  display: flex; flex-direction: column; justify-content: center;
+  flex: 1; padding: 40px 32px 28px; min-width: 0;
+  max-height: 85vh; overflow-y: auto;
+  /* Top-aligned with a fixed minimum height: centering made the form jump
+     every time Stripe added a field (postal code, Link). */
+  display: flex; flex-direction: column; justify-content: flex-start;
+  min-height: 420px;
 }
-.checkout-modal__pay form { display: flex; flex-direction: column; justify-content: center; flex: 1; }
+.checkout-form { display: flex; flex-direction: column; position: relative; }
+/* Payment Element mounts hidden behind the skeleton until it's ready, so it
+   can size itself without the layout jumping. */
+.checkout-pe { min-height: 1px; }
+.checkout-pe--loading { position: absolute; inset: 0 0 auto 0; opacity: 0; pointer-events: none; }
+.checkout-form__pay { margin-top: 18px; }
+.checkout-form__pay:disabled { opacity: 0.55; cursor: default; }
+.checkout-form-error {
+  margin: 12px 0 0; font-size: 0.8125rem; line-height: 1.45; color: var(--red-600);
+}
+.checkout-form-error .checkout-retry { margin-left: 4px; }
+.checkout-skel { display: flex; flex-direction: column; }
+.checkout-skel__label, .checkout-skel__input {
+  display: block; border-radius: 8px; background: var(--surface-2);
+  animation: skel-fade 1.2s ease-in-out infinite alternate;
+}
+.checkout-skel__label { width: 34%; height: 11px; margin: 2px 0 8px; border-radius: 4px; }
+.checkout-skel__input { height: 46px; margin-bottom: 14px; border: 1px solid var(--border); }
+.checkout-skel__row { display: flex; gap: 12px; }
+.checkout-skel__row > span { flex: 1; }
 @media (max-width: 640px) {
   .checkout-modal--landscape {
     flex-direction: column; min-width: 0;
@@ -2824,18 +2846,19 @@ td { padding:7px 11px; vertical-align:middle; }
     border-radius: 0; border: none;
     overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
+  /* Phones: one compact line (name, price) and the trust note, then the card
+     form right away. The pitch already ran before this screen. */
   .checkout-modal__info {
     flex: none; border-right: none; border-bottom: 0.5px solid var(--border);
-    padding: 20px 16px;
+    padding: 18px 60px 14px 16px;
+    flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 10px;
   }
-  /* Compact the info section on mobile — less whitespace before the payment form */
-  .checkout-modal__info-price { font-size: 1.25rem; margin-bottom: 4px; }
-  .checkout-modal__info-subtitle { margin-bottom: 10px; }
-  .checkout-modal__features { gap: 5px; }
-  .checkout-modal__trust { margin-top: 10px; padding-top: 10px; }
+  .checkout-modal__logo, .checkout-modal__info-subtitle, .checkout-modal__features { display: none; }
+  .checkout-modal__info-title { font-size: 1.0625rem; margin: 0; }
+  .checkout-modal__info-price { font-size: 1.0625rem; font-weight: 600; color: var(--text-2); margin: 0; letter-spacing: 0; }
+  .checkout-modal__trust { flex-basis: 100%; margin-top: 6px; padding-top: 0; border-top: none; }
   .checkout-modal__pay {
-    padding: 20px 16px 32px; flex: none;
-    justify-content: flex-start; /* don't center — let it flow naturally so button isn't cut off */
+    padding: 20px 16px 32px; flex: none; min-height: 0; max-height: none;
   }
   /* Override the overlay alignment — full-screen sheet on mobile */
   .upgrade-overlay:has(.checkout-modal--landscape) {
@@ -2844,9 +2867,8 @@ td { padding:7px 11px; vertical-align:middle; }
 }
 
 .checkout-modal--landscape .upgrade-modal__close {
-  top: 8px; right: 8px;
-  background: rgba(0,0,0,0.5); border-color: rgba(255,255,255,0.1);
-  backdrop-filter: blur(4px);
+  position: absolute; top: 12px; right: 12px; float: none; margin: 0;
+  width: 32px; height: 32px;
 }
 
 /* ── Toggle switch ────────────────────────────────────────────────────────── */
@@ -5356,3 +5378,8 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
   min-height: 0;
   overflow-y: auto;
 }
+
+/* Dark theme: --accent-strong is a pale lavender there, too light for white
+   button text. Upgrade and checkout buttons use the same purple as the rest
+   of the site's primary buttons. */
+[data-theme="dark"] .upgrade-modal__cta { background: var(--accent); }

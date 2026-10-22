@@ -99,10 +99,12 @@ def link(path: str, content: str) -> str:
 
 
 # ── 1. Unfinished checkout ───────────────────────────────────────────────────
-# A Stripe subscription is created (status 'incomplete') when the payment form
-# opens, and the webhook writes that status here. 'incomplete_expired' is the
-# same attempt 23 hours later. Either one, with no live subscription since,
-# means they got to the card form and didn't finish.
+# A Stripe subscription is created (status 'incomplete') when someone presses
+# Subscribe, just before the card is charged, and the webhook writes that
+# status here. Still 'incomplete' (or 'incomplete_expired', the same attempt
+# 23 hours later) with no live subscription since means they tried to pay and
+# it didn't go through: a declined card, or a bank check they didn't finish.
+# Opening the form and closing it creates nothing, so it never triggers this.
 CHECKOUT_SQL = """
 SELECT p.clerk_user_id, p.email, p.first_name, s.stripe_subscription_id AS ref, s.updated_at AS at
   FROM public.subscriptions s

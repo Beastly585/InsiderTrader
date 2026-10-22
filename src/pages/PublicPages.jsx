@@ -331,7 +331,7 @@ export function PublicHome() {
         <p className="sx-hero__browse">or <a href="/stocks" className="sx-link" onClick={navClick('/stocks')}>browse every stock A to Z</a></p>
         <div className="sx-hero__cta">
           <button className="sx-btn sx-btn--accent" onClick={signUp}>Get started free</button>
-          {!narrow && <span className="sx-muted sx-small">No card needed. Data from SEC EDGAR and congressional disclosures.</span>}
+          <span className="sx-muted sx-small">{narrow ? 'Free. No card needed.' : 'No card needed. Data from SEC EDGAR and congressional disclosures.'}</span>
         </div>
       </section>
 
@@ -373,7 +373,7 @@ export function PublicHome() {
               </ul>
             )}
           </Card>
-          <Card title="Best insider track records" sub="Buys that beat the S&P 500, last 12 months" pad={false}
+          <Card title="Best insider track records" sub="Points their buys beat the S&P 500 by, last 12 months. More buys ranks higher." pad={false}
             action={<a href="/leaderboard" className="sx-link" onClick={navClick('/leaderboard')}>Leaderboard <Icon name="arrow" size={12} /></a>}>
             {!leaders ? <div className="sx-card__body"><Skeleton lines={4} /></div> : (
               <ul className="sx-rows">
