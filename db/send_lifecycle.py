@@ -10,11 +10,17 @@ the daily email run, so it costs no extra GitHub Actions minutes.
   lc_cancel       clicked cancel (within the last 3 days)       Kevin   (account notice)
   lc_ending       canceled Pro ends in 1 to 3.5 days            Seli    (account notice)
   lc_first_stock  signed up 4 to 10 days ago, watchlist empty   Kevin
+  lc_alerts_off   paying Pro, watching things, every same-day   Kevin
+                  alert switched off
+  lc_free_limit   free account tried to add a 4th stock or      Kevin   (once per 30 days)
+                  person 6 hours to 3 days ago, and it's still
+                  not on their list (user_events, written by the Worker)
 
 House rules (see email_kit.py for the ones every sender follows):
-  - Account notices go once per cancellation. The checkout reminder and
-    lc_first_stock go once per person, ever (the checkout one promises
-    "I won't bug you about it again").
+  - Account notices go once per cancellation. The checkout reminder,
+    lc_first_stock and lc_alerts_off go once per person, ever (the checkout
+    and alerts ones promise not to mention it again). lc_free_limit can come
+    back after 30 days, for a different stock.
   - The trigger is re-checked at send time, so an email never goes to someone
     who already finished checkout, reactivated, or added a stock.
   - Non-account emails (lc_checkout, lc_first_stock): skipped for anyone who
@@ -55,7 +61,7 @@ KEVIN_FROM = os.environ.get("WELCOME_FROM_EMAIL") or ("kevin@" + ek.FROM_EMAIL.s
 REPLY_TO   = os.environ.get("WELCOME_REPLY_TO") or None
 ET         = ZoneInfo("America/New_York")
 
-NUDGE_KINDS = ["lc_checkout", "lc_first_stock"]   # the non-account ones, which share the 3-day cap
+NUDGE_KINDS = ["lc_checkout", "lc_first_stock", "lc_alerts_off", "lc_free_limit"]   # the non-account ones, which share the 3-day cap
 MEDIUM = "lifecycle"
 
 
@@ -261,6 +267,132 @@ def first_stock_email(u: dict, picks: list[dict]) -> tuple[str, str]:
                          "You're getting this because you signed up for Seli.", u["clerk_user_id"])
 
 
+# ── 5. Pro with every alert switched off ────────────────────────────────────
+# Same-day alerts are the main thing Pro adds. Someone paying for it with all
+# of them off is only hearing about their stocks in the digest.
+ALERTS_OFF_SQL = """
+SELECT p.clerk_user_id, p.email, p.first_name, p.daily_digest IS TRUE AS daily_digest,
+       (SELECT array_agg(w.item_value ORDER BY w.added_at DESC) FROM public.user_watchlist w
+         WHERE w.clerk_user_id = p.clerk_user_id AND w.item_type = 'ticker') AS tickers,
+       (SELECT count(*) FROM public.user_watchlist w WHERE w.clerk_user_id = p.clerk_user_id) AS n_watch
+  FROM public.subscriptions s
+  JOIN public.user_preferences p ON p.clerk_user_id = s.clerk_user_id
+ WHERE s.plan = 'pro' AND s.status IN ('active', 'trialing')
+   AND s.stripe_subscription_id IS NOT NULL          -- paying, not comped
+   AND s.cancel_at_period_end IS NOT TRUE
+   AND s.updated_at <= now() - interval '2 days'      -- give a new subscriber time to set things up
+   AND NOT COALESCE(p.instant_watchlist_ticker OR p.instant_followed_insider
+                    OR p.instant_high_conviction OR p.instant_reversal, false)
+   AND EXISTS (SELECT 1 FROM public.user_watchlist w WHERE w.clerk_user_id = p.clerk_user_id)
+   AND p.email IS NOT NULL AND p.email_unsubscribed_at IS NULL
+"""
+
+
+def list_phrase(items: list[str], total: int) -> str:
+    """'AAPL', 'AAPL and NVDA', 'AAPL, NVDA and 3 more'."""
+    items = [i for i in items if i][:2]
+    more = total - len(items)
+    if not items:
+        return "the things you watch"
+    if more > 0:
+        return ", ".join(items) + f" and {more} more"
+    return " and ".join(items)
+
+
+def alerts_off_email(u: dict) -> tuple[str, str]:
+    subject = "Your same-day alerts are off"
+    what = list_phrase(u.get("tickers") or [], int(u.get("n_watch") or 0))
+    where = "your daily brief" if u.get("daily_digest") else "your Sunday email"
+    body = hello(u)
+    body += P(f"Quick one: you're on Pro, but same-day alerts are switched off, so news on {ek.esc(what)} "
+              f"only reaches you in {where}.")
+    body += P("Turn them on and you'll get an email the day an insider files on anything you watch.", margin="0 0 6px")
+    body += f'<div style="margin:2px 0 18px;">{ek.button("Turn on alerts", link("/account#emails", "alerts_off_on"))}</div>'
+    body += P("If you left them off on purpose, ignore this. I won't mention it again.", margin="0 0 18px")
+    body += sign_off()
+    return subject, page(subject, "You're paying for same-day alerts, but they're switched off.", "Seli Pro", body,
+                         "You're getting this because you're on Seli Pro.", u["clerk_user_id"])
+
+
+# ── 6. Hit the free limit ───────────────────────────────────────────────────
+# The page shows the Pro pitch on the spot; this is the next-day follow-up:
+# what insiders did in the thing they wanted, then the two ways to watch it.
+FREE_LIMIT_SQL = """
+SELECT DISTINCT ON (p.clerk_user_id)
+       p.clerk_user_id, p.email, p.first_name, e.ref AS ref, e.created_at AS at
+  FROM public.user_events e
+  JOIN public.user_preferences p ON p.clerk_user_id = e.clerk_user_id
+  LEFT JOIN public.subscriptions s ON s.clerk_user_id = e.clerk_user_id
+ WHERE e.kind = 'free_limit'
+   AND e.created_at BETWEEN now() - interval '3 days' AND now() - interval '6 hours'
+   AND NOT COALESCE(s.plan = 'pro' AND s.status IN ('active', 'trialing'), false)
+   -- not on their list since (they may have swapped it in)
+   AND NOT EXISTS (SELECT 1 FROM public.user_watchlist w
+                    WHERE w.clerk_user_id = p.clerk_user_id AND w.item_type || ':' || w.item_value = e.ref)
+   AND p.email IS NOT NULL AND p.email_unsubscribed_at IS NULL
+ ORDER BY p.clerk_user_id, e.created_at DESC
+"""
+
+
+def when_phrase(ts) -> str:
+    d = ts.astimezone(ET).date() if isinstance(ts, datetime) else ek.as_date(ts)
+    today = ek.utcnow().astimezone(ET).date()
+    return "earlier today" if d == today else "yesterday" if (today - d).days == 1 else f"on {d:%A}"
+
+
+def ticker_line(s: dict) -> str:
+    """Where a stock stands, one plain sentence (same wording as the welcome email)."""
+    yb, ys, lb, rb = s["yr_buys"], s["yr_sells"], s["last_buy"], s["recent_buys"]
+    if not s["known"]:
+        return "No insider filings on record yet."
+    if rb["n"]:
+        return f"Insiders bought {ek.money(rb['v'])} in the last 90 days ({ek.plural(rb['insiders'], 'insider')})."
+    if lb and ys["n"]:
+        return (f"Insiders sold {ek.money(ys['v'])} over the last year. The last insider buy was "
+                f"{ek.ago(lb['date'])} ({lb['name']}, {ek.money(lb['value'])}).")
+    if lb:
+        return f"Quiet lately. The last insider buy was {ek.ago(lb['date'])} ({lb['name']}, {ek.money(lb['value'])})."
+    if ys["n"]:
+        return f"Insiders sold {ek.money(ys['v'])} over the last year, with no open-market buys."
+    return "No open-market insider trades in the last year."
+
+
+def free_limit_email(u: dict, conn=None) -> tuple[str, str]:
+    kind, _, value = (u.get("ref") or "ticker:").partition(":")
+    stock = kind == "ticker"
+    when = when_phrase(u["at"]) if u.get("at") else "recently"
+    status = None
+    if stock and conn is not None:
+        import insider_intel as ii
+        today = date.today()
+        try:
+            status = ii.ticker_status(conn, [value], today - timedelta(days=90), today, today=today).get(value.upper())
+        except Exception:
+            conn.rollback()
+    name = value.upper() if stock else ek.pretty_person(value)
+    subject = f"{name} didn't make it onto your watchlist"
+    body = hello(u)
+    body += P(f"You tried to add {ek.esc(name)} {when}, but free accounts watch up to 3 stocks or people, "
+              "so it didn't go on your list.")
+    if status:
+        href = link(ek.ticker_path(value), "free_limit_stock")
+        body += P("In case it helps, here's where it stands:", margin="4px 0 4px")
+        body += (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">'
+                 f'<tr><td style="padding:10px 0;border-top:1px solid {ek.BORDER};border-bottom:1px solid {ek.BORDER};">'
+                 f'{ek.ticker_tag(value.upper(), href)}'
+                 f'<span style="font-family:{ek.FONT};font-size:13px;color:{ek.MUTED};margin-left:8px;">{ek.esc(status["company"])}</span>'
+                 + ek.p(ek.esc(ticker_line(status)), 14, ek.TEXT_2, "6px 0 0") + "</td></tr></table>")
+    elif not stock:
+        body += P(f'You can still see everything {ek.esc(name)} has filed on {ek.a(link(ek.insider_path(value), "free_limit_person"), "their page")}.')
+    body += P("Two ways to get it on there: swap it in for one of your current 3 on "
+              f"{ek.a(link('/watchlist', 'free_limit_watchlist'), 'your watchlist')}, or go Pro, which lifts the limit "
+              "and emails you the same day insiders trade ($6.99/month).", margin="0 0 6px")
+    body += f'<div style="margin:2px 0 18px;">{ek.button("See Pro", link("/account#billing", "free_limit_pro"))}</div>'
+    body += sign_off()
+    return subject, page(subject, f"Free accounts watch up to 3. Here's where {name} stands anyway.", "Watchlist", body,
+                         "You're getting this because you tried to add something to your Seli watchlist.", u["clerk_user_id"])
+
+
 # ── Rules, in priority order ─────────────────────────────────────────────────
 # account=True: an account notice (sent even to people who unsubscribed from
 # other email, and not counted against the 3-day cap).
@@ -270,7 +402,18 @@ RULES = [
     {"kind": "lc_ending",      "sql": ENDING_SQL,      "build": ending_email,      "account": True,  "from": "seli",
      "skip_if_recent": ("lc_cancel", 4)},   # they were just told
     {"kind": "lc_first_stock", "sql": FIRST_STOCK_SQL, "build": first_stock_email, "account": False, "from": "kevin", "once_ever": True},
+    {"kind": "lc_alerts_off",  "sql": ALERTS_OFF_SQL,  "build": alerts_off_email,  "account": False, "from": "kevin", "once_ever": True},
+    {"kind": "lc_free_limit",  "sql": FREE_LIMIT_SQL,  "build": free_limit_email,  "account": False, "from": "kevin", "repeat_days": 30,
+     "needs_table": "user_events"},
 ]
+
+
+def table_exists(conn, name: str) -> bool:
+    cur = conn.cursor()
+    cur.execute("SELECT to_regclass(%s) IS NOT NULL", (f"public.{name}",))
+    ok = cur.fetchone()[0]
+    cur.close()
+    return bool(ok)
 
 
 def quiet_hours(now: datetime) -> bool:
@@ -347,11 +490,14 @@ def run_sample(conn) -> None:
         (RULES[1], {**u, "ends": now + timedelta(days=24), "gave_feedback": False}),
         (RULES[2], {**u, "ends": now + timedelta(days=3)}),
         (RULES[3], {**u, "signed_up_at": u.get("signed_up_at") or now - timedelta(days=5)}),
+        (RULES[4], {**u, "tickers": ["AAPL", "NVDA", "MSFT"], "n_watch": 5, "daily_digest": True}),
+        (RULES[5], {**u, "ref": "ticker:NVDA", "at": now - timedelta(hours=20)}),
     ]
     for rule, data in samples:
         if ONLY and rule["kind"] not in ONLY:
             continue
-        subject, html_doc = (rule["build"](data, picks) if rule["kind"] == "lc_first_stock" else rule["build"](data))
+        subject, html_doc = (rule["build"](data, picks) if rule["kind"] == "lc_first_stock"
+                             else rule["build"](data, conn) if rule["kind"] == "lc_free_limit" else rule["build"](data))
         ok = send_one(rule, data, subject, html_doc, test=True)
         log.info(f"  sample {rule['kind']}: {'sent' if ok else 'FAILED'}  ({subject})")
 
@@ -378,6 +524,9 @@ def main():
         kind = rule["kind"]
         if ONLY and kind not in ONLY:
             continue
+        if rule.get("needs_table") and not table_exists(conn, rule["needs_table"]):
+            log.info(f"{kind}: skipped, {rule['needs_table']} isn't there yet (db/migrations/2026-10-23_annual_and_events.sql)")
+            continue
         try:
             people = rows(conn, rule["sql"])
         except Exception:
@@ -397,6 +546,8 @@ def main():
                     if picks is None:
                         picks = rows(conn, PICKS_SQL)
                     subject, html_doc = rule["build"](u, picks)
+                elif kind == "lc_free_limit":
+                    subject, html_doc = rule["build"](u, conn)
                 else:
                     subject, html_doc = rule["build"](u)
             except Exception:

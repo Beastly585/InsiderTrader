@@ -19,7 +19,7 @@
 // because that's what makes a page worth coming back to.
 
 import {
-  tickerStatus, buildClusters, clusterOut, prettyPerson, prettyCompany, shortRole, isCongress, asDate, todayStr, isEntityName,
+  tickerStatus, buildClusters, clusterOut, prettyPerson, prettyCompany, shortRole, isCongress, asDate, todayStr, isEntityName, buyBreak,
 } from './intel.js';
 import { DATA_ROUTES } from './data.js';
 
@@ -210,7 +210,14 @@ async function stock(ctx, ticker) {
              f.transaction_type, f.is_open_market, ${PLANNED} AS is_routine, f.shares::float AS shares,
              f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
              f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date,
-             f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class
+             f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class,
+             -- For the "First buy in 4 yrs" tag (buyBreak in intel.js): this
+             -- person's last open-market buy at least a month before, and how
+             -- far back their trades in this stock go.
+             MAX(${date}) FILTER (WHERE f.is_open_market AND f.transaction_type = 'buy')
+               OVER (PARTITION BY f.insider_name ORDER BY ${date}
+                     RANGE BETWEEN UNBOUNDED PRECEDING AND INTERVAL '31 days' PRECEDING) AS prior_buy_date,
+             MIN(${date}) OVER (PARTITION BY f.insider_name) AS first_seen
         FROM public.filings f
        WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} >= DATE '2013-01-01'
        ORDER BY ${date} DESC, f.value DESC NULLS LAST LIMIT 400`),
@@ -292,6 +299,10 @@ function tradeOut(r) {
     shares: num(r.shares), price: num(r.price), value: num(r.value), pct: num(r.pct), owned_after: num(r.owned_after),
     filed: asDate(r.filing_date), date: asDate(r.trade_date),
     ...(r.other_class ? { other_class: true, security: r.security_title || '' } : {}),
+    // "First buy in 4 yrs", only where the query supplied the history for it.
+    ...('first_seen' in r && r.is_open_market && r.transaction_type === 'buy' && !cg
+      ? (b => (b ? { brk: b[0] } : {}))(buyBreak(asDate(r.prior_buy_date), asDate(r.first_seen), asDate(r.trade_date)))
+      : {}),
   };
 }
 
@@ -498,7 +509,11 @@ async function marketFeed(ctx) {
                (SELECT MAX(COALESCE(p.transaction_date, p.filing_date)) FROM public.filings p
                  WHERE p.insider_name = f.insider_name AND p.ticker = f.ticker AND p.is_open_market = true
                    AND p.transaction_type = 'buy'
-                   AND COALESCE(p.transaction_date, p.filing_date) < COALESCE(f.transaction_date, f.filing_date) - 30) AS prior_buy_date
+                   AND COALESCE(p.transaction_date, p.filing_date) < COALESCE(f.transaction_date, f.filing_date) - 30) AS prior_buy_date,
+               -- How far back their filings on this stock go, so "no earlier
+               -- buy" is only claimed with history behind it (buyBreak in intel.js).
+               (SELECT MIN(COALESCE(p.transaction_date, p.filing_date)) FROM public.filings p
+                 WHERE p.insider_name = f.insider_name AND p.ticker = f.ticker) AS first_seen
           FROM public.filings f
          WHERE f.is_open_market = true AND f.transaction_type = 'buy' AND f.ticker IS NOT NULL
            AND f.filing_date > CURRENT_DATE - 7 AND f.filing_date <= CURRENT_DATE

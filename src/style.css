@@ -5383,3 +5383,26 @@ body.drawer-open .ws-footer { z-index: 0; }  /* drop footer below overlay */
    button text. Upgrade and checkout buttons use the same purple as the rest
    of the site's primary buttons. */
 [data-theme="dark"] .upgrade-modal__cta { background: var(--accent); }
+
+/* Monthly / Yearly switch in checkout (shown once the yearly price exists) */
+.checkout-interval {
+  display: flex; gap: 6px; margin: 4px 0 14px; padding: 4px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+}
+.checkout-interval button {
+  flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 8px 10px; border: 1px solid transparent; border-radius: 7px; background: transparent;
+  font: inherit; font-size: 0.8125rem; font-weight: 600; color: var(--text-2); cursor: pointer; text-align: left;
+}
+.checkout-interval button span { font-size: 0.6875rem; font-weight: 500; color: var(--text-3); }
+.checkout-interval button.is-on { background: var(--accent-50); border-color: var(--accent); color: var(--text); }
+.checkout-interval button.is-on span { color: var(--accent-strong); }
+@media (max-width: 640px) {
+  .checkout-interval { flex-basis: 100%; margin: 8px 0 2px; }
+}
+.upgrade-narrative__yearly {
+  display: block; width: 100%; margin: -2px 0 8px; padding: 4px 0;
+  background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 0.75rem; font-weight: 600; color: var(--accent-strong);
+}
+.upgrade-narrative__yearly:hover { text-decoration: underline; }

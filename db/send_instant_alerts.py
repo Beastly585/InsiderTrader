@@ -125,7 +125,7 @@ def fetch_portfolio_tickers() -> dict[str, set[str]]:
         return {}
 
 
-def get_insider_context(conn, insider_name: str, ticker: str, trade_date) -> str:
+def get_insider_context(conn, insider_name: str, ticker: str, trade_date, tx_type: str | None = None) -> str:
     """Generate a one-line factual context about this trade.
     No predictions, no recommendations — just what's observable in the filing history."""
     cur = conn.cursor()
@@ -162,13 +162,25 @@ def get_insider_context(conn, insider_name: str, ticker: str, trade_date) -> str
 
         # Build context line
         parts = []
-        if prev:
+        if tx_type == "buy":
+            # Same rule as the digest and the site (insider_intel.buy_break):
+            # a real gap since their last buy, or no buy in 2+ years of filings.
+            cur.execute("""
+                SELECT MAX(COALESCE(transaction_date, filing_date)) FILTER (
+                         WHERE is_open_market AND transaction_type = 'buy'
+                           AND COALESCE(transaction_date, filing_date) < %(d)s::date - 30),
+                       MIN(COALESCE(transaction_date, filing_date))
+                  FROM public.filings WHERE insider_name = %(n)s AND ticker = %(t)s
+            """, {"d": trade_date, "n": insider_name, "t": ticker})
+            prior_buy, first_seen = cur.fetchone()
+            brk = ii.buy_break(prior_buy, first_seen, trade_date)
+            if brk:
+                parts.append(f"Their first open-market buy of {ticker} {brk[1]}")
+        elif prev:
             prev_type, prev_date = prev
             months_gap = max(1, (trade_date - prev_date).days // 30) if trade_date and prev_date else None
             if months_gap and months_gap >= 6:
                 parts.append(f"First open-market trade in {months_gap} months")
-        elif total <= 1:
-            parts.append("Their first open-market trade in this stock on record")
 
         if cluster_count >= 2:
             parts.append(f"{cluster_count + 1} insiders trading this week")
@@ -228,7 +240,7 @@ def build_email(conn, clerk_user_id: str, matches: list[dict]) -> tuple[str, str
             bits.append(f"{m['shares']:,.0f} shares" + (f" at ${m['price_per_share']:,.2f}" if m.get("price_per_share") else ""))
         if cg:
             bits.append("Congress reports a range, not an exact amount")
-        context = "" if cg else get_insider_context(conn, m["insider_name"], m["ticker"], m["trade_date"])
+        context = "" if cg else get_insider_context(conn, m["insider_name"], m["ticker"], m["trade_date"], m.get("transaction_type"))
         planned = (not cg and m.get("planned") is True)
         planned_note = ("Made under a trading plan the insider set up in advance (a 10b5-1 plan), "
                         "so it says less about how they see the stock today.") if planned else ""

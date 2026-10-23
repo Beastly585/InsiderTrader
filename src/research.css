@@ -823,3 +823,5 @@ body.drawer-open .sx-nav { z-index: 94; }
 .sx-fresh__dot--live { background: var(--green-600); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-600) 18%, transparent); }
 .sx-head .sx-fresh { margin-top: 8px; }
 .sx-hero .sx-fresh { margin-top: 14px; }
+.sx-plan__alt { margin: -4px 0 10px; font-size: 13px; font-weight: 600; color: var(--accent-strong); }
+.sx-table__code--accent { color: var(--accent-strong); font-weight: 600; }

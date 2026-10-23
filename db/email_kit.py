@@ -304,7 +304,11 @@ def track(path: str, medium: str, content: str = "", campaign: str = "") -> str:
         q["utm_campaign"] = campaign
     if content:
         q["utm_content"] = content
-    return base + ("&" if "?" in base else "?") + urlencode(q)
+    # The query goes before any #section: "/account?utm_...#emails". After it,
+    # the browser treats the tags as part of the section name, so the page
+    # can't find the section and PostHog never sees the tags.
+    base, hsh = (base.split("#", 1) + [""])[:2] if "#" in base else (base, "")
+    return base + ("&" if "?" in base else "?") + urlencode(q) + (f"#{hsh}" if hsh else "")
 
 
 def ticker_path(ticker: str) -> str:

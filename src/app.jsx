@@ -192,6 +192,11 @@ function useBilling() { return useContext(BillingContext); }
 // ─── Upgrade modal ────────────────────────────────────────────────────────────
 const PRO_PRICE_DISPLAY = '$6.99';
 const PRO_PRICE_LABEL = '$6.99/mo';
+// Yearly Pro. Offered only when the Worker says the yearly Stripe price is
+// set up (billingStatus.annualAvailable, from STRIPE_PRICE_PRO_ANNUAL).
+const PRO_ANNUAL_DISPLAY = '$69';
+const PRO_ANNUAL_LABEL = '$69/year';
+const PRO_ANNUAL_SAVE = 'save 18%'; // vs 12 × $6.99 = $83.88
 
 // Shown when a free user tries to use a Pro feature.
 // Comparison-table style, matching the reference layout's structure:
@@ -209,6 +214,9 @@ function UpgradeModal({ feature, pro, onClose }) {
   }, [onClose]);
 
   const [checkoutProduct, setCheckoutProduct] = useState(null); // null | 'pro' | 'data_export'
+  const [checkoutInterval, setCheckoutInterval] = useState('month');
+  const { billingStatus: bs } = useBilling();
+  const annualOffered = !!bs?.annualAvailable;
   const [plan, setPlan] = useState(feature === 'data_export' || feature === 'data_export_direct' ? 'data_export' : 'pro'); // which card is selected in the picker
   const [statusModal, setStatusModal] = useState(null);
   const [processing, setProcessing] = useState(false); // true for the gap between payment succeeding and the confirmation being ready
@@ -305,6 +313,7 @@ function UpgradeModal({ feature, pro, onClose }) {
     return (
       <CheckoutModal
         product={checkoutProduct}
+        initialInterval={checkoutInterval}
         onClose={() => { setCheckoutProduct(null); if (feature === 'data_export_direct' || feature === 'pro_direct') onClose(); }}
         onSuccess={async () => {
           const wasPro = checkoutProduct === 'pro';
@@ -403,9 +412,14 @@ function UpgradeModal({ feature, pro, onClose }) {
 
         {/* Price + CTA */}
         <div className="upgrade-narrative__cta-section">
-          <button className="upgrade-modal__cta" onClick={() => setCheckoutProduct('pro')}>
+          <button className="upgrade-modal__cta" onClick={() => { setCheckoutInterval('month'); setCheckoutProduct('pro'); }}>
             {variant.cta} · {PRO_PRICE_LABEL}
           </button>
+          {annualOffered && (
+            <button className="upgrade-narrative__yearly" onClick={() => { setCheckoutInterval('year'); setCheckoutProduct('pro'); }}>
+              Or {PRO_ANNUAL_LABEL}, {PRO_ANNUAL_SAVE}
+            </button>
+          )}
         </div>
 
         <div className="upgrade-modal__trust">
@@ -444,16 +458,18 @@ function getStripePromise() {
 }
 
 const PRO_PRICE_CENTS = 699;      // keep in step with PRO_PRICE_DISPLAY and the Stripe price
+const PRO_ANNUAL_CENTS = 6900;    // keep in step with PRO_ANNUAL_DISPLAY and STRIPE_PRICE_PRO_ANNUAL
 const DATA_PRICE_CENTS = 3999;
 
-function productCopy(product, since) {
+function productCopy(product, since, interval = 'month') {
+  const yearly = interval === 'year';
   return product === 'pro' ? {
-    title: 'Seli Pro', price: `${PRO_PRICE_DISPLAY}/month`, endpoint: '/billing/create-subscription',
+    title: 'Seli Pro', price: yearly ? PRO_ANNUAL_LABEL : `${PRO_PRICE_DISPLAY}/month`, endpoint: '/billing/create-subscription',
     subtitle: 'Know the same day insiders trade the stocks you care about.',
     features: ['Watch as many stocks and people as you like', 'Same-day email alerts and a daily brief', `Full history${since ? `, back to ${since}` : ''}`],
-    button: `Subscribe for ${PRO_PRICE_DISPLAY}/month`,
-    note: 'Billed monthly. Cancel anytime in Settings, under Billing.',
-    mode: 'subscription', amount: PRO_PRICE_CENTS,
+    button: yearly ? `Subscribe for ${PRO_ANNUAL_LABEL}` : `Subscribe for ${PRO_PRICE_DISPLAY}/month`,
+    note: yearly ? 'Billed once a year. Cancel anytime in Settings, under Billing.' : 'Billed monthly. Cancel anytime in Settings, under Billing.',
+    mode: 'subscription', amount: yearly ? PRO_ANNUAL_CENTS : PRO_PRICE_CENTS,
   } : {
     title: 'Seli dataset', price: '$39.99 one time', endpoint: '/billing/create-data-purchase',
     subtitle: `Every open-market insider and Congress trade${since ? ` since ${since}` : ''}, as CSV.`,
@@ -579,9 +595,13 @@ function ProWelcomeModal({ onClose }) {
   );
 }
 
-function CheckoutModal({ product, onClose, onSuccess }) {
+function CheckoutModal({ product, onClose, onSuccess, initialInterval = 'month' }) {
   const since = useDataSinceYear();
-  const copy = productCopy(product, since);
+  const { billingStatus } = useBilling();
+  const annual = product === 'pro' && !!billingStatus?.annualAvailable;
+  const [interval, setInterval_] = useState(initialInterval === 'year' ? 'year' : 'month');
+  const effInterval = annual ? interval : 'month';
+  const copy = productCopy(product, since, effInterval);
   const [stripePromise] = useState(() => getStripePromise());
   const [loadFailed, setLoadFailed] = useState(false);
   useEffect(() => { stripePromise.catch(() => setLoadFailed(true)); }, [stripePromise]);
@@ -590,14 +610,15 @@ function CheckoutModal({ product, onClose, onSuccess }) {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
-  // Read once per open, so the form matches whichever theme is on now.
+  // Read once per open (and per plan length), so the form matches whichever
+  // theme is on now and shows the right amount in Apple Pay / Google Pay.
   const options = useMemo(() => ({
     mode: copy.mode, amount: copy.amount, currency: 'usd',
     // Must match payment_method_types on what the Worker creates. Apple Pay
     // and Google Pay still show: they're cards.
     paymentMethodTypes: ['card'],
     appearance: stripeAppearance(), fonts: STRIPE_FONTS, loader: 'never',
-  }), [product]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [product, effInterval]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="upgrade-overlay" onClick={e => { if (e.target.classList.contains('upgrade-overlay')) onClose(); }}>
@@ -609,6 +630,16 @@ function CheckoutModal({ product, onClose, onSuccess }) {
           <div className="logo-mark checkout-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
           <div className="checkout-modal__info-title">{copy.title}</div>
           <div className="checkout-modal__info-price">{copy.price}</div>
+          {annual && (
+            <div className="checkout-interval" role="radiogroup" aria-label="Billing">
+              <button type="button" role="radio" aria-checked={effInterval === 'month'} className={effInterval === 'month' ? 'is-on' : ''} onClick={() => setInterval_('month')}>
+                Monthly <span>{PRO_PRICE_DISPLAY}/mo</span>
+              </button>
+              <button type="button" role="radio" aria-checked={effInterval === 'year'} className={effInterval === 'year' ? 'is-on' : ''} onClick={() => setInterval_('year')}>
+                Yearly <span>{PRO_ANNUAL_DISPLAY}/yr · {PRO_ANNUAL_SAVE}</span>
+              </button>
+            </div>
+          )}
           <p className="checkout-modal__info-subtitle">{copy.subtitle}</p>
           <ul className="checkout-modal__features">
             {copy.features.map(f => (
@@ -627,8 +658,10 @@ function CheckoutModal({ product, onClose, onSuccess }) {
               The payment form couldn't load. Check your connection, or allow js.stripe.com if you use a content blocker, then <button className="checkout-retry" onClick={onClose}>close and try again</button>
             </div>
           ) : (
-            <Elements stripe={stripePromise} options={options}>
-              <CheckoutForm product={product} copy={copy} onSuccess={onSuccess} />
+            // Switching monthly/yearly starts a fresh form: a payment already
+            // started for one length must never be confirmed for the other.
+            <Elements key={effInterval} stripe={stripePromise} options={options}>
+              <CheckoutForm product={product} copy={copy} interval={effInterval} onSuccess={onSuccess} />
             </Elements>
           )}
         </div>
@@ -654,7 +687,7 @@ function checkoutErrorText(msg) {
   return msg || 'Something went wrong. Please try again.';
 }
 
-function CheckoutForm({ product, copy, onSuccess }) {
+function CheckoutForm({ product, copy, interval = 'month', onSuccess }) {
   const stripe = useStripe();
   const elements = useElements();
   const { user } = useUser();
@@ -684,7 +717,7 @@ function CheckoutForm({ product, copy, onSuccess }) {
         const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
         const res = await fetch(`${cfg.NEON_PROXY_URL}${copy.endpoint}`, {
           method: 'POST', headers,
-          body: JSON.stringify({ email: user?.primaryEmailAddress?.emailAddress }),
+          body: JSON.stringify({ email: user?.primaryEmailAddress?.emailAddress, ...(product === 'pro' ? { interval } : {}) }),
         });
         data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || data.error || 'Could not start checkout');
@@ -849,6 +882,22 @@ function BillingSection({ user }) {
     }
   }
 
+  // Stripe's hosted billing page: invoices, receipts, update the card.
+  const [portalBusy, setPortalBusy] = useState(false);
+  async function openPortal() {
+    setPortalBusy(true); setActionErr(null);
+    try {
+      const headers = { 'Content-Type': 'application/json', ...await getAuthHeaders() };
+      const res = await fetch(`${cfg.NEON_PROXY_URL}/billing/portal`, { method: 'POST', headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data.error || "Couldn't open billing. Please try again.");
+      window.location.href = data.url;
+    } catch (e) {
+      setActionErr(e.message);
+      setPortalBusy(false);
+    }
+  }
+
   async function handleReactivate() {
     setBusy(true); setActionErr(null);
     try {
@@ -899,7 +948,7 @@ function BillingSection({ user }) {
         <div className="settings-group__label">Current plan</div>
         <div className="settings-row settings-row--toggle">
           <div>
-            <div className="settings-row__label">{isProPlan ? `Seli Pro — ${PRO_PRICE_LABEL}` : 'Free'}</div>
+            <div className="settings-row__label">{isProPlan ? `Seli Pro, ${status.interval === 'year' ? PRO_ANNUAL_LABEL : PRO_PRICE_LABEL}` : 'Free'}</div>
           </div>
           {!isProPlan && (
             <button className="btn btn--primary" onClick={() => setCheckoutProduct('pro')}>Go Pro →</button>
@@ -936,6 +985,21 @@ function BillingSection({ user }) {
           </div>
         )}
       </div>
+
+      {status.hasBilling && (
+        <div className="settings-group">
+          <div className="settings-group__label">Receipts and payment method</div>
+          <div className="settings-row settings-row--toggle">
+            <div>
+              <div className="settings-row__label">Invoices, receipts and the card on file</div>
+              <div className="settings-row__sub">Opens Stripe's secure billing page, then brings you back here.</div>
+            </div>
+            <button className="btn btn--ghost" disabled={portalBusy} onClick={openPortal}>
+              {portalBusy ? 'Opening…' : 'Open'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="settings-group">
         <div className="settings-group__label">Full data export</div>
@@ -1084,8 +1148,16 @@ function useWatchlist(user) {
   // One list, two kinds of thing: stocks and people. Free accounts get
   // FREE_WATCHLIST_LIMIT watched items in total (the Worker enforces the same
   // cap). Pro is unlimited. Everything syncs to Neon so the emails see it.
-  const [tickers, setTickers] = useState(() => wlGet(WL_KEY));
-  const [insiders, setInsiders] = useState(() => wlGet(WL_INSIDER_KEY));
+  // The server list is the truth. This browser keeps a copy per account only
+  // so the list shows instantly on load. (It used to keep one shared copy and
+  // upload it whenever the server list was empty, which brought back stocks
+  // removed on another device and copied one account's list into another
+  // account signed in on the same browser.)
+  const uid = user?.id || null;
+  const keyT = uid ? `${WL_KEY}:${uid}` : null;
+  const keyI = uid ? `${WL_INSIDER_KEY}:${uid}` : null;
+  const [tickers, setTickers] = useState(() => (keyT ? wlGet(keyT) : []));
+  const [insiders, setInsiders] = useState(() => (keyI ? wlGet(keyI) : []));
   const [alerts, setAlertsMap] = useState({}); // "ticker:NVDA" -> false when muted
   const [showUpgrade, setShowUpgrade] = useState(null); // null | 'watchlist_ticker' | 'watchlist_insider'
   // Bumps each time an add is confirmed saved, so pages that summarize the
@@ -1093,27 +1165,33 @@ function useWatchlist(user) {
   const [synced, setSynced] = useState(0);
   const [ready, setReady] = useState(false); // server list loaded
 
+  // Switching accounts shows that account's cached copy (or nothing), never
+  // the last one's. The old shared copies are removed so they can't leak.
+  useEffect(() => {
+    try { localStorage.removeItem(WL_KEY); localStorage.removeItem(WL_INSIDER_KEY); } catch { }
+    setTickers(keyT ? wlGet(keyT) : []);
+    setInsiders(keyI ? wlGet(keyI) : []);
+    setReady(false);
+  }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Waits for billingStatus so a Pro user with stale Clerk metadata isn't
-  // treated as free. If the server has nothing but this browser does (lists
-  // built before server sync), push the local list up once, capped for free.
+  // treated as free. If the load fails, the cached copy stays on screen.
   const billingKnown = billingStatus !== null;
   useEffect(() => {
-    if (!user || !billingKnown) return;
+    if (!uid || !billingKnown) return;
+    let cancelled = false;
     neonWatchlistLoad().then(items => {
+      if (cancelled) return;
       setReady(true);
       if (!items) return;
       const t = items.filter(i => i.item_type === 'ticker').map(i => i.item_value);
       const ins = items.filter(i => i.item_type === 'insider').map(i => i.item_value);
       setAlertsMap(Object.fromEntries(items.map(i => [`${i.item_type}:${i.item_value}`, i.alerts !== false])));
-      if (t.length || ins.length) {
-        wlSet(t, WL_KEY); setTickers(t);
-        wlSet(ins, WL_INSIDER_KEY); setInsiders(ins);
-      } else {
-        const local = wlGet(WL_KEY);
-        (pro ? local : local.slice(0, FREE_WATCHLIST_LIMIT)).forEach(tk => neonWatchlistMutate('ticker', tk, 'add'));
-      }
+      wlSet(t, keyT); setTickers(t);
+      wlSet(ins, keyI); setInsiders(ins);
     });
-  }, [pro, user?.id, billingKnown]);
+    return () => { cancelled = true; };
+  }, [pro, uid, billingKnown]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const count = tickers.length + insiders.length;
   // Refs mirror state so toggles can decide from the latest list without
@@ -1122,14 +1200,26 @@ function useWatchlist(user) {
   const insidersRef = useRef(insiders); insidersRef.current = insiders;
 
   const makeToggle = (type, ref, set, key, upgradeKey) => (value) => {
+    if (!key) return; // not signed in yet
     const prev = ref.current;
     if (prev.includes(value)) {
       const next = prev.filter(v => v !== value);
       ref.current = next; set(next); wlSet(next, key);
-      neonWatchlistMutate(type, value, 'remove');
+      // If the server didn't take the removal, put it back on screen.
+      // Otherwise it would quietly reappear on the next visit.
+      neonWatchlistMutate(type, value, 'remove').then(r => {
+        if (r?.ok !== false || ref.current.includes(value)) return;
+        const back = [...ref.current, value];
+        ref.current = back; set(back); wlSet(back, key);
+      });
       return;
     }
-    if (!pro && tickersRef.current.length + insidersRef.current.length >= FREE_WATCHLIST_LIMIT) { setShowUpgrade(upgradeKey); return; }
+    if (!pro && tickersRef.current.length + insidersRef.current.length >= FREE_WATCHLIST_LIMIT) {
+      setShowUpgrade(upgradeKey);
+      // Lets the next-morning "you tried to add X" email know what it was.
+      neonWatchlistMutate(type, value, 'limit');
+      return;
+    }
     const next = [...prev, value];
     ref.current = next; set(next); wlSet(next, key);
     // The Worker has the final say (free cap, auth). Undo the add if it refuses.
@@ -1141,9 +1231,9 @@ function useWatchlist(user) {
     });
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const toggleTicker = useCallback(makeToggle('ticker', tickersRef, setTickers, WL_KEY, 'watchlist_ticker'), [pro]);
+  const toggleTicker = useCallback(makeToggle('ticker', tickersRef, setTickers, keyT, 'watchlist_ticker'), [pro, keyT]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const toggleInsider = useCallback(makeToggle('insider', insidersRef, setInsiders, WL_INSIDER_KEY, 'watchlist_insider'), [pro]);
+  const toggleInsider = useCallback(makeToggle('insider', insidersRef, setInsiders, keyI, 'watchlist_insider'), [pro, keyI]);
 
   // Per-item same-day alerts (Pro). Optimistic, rolled back if the save fails.
   const setAlerts = useCallback(async (type, value, on) => {
@@ -7096,11 +7186,26 @@ function AppInner() {
   const filingsRequested = useRef(false);
   function enterApp() { }
 
+  // Only the newest request counts. Widening the range (7d, then 90d) starts a
+  // second, bigger load; if the first one finished last it used to overwrite
+  // the bigger result, and since loadedDays already said 90 nothing reloaded.
+  // A failed load puts loadedDays back to what's really loaded, so picking
+  // the range again retries instead of showing the old rows for good.
+  const loadSeq = useRef(0);
+  const appliedDays = useRef(0);
   const load = useCallback(async (daysBack) => {
+    const id = ++loadSeq.current;
     setLoading(true); setError(null);
-    try { const d = await loadFilings(daysBack); setFilings(d); }
-    catch (e) { setError(e.message); }
-    finally { setLoading(false); }
+    try {
+      const d = await loadFilings(daysBack);
+      if (id !== loadSeq.current) return;
+      setFilings(d); appliedDays.current = daysBack;
+    } catch (e) {
+      if (id !== loadSeq.current) return;
+      setError(e.message); setLoadedDays(appliedDays.current);
+    } finally {
+      if (id === loadSeq.current) setLoading(false);
+    }
   }, []);
 
   const ensureFilingsWindow = useCallback(needed => {

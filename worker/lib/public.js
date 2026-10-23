@@ -10,6 +10,7 @@
 //   GET /public/leaderboard?source=      top 10 insiders, last 12 months
 //   GET /public/stocks                   A to Z directory of stocks with recent Form 4s
 //   GET /public/freshness                when the ingest last checked SEC (the "checked N min ago" line)
+//   GET /public/pricing                  { annual } whether yearly Pro is on sale
 //   GET /public/sitemap.xml              sitemap index
 //   GET /public/sitemap/{static,stocks,congress,insiders-N}.xml
 //
@@ -79,6 +80,9 @@ export async function handlePublic(request, env, origin, url, deps) {
     if (parts[1] === 'congress' && !parts[2]) return json(await cached('congress', TTL.hub, () => congressHub(ctx)));
     if (parts[1] === 'stocks' && !parts[2]) return json(await cached('stocks', TTL.sitemap, () => stocksDirectory(ctx)), 200, 3600);
     if (parts[1] === 'freshness' && !parts[2]) return json(await cached('freshness', 60 * 1000, () => freshness(ctx)), 200, 60);
+    // Whether the yearly Pro price is set up, so the pricing card only
+    // mentions it once checkout can actually sell it.
+    if (parts[1] === 'pricing' && !parts[2]) return json({ annual: !!env.STRIPE_PRICE_PRO_ANNUAL }, 200, 600);
     if (parts[1] === 'insider-buying' && !parts[2]) {
       const d = await marketFeed(ctx); // has its own 10-minute cache
       return json({ ...d, today: new Date().toISOString().slice(0, 10) }, 200, 300);

@@ -16,6 +16,9 @@
  *   STRIPE_PRICE_PRO         price_... for the $11.99/mo Pro plan (the only
  *                            recurring plan — the $39.99 data export is a
  *                            one-time PaymentIntent, no Price object needed)
+ *   STRIPE_PRICE_PRO_ANNUAL  price_... for Pro at $69/year (a yearly price on
+ *                            the same Pro product). Optional: until it's set,
+ *                            checkout offers monthly only.
  *   CLERK_SECRET_KEY         sk_live_... / sk_test_... — used to mirror plan
  *                            status into Clerk publicMetadata after webhook events
  *   CLERK_JWKS_URL           https://<your-clerk-domain>/.well-known/jwks.json
@@ -46,6 +49,7 @@ import { encryptSecret, decryptSecret } from './lib/crypto.js';
 import { computeSignature } from './lib/snaptrade-sign.js';
 import { handleResearch, refreshLeaderboards, ensureLeaderboards } from './lib/research.js';
 import { handlePublic } from './lib/public.js';
+import { sendEmail, dataExportEmail, proWelcomeEmail, testEmail } from './lib/email.js';
 import * as Sentry from '@sentry/cloudflare';
 // ── Streaming ZIP writer — Archive Utility compatible ─────────────────────
 // Streams each file directly from R2 without buffering the entire file in
@@ -604,6 +608,9 @@ async function handleFetchInner(request, env, origin, ctx) {
     }
     if (url.pathname === '/billing/status') {
       return handleBillingStatus(request, env, origin);
+    }
+    if (url.pathname === '/billing/portal') {
+      return handleBillingPortal(request, env, origin);
     }
 
     // ── Watchlist routes ───────────────────────────────────────────────────
@@ -1586,37 +1593,11 @@ async function handleGuestCSVDownload(request, env, origin, ctx) {
         const alreadyEmailed = await env.EXPORT_SNAPSHOTS.head(emailedKey).catch(() => null);
         if (customerEmail && env.RESEND_API_KEY && !alreadyEmailed && !(await guestOrderRevoked(stripe, session.payment_intent))) {
           ctx?.waitUntil?.(env.EXPORT_SNAPSHOTS.put(emailedKey, new Date().toISOString()).catch(() => {}));
-          fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              from: env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app',
-              to: customerEmail,
-              subject: 'Your Seli data export is ready',
-              html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 0">
-                <h1 style="font-size:20px;font-weight:700;margin-bottom:16px">Your data export is ready</h1>
-                <p style="color:#555;line-height:1.6;margin-bottom:20px">
-                  Thank you for purchasing the Seli Insider Trading Dataset. Your download is available now.
-                </p>
-                <div style="background:#f7f7f8;border:1px solid #e5e5e5;border-radius:8px;padding:16px 20px;margin-bottom:20px">
-                  <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:10px">Order details</div>
-                  <div style="margin-bottom:6px"><strong>Order ID:</strong> <code style="font-size:13px">${paymentIntent}</code></div>
-                  <div style="margin-bottom:6px"><strong>Email:</strong> ${customerEmail}</div>
-                  <div><strong>Data through:</strong> ${purchaseDate}</div>
-                </div>
-                <p style="color:#555;line-height:1.6;margin-bottom:20px">
-                  <strong>Save this email.</strong> If you need to re-download your data later, go to
-                  <a href="https://seli.app/redownload" style="color:#5A4FE8">seli.app/redownload</a>
-                  and enter your Order ID and email.
-                </p>
-                <a href="https://seli.app/purchase-complete?session_id=${body.session_id}" style="display:inline-block;background:#5A4FE8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px">Download your dataset</a>
-                <p style="color:#999;font-size:12px;margin-top:24px;line-height:1.5">
-                  This is a one-time purchase. The export contains data through ${purchaseDate}.
-                  Re-downloads deliver the same snapshot — not newer data added after your purchase.
-                </p>
-              </div>`,
-            }),
-          }).catch(e => console.error('[Guest CSV] confirmation email failed:', e.message));
+          const m = dataExportEmail({ orderId: paymentIntent, email: customerEmail, through: purchaseDate,
+            downloadUrl: `https://seli.app/purchase-complete?session_id=${encodeURIComponent(body.session_id)}`,
+            address: env.MAILING_ADDRESS || '' });
+          ctx?.waitUntil?.(sendEmail(env, { to: customerEmail, subject: m.subject, html: m.html, tag: 'data_export' })
+            .catch(e => console.error('[Guest CSV] confirmation email failed:', e.message)));
         }
         return corsResponse({
           order_id: paymentIntent,
@@ -2654,49 +2635,11 @@ async function handleTestEmail(request, env, origin) {
     }
     if (!email) return corsResponse({ error: 'Could not verify your account email' }, 500, origin, env);
 
-    const fromEmail = env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app';
-    const fromName  = 'Seli - Test Email';
-    const appUrl = env.APP_URL || 'https://seli.app';
-    // Same brand structure and light-theme colors as send_digests.py /
-    // send_instant_alerts.py — this is the first real email a new Pro user
-    // sees, so it should look like the same product those two do, not a
-    // separate, unstyled fallback.
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Seli — test email</title>
-</head>
-<body style="margin:0;padding:0;background:#F3F4F6;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:24px 12px;">
-<tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:12px;overflow:hidden;">
-  <tr><td style="background:linear-gradient(135deg,#5A4FE8 0%,#4338C9 60%,#3FBFA0 100%);padding:20px 24px;">
-    <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-0.02em;">Seli</span>
-    <span style="color:rgba(255,255,255,0.85);font-size:13px;margin-left:8px;">Test email</span>
-  </td></tr>
-  <tr><td style="padding:24px 20px 8px;">
-    <p style="font-size:14px;color:#111827;margin:0 0 12px;">This is a test email from Seli — if you're reading this, your notification delivery is working correctly.</p>
-    <p style="font-size:13px;color:#6B7280;margin:0;">Real digests and instant alerts will look similar to this, populated with actual insider activity matching your Settings.</p>
-  </td></tr>
-  <tr><td style="padding:20px;">
-    <a href="${appUrl}" style="display:inline-block;background:#5A4FE8;color:#ffffff;font-weight:700;font-size:13px;padding:10px 20px;border-radius:8px;text-decoration:none;">Open Seli →</a>
-  </td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`;
-
-    const resp = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to: [email], subject: 'Seli — test email', html }),
-    });
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
-      console.error('[Worker] Test email failed:', resp.status, errText.slice(0,200));
+    const m = testEmail({ appUrl: env.APP_URL || 'https://seli.app', address: env.MAILING_ADDRESS || '' });
+    try {
+      await sendEmail(env, { to: email, subject: m.subject, html: m.html, tag: 'test' });
+    } catch (e) {
+      console.error('[Worker] Test email failed:', e.message);
       return corsResponse({ error: 'Resend rejected the send — check Worker secrets' }, 502, origin, env);
     }
 
@@ -2928,7 +2871,7 @@ async function handleWatchlist(request, env, origin) {
     let body;
     try { body = await request.json(); } catch { return corsResponse({ error: 'Invalid JSON' }, 400, origin, env); }
     const { action, item_type, item_value } = body;
-    if (!['add','remove','alerts'].includes(action))   return corsResponse({ error: 'Invalid action' }, 400, origin, env);
+    if (!['add','remove','alerts','limit'].includes(action))   return corsResponse({ error: 'Invalid action' }, 400, origin, env);
     // Only gate 'add' — same principle as SnapTrade's disconnect staying
     // ungated: removing something should always be allowed regardless of
     // plan (it shrinks usage, not grows it), so a downgraded user isn't
@@ -2943,11 +2886,20 @@ async function handleWatchlist(request, env, origin) {
     // Free tier: 3 watched things total, stocks or people. Stocks and people
     // are watched the same way now (one Watch button), so the cap counts both.
     // The weekly digest already covers followed insiders for everyone.
+    // 'limit': the page blocked a free user's 4th add and showed the Pro
+    // pitch. Noted (once a day per item) for the "you tried to add X" email
+    // (db/send_lifecycle.py, lc_free_limit). Never changes the watchlist,
+    // and a missing user_events table just means nothing is noted.
+    if (action === 'limit') {
+      await recordUserEvent(env, userId, 'free_limit', `${item_type}:${item_value.slice(0, 200)}`);
+      return corsResponse({ ok: true }, 200, origin, env);
+    }
     if (action==='add' && !(await isProServerSide(env, userId))) {
       const FREE_WATCHLIST_LIMIT = 3;
       const cnt = await neonFetch(env,
         `SELECT COUNT(*)::int AS n FROM public.user_watchlist WHERE clerk_user_id=${sqlVal(userId)} AND NOT (item_type=${sqlVal(item_type)} AND item_value = ${sqlVal(item_value.slice(0,200))})`);
       if ((cnt.rows?.[0]?.n ?? 0) >= FREE_WATCHLIST_LIMIT) {
+        await recordUserEvent(env, userId, 'free_limit', `${item_type}:${item_value.slice(0, 200)}`);
         return corsResponse({ error: 'Free watchlist is full (3 items)', limit: FREE_WATCHLIST_LIMIT }, 403, origin, env);
       }
     }
@@ -3875,8 +3827,60 @@ async function cancelStripeForDeletedUser(env, clerkUserId) {
 // stripe_subscription_id), not a third $0 price — see the guard in
 // handleCreateSubscription below for why that's still safe against a
 // comped account accidentally paying anyway.
+// "You're on Seli Pro": what turned on, a nudge to set up alerts, where
+// billing lives. Once per subscription, recorded in email_log BEFORE sending
+// so Stripe retrying the webhook can't send it twice. If email_log isn't
+// there it sends nothing rather than risk repeats.
+async function sendProWelcome(env, clerkUserId, sub, periodEnd) {
+  if (!env.RESEND_API_KEY || !env.CLERK_SECRET_KEY) return;
+  const claim = await neonFetch(env, `
+    INSERT INTO public.email_log (clerk_user_id, kind, ref)
+    SELECT ${sqlVal(clerkUserId)}, 'pro_welcome', ${sqlVal(sub.id)}
+     WHERE NOT EXISTS (SELECT 1 FROM public.email_log
+                        WHERE clerk_user_id = ${sqlVal(clerkUserId)} AND kind = 'pro_welcome' AND ref = ${sqlVal(sub.id)})
+    RETURNING id`);
+  const logId = claim.rows?.[0]?.id;
+  if (!logId) return; // already sent for this subscription
+  try {
+    const r = await fetch(`https://api.clerk.com/v1/users/${clerkUserId}`, { headers: { 'Authorization': `Bearer ${env.CLERK_SECRET_KEY}` } });
+    const u = await r.json();
+    const email = u.email_addresses?.find(e => e.id === u.primary_email_address_id)?.email_address || u.email_addresses?.[0]?.email_address;
+    if (!email) throw new Error('no email on the Clerk user');
+    const price = sub.items?.data?.[0]?.price;
+    const amount = price?.unit_amount != null ? `$${(price.unit_amount / 100).toFixed(2).replace(/\.00$/, '')}` : '$6.99';
+    const per = price?.recurring?.interval === 'year' ? 'year' : 'month';
+    const renews = periodEnd ? new Date(periodEnd * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' }) : null;
+    const m = proWelcomeEmail({ firstName: (u.first_name || '').trim(), priceLabel: `${amount}/${per}`, renews,
+      appUrl: env.APP_URL || 'https://seli.app', address: env.MAILING_ADDRESS || '' });
+    const domain = (env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app').split('@')[1];
+    await sendEmail(env, { to: email, subject: m.subject, html: m.html, tag: 'pro_welcome',
+      fromName: 'Kevin at Seli', fromEmail: env.WELCOME_FROM_EMAIL || `kevin@${domain}`,
+      replyTo: env.WELCOME_REPLY_TO || 'kevin@seli.app' });
+  } catch (e) {
+    await neonFetch(env, `DELETE FROM public.email_log WHERE id = ${Number(logId)}`).catch(() => {});
+    throw e;
+  }
+}
+
+// Things people did that an email may follow up on (db/send_lifecycle.py).
+// public.user_events comes from db/migrations/2026-10-23_annual_and_events.sql.
+// Best-effort: same thing at most once a day per person, and a failure (no
+// table yet) is ignored.
+async function recordUserEvent(env, userId, kind, ref = null) {
+  try {
+    await neonFetch(env, `
+      INSERT INTO public.user_events (clerk_user_id, kind, ref)
+      SELECT ${sqlVal(userId)}, ${sqlVal(kind)}, ${sqlVal(ref)}
+       WHERE NOT EXISTS (SELECT 1 FROM public.user_events
+                          WHERE clerk_user_id = ${sqlVal(userId)} AND kind = ${sqlVal(kind)}
+                            AND ref IS NOT DISTINCT FROM ${sqlVal(ref)} AND created_at > now() - interval '1 day')`);
+  } catch (e) {
+    console.warn('[Worker] user event not recorded (run the 2026-10-23 migration?):', e.message);
+  }
+}
+
 function planFromPriceId(env, priceId) {
-  const proPrices = [env.STRIPE_PRICE_PRO, env.STRIPE_PRICE_BETA].filter(Boolean);
+  const proPrices = [env.STRIPE_PRICE_PRO, env.STRIPE_PRICE_BETA, env.STRIPE_PRICE_PRO_ANNUAL].filter(Boolean);
   return proPrices.includes(priceId) ? 'pro' : 'free';
 }
 
@@ -3989,6 +3993,7 @@ async function handleStripeWebhook(request, env) {
         }
 
         let plan;
+        let wasPro = false;   // for the "You're on Pro" email: only on the change to Pro
         if (!isLiveNow) {
           plan = 'free';
         } else {
@@ -4010,7 +4015,8 @@ async function handleStripeWebhook(request, env) {
           const existing = await neonFetch(env,
             `SELECT plan FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
           );
-          plan = existing.rows?.[0]?.plan === 'pro' ? 'pro' : planFromPriceId(env, priceId);
+          wasPro = existing.rows?.[0]?.plan === 'pro';
+          plan = wasPro ? 'pro' : planFromPriceId(env, priceId);
         }
 
         await neonFetch(env, `
@@ -4031,6 +4037,24 @@ async function handleStripeWebhook(request, env) {
         `);
 
         await syncClerkMetadata(env, clerkUserId, { plan });
+
+        // Monthly or yearly, for Settings > Billing and the weekly numbers.
+        // Separate and best-effort: the column comes from
+        // db/migrations/2026-10-23_annual_and_events.sql, and a missing
+        // column must never fail the webhook (Stripe would keep retrying).
+        const interval = sub.items?.data?.[0]?.price?.recurring?.interval || null;
+        if (interval) {
+          await neonFetch(env,
+            `UPDATE public.subscriptions SET price_interval = ${sqlVal(interval)} WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+          ).catch(e => console.warn('[Worker] price_interval not saved (run the 2026-10-23 migration):', e.message));
+        }
+
+        // Just became Pro (a new subscription, or back after one ended):
+        // the welcome email. Never fails the webhook.
+        if (isLiveNow && plan === 'pro' && !wasPro) {
+          await sendProWelcome(env, clerkUserId, sub, periodEnd)
+            .catch(e => console.error('[Worker] Pro welcome email failed (non-fatal):', e.message));
+        }
 
         // ── Auto-disconnect SnapTrade when a user actually loses Pro ──
         // SnapTrade bills $2/mo per connected user regardless of whether they
@@ -4079,36 +4103,8 @@ async function handleStripeWebhook(request, env) {
             const clerkUser = await clerkResp.json();
             const userEmail = clerkUser.email_addresses?.[0]?.email_address;
             if (userEmail) {
-              await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  from: env.ALERTS_FROM_EMAIL || 'alerts@mail.seli.app',
-                  to: userEmail,
-                  subject: 'Your Seli data export is ready',
-                  html: `<div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 0">
-                    <h1 style="font-size:20px;font-weight:700;margin-bottom:16px">Your data export is ready</h1>
-                    <p style="color:#555;line-height:1.6;margin-bottom:20px">
-                      Thank you for purchasing the Seli Insider Trading Dataset. Your download is available now.
-                    </p>
-                    <div style="background:#f7f7f8;border:1px solid #e5e5e5;border-radius:8px;padding:16px 20px;margin-bottom:20px">
-                      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#888;margin-bottom:10px">Order details</div>
-                      <div style="margin-bottom:6px"><strong>Order ID:</strong> <code style="font-size:13px">${pi.id}</code></div>
-                      <div style="margin-bottom:6px"><strong>Email:</strong> ${userEmail}</div>
-                      <div><strong>Data through:</strong> ${purchaseDate}</div>
-                    </div>
-                    <p style="color:#555;line-height:1.6;margin-bottom:20px">
-                      <strong>Save this email.</strong> You can re-download your data anytime at
-                      <a href="https://seli.app/redownload" style="color:#5A4FE8">seli.app/redownload</a>.
-                    </p>
-                    <a href="https://seli.app/redownload" style="display:inline-block;background:#5A4FE8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px">Download your dataset</a>
-                    <p style="color:#999;font-size:12px;margin-top:24px;line-height:1.5">
-                      This is a one-time purchase. The export contains data through ${purchaseDate}.
-                      Re-downloads deliver the same snapshot.
-                    </p>
-                  </div>`,
-                }),
-              });
+              const m = dataExportEmail({ orderId: pi.id, email: userEmail, through: purchaseDate, address: env.MAILING_ADDRESS || '' });
+              await sendEmail(env, { to: userEmail, subject: m.subject, html: m.html, tag: 'data_export' });
             }
           } catch (e) {
             console.error('[Worker] Data export confirmation email failed:', e.message);
@@ -4314,6 +4310,12 @@ async function handleClerkWebhook(request, env) {
     await neonFetch(env, `DELETE FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
     await neonFetch(env, `DELETE FROM public.user_preferences WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
     await neonFetch(env, `DELETE FROM public.user_watchlist WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    // Email history and behavior events (newer tables): best-effort, so a
+    // table that doesn't exist yet can't block the rest of the deletion.
+    for (const t of ['email_log', 'user_events']) {
+      await neonFetch(env, `DELETE FROM public.${t} WHERE clerk_user_id = ${sqlVal(clerkUserId)}`)
+        .catch(e => console.warn(`[Worker] ${t} cleanup on account deletion skipped:`, e.message));
+    }
     console.log(`[Worker] Cascaded delete for clerk_user_id ${clerkUserId} following Clerk user.deleted`);
     return new Response(JSON.stringify({ received: true }), { status: 200 });
   } catch (e) {
@@ -4341,7 +4343,14 @@ async function handleCreateSubscription(request, env, origin) {
   // status:'active', and no stripe_subscription_id, set up directly rather
   // than through any price/checkout. The guard below still protects those
   // accounts from accidentally paying anyway (see the comment there).
-  const priceId = env.STRIPE_PRICE_BETA;
+  // Annual Pro ($69/year) when the page asks for it and the yearly price is
+  // set up (STRIPE_PRICE_PRO_ANNUAL); otherwise monthly, as before.
+  let wantsAnnual = false;
+  try { wantsAnnual = (await request.clone().json())?.interval === 'year'; } catch { /* no body: monthly */ }
+  if (wantsAnnual && !env.STRIPE_PRICE_PRO_ANNUAL) {
+    return corsResponse({ error: "Yearly billing isn't available yet. Pick monthly, or try again soon." }, 400, origin, env);
+  }
+  const priceId = wantsAnnual ? env.STRIPE_PRICE_PRO_ANNUAL : env.STRIPE_PRICE_BETA;
 
   // Email comes from Clerk server-side, never from the request body. The
   // client used to be trusted here (`const { email } = body`) — not a
@@ -4723,9 +4732,15 @@ async function handleBillingStatus(request, env, origin) {
 
   try {
     const subResult = await neonFetch(env,
-      `SELECT plan, status, current_period_end, cancel_at_period_end
+      `SELECT plan, status, current_period_end, cancel_at_period_end,
+              (stripe_subscription_id IS NOT NULL) AS has_billing, price_interval
        FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
-    );
+    ).catch(() => neonFetch(env,
+      // price_interval arrives with db/migrations/2026-10-23_annual_and_events.sql
+      `SELECT plan, status, current_period_end, cancel_at_period_end,
+              (stripe_subscription_id IS NOT NULL) AS has_billing, NULL AS price_interval
+       FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`
+    ));
     const subRow = subResult.rows?.[0];
 
     const purchaseResult = await neonFetch(env,
@@ -4738,13 +4753,46 @@ async function handleBillingStatus(request, env, origin) {
     const hasDataExport = dataExports.length > 0;
 
     if (!subRow) {
-      return corsResponse({ plan: 'free', status: 'inactive', hasDataExport, dataExports }, 200, origin, env);
+      return corsResponse({ plan: 'free', status: 'inactive', hasDataExport, dataExports, annualAvailable: !!env.STRIPE_PRICE_PRO_ANNUAL }, 200, origin, env);
     }
-    const { plan, status, current_period_end, cancel_at_period_end } = subRow;
-    return corsResponse({ plan, status, current_period_end, cancel_at_period_end, hasDataExport, dataExports }, 200, origin, env);
+    const { plan, status, current_period_end, cancel_at_period_end, has_billing, price_interval } = subRow;
+    return corsResponse({ plan, status, current_period_end, cancel_at_period_end, hasBilling: !!has_billing,
+      interval: price_interval || (plan === 'pro' ? 'month' : null), hasDataExport, dataExports,
+      annualAvailable: !!env.STRIPE_PRICE_PRO_ANNUAL }, 200, origin, env);
   } catch (e) {
     console.error('[Worker] billing-status failed:', e.message);
     return corsResponse({ error: 'Something went wrong — please try again' }, 500, origin, env);
+  }
+}
+
+// ── Stripe customer portal ──────────────────────────────────────────────────
+// Receipts and invoices, and updating the card on file, on Stripe's own
+// hosted page. Canceling stays in Settings > Billing (it asks why, and the
+// cancel emails key off it), so turn "cancel subscriptions" and "switch
+// plans" off in Stripe's portal settings (Settings > Billing > Customer portal).
+// Returns { url }; the page sends the browser there and Stripe sends it back
+// to /account#billing.
+async function handleBillingPortal(request, env, origin) {
+  if (request.method !== 'POST') return corsResponse({ error: 'Method not allowed' }, 405, origin, env);
+  const clerkUserId = await verifiedUserId(request, env);
+  if (!clerkUserId) return corsResponse({ error: 'Authentication required' }, 401, origin, env);
+  try {
+    const row = await neonFetch(env,
+      `SELECT stripe_customer_id FROM public.subscriptions WHERE clerk_user_id = ${sqlVal(clerkUserId)}`);
+    const customer = row.rows?.[0]?.stripe_customer_id;
+    if (!customer) return corsResponse({ error: 'No billing history yet.' }, 404, origin, env);
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient(),
+      timeout: 20000, apiVersion: '2024-06-20' }); // fail fast instead of hanging (Stripe's default is 80s)
+    const back = (isAllowedOrigin(origin) ? origin : 'https://seli.app') + '/account#billing';
+    const session = await stripe.billingPortal.sessions.create({ customer, return_url: back });
+    return corsResponse({ url: session.url }, 200, origin, env);
+  } catch (e) {
+    console.error('[Worker] billing-portal failed:', e.message);
+    const notSetUp = /configuration|portal/i.test(e.message || '');
+    return corsResponse({ error: notSetUp
+      ? "Billing history isn't available yet. Email admin@seli.app and we'll send your receipts."
+      : 'Something went wrong. Please try again.' }, 500, origin, env);
   }
 }
 

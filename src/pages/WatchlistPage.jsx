@@ -1,7 +1,7 @@
 // src/pages/WatchlistPage.jsx — /watchlist
 // One list: the stocks and people you watch, plus what you hold. Each row
 // says in plain English what insiders did, and has its own alert bell.
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link } from '../lib/nav.jsx';
 import { money, congressRange, ago, plural, prettyPerson } from '../lib/text.js';
@@ -11,7 +11,7 @@ import { SearchBox } from '../components/Search.jsx';
 
 export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgrade, alertsMasterOn }) {
   const h = (portfolioTickers || []).slice(0, 60).join(',');
-  const { data: d, error, reload } = useApi(`/api/watchlist/summary${h ? `?h=${encodeURIComponent(h)}` : ''}`);
+  const { data: d, error, loading, reload } = useApi(`/api/watchlist/summary${h ? `?h=${encodeURIComponent(h)}` : ''}`);
   useEffect(() => { document.title = 'Watchlist · Seli'; }, []);
 
   const used = watchlist.tickers.length + watchlist.insiders.length;
@@ -25,6 +25,15 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
   // every click and a fast add doesn't leave a row stuck loading.
   const missing = d ? [...watchlist.tickers.filter(t => !byTicker[t]), ...watchlist.insiders.filter(n => !byPerson[n])].join('|') : '';
   useEffect(() => { if (missing) reload(); }, [missing, watchlist.synced]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // What the last summary was asked about. A row it covered but has nothing
+  // for gets a plain line instead of a placeholder that pulses forever; a
+  // row added since keeps its placeholder until the refetch lands.
+  // Snapshot taken when a new summary arrives (useMemo, so it's ready in the
+  // same render; a ref set in an effect would leave rows pulsing a beat late).
+  const covered = useMemo(() => new Set([...watchlist.tickers, ...watchlist.insiders]), [d]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pending = id => !error && (loading || !d || !covered.has(id));
+  const noDetail = <p className="sx-wl__line sx-muted">{error ? "Couldn't load the latest. Try again above." : 'No insider filings on record yet.'}</p>;
 
   return (
     <div className="sx-page">
@@ -74,7 +83,7 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
                           {s?.recent_buys?.n > 0 && <Chip tone="buy">Buying · 30d</Chip>}
                           {s?.recent_sells?.n > 0 && !s?.recent_buys?.n && <Chip tone="sell">Selling · 30d</Chip>}
                         </div>
-                        {s ? s.lines.slice(0, 2).map((l, i) => <p key={i} className={`sx-wl__line${i ? ' sx-muted' : ''}`}>{l}</p>) : <Skeleton lines={1} height={12} />}
+                        {s ? s.lines.slice(0, 2).map((l, i) => <p key={i} className={`sx-wl__line${i ? ' sx-muted' : ''}`}>{l}</p>) : pending(t) ? <Skeleton lines={1} height={12} /> : noDetail}
                       </div>
                       <div className="sx-wl__ctl">
                         <AlertBell watchlist={watchlist} kind="stock" id={t} onUpgrade={onUpgrade} />
@@ -99,7 +108,7 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
                           <InsiderLink raw={n} className="sx-strong">{p?.name || prettyPerson(n)}</InsiderLink>
                           {p?.role && <span className="sx-wl__name">{p.role}</span>}
                         </div>
-                        {!p ? <Skeleton lines={1} height={12} />
+                        {!p ? (pending(n) ? <Skeleton lines={1} height={12} /> : noDetail)
                           : p.recent.length ? p.recent.slice(0, 2).map((t, i) => (
                             <p key={i} className="sx-wl__line">{t.type === 'buy' ? 'Bought' : 'Sold'} <b className={t.type === 'buy' ? 'sx-up' : 'sx-down'}>{t.congress ? congressRange(t.value) : money(t.value)}</b> of <StockLink ticker={t.ticker} /> {ago(t.date)}.</p>
                           ))

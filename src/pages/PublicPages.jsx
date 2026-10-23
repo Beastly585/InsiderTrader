@@ -311,9 +311,14 @@ const WHY = [
 export function PublicHome() {
   const clerk = useClerk();
   const since = useDataSinceYear();
-  const { data: buying } = useApi('/public/insider-buying');
-  const { data: congress } = useApi('/public/congress');
-  const { data: leaders } = useApi('/public/leaderboard?years=1&source=all');
+  const { data: buying, error: buyingErr, reload: reloadBuying } = useApi('/public/insider-buying');
+  const { data: congress, error: congressErr, reload: reloadCongress } = useApi('/public/congress');
+  const { data: leaders, error: leadersErr, reload: reloadLeaders } = useApi('/public/leaderboard?years=1&source=all');
+  const { data: pricing } = useApi('/public/pricing');
+  // Each card shows its own "couldn't load" instead of pulsing forever.
+  const loadingOr = (err, retry, lines) => err
+    ? <div className="sx-card__body"><ErrorNote message="Couldn't load this right now." onRetry={retry} /></div>
+    : <div className="sx-card__body"><Skeleton lines={lines} /></div>;
   useEffect(() => { document.title = PAGE_TITLES.home; }, []);
   const narrow = useNarrow();
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
@@ -340,7 +345,7 @@ export function PublicHome() {
       <div className="sx-feed-cols">
         <Card title="Insider buying this week" sub="Open-market purchases, biggest first" pad={false}
           action={<a href="/insider-buying" className="sx-link" onClick={navClick('/insider-buying')}>See all <Icon name="arrow" size={12} /></a>}>
-          {!buying ? <div className="sx-card__body"><Skeleton lines={5} /></div> : (
+          {!buying ? loadingOr(buyingErr, reloadBuying, 5) : (
             <ul className="sx-rows">
               {clusters.map(c => (
                 <li key={c.ticker} className="sx-row">
@@ -361,7 +366,7 @@ export function PublicHome() {
         <div className="sx-feed-stack">
           <Card title="Latest from Congress" sub="STOCK Act disclosures, most recent trades" pad={false}
             action={<a href="/congress" className="sx-link" onClick={navClick('/congress')}>See all <Icon name="arrow" size={12} /></a>}>
-            {!congress ? <div className="sx-card__body"><Skeleton lines={4} /></div> : (
+            {!congress ? loadingOr(congressErr, reloadCongress, 4) : (
               <ul className="sx-rows">
                 {(congress.recent || []).slice(0, 5).map((t, i) => (
                   <li key={`${t.acc}:${i}`} className="sx-row">
@@ -377,7 +382,7 @@ export function PublicHome() {
           </Card>
           <Card title="Best insider track records" sub="Points their buys beat the S&P 500 by, last 12 months. More buys ranks higher." pad={false}
             action={<a href="/leaderboard" className="sx-link" onClick={navClick('/leaderboard')}>Leaderboard <Icon name="arrow" size={12} /></a>}>
-            {!leaders ? <div className="sx-card__body"><Skeleton lines={4} /></div> : (
+            {!leaders ? loadingOr(leadersErr, reloadLeaders, 4) : (
               <ul className="sx-rows">
                 {(leaders.ranked || []).slice(0, 5).map(r => (
                   <li key={r.raw} className="sx-row">
@@ -425,6 +430,7 @@ export function PublicHome() {
           <div className="sx-plan sx-plan--pro">
             <div className="sx-plan__name">Pro</div>
             <div className="sx-plan__price">$6.99<span>/month</span></div>
+            {pricing?.annual && <p className="sx-plan__alt">or $69 a year, save 18%</p>}
             <p className="sx-plan__desc">For people who want to know the same day:</p>
             <ul className="sx-plan__list">
               <li>Watch as many stocks and people as you like</li>

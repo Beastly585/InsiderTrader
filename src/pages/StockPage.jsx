@@ -178,7 +178,7 @@ function TradeList({ trades, showTicker, showInsider, showNow, membersOnly }) {
       {trades.map((t, i) => {
         const since = sinceBuy(t, showNow);
         const role = membersOnly ? '' : t.congress ? memberRole(t) : t.role;
-        const detail = !t.om ? codeLabel(t.code) : t.routine ? 'Planned' : '';
+        const detail = !t.om ? codeLabel(t.code) : t.routine ? 'Planned' : t.brk || '';
         // Who traded (stock pages), which company (multi-company people), or,
         // on a one-company insider page, the trade itself.
         const verb = t.type === 'buy' ? (t.om ? 'Bought' : 'Acquired') : t.type === 'sell' ? (t.om ? 'Sold' : 'Disposed') : 'Traded';
@@ -243,7 +243,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
                     {!membersOnly && <span className="sx-table__role">{t.congress ? memberRole(t) : t.role}</span>}
                   </td>
                 )}
-                <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}</td>
+                <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}{t.om && !t.routine && t.brk && <span className="sx-table__code sx-table__code--accent" title="This insider hadn't bought this stock on the open market in that long">{t.brk}</span>}</td>
                 <td className="sx-r sx-mono sx-hide-sm">{t.congress ? '—' : shares(t.shares)}</td>
                 <td className="sx-r sx-mono sx-hide-sm">{t.congress ? '—' : t.other_class
                   ? <span className="sx-otherclass" title={`${t.security || 'Local shares'}: priced per local share, not per ${t.ticker || 'US'} ADS. The dollar value is correct.`}>{price(t.price)}<small>local</small></span>

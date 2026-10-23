@@ -157,6 +157,25 @@ function roleBit(role) {
 }
 
 // ── Clusters (insider_intel.build_clusters) ──────────────────────────────────
+// [chip, phrase] when a buy breaks a long gap, else null. "First buy in 4
+// yrs": their last open-market buy of this stock was 4 years earlier. "First
+// buy in 6+ yrs": no earlier buy at all, but they've filed on this stock for
+// 6 years. No earlier buy and little history claims nothing: records start in
+// 2013, and a new insider has no pattern to break. Same rule as buy_break()
+// in db/insider_intel.py.
+export function buyBreak(priorBuy, firstSeen, trade) {
+  if (!trade) return null;
+  if (priorBuy) {
+    const g = daysBetween(priorBuy, trade) / 365.25;
+    return g >= 2 ? [`First buy in ${Math.round(g)} yrs`, `in ${Math.round(g)} years`] : null;
+  }
+  if (firstSeen) {
+    const h = daysBetween(firstSeen, trade) / 365.25;
+    if (h >= 2) return [`First buy in ${Math.floor(h)}+ yrs`, `in ${Math.floor(h)}+ years of filings`];
+  }
+  return null;
+}
+
 function stakeLabel(pct, ownedBefore) {
   if (pct == null) return ownedBefore != null && ownedBefore <= 0 ? 'New position' : null;
   if (pct < 5) return null;
@@ -203,7 +222,7 @@ export function buildClusters(buys, { includeCorporate = true, includeCongress =
       if (!buyers.has(r.insider_name)) buyers.set(r.insider_name, {
         raw: r.insider_name, name: prettyPerson(r.insider_name, cg), title: r.insider_title || '',
         role: shortRole(r.insider_title, cg ? 'congress' : r.relationship), value: 0, pct: null,
-        owned_before: r.owned_before, last_trade: null, prior_buy_date: asDate(r.prior_buy_date),
+        owned_before: r.owned_before, last_trade: null, prior_buy_date: asDate(r.prior_buy_date), first_seen: asDate(r.first_seen),
         nonroutine: false, congress: cg,
       });
       const b = buyers.get(r.insider_name);
@@ -214,12 +233,14 @@ export function buildClusters(buys, { includeCorporate = true, includeCongress =
       if (r.is_routine === false) b.nonroutine = true;
       const pb = asDate(r.prior_buy_date);
       if (pb && (!b.prior_buy_date || pb > b.prior_buy_date)) b.prior_buy_date = pb;
+      const fs = asDate(r.first_seen);
+      if (fs && (!b.first_seen || fs < b.first_seen)) b.first_seen = fs;
     }
     const blist = [...buyers.values()].sort((a, b) => b.value - a.value);
     for (const b of blist) {
-      const gap = b.prior_buy_date && b.last_trade ? daysBetween(b.prior_buy_date, b.last_trade) / 365.25 : null;
-      b.gap_years = gap;
-      b.first_buy = !b.prior_buy_date || (gap != null && gap >= 2);
+      b.gap_years = b.prior_buy_date && b.last_trade ? daysBetween(b.prior_buy_date, b.last_trade) / 365.25 : null;
+      b.break = buyBreak(b.prior_buy_date, b.first_seen, b.last_trade);
+      b.first_buy = !!b.break;
       b.stake = stakeLabel(b.pct, b.owned_before);
     }
     const c = {
@@ -250,17 +271,13 @@ export function clusterFacts(c) {
   if (c.n_insiders >= 2) f.push([`${c.n_insiders} insiders buying`, 'buy']);
   if (c.csuite.length) f.push([`${rolesPhrase(c.csuite)} buying`, 'buy']);
   else if (c.congress) f.push(['Member of Congress', 'accent']);
-  if (c.first_buy.length) {
-    const g = c.first_buy[0].gap_years;
-    f.push([g ? `First buy in ${Math.round(g)} yrs` : 'First buy on record', 'accent']);
-  }
+  if (c.first_buy.length) f.push([c.first_buy[0].break[0], 'accent']);
   // Same person the lead sentence is about, so the chip and the sentence agree.
   // If the top buyer has no stake figure, name whose stake it is.
   const top = c.buyers[0];
   const stakes = c.buyers.filter(b => b.stake);
   if (top.stake) f.push([top.stake, 'neutral']);
   else if (stakes.length) { const s = stakes.reduce((a, b) => ((b.pct || 0) > (a.pct || 0) ? b : a)); f.push([`${s.stake} (${s.role})`, 'neutral']); }
-  if (c.nonroutine) f.push(['Non-routine', 'neutral']);
   return f.slice(0, 5);
 }
 
@@ -277,16 +294,14 @@ export function leadSentence(c, period = 'this week') {
       : `, growing their stake ${(1 + top.pct / 100).toFixed(1).replace(/\.0$/, '')}x`;
   }
   s += '.';
-  const fb = c.first_buy.filter(b => b.gap_years);
-  if (fb.length) s += ` It's ${fb[0].name}'s first open-market buy of ${c.ticker} in ${Math.round(fb[0].gap_years)} years.`;
-  else if (c.first_buy.length && c.first_buy[0] === top) s += ` It's the first open-market buy of ${c.ticker} on record for ${top.name}.`;
+  if (c.first_buy.length) s += ` It's ${c.first_buy[0].name}'s first open-market buy of ${c.ticker} ${c.first_buy[0].break[1]}.`;
   return s;
 }
 
 export function filingContext(c) {
-  const fb = c.first_buy.filter(b => b.gap_years);
+  const fb = c.first_buy;
   if (c.n_insiders >= 3) return 'When several insiders at one company file open-market buys within a few weeks, it\'s called a cluster. Clusters show up less often than single buys, which is why Seli points them out.';
-  if (fb.length) return `${fb[0].name} hadn't filed an open-market buy of ${c.ticker} in ${Math.round(fb[0].gap_years)} years. Seli flags it when an insider's filings break from their usual pattern.`;
+  if (fb.length) return `${fb[0].name} hadn't filed an open-market buy of ${c.ticker} ${fb[0].break[1]}. Seli flags it when an insider's filings break from their usual pattern.`;
   if (c.csuite.length) return 'Most executive stock comes from grants and option exercises. An open-market buy means the executive paid market price with their own money, which happens less often.';
   if ((c.max_pct || 0) >= 25) return 'Stake change compares the shares bought to what the insider already held, so the dollar amount can be read against the size of their existing position.';
   if (c.congress) return 'Congressional trades are disclosed under the STOCK Act, often weeks after the trade date.';

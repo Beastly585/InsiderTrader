@@ -87,7 +87,12 @@ SELECT f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship
          WHERE p.insider_name = f.insider_name AND p.ticker = f.ticker
            AND p.is_open_market = true AND p.transaction_type = 'buy'
            AND COALESCE(p.transaction_date, p.filing_date) < COALESCE(f.transaction_date, f.filing_date) - 30
-       ) AS prior_buy_date
+       ) AS prior_buy_date,
+       -- How far back this person's filings on this stock go (any kind), so
+       -- "no earlier buy" is only claimed where there's history to back it.
+       (SELECT MIN(COALESCE(p.transaction_date, p.filing_date))
+          FROM public.filings p
+         WHERE p.insider_name = f.insider_name AND p.ticker = f.ticker) AS first_seen
   FROM public.filings f
  WHERE f.is_open_market = true
    AND f.transaction_type = 'buy'
@@ -116,6 +121,23 @@ def _gap_years(prior, trade) -> float | None:
     if not prior or not trade:
         return None
     return (trade - prior).days / 365.25
+
+
+def buy_break(prior_buy, first_seen, trade) -> tuple[str, str] | None:
+    """(chip, phrase) when this buy breaks a long gap, else None.
+    "First buy in 4 yrs" / "in 4 years": their last open-market buy of this
+    stock was 4 years earlier. "First buy in 6+ yrs" / "in 6+ years of
+    filings": no earlier buy at all, but they've filed on this stock for 6
+    years. With no earlier buy and little history, nothing is claimed: Seli's
+    records start in 2013 and a new insider has no pattern to break.
+    Same rule as buyBreak() in worker/lib/intel.js."""
+    gap = _gap_years(prior_buy, trade)
+    if gap is not None:
+        return (f"First buy in {round(gap)} yrs", f"in {round(gap)} years") if gap >= 2 else None
+    hist = _gap_years(first_seen, trade)
+    if hist is not None and hist >= 2:
+        return f"First buy in {int(hist)}+ yrs", f"in {int(hist)}+ years of filings"
+    return None
 
 
 def _stake_label(pct, owned_before) -> str | None:
@@ -181,7 +203,7 @@ def build_clusters(buys: list[dict], *, include_corporate: bool = True, include_
                 "role": short_role(r.get("insider_title"), "congress" if is_congress(r) else r.get("relationship")),
                 "relationship": r.get("relationship"),
                 "value": 0.0, "pct": None, "owned_before": r.get("owned_before"),
-                "last_trade": None, "prior_buy_date": r.get("prior_buy_date"),
+                "last_trade": None, "prior_buy_date": r.get("prior_buy_date"), "first_seen": r.get("first_seen"),
                 "nonroutine": False, "congress": is_congress(r),
             })
             b["value"] += r.get("value") or 0
@@ -195,12 +217,14 @@ def build_clusters(buys: list[dict], *, include_corporate: bool = True, include_
             # most recent earlier buy wins (each row's value is already a MAX)
             if r.get("prior_buy_date") and (b["prior_buy_date"] is None or as_date(r["prior_buy_date"]) > as_date(b["prior_buy_date"])):
                 b["prior_buy_date"] = r["prior_buy_date"]
+            if r.get("first_seen") and (b["first_seen"] is None or as_date(r["first_seen"]) < as_date(b["first_seen"])):
+                b["first_seen"] = r["first_seen"]
 
         blist = sorted(buyers.values(), key=lambda b: b["value"], reverse=True)
         for b in blist:
-            gap = _gap_years(b["prior_buy_date"], b["last_trade"])
-            b["gap_years"] = gap
-            b["first_buy"] = (b["prior_buy_date"] is None) or (gap is not None and gap >= 2)
+            b["gap_years"] = _gap_years(b["prior_buy_date"], b["last_trade"])
+            b["break"] = buy_break(b["prior_buy_date"], b.get("first_seen"), b["last_trade"])
+            b["first_buy"] = b["break"] is not None
             b["stake"] = _stake_label(b["pct"], b["owned_before"])
 
         c = {
@@ -242,11 +266,10 @@ def cluster_facts(c: dict) -> list[tuple[str, str]]:
         f.append((f"{_roles_phrase(c['csuite'])} buying", "buy"))
     elif c["congress"]:
         f.append(("Member of Congress", "accent"))
-    # "First buy on record" and "Non-routine" were true of nearly every row,
-    # so they stopped meaning anything. Only a real break in pattern shows.
-    fb = [b for b in c["first_buy"] if b["gap_years"]]
-    if fb:
-        f.append((f"First buy in {round(fb[0]['gap_years'])} yrs", "accent"))
+    # Only a real break in pattern shows (see buy_break). "First buy on
+    # record" and "Non-routine" were true of nearly every row.
+    if c["first_buy"]:
+        f.append((c["first_buy"][0]["break"][0], "accent"))
     # Same person the lead sentence is about, so the chip and the sentence agree.
     lead = c["buyers"][0]
     stakes = [b for b in c["buyers"] if b["stake"]]
@@ -272,12 +295,9 @@ def lead_sentence(c: dict) -> str:
     if top["pct"] is not None and top["pct"] >= 5:
         s += f", growing their stake by {top['pct']:.0f}%" if top["pct"] < 100 else f", growing their stake {1 + top['pct'] / 100:.1f}x".replace(".0x", "x")
     s += "."
-    fb = [b for b in c["first_buy"] if b["gap_years"]]
-    if fb:
-        b = fb[0]
-        s += f" It's {b['name']}'s first open-market buy of {c['ticker']} in {round(b['gap_years'])} years."
-    elif c["first_buy"] and c["first_buy"][0] is top:
-        s += f" It's the first open-market buy of {c['ticker']} on record for {top['name']}."
+    if c["first_buy"]:
+        b = c["first_buy"][0]
+        s += f" It's {b['name']}'s first open-market buy of {c['ticker']} {b['break'][1]}."
     return s
 
 
@@ -285,12 +305,12 @@ def filing_context(c: dict) -> str:
     """One plain, descriptive line about what makes this filing stand out.
     Explains the data, never what the stock might do. Rotates with what's
     actually true about the lead so regular readers learn something new."""
-    fb = [b for b in c["first_buy"] if b["gap_years"]]
+    fb = c["first_buy"]
     if c["n_insiders"] >= 3:
         return ("When several insiders at one company file open-market buys within a few weeks, it's called a cluster. "
                 "Clusters show up less often than single buys, which is why Seli points them out.")
     if fb:
-        return (f"{fb[0]['name']} hadn't filed an open-market buy of {c['ticker']} in {round(fb[0]['gap_years'])} years. "
+        return (f"{fb[0]['name']} hadn't filed an open-market buy of {c['ticker']} {fb[0]['break'][1]}. "
                 "Seli flags it when an insider's filings break from their usual pattern.")
     if c["csuite"]:
         return ("Most executive stock comes from grants and option exercises. An open-market buy means the executive "
