@@ -197,6 +197,8 @@ const PRO_PRICE_LABEL = '$6.99/mo';
 const PRO_ANNUAL_DISPLAY = '$69';
 const PRO_ANNUAL_LABEL = '$69/year';
 const PRO_ANNUAL_SAVE = 'save 18%'; // vs 12 × $6.99 = $83.88
+// What Pro adds, three lines, same everywhere it's pitched.
+const proGets = since => ['Same-day email alerts on what you watch', 'Watch as many stocks and people as you like', `Every trade${since ? ` back to ${since}` : ''}, not just the last 12 months`];
 
 // Shown when a free user tries to use a Pro feature.
 // Comparison-table style, matching the reference layout's structure:
@@ -241,13 +243,14 @@ function UpgradeModal({ feature, pro, onClose }) {
   const since = useDataSinceYear();
   const sinceText = since ? `back to ${since}` : 'all the way back';
   const FEATURE_MESSAGES = {
-    watchlist_ticker: "You're watching 3 things, the free limit. Pro watches as many stocks and people as you like, and emails you the same day they file.",
-    watchlist_insider: "You're watching 3 things, the free limit. Pro watches as many stocks and people as you like, and emails you the same day they file.",
-    notifications: 'Pro emails you the same day someone you watch files a trade, plus a daily brief. You only open Seli when something happens.',
-    portfolio: "Link your brokerage and Seli watches every stock you own. You'll hear about insider trades in what you own the same day they're filed.",
+    // Just why this opened; the checklist below says what Pro adds.
+    watchlist_ticker: "You're watching 3 things, the free limit.",
+    watchlist_insider: "You're watching 3 things, the free limit.",
+    notifications: 'Same-day alerts and the daily brief are part of Pro.',
+    portfolio: 'Link your brokerage and Seli watches every stock you own.',
     data_export: 'The full historical dataset as CSV. One payment, no subscription.',
-    full_history: `Free shows 12 months. Pro shows every filing ${sinceText}, so you can see patterns that only show up over years.`,
-    default: 'Tell Seli what to watch. It does the rest.',
+    full_history: 'Free accounts see the last 12 months.',
+    default: 'Know the same day insiders trade what you care about.',
   };
   const subtitle = FEATURE_MESSAGES[feature] || FEATURE_MESSAGES.default;
 
@@ -400,18 +403,15 @@ function UpgradeModal({ feature, pro, onClose }) {
           <p className="upgrade-narrative__sub">{subtitle}</p>
         </div>
 
-        {/* Three steps */}
-        <div className="upgrade-narrative__outcomes">
-          {OUTCOMES.map((o, i) => (
-            <div className="upgrade-narrative__outcome" key={i}>
-              <span className="upgrade-narrative__step-num">{o.step}</span>
-              <span className="upgrade-narrative__outcome-text">{o.text}</span>
-            </div>
-          ))}
-        </div>
+        {/* What Pro gets you, in three short lines (was a 3-step "how it
+            works" list plus a dataset link: too much for a bottom sheet). */}
+        <ul className="upgrade-narrative__gets">
+          {proGets(since).map(t => <li key={t}><IconCheck style={{ width: 13, height: 13 }} />{t}</li>)}
+        </ul>
 
         {/* Price + CTA */}
         <div className="upgrade-narrative__cta-section">
+          <div className="upgrade-narrative__beta">Beta price</div>
           <button className="upgrade-modal__cta" onClick={() => { setCheckoutInterval('month'); setCheckoutProduct('pro'); }}>
             {variant.cta} · {PRO_PRICE_LABEL}
           </button>
@@ -427,9 +427,6 @@ function UpgradeModal({ feature, pro, onClose }) {
           <span><IconCheck style={{ width: 11, height: 11, marginRight: 3, verticalAlign: '-1px' }} />Cancel anytime</span>
         </div>
 
-        <button className="upgrade-narrative__alt-link" onClick={() => setCheckoutProduct('data_export')}>
-          Or just the dataset, $39.99 one time →
-        </button>
       </div>
     </div>
   );
@@ -629,7 +626,7 @@ function CheckoutModal({ product, onClose, onSuccess, initialInterval = 'month' 
         <div className="checkout-modal__info">
           <div className="logo-mark checkout-modal__logo"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
           <div className="checkout-modal__info-title">{copy.title}</div>
-          <div className="checkout-modal__info-price">{copy.price}</div>
+          <div className="checkout-modal__info-price">{copy.price}{product === 'pro' && <span className="checkout-modal__beta">Beta price</span>}</div>
           {annual && (
             <div className="checkout-interval" role="radiogroup" aria-label="Billing">
               <button type="button" role="radio" aria-checked={effInterval === 'month'} className={effInterval === 'month' ? 'is-on' : ''} onClick={() => setInterval_('month')}>
@@ -1008,7 +1005,7 @@ function BillingSection({ user }) {
             <div className="settings-row__label">
               {status.hasDataExport ? 'Purchased' : 'Not purchased'}
             </div>
-            <div className="settings-row__sub">One-time pull of everything in the database — $39.99</div>
+            <div className="settings-row__sub">Every insider and Congress trade as CSV, one-time $39.99</div>
           </div>
           <button className="btn btn--primary" onClick={() => setCheckoutProduct('data_export')}>
             {status.hasDataExport ? 'Buy again' : 'Buy →'}
@@ -1517,7 +1514,7 @@ function IconLock(p) { return <svg {...ICON_PROPS} {...p}><rect x="3" y="11" wid
 const NAV_LINKS = [
   { id: 'home', label: 'Home', short: 'Home', Icon: IconHome, path: '/' },
   { id: 'watchlist', label: 'Watchlist', short: 'Watchlist', Icon: IconFavorites, path: '/watchlist' },
-  { id: 'leaderboard', label: 'Leaderboard', short: 'Leaders', Icon: IconInsights, path: '/leaderboard' },
+  { id: 'leaderboard', label: 'Leaderboard', short: 'Leaderboard', Icon: IconInsights, path: '/leaderboard' },
   { id: 'dashboard', label: 'Data', short: 'Data', Icon: IconData, path: '/data' },
 ];
 
@@ -3032,7 +3029,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
       <header className="sx-head sx-head--page ws-data-head">
         <div className="sx-head__main">
           <h1 className="sx-head__title">Data</h1>
-          <p className="sx-head__desc">Every open-market insider and Congress trade. Signals groups them by stock; Raw filings shows one row per trade.{isMobile ? ' Tap a row for details.' : ''}</p>
+          <p className="sx-head__desc">Every open-market insider and Congress trade, grouped by stock or one row per trade.{isMobile ? ' Tap a row for details.' : ''}</p>
         </div>
         <div className="sx-head__actions">
           <button className="sx-btn sx-btn--ghost sx-btn--sm" onClick={() => onUpgrade('data_export_direct')}><IconDownload style={{ width: 13, height: 13 }} /> Download dataset</button>
@@ -3045,11 +3042,11 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
           <div className="ws-toolbar-tabs">
             <button className={`ws-toolbar-tab${tab === 'signals' ? ' ws-toolbar-tab--active' : ''}`}
               onClick={() => { setTab('signals'); setExpandedRaws(new Set()); }}>
-              Signals <span className="ws-tile__count">{loading ? '…' : allSignals.length}</span>
+              By stock <span className="ws-tile__count">{loading ? '…' : allSignals.length}</span>
             </button>
             <button className={`ws-toolbar-tab${tab === 'raw' ? ' ws-toolbar-tab--active' : ''}`}
               onClick={() => { setTab('raw'); setExpandedSigs(new Set()); }}>
-              Raw filings <span className="ws-tile__count">{loading ? '…' : allRaw.length}</span>
+              Every trade <span className="ws-tile__count">{loading ? '…' : allRaw.length}</span>
             </button>
           </div>
           <div className="ws-toolbar-right">
@@ -3841,7 +3838,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
             <span className="topnav__wordmark" style={{ fontSize: 14 }}>Seli</span>
           </div>
           <div className="drawer__tabs">
-            {[['signals', 'Signals'], ['insiders', 'Insiders'], ['data', 'Raw Data']].map(([k, l]) => (
+            {[['signals', 'By stock'], ['insiders', 'By insider'], ['data', 'Every trade']].map(([k, l]) => (
               <button key={k}
                 className={`drawer__tab${activeTab === k ? ' drawer__tab--active' : ''}`}
                 onClick={() => switchTab(k)}>{l}</button>
@@ -4433,7 +4430,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
             <span className="topnav__wordmark" style={{ fontSize: 14 }}>Seli</span>
           </div>
           <div className="drawer__tabs">
-            {[['signals', 'Signals'], ['insiders', 'Insiders'], ['data', 'Raw Data']].map(([k, l]) => (
+            {[['signals', 'By stock'], ['insiders', 'By insider'], ['data', 'Every trade']].map(([k, l]) => (
               <button key={k}
                 className={`drawer__tab${k === 'data' ? ' drawer__tab--active' : ''}`}
                 onClick={() => { if (k !== 'data' && onSwitchTab) onSwitchTab(k); }}>{l}</button>
@@ -6178,6 +6175,10 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
           <SxSetting label="Weekly digest" sub="Sunday evening: what insiders did with everything you watch, plus the week's most notable insider buying.">
             <SxToggle label="Weekly digest" checked={L.weekly_digest} onChange={v => update({ weekly_digest: v })} />
           </SxSetting>
+          {/* Free accounts see only what they can change, plus one line on what
+              Pro adds. Showing five greyed-out Pro switches (two of them looking
+              "on") read as broken and buried the one setting they have. */}
+          {!lock && (<>
           <SxSetting label="Daily digest" sub="Weekday mornings, only when something you watch had a filing." pro locked={lock}>
             <SxToggle label="Daily digest" checked={pro && L.daily_digest} disabled={lock} onChange={v => update({ daily_digest: v })} />
           </SxSetting>
@@ -6208,9 +6209,10 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
           <SxSetting label="Congressional trades in digests" sub="STOCK Act disclosures from members of Congress." pro locked={lock}>
             <SxToggle label="Congressional trades" checked={pro ? L.digest_congressional : true} disabled={lock || !anyDigest} onChange={v => update({ digest_congressional: v })} />
           </SxSetting>
+          </>)}
           {lock ? (
             <div className="sx-gate sx-gate--block" style={{ marginTop: 10 }}>
-              <span className="sx-gate__text">Free accounts get the weekly digest. Pro adds the daily digest, same-day alerts and these filters.</span>
+              <span className="sx-gate__text">Pro adds an email the same day someone you watch trades, a weekday morning brief, and alerts for big executive buys anywhere.</span>
               <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={() => onUpgrade('notifications')}>See Pro</button>
             </div>
           ) : (

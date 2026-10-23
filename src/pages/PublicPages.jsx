@@ -17,7 +17,7 @@ import { MarketSections } from './HomeFeed.jsx';
 const PUBLIC_LINKS = [
   { id: 'insiderBuying', label: 'Insider buying', short: 'Insider buys', path: '/insider-buying' },
   { id: 'congress', label: 'Congress trades', short: 'Congress trades', path: '/congress' },
-  { id: 'leaderboard', label: 'Leaderboard', short: 'Top insiders', path: '/leaderboard' },
+  { id: 'leaderboard', label: 'Leaderboard', short: 'Leaderboard', path: '/leaderboard' },
 ];
 const POPULAR = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'JPM', 'PLTR', 'AMD'];
 
@@ -380,8 +380,8 @@ export function PublicHome() {
               </ul>
             )}
           </Card>
-          <Card title="Best insider track records" sub="Points their buys beat the S&P 500 by, last 12 months. More buys ranks higher." pad={false}
-            action={<a href="/leaderboard" className="sx-link" onClick={navClick('/leaderboard')}>Leaderboard <Icon name="arrow" size={12} /></a>}>
+          <Card title="Insider leaderboard" sub="Points their buys beat the S&P 500 by, last 12 months" pad={false}
+            action={<a href="/leaderboard" className="sx-link" onClick={navClick('/leaderboard')}>See all <Icon name="arrow" size={12} /></a>}>
             {!leaders ? loadingOr(leadersErr, reloadLeaders, 4) : (
               <ul className="sx-rows">
                 {(leaders.ranked || []).slice(0, 5).map(r => (
@@ -428,7 +428,7 @@ export function PublicHome() {
             <button className="sx-btn" onClick={signUp}>Get started free</button>
           </div>
           <div className="sx-plan sx-plan--pro">
-            <div className="sx-plan__name">Pro</div>
+            <div className="sx-plan__name">Pro <span className="sx-plan__beta">Beta price</span></div>
             <div className="sx-plan__price">$6.99<span>/month</span></div>
             {pricing?.annual && <p className="sx-plan__alt">or $69 a year, save 18%</p>}
             <p className="sx-plan__desc">For people who want to know the same day:</p>

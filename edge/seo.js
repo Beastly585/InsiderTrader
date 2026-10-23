@@ -17,7 +17,8 @@ import { money, congressRange, shortDate, plural, pct, price, PAGE_TITLES, stock
 
 export const SITE = 'https://seli.app';
 const DEFAULT_WORKER = 'https://neon-proxy.beastly-insider-trades.workers.dev';
-const DATA_TTL = 15 * 60; // seconds, edge cache for Worker JSON
+const DATA_TTL = 15 * 60;       // seconds: after this, refresh in the background
+const STALE_MAX = 6 * 3600;     // seconds: up to this old, serve instantly while refreshing
 
 export const h = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const clip = (s, n = 158) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : s; };
@@ -26,27 +27,47 @@ export const personHref = raw => `/insider/${encodeURIComponent(raw)}`;
 export const amt = (v, congress) => (congress ? congressRange(v) : money(v));
 
 // Fetch JSON from the Worker's /public/* routes, cached at the edge.
-export async function workerJson(context, path) {
+//
+// Stale-while-revalidate: a copy up to 15 minutes old is served as is. A copy
+// 15 minutes to 6 hours old is served right away too, and a fresh one is
+// fetched in the background for the next visitor. So a visitor almost never
+// waits on the database, including the half second it takes Neon to wake up
+// when it has been idle. Only a page nobody has opened in 6 hours (in that
+// region) is fetched while the visitor waits. If the Worker fails, any saved
+// copy is better than the bare fallback page.
+async function fetchFromWorker(context, path) {
   const base = (context.env.WORKER_URL || DEFAULT_WORKER).replace(/\/$/, '');
-  const url = base + path;
-  const cache = typeof caches !== 'undefined' ? caches.default : null;
-  const key = new Request(`${SITE}/__data${path}`);
-  if (cache) {
-    const hit = await cache.match(key);
-    if (hit) return { status: hit.status, data: await hit.json() };
-  }
   const headers = { Accept: 'application/json' };
   if (context.env.EDGE_KEY) headers['X-Seli-Edge'] = context.env.EDGE_KEY; // skips the Worker's per-IP rate limit
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(6000) });
+  const res = await fetch(base + path, { headers, signal: AbortSignal.timeout(6000) });
   const text = await res.text();
   let data = null;
   try { data = JSON.parse(text); } catch { /* not JSON */ }
-  if (cache && (res.status === 200 || res.status === 404) && data) {
-    context.waitUntil(cache.put(key, new Response(text, {
-      status: res.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${DATA_TTL}` },
-    })));
+  return { status: res.status, data, text };
+}
+
+async function saveToCache(cache, key, got) {
+  if (!cache || !got.data || !(got.status === 200 || got.status === 404)) return;
+  await cache.put(key, new Response(got.text, {
+    status: got.status,
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${STALE_MAX}`, 'X-Fetched-At': String(Date.now()) },
+  }));
+}
+
+export async function workerJson(context, path) {
+  const cache = typeof caches !== 'undefined' ? caches.default : null;
+  const key = new Request(`${SITE}/__data${path}`);
+  const hit = cache ? await cache.match(key).catch(() => null) : null;
+  if (hit) {
+    const age = (Date.now() - Number(hit.headers.get('X-Fetched-At') || 0)) / 1000;
+    if (age > DATA_TTL) {
+      context.waitUntil(fetchFromWorker(context, path).then(got => saveToCache(cache, key, got)).catch(() => {}));
+    }
+    return { status: hit.status, data: await hit.json() };
   }
-  return { status: res.status, data };
+  const got = await fetchFromWorker(context, path);
+  if (got.data) context.waitUntil(saveToCache(cache, key, got).catch(() => {}));
+  return { status: got.status, data: got.data };
 }
 
 // page: { status, title, description, canonical, jsonld, body, prefetch: {path, data}, noindex }

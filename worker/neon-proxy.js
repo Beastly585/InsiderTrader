@@ -309,13 +309,22 @@ const workerHandler = {
     // Cron work can legitimately run long queries; give it 10 minutes
     // instead of the 45s visitor-request limit in neonFetch.
     env = { ...env, NEON_TIMEOUT_MS: 600_000 };
-    // The */4 cron is a Neon keep-alive — just ping the DB to prevent
-    // serverless compute hibernation. Skip the heavy snapshot/CSV work.
+    // The */4 cron starts GitHub runs and keeps Neon awake, but only when
+    // people are likely around: weekdays 7am to 9pm Eastern. Pinging around
+    // the clock kept the database billing 24/7 (Neon sleeps after about 5
+    // idle minutes and charges only while awake). Outside that window it
+    // sleeps; the first request after that waits about half a second while
+    // it wakes, and public pages don't wait at all (edge/seo.js serves its
+    // saved copy and refreshes it in the background). The ingest wakes it
+    // on its own schedule, so data stays fresh either way.
+    // KEEP_WARM (Worker variable): 'always' | 'off' | default weekday daytime.
     if (event.cron === '*/4 * * * *') {
-      try {
-        await neonFetch(env, 'SELECT 1');
-      } catch (e) {
-        console.error('[Scheduled] keep-alive ping failed:', e.message);
+      if (shouldKeepWarm(env, new Date(event.scheduledTime || Date.now()))) {
+        try {
+          await neonFetch(env, 'SELECT 1');
+        } catch (e) {
+          console.error('[Scheduled] keep-alive ping failed:', e.message);
+        }
       }
       // Start the GitHub ingest runs. GitHub's own scheduler dropped or
       // delayed them by hours; this cron fires on time.
@@ -3860,6 +3869,18 @@ async function sendProWelcome(env, clerkUserId, sub, periodEnd) {
     await neonFetch(env, `DELETE FROM public.email_log WHERE id = ${Number(logId)}`).catch(() => {});
     throw e;
   }
+}
+
+// Whether the */4 cron should keep Neon awake right now (see scheduled()).
+function shouldKeepWarm(env, now) {
+  const mode = (env.KEEP_WARM || '').toLowerCase();
+  if (mode === 'always') return true;
+  if (mode === 'off') return false;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', hour12: false,
+  }).formatToParts(now).map(p => [p.type, p.value]));
+  const hour = Number(parts.hour) % 24;
+  return !['Sat', 'Sun'].includes(parts.weekday) && hour >= 7 && hour < 21;
 }
 
 // Things people did that an email may follow up on (db/send_lifecycle.py).
