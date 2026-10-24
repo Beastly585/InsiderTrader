@@ -20,7 +20,7 @@
 // neon-proxy.js runs before this, same as every other route.
 
 import { stock, insider, marketFeed, search, leaderboard, tradeOut, TICKER_RE, FREE_DAYS } from './research.js';
-import { prettyPerson, prettyCompany, shortRole, asDate } from './intel.js';
+import { prettyPerson, prettyCompany, shortRole, asDate, isPlaceholderTicker } from './intel.js';
 
 const SITE = 'https://seli.app';
 const TTL = { page: 30 * 60 * 1000, hub: 15 * 60 * 1000, sitemap: 6 * 3600 * 1000 };
@@ -149,6 +149,7 @@ async function congressHub(ctx) {
          -- Stock trades only: disclosures without a ticker are bonds, funds
          -- and other assets that don't belong on a stock page.
          AND f.ticker IS NOT NULL AND f.ticker <> ''
+         AND upper(f.ticker) NOT IN ('N/A', 'NA', 'NONE', 'NULL', 'UNKNOWN', 'TBD', 'NOTICKER', 'FOMC')
          AND ${DATE} <= CURRENT_DATE AND f.filing_date > CURRENT_DATE - 120
        ORDER BY ${DATE} DESC, f.filing_date DESC
        LIMIT 60`),
@@ -159,6 +160,7 @@ async function congressHub(ctx) {
              COUNT(*) FILTER (WHERE f.transaction_type = 'sell')::int AS sells
         FROM public.filings f
        WHERE ${CONGRESS} AND f.transaction_type IN ('buy','sell') AND f.ticker IS NOT NULL
+         AND upper(f.ticker) NOT IN ('N/A', 'NA', 'NONE', 'NULL', 'UNKNOWN', 'TBD', 'NOTICKER', 'FOMC')
          AND ${DATE} >= CURRENT_DATE - 90 AND ${DATE} <= CURRENT_DATE
        GROUP BY f.ticker
        ORDER BY COUNT(DISTINCT f.insider_name) DESC, COUNT(*) DESC
@@ -170,7 +172,7 @@ async function congressHub(ctx) {
       raw: r.insider_name, name: prettyPerson(r.insider_name, true), role: shortRole(r.title, 'congress'),
       n: Number(r.n) || 0, buys: Number(r.buys) || 0, sells: Number(r.sells) || 0,
       last: asDate(r.last) || null,
-      tickers: [...new Set(r.tickers || [])].slice(0, 4),
+      tickers: [...new Set((r.tickers || []).filter(t => !isPlaceholderTicker(t)))].slice(0, 4),
     })),
     recent: recent.map(tradeOut),
     popular: popular.map(r => ({

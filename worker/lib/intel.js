@@ -82,9 +82,24 @@ const SUFFIX_CASE = {
   CORPORATION: 'Corporation', HOLDINGS: 'Holdings', GROUP: 'Group', COMPANY: 'Company', INCORPORATED: 'Incorporated',
 };
 
+// Congress disclosures name the asset, not the company: "Datadog, Inc -
+// Class A Common Stock [ST] $100,000". Keep just the company. Same rule as
+// cleanAssetName in src/lib/text.js and clean_asset_name in db/email_kit.py.
+// Tickers that are placeholders, not stocks (Congress forms use these for
+// bonds, funds and anything without a symbol). Never linked as a stock.
+export const isPlaceholderTicker = t => !t || /^(N\/?A|NONE|NULL|UNKNOWN|TBD|NOTICKER|FOMC|-+)$/i.test(String(t).trim());
+
+export function cleanAssetName(name) {
+  return String(name || '')
+    .replace(/\s*\[[A-Z]{1,3}\]/g, '')
+    .replace(/\s*\$[\d,]+(\.\d+)?\s*$/, '')
+    .replace(/\s+-\s+(class\s+[a-z0-9]\s+)?(common|ordinary|american depositary|adr|ads|preferred|shares?|stock|units?|sponsored)\b.*$/i, '')
+    .trim();
+}
+
 export function prettyCompany(name) {
   if (!name) return '';
-  const s = String(name).split(/\s+/).filter(Boolean).join(' ');
+  const s = cleanAssetName(name).split(/\s+/).filter(Boolean).join(' ');
   const allCaps = s === s.toUpperCase();
   return s.split(' ').map((w, i) => {
     const comma = w.endsWith(',') ? ',' : '';
@@ -103,6 +118,8 @@ export function prettyCompany(name) {
 
 const PARTICLES = new Set(['van', 'von', 'de', 'der', 'den', 'del', 'della', 'da', 'di', 'du', 'la', 'le', 'st', 'st.', 'bin', 'al', 'el', 'ten', 'ter']);
 const HONORIFICS = new Set(['dr', 'hon', 'honorable', 'mr', 'mrs', 'ms']);
+// Credentials House filers put in their names ("Neal Patrick MD Facs Dunn").
+const CREDENTIALS = new Set(['md', 'facs', 'dds', 'dmd', 'do', 'facp', 'faafp', 'cpa', 'esq', 'rn']);
 export function prettyPerson(name, isCongress = false) {
   if (!name) return '';
   const s = String(name).replace(/,/g, ' ').split(/\s+/).filter(Boolean).join(' ');
@@ -110,7 +127,11 @@ export function prettyPerson(name, isCongress = false) {
   const words = s.split(' ');
   const fix = allCaps ? titleWord : (w => w);
   // House names arrive with honorifics mixed in ("Richard Dean Dr McCormick").
-  if (isCongress) return words.filter(w => !HONORIFICS.has(w.replace(/\./g, '').toLowerCase())).map(fix).join(' ');
+  if (isCongress) {
+    const kept = words.filter(w => { const k = w.replace(/\./g, '').toLowerCase(); return !HONORIFICS.has(k) && !CREDENTIALS.has(k); });
+    // "Scott Scott Franklin": a name repeated by the filing form.
+    return kept.filter((w, i) => i === 0 || w.toLowerCase() !== kept[i - 1].toLowerCase()).map(fix).join(' ');
+  }
   if (ENTITY_RE.test(s) || words.length < 2 || words.length > 6) return words.map(fix).join(' ');
   const strip = w => w.replace(/\./g, '').toUpperCase();
   const suffix = words.filter(w => SUFFIXES.has(strip(w)));
@@ -153,7 +174,8 @@ function roleBit(role) {
   if (role === 'Congress') return 'a member of Congress';
   if (role === '10% owner') return 'a 10% owner';
   if (CSUITE_ROLES.has(role) || role === 'Chair' || role === 'General Counsel') return `the ${role}`;
-  return `a ${role.toLowerCase()}`;
+  const r = role.toLowerCase();
+  return `${/^[aeiou]/.test(r) ? 'an' : 'a'} ${r}`;
 }
 
 // ── Clusters (insider_intel.build_clusters) ──────────────────────────────────
@@ -284,6 +306,11 @@ export function clusterFacts(c) {
 export function leadSentence(c, period = 'this week') {
   const top = c.buyers[0];
   let s;
+  // Members of Congress disclose a range ($50K–$100K), never an exact amount.
+  if (c.buyers.every(b => b.congress)) {
+    const who = c.n_insiders >= 2 ? `${c.n_insiders} members of Congress, including ${top.name},` : top.name;
+    return `${who} disclosed buying ${c.company} stock, ${congressRange(top.value)}${c.n_insiders >= 2 ? ' for the largest' : ''}.`;
+  }
   if (c.n_insiders >= 2) {
     s = `${c.n_insiders} insiders at ${c.company} bought ${money(c.total)} of stock ${period}. The biggest check came from ${top.name}, ${roleBit(top.role)}, at ${money(top.value)}`;
   } else {

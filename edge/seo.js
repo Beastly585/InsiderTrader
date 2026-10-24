@@ -147,7 +147,7 @@ export function tradeTable(trades, { showTicker = true, showPerson = true, limit
   return `<div class="sx-table-wrap"><table class="sx-table"><thead><tr><th>Date</th>${showPerson ? '<th>Insider</th>' : ''}${showTicker ? '<th>Stock</th>' : ''}<th>Trade</th><th>Value</th></tr></thead><tbody>${
     rows.map(t => `<tr><td>${h(shortDate(t.date, { year: true }))}</td>${
       showPerson ? `<td><a href="${personHref(t.raw)}">${h(t.name)}</a>${t.role ? ` <span>(${h(t.role)})</span>` : ''}</td>` : ''}${
-      showTicker ? `<td><a href="${stockHref(t.ticker)}">${h(t.ticker)}</a>${t.company ? ` ${h(t.company)}` : ''}</td>` : ''}<td>${
+      showTicker ? `<td>${t.ticker ? `<a href="${stockHref(t.ticker)}">${h(t.ticker)}</a>` : 'Other asset'}${t.company ? ` ${h(t.company)}` : ''}</td>` : ''}<td>${
       t.type === 'buy' ? 'Bought' : 'Sold'}${t.om === false ? ' (not open market)' : ''}</td><td>${h(amt(t.value, t.congress))}</td></tr>`).join('')
   }</tbody></table></div>`;
 }

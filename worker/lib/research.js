@@ -19,7 +19,7 @@
 // because that's what makes a page worth coming back to.
 
 import {
-  tickerStatus, buildClusters, clusterOut, prettyPerson, prettyCompany, shortRole, isCongress, asDate, todayStr, isEntityName, buyBreak,
+  tickerStatus, buildClusters, clusterOut, prettyPerson, prettyCompany, shortRole, isCongress, asDate, todayStr, isEntityName, buyBreak, isPlaceholderTicker,
 } from './intel.js';
 import { DATA_ROUTES } from './data.js';
 
@@ -294,7 +294,7 @@ function tradeOut(r) {
   return {
     acc: r.accession_number, cik: r.cik_issuer, raw: r.insider_name, name: prettyPerson(r.insider_name, cg),
     title: r.insider_title || '', role: shortRole(r.insider_title, cg ? 'congress' : r.relationship), congress: cg,
-    ticker: r.ticker, company: r.company_name ? prettyCompany(r.company_name) : undefined,
+    ticker: isPlaceholderTicker(r.ticker) ? null : r.ticker, company: r.company_name ? prettyCompany(r.company_name) : undefined,
     type: r.transaction_type, code: r.transaction_code, om: !!r.is_open_market, routine: r.is_routine,
     shares: num(r.shares), price: num(r.price), value: num(r.value), pct: num(r.pct), owned_after: num(r.owned_after),
     filed: asDate(r.filing_date), date: asDate(r.trade_date),

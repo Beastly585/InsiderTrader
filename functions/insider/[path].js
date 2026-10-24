@@ -1,64 +1,46 @@
-// /insider/:name — corporate insiders and members of Congress.
-// See edge/seo.js for how these pages work.
-import { serve, renderShell, safeDecode, layout, tradeTable, crumbs, cta, h, stockHref, plural, shortDate, clip, SITE, personTitle } from '../../edge/seo.js';
-import { prettyPerson } from '../../src/lib/text.js';
+// /edge-data/public/* — the app's public data, served from the edge cache.
+//
+// The prerendered pages (functions/stocks.js etc.) already keep a copy of each
+// /public/* response at the edge (stale-while-revalidate, see edge/seo.js).
+// When someone clicks from one page to another inside the app, though, the
+// app used to call the Worker directly, which skipped that copy and waited on
+// Neon. If Neon was asleep or a query was slow, the page sat on its loading
+// skeleton. This hands the app the same edge copy the prerender uses, so
+// in-app navigation is as fast as a fresh page load.
+//
+// Only the read-only public routes below are passed through, and only GET.
+// Anything else 404s, and src/lib/api.js then falls back to the Worker.
+import { workerJson } from '../../edge/seo.js';
 
-export function onRequestGet(context) {
-  const segs = [].concat(context.params.path || []);
-  const raw = segs.map(safeDecode).join('/').slice(0, 200);
-  if (!raw.trim()) return renderShell(context, null);
-  const api = `/public/insider/${encodeURIComponent(raw)}`;
-  const path = `/insider/${encodeURIComponent(raw)}`;
-  const fallback = {
-    canonical: path, title: personTitle(prettyPerson(raw)),
-    description: `Stock trades by ${prettyPerson(raw)}, from SEC Form 4 filings and STOCK Act disclosures.`,
-    body: layout(`<h1 class="sx-head__title">${h(prettyPerson(raw))}</h1><p>Stock trades from SEC Form 4 filings and STOCK Act disclosures.</p>`),
-  };
-  return serve(context, api, (d, status) => {
-    if (status === 404 || !d.known) {
-      return {
-        status: 404, noindex: true, canonical: path, title: 'Insider not found | Seli',
-        description: 'No SEC Form 4 or STOCK Act filings on record for this name.',
-        body: layout(`<h1 class="sx-head__title">${h(raw)}</h1><p>No filings on record for this name.</p>`),
-      };
-    }
-    const cos = (d.companies || []).slice(0, 12);
-    const tickers = cos.map(c => c.ticker).filter(Boolean);
-    const r = d.record || {};
-    const since = d.first_trade ? shortDate(d.first_trade, { year: true }) : null;
-    const coList = cos.map(c => `<li><a href="${stockHref(c.ticker)}">${h(c.ticker)}</a> ${h(c.company || '')}: ${
-      [c.buys ? `${plural(c.buys, 'buy')}` : '', c.sells ? `${plural(c.sells, 'sale')}` : ''].filter(Boolean).join(', ') || 'other filings'
-    }${c.last ? `, last ${h(shortDate(c.last, { year: true }))}` : ''}</li>`).join('');
-    let title, intro, desc;
-    if (d.congress) {
-      title = personTitle(d.name, { congress: true });
-      intro = `Every stock trade ${h(d.name)} has disclosed under the STOCK Act${since ? `, since ${h(since)}` : ''}. Amounts are the ranges members of Congress are required to report.`;
-      desc = `${d.name} stock trades: every STOCK Act disclosure${tickers.length ? `, including ${tickers.slice(0, 4).join(', ')}` : ''}. See what ${d.name} bought and sold, updated daily.`;
-    } else {
-      const at = cos[0]?.company ? ` at ${cos[0].company}` : '';
-      title = personTitle(d.name, { ticker: tickers[0] });
-      intro = `Open-market stock purchases and sales by ${h(d.name)}${d.title ? `, ${h(d.title)}` : ''}${h(at)}, from SEC Form 4 filings${since ? ` since ${h(since)}` : ''}.`;
-      desc = `${d.name}${d.role ? ` (${d.role}${at})` : ''} insider trading: every Form 4 buy and sell${tickers.length ? ` in ${tickers.slice(0, 3).join(', ')}` : ''}, with how each buy has done since.`;
-    }
-    const record = !d.congress && r.priced
-      ? `<p>Track record: ${r.hit_rate}% of ${plural(r.priced, 'scored buy')} are up 5% or more since purchase${r.avg_return != null ? `, averaging ${r.avg_return >= 0 ? '+' : ''}${Math.round(r.avg_return)}%` : ''}.</p>` : '';
-    const body = layout(`
-<header class="sx-head sx-head--page"><div class="sx-head__main">
-<h1 class="sx-head__title">${h(d.name)} ${d.congress ? 'stock trades' : 'insider trades'}</h1>
-<p class="sx-head__desc">${intro}</p></div></header>
-${record}
-<section class="sx-card"><div class="sx-card__body"><h2 class="sx-card__title">Recent trades</h2>${tradeTable(d.trades, { showPerson: false })}</div></section>
-${coList ? `<section class="sx-card"><div class="sx-card__body"><h2 class="sx-card__title">Companies traded</h2><ul>${coList}</ul></div></section>` : ''}
-${cta(d.name)}`);
-    return {
-      canonical: path, title, description: desc, body,
-      prefetch: { path: api, data: d },
-      jsonld: [
-        crumbs([['Seli', '/'], d.congress ? ['Congress stock trades', '/congress'] : ['Insider buying', '/insider-buying'], [d.name, path]]),
-        { '@context': 'https://schema.org', '@type': 'ProfilePage', url: SITE + path, name: clip(title, 110),
-          mainEntity: { '@type': 'Person', name: d.name, jobTitle: d.congress ? 'Member of Congress' : (d.title || undefined),
-            worksFor: cos[0]?.company && !d.congress ? { '@type': 'Corporation', name: cos[0].company, tickerSymbol: cos[0].ticker } : undefined } },
-      ],
-    };
-  }, fallback);
+const ALLOWED = [
+  /^\/public\/stocks$/,
+  /^\/public\/congress$/,
+  /^\/public\/insider-buying$/,
+  /^\/public\/leaderboard$/,
+  /^\/public\/pricing$/,
+  /^\/public\/data-stats$/,
+  /^\/public\/stock\/[A-Za-z0-9.\-%]{1,30}$/,
+  /^\/public\/insider\/[^?#]{1,400}$/,
+];
+
+const reply = (body, status, maxAge = 0) => new Response(JSON.stringify(body), {
+  status,
+  headers: { 'Content-Type': 'application/json', 'Cache-Control': maxAge ? `public, max-age=${maxAge}` : 'no-store' },
+});
+
+export async function onRequestGet(context) {
+  const url = new URL(context.request.url);
+  const path = url.pathname.replace(/^\/edge-data/, '');
+  if (!ALLOWED.some(re => re.test(path))) return reply({ error: 'Not found' }, 404);
+  // Only the leaderboard takes options; keep its query string so each
+  // variant is cached on its own. Everything else ignores query strings.
+  const full = path === '/public/leaderboard' ? path + url.search : path;
+  try {
+    const { status, data } = await workerJson(context, full);
+    if (!data || status >= 500) return reply({ error: 'Unavailable' }, 502);
+    // The browser can hold it for a minute; the edge copy does the real work.
+    return reply(data, status, status === 200 ? 60 : 0);
+  } catch {
+    return reply({ error: 'Unavailable' }, 502);
+  }
 }

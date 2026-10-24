@@ -3366,7 +3366,9 @@ async function handleSnapTradePositions(request, env, origin) {
     const cachedRow = await neonFetch(env, `
       SELECT last_synced_at, cached_tickers FROM public.portfolio_connections
        WHERE clerk_user_id = ${sqlVal(clerkUserId)} AND status = 'active'`).then(r => r.rows?.[0]);
-    if (!cachedRow) return corsResponse({ error: 'No active connection' }, 404, origin, env);
+    // Not linked is the normal case, not an error: answer 200 with nothing in
+    // it so it doesn't show up as a failed request in the browser console.
+    if (!cachedRow) return corsResponse({ linked: false, accounts: [] }, 200, origin, env);
     touchPortfolioSeen(env, clerkUserId);
     const age = cachedRow.last_synced_at ? Date.now() - new Date(cachedRow.last_synced_at).getTime() : Infinity;
     if (age < 8 * 3600 * 1000 && cachedRow.cached_tickers) {
@@ -3378,7 +3380,7 @@ async function handleSnapTradePositions(request, env, origin) {
     }
 
     const conn = await getSnapTradeConnection(env, clerkUserId);
-    if (!conn) return corsResponse({ error: 'No active connection' }, 404, origin, env);
+    if (!conn) return corsResponse({ linked: false, accounts: [] }, 200, origin, env);
 
     // The old combined /holdings endpoint is deprecated — confirmed directly
     // from SnapTrade's own docs: it returns HTTP 410 Gone for any account

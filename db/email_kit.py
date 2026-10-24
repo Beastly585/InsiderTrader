@@ -207,6 +207,16 @@ _SUFFIX_CASE = {"INC": "Inc", "INC.": "Inc", "CORP": "Corp", "CORP.": "Corp", "C
                 "COMPANY": "Company", "INCORPORATED": "Incorporated"}
 
 
+def clean_asset_name(name) -> str:
+    """Congress disclosures name the asset, not the company: "Datadog, Inc -
+    Class A Common Stock [ST] $100,000". Keep just the company. Same rule as
+    cleanAssetName in worker/lib/intel.js and src/lib/text.js."""
+    s = re.sub(r"\s*\[[A-Z]{1,3}\]", "", str(name or ""))
+    s = re.sub(r"\s*\$[\d,]+(\.\d+)?\s*$", "", s)
+    s = re.sub(r"\s+-\s+(class\s+[a-z0-9]\s+)?(common|ordinary|american depositary|adr|ads|preferred|shares?|stock|units?|sponsored)\b.*$", "", s, flags=re.I)
+    return s.strip()
+
+
 def pretty_company(name) -> str:
     """Issuer names arrive in every style ('NVIDIA CORP', 'HOME DEPOT, INC.',
     'Alphabet Inc.'). Normalize suffixes everywhere, title-case all-caps names
@@ -214,7 +224,7 @@ def pretty_company(name) -> str:
     spellings (RenaissanceRe, PayPal)."""
     if not name:
         return ""
-    s = " ".join(str(name).split())
+    s = " ".join(clean_asset_name(name).split())
     all_caps = s == s.upper()
     out = []
     for i, w in enumerate(s.split()):

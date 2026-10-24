@@ -31,17 +31,61 @@ export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
 
+// A signal that fires when the caller aborts or after ms, whichever is first.
+// (AbortSignal.any isn't in every browser Seli supports yet.)
+function withTimeout(signal, ms) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(new DOMException('Timed out', 'TimeoutError')), ms);
+  const onAbort = () => ctl.abort(signal.reason);
+  if (signal) { if (signal.aborted) onAbort(); else signal.addEventListener('abort', onAbort, { once: true }); }
+  return { signal: ctl.signal, done: () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); } };
+}
+
+// Public pages first try the copy the site keeps at the edge
+// (functions/edge-data), which answers in milliseconds even when the database
+// is asleep. Anything odd (not deployed yet, local dev, a slow edge, an error)
+// returns null and the caller goes to the Worker as before.
+const EDGE_PATHS = /^\/public\/(stocks|congress|insider-buying|leaderboard|pricing|data-stats|stock\/|insider\/)/;
+async function fromEdge(path, signal) {
+  if (typeof window === 'undefined' || !EDGE_PATHS.test(path)) return null;
+  const t = withTimeout(signal, 5000);
+  try {
+    const res = await fetch(`/edge-data${path}`, { signal: t.signal });
+    if (!(res.ok || res.status === 404) || !(res.headers.get('Content-Type') || '').includes('application/json')) return null;
+    const data = await res.json();
+    if (res.status === 404 && data?.error === 'Not found') return null; // not a path the edge serves
+    return { status: res.status, data };
+  } catch (e) {
+    if (signal?.aborted) throw e; // the page moved on; don't fetch again
+    return null;
+  } finally { t.done(); }
+}
+
+// How long a page waits before showing "try again" instead of a skeleton.
+const GET_TIMEOUT_MS = 20_000;
+
 export async function api(path, { method = 'GET', body, signal } = {}) {
+  const isPublic = path.startsWith('/public/');
+  if (method === 'GET' && isPublic) {
+    const edge = await fromEdge(path, signal);
+    if (edge?.status === 200) return edge.data;
+  }
   // /public/* needs no sign-in; don't wait on Clerk for it.
-  const headers = path.startsWith('/public/') ? {} : { ...(await authHeaders()) };
+  const headers = isPublic ? {} : { ...(await authHeaders()) };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // Writes aren't cut off (they may have gone through); reads are.
+  const t = method === 'GET' ? withTimeout(signal, GET_TIMEOUT_MS) : { signal, done: () => {} };
   let res;
   try {
-    res = await fetch(`${cfg.NEON_PROXY_URL}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal });
+    res = await fetch(`${cfg.NEON_PROXY_URL}${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: t.signal });
   } catch (e) {
+    t.done();
+    if (signal?.aborted) throw e.name === 'AbortError' ? e : new DOMException('Aborted', 'AbortError');
+    if (e.name === 'TimeoutError' || t.signal?.aborted) throw new ApiError('This is taking longer than usual. Try again in a moment.', 0);
     if (e.name === 'AbortError') throw e;
     throw new ApiError('Couldn\'t reach Seli. Check your connection and try again.', 0);
   }
+  t.done();
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     // "Missing query" / "Not found" mean the Worker predates this endpoint

@@ -4642,7 +4642,7 @@ function TermsPage() {
 
         <h2>7. Subscriptions, Billing, and Refunds</h2>
         <p>Certain features require a paid Pro subscription ({PRO_PRICE_LABEL}) or a one-time data export purchase ($39.99). All payments are processed by Stripe and subject to <a href="https://stripe.com/legal" target="_blank" rel="noopener noreferrer">Stripe's terms of service</a>.</p>
-        <p><strong>Subscriptions.</strong> Pro subscriptions bill monthly. You may cancel at any time; cancellation takes effect at the end of the current billing period. No partial-month refunds are issued for cancellations. We reserve the right to change pricing with at least 30 days' notice to current subscribers.</p>
+        <p><strong>Subscriptions.</strong> Pro subscriptions bill monthly or yearly, whichever you choose at checkout. You may cancel at any time; cancellation takes effect at the end of the current billing period (month or year), and Pro stays on until then. No refunds are issued for the unused part of a billing period. We reserve the right to change pricing with at least 30 days' notice to current subscribers.</p>
         <p><strong>Data exports.</strong> Each data export purchase provides a one-time download of the database as it exists at the time of purchase. Data exports are non-refundable once the download link has been generated.</p>
         <p><strong>Refund requests.</strong> If you believe you were charged in error or have not received the service you paid for, contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> within 30 days of the charge. We will review each request individually.</p>
 

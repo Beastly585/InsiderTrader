@@ -29,7 +29,7 @@ import re
 from collections import defaultdict
 from datetime import date, timedelta
 
-from email_kit import as_date, money, plural, pretty_company, pretty_person, short_role
+from email_kit import as_date, congress_range, money, plural, pretty_company, pretty_person, short_role
 
 CSUITE_ROLES = {"CEO", "CFO", "COO", "CTO", "President", "C-suite exec"}
 
@@ -287,7 +287,11 @@ def lead_sentence(c: dict) -> str:
     top = c["buyers"][0]
     who = top["name"]
     role = top["role"]
-    role_bit = "a member of Congress" if role == "Congress" else ("a 10% owner" if role == "10% owner" else f"the {role}" if role in CSUITE_ROLES or role in ("Chair", "General Counsel") else f"a {role.lower()}")
+    # Members of Congress disclose a range ($50K to $100K), never an exact amount.
+    if all(b.get("congress") for b in c["buyers"]):
+        lead = f"{c['n_insiders']} members of Congress, including {who}," if c["n_insiders"] >= 2 else who
+        return f"{lead} disclosed buying {c['company']} stock, {congress_range(top['value'])}{' for the largest' if c['n_insiders'] >= 2 else ''}."
+    role_bit = "a member of Congress" if role == "Congress" else ("a 10% owner" if role == "10% owner" else f"the {role}" if role in CSUITE_ROLES or role in ("Chair", "General Counsel") else f"{'an' if role.lower()[:1] in 'aeiou' else 'a'} {role.lower()}")
     if c["n_insiders"] >= 2:
         s = f"{c['n_insiders']} insiders at {c['company']} bought {money(c['total'])} of stock. The biggest check came from {who}, {role_bit}, at {money(top['value'])}"
     else:
