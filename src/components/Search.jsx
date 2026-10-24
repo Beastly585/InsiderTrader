@@ -7,13 +7,14 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { api } from '../lib/api.js';
 import { go, stockPath, insiderPath, getRecent, pushRecent } from '../lib/nav.jsx';
 import { Icon } from './ui.jsx';
+import { roleText } from '../lib/text.js';
 
 const resultCache = new Map();
 
 function toItems(res) {
   return [
     ...res.stocks.map(s => ({ kind: 'stock', id: s.ticker, label: s.ticker, sub: s.company })),
-    ...res.people.map(p => ({ kind: 'person', id: p.raw, label: p.name, sub: [p.role !== 'Insider' ? p.role : '', p.ticker].filter(Boolean).join(' · ') || p.title, congress: p.congress })),
+    ...res.people.map(p => ({ kind: 'person', id: p.raw, label: p.name, sub: [p.role !== 'Insider' ? roleText(p.role) : '', p.ticker].filter(Boolean).join(' · ') || p.title, congress: p.congress })),
   ];
 }
 

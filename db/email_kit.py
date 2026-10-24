@@ -287,6 +287,7 @@ _ROLE_PATTERNS = [
     (re.compile(r"general counsel", re.I), "General Counsel"),
     (re.compile(r"10%|ten percent", re.I), "10% owner"),
     (re.compile(r"director", re.I), "Director"),
+    (re.compile(r"^\s*officer\s*$", re.I), "Officer"),
 ]
 
 

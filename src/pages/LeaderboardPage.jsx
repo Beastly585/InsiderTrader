@@ -7,12 +7,11 @@
 import React, { useEffect, useState } from 'react';
 import { InsiderLink, StockLink } from '../lib/nav.jsx';
 import { useApi } from '../lib/api.js';
-import { money, pct, plural, memberRole, memberChamber, PAGE_TITLES } from '../lib/text.js';
-import { Card, Segmented, Skeleton, ErrorNote, Gate, Chip, useNarrow } from '../components/ui.jsx';
+import { money, pct, plural, PAGE_TITLES } from '../lib/text.js';
+import { Card, Segmented, Skeleton, ErrorNote, Gate, useNarrow, RoleTag } from '../components/ui.jsx';
 
 const LIST = { rank: 'ranked', hit: 'by_hit', ret: 'by_return', buys: 'by_buying' };
 const signed = (v, d = 1) => `${v >= 0 ? '+' : ''}${Number(v).toFixed(d)}`;
-const roleOf = r => (r.congress ? memberRole(r) : r.role || (/^unknown$/i.test(r.title || '') ? '' : r.title) || 'Insider');
 
 // The number a row is ranked by, so the list always leads with it.
 function headline(r, sort) {
@@ -31,8 +30,9 @@ function LeaderList({ rows, sort }) {
         const h = headline(r, sort);
         // One short line of context, minus whatever the big number already says.
         const bits = [
-          plural(r.priced || r.om_buys || 0, 'buy'),
-          sort !== 'hit' && r.hit_rate != null ? `${r.hit_rate}% hit` : null,
+          sort === 'hit' && r.priced ? `hit rate of ${r.priced} scored` : null,
+          plural(r.om_buys || 0, 'buy'),
+          sort !== 'hit' && r.hit_rate != null ? `${r.hit_rate}% hit (of ${r.priced} scored)` : null,
           sort !== 'ret' && r.avg_return != null ? `avg ${signed(r.avg_return, 0)}%` : null,
           sort === 'buys' && r.excess != null ? `${signed(r.excess, 0)} pts vs S&P` : null,
         ].filter(Boolean);
@@ -41,7 +41,7 @@ function LeaderList({ rows, sort }) {
             <div className="sx-lb__main">
               <InsiderLink raw={r.raw} className="sx-lb__name">{r.name}</InsiderLink>
               <div className="sx-lb__who">
-                {r.congress ? <Chip tone="accent">{memberChamber(r)}</Chip> : <span>{roleOf(r)}</span>}
+                <RoleTag role={r.role} congress={!!r.congress} title={r.title} />
                 {(r.tickers || []).slice(0, 2).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
               </div>
               <div className="sx-lb__stats">{bits.join(' · ')}</div>
@@ -84,7 +84,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
           { value: 'rank', label: 'Track record' }, { value: 'hit', label: 'Hit rate' }, { value: 'ret', label: 'Avg return' }, { value: 'buys', label: 'Most buying' },
         ]} />
         <Segmented size="sm" value={source} onChange={setSource} options={[
-          { value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'congress', label: 'Politicians' },
+          { value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'congress', label: 'Congress' },
         ]} />
         {pro
           ? <Segmented size="sm" value={years} onChange={setYears} options={[{ value: 1, label: '1Y' }, { value: 2, label: '2Y' }, { value: 5, label: '5Y' }]} />
@@ -119,11 +119,11 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
                       <td className="sx-table__who">
                         <InsiderLink raw={r.raw}>{r.name}</InsiderLink>
                         <span className="sx-table__role">
-                          {r.congress ? <Chip tone="accent">{memberChamber(r)}</Chip> : roleOf(r)}
+                          <RoleTag role={r.role} congress={!!r.congress} title={r.title} />
                           {(r.tickers || []).slice(0, 3).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
                         </span>
                       </td>
-                      <td className="sx-r sx-mono">{r.hit_rate != null ? `${r.hit_rate}%` : '—'}<span className="sx-n">{r.priced ? plural(r.priced, 'buy') : ''}</span></td>
+                      <td className="sx-r sx-mono">{r.hit_rate != null ? `${r.hit_rate}%` : '—'}<span className="sx-n">{r.priced ? `of ${r.priced} scored` : ''}</span></td>
                       <td className={`sx-r sx-mono sx-hide-sm ${r.avg_return >= 0 ? 'sx-up' : 'sx-down'}`}>{r.avg_return != null ? pct(r.avg_return, 1) : '—'}</td>
                       <td className={`sx-r sx-mono ${ex == null ? 'sx-muted' : ex >= 0 ? 'sx-up' : 'sx-down'}`}>
                         {ex != null ? `${ex >= 0 ? '+' : ''}${ex.toFixed(1)} pts` : '—'}
@@ -143,7 +143,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
       </Card>
       <p className="sx-note sx-note--center">
         Track record ranks by how far someone's buys beat the S&amp;P 500 over the same periods, discounted when there are only a few buys.
-        Hit rate is the share of buys now 5%+ higher (buys within 5% either way are left out).
+        Hit rate is the share of scored buys now 5%+ higher. A buy is scored when there's a price to check it against, and buys that moved less than 5% either way are left out, so it's often based on fewer buys than the Bought column counts.
         To be ranked: at least {rules.min_scored} scored buys averaging {money(rules.min_avg_buy)}+, and a person rather than a company or fund.
       </p>
     </div>

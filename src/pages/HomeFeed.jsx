@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link, stockPath } from '../lib/nav.jsx';
 import { money, congressRange, ago, plural } from '../lib/text.js';
-import { Card, Chip, Skeleton, ErrorNote, Icon, Freshness } from '../components/ui.jsx';
+import { Card, Chip, Skeleton, ErrorNote, Icon, Freshness, RoleTag } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
 import { SearchBox } from '../components/Search.jsx';
 
@@ -38,7 +38,7 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
       {d && (
         <>
           <Yours d={d} watchlist={watchlist} />
-          <MarketSections d={d} watchlist={watchlist} />
+          <MarketSections d={d} watchlist={watchlist} signedIn onHome />
         </>
       )}
     </div>
@@ -47,27 +47,32 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
 
 // The market-wide part of Home: this week's buying, Congress, big sales.
 // Also used by the public /insider-buying page.
-export function MarketSections({ d, watchlist }) {
+// signedIn: links into the Data page (signed-in only) are shown.
+// onHome: links out to the full buying page (which is this same list, so it's
+// left off there) and the leaderboard teaser.
+export function MarketSections({ d, watchlist, signedIn = false, onHome = false }) {
+  const seeAll = (to, label) => <Link to={to} className="sx-link">{label} <Icon name="arrow" size={12} /></Link>;
   return (
     <>
-    {d.pulse && <Pulse p={d.pulse} />}
+    {d.pulse && <Pulse p={d.pulse} signedIn={signedIn} />}
     {d.featured && <Featured c={d.featured} watchlist={watchlist} />}
+    {onHome && d.leader && <Leader l={d.leader} />}
     <div className="sx-feed-cols">
       {d.more?.length > 0 && (
-        <Card title="More insider buying this week" pad={false}>
+        <Card title="More insider buying this week" pad={false} action={onHome ? seeAll('/insider-buying', 'All buying') : null}>
           <ul className="sx-rows">{d.more.map(c => <ClusterRow key={c.ticker} c={c} />)}</ul>
         </Card>
       )}
       <div className="sx-feed-stack">
         {d.congress?.length > 0 && (
-          <Card title="From Congress" sub="Disclosed as ranges, often weeks after the trade" pad={false}>
+          <Card title="From Congress" sub="Disclosed as ranges, often weeks after the trade" pad={false} action={seeAll('/congress', 'All Congress trades')}>
             <ul className="sx-rows">
               {d.congress.map(c => (
                 <li key={c.ticker} className="sx-row">
                   <StockLink ticker={c.ticker} />
                   <div className="sx-row__main">
                     <div className="sx-row__title"><InsiderLink raw={c.buyers[0].raw}>{c.buyers[0].name}</InsiderLink> bought {congressRange(c.buyers[0].value)}</div>
-                    <div className="sx-row__sub">{c.company}{c.n_insiders > 1 ? ` · ${plural(c.n_insiders - 1, 'other member')}` : ''}</div>
+                    <div className="sx-row__sub"><RoleTag role={c.buyers[0].role} congress /> {c.company}{c.n_insiders > 1 ? ` · ${plural(c.n_insiders - 1, 'other member')}` : ''}</div>
                   </div>
                 </li>
               ))}
@@ -75,13 +80,13 @@ export function MarketSections({ d, watchlist }) {
           </Card>
         )}
         {d.sells?.length > 0 && (
-          <Card title="Largest insider sales this week" pad={false}>
+          <Card title="Largest insider sales this week" pad={false} action={signedIn ? seeAll('/data?tab=trades&side=sell&sort=value', 'All sales') : null}>
             <ul className="sx-rows">
               {d.sells.map(r => (
                 <li key={`${r.ticker}:${r.raw}`} className="sx-row">
                   <StockLink ticker={r.ticker} />
                   <div className="sx-row__main">
-                    <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <span className="sx-muted">({r.role})</span></div>
+                    <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <RoleTag role={r.role} /></div>
                     <div className="sx-row__sub">{r.company}{r.planned ? ' · pre-scheduled plan' : ''}</div>
                   </div>
                   <span className="sx-row__amt sx-down">{money(r.value)}</span>
@@ -101,7 +106,21 @@ const YOURS_PREVIEW = 8;
 
 function Yours({ d, watchlist }) {
   const [expanded, setExpanded] = useState(false);
-  const y = d.yours;
+  // The feed is a snapshot from the server. Once this browser has the saved
+  // watchlist, only show what's on it (plus holdings), so a stock removed a
+  // moment ago doesn't linger here while it's already gone from Watchlist.
+  const raw = d.yours;
+  const days = raw.days || 30;
+  const y = watchlist.ready ? (() => {
+    const t = new Set(watchlist.tickers.map(x => String(x).toUpperCase()));
+    const p = new Set(watchlist.insiders);
+    return {
+      ...raw,
+      stocks: raw.stocks.filter(s => s.held || t.has(s.ticker)),
+      people: raw.people.filter(x => p.has(x.raw)),
+      watching: watchlist.tickers.length + watchlist.insiders.length,
+    };
+  })() : raw;
   if (!y.watching && !y.holdings) {
     return (
       <Card title="Start with what you own" className="sx-yours sx-yours--empty">
@@ -155,7 +174,7 @@ function Yours({ d, watchlist }) {
       <li className="sx-row sx-row--yours">
         <span className="sx-avatar-sm" aria-hidden="true">{initials}</span>
         <div className="sx-row__main">
-          <div className="sx-row__title"><InsiderLink raw={p.raw}>{p.name}</InsiderLink>{p.role && <span className="sx-row__role">{p.role}</span>}</div>
+          <div className="sx-row__title"><InsiderLink raw={p.raw}>{p.name}</InsiderLink>{p.role && <RoleTag role={p.role} className="sx-row__role" />}</div>
           {p.recent.length > 0
             ? p.recent.slice(0, 3).map((r, i) => (
               <div key={i} className="sx-row__sub">
@@ -172,7 +191,7 @@ function Yours({ d, watchlist }) {
     );
   };
   return (
-    <Card title="Your stocks and people" sub={active.length || activePeople.length ? 'Newest activity first · last 14 days' : 'Nothing new in the last 14 days'} pad={false}
+    <Card title="Your stocks and people" sub={active.length || activePeople.length ? `Newest activity first · last ${days} days` : `Nothing new in the last ${days} days`} pad={false}
       action={<Link to="/watchlist" className="sx-link">Watchlist <Icon name="arrow" size={12} /></Link>}>
       <ul className="sx-rows">
         {/* New activity first (stocks, then people), then the quiet ones. */}
@@ -181,6 +200,9 @@ function Yours({ d, watchlist }) {
         {quiet.map(s => <Stock key={s.ticker} s={s} />)}
         {quietPeople.map(p => <Person key={p.raw} p={p} />)}
       </ul>
+      <div className="sx-card__links">
+        <Link to="/data?mine=1" className="sx-link">See their trades <Icon name="arrow" size={12} /></Link>
+      </div>
       {(hidden > 0 || (expanded && total > YOURS_PREVIEW)) && (
         <button className="sx-more" onClick={() => setExpanded(e => !e)} aria-expanded={expanded}>
           {expanded ? 'Show less'
@@ -192,19 +214,42 @@ function Yours({ d, watchlist }) {
   );
 }
 
-function Pulse({ p }) {
+// Every open-market buy and sale filed in the last 7 days, all stocks.
+// The Data page's Signals tab only totals the stocks it groups, so the
+// labels here say exactly what's counted.
+function Pulse({ p, signedIn }) {
   return (
     <div className="sx-pulse">
-      <div className="sx-pulse__stat"><span className="sx-pulse__label">Insiders bought this week</span><span className="sx-pulse__val sx-up">{money(p.buy_v)}</span><span className="sx-muted">{plural(p.buy_n, 'filing')}</span></div>
-      <div className="sx-pulse__stat"><span className="sx-pulse__label">Insiders sold</span><span className="sx-pulse__val sx-down">{money(p.sell_v)}</span><span className="sx-muted">{plural(p.sell_n, 'filing')}</span></div>
-      {p.line && <p className="sx-pulse__line">{p.line}</p>}
+      <div className="sx-pulse__stat"><span className="sx-pulse__label">Bought, last 7 days</span><span className="sx-pulse__val sx-up">{money(p.buy_v)}</span><span className="sx-muted">{plural(p.buy_n, 'filing')}</span></div>
+      <div className="sx-pulse__stat"><span className="sx-pulse__label">Sold, last 7 days</span><span className="sx-pulse__val sx-down">{money(p.sell_v)}</span><span className="sx-muted">{plural(p.sell_n, 'filing')}</span></div>
+      <div className="sx-pulse__text">
+        {p.line && <p className="sx-pulse__line">{p.line}</p>}
+        <p className="sx-pulse__scope">Every open-market insider and Congress trade filed in the last 7 days.{signedIn && <> <Link to="/data?tab=trades" className="sx-link">See every trade <Icon name="arrow" size={12} /></Link></>}</p>
+      </div>
+    </div>
+  );
+}
+
+// One line pointing at the leaderboard: whose buys have done best lately.
+function Leader({ l }) {
+  const pts = Math.round(l.excess);
+  if (!(pts > 0)) return null; // only worth a line when someone actually beat the market
+  return (
+    <div className="sx-leader">
+      <span className="sx-leader__label">Top insider, last 12 months</span>
+      <span className="sx-leader__who">
+        <InsiderLink raw={l.raw} className="sx-strong">{l.name}</InsiderLink> <RoleTag role={l.role} congress={l.congress} />
+        {l.tickers?.[0] && <> <StockLink ticker={l.tickers[0]} plain /></>}
+      </span>
+      <span className="sx-leader__stat">Their buys beat the S&amp;P 500 by <b className="sx-up">{pts} points</b> on average, across {plural(l.scored, 'scored buy')}.</span>
+      <Link to="/leaderboard" className="sx-link sx-leader__link">Leaderboard <Icon name="arrow" size={12} /></Link>
     </div>
   );
 }
 
 function Featured({ c, watchlist }) {
   return (
-    <Card className="sx-featured" title="Featured filing this week" sub="The week's most notable insider buying. A summary of what was filed, not a recommendation.">
+    <Card className="sx-featured" title="Featured filing this week" sub={`${c.why ? `${c.why}. ` : "The week's most notable insider buying. "}A summary of what was filed, not a recommendation.`}>
       <div className="sx-featured__head">
         <StockLink ticker={c.ticker} className="sx-tk--lg" />
         <span className="sx-featured__co">{c.company}</span>
@@ -218,7 +263,7 @@ function Featured({ c, watchlist }) {
         <ul className="sx-buyers">
           {c.buyers.map(b => (
             <li key={b.raw}>
-              <span><InsiderLink raw={b.raw} className="sx-strong">{b.name}</InsiderLink> <span className="sx-muted">· {b.role}</span></span>
+              <span><InsiderLink raw={b.raw} className="sx-strong">{b.name}</InsiderLink> <RoleTag role={b.role} /></span>
               <span>{b.stake && <Chip>{b.stake}</Chip>}<b className="sx-mono sx-up">{money(b.value)}</b></span>
             </li>
           ))}
@@ -247,7 +292,7 @@ function ClusterRow({ c }) {
       <div className="sx-row__main">
         <div className="sx-row__title">{c.company}</div>
         <div className="sx-row__sub">
-          {facts.length ? facts.join(' · ') : <><InsiderLink raw={top.raw}>{top.name}</InsiderLink> ({top.role})</>}
+          {facts.length ? facts.join(' · ') : <><InsiderLink raw={top.raw}>{top.name}</InsiderLink> <RoleTag role={top.role} /></>}
         </div>
       </div>
       <span className="sx-row__amt sx-up">{money(c.total)}</span>

@@ -13,10 +13,10 @@ import OnboardingFlow from './onboard.jsx';
 import './research.css';
 import { go, stockPath, insiderPath } from './lib/nav.jsx';
 import { clearApiCache, refreshApi, api, useDataSinceYear } from './lib/api.js';
-import { prettyPerson, prettyCompany, shortDate, plural, memberRole, memberChamber } from './lib/text.js';
+import { prettyPerson, prettyCompany, shortDate, plural, memberRole, memberChamber, roleFromTitle, roleText } from './lib/text.js';
 import { peekIntent, clearIntent } from './lib/intent.js';
 import { SearchBox, SearchOverlay } from './components/Search.jsx';
-import { Icon, Card } from './components/ui.jsx';
+import { Icon, Card, RoleTag } from './components/ui.jsx';
 import StockPage from './pages/StockPage.jsx';
 import InsiderPage from './pages/InsiderPage.jsx';
 import HomeFeed from './pages/HomeFeed.jsx';
@@ -261,7 +261,7 @@ function UpgradeModal({ feature, pro, onClose }) {
     alert: {
       title: 'Never miss a trade again',
       outcomes: [
-        { step: '1', text: 'Pick the stocks, insiders, or politicians you care about' },
+        { step: '1', text: 'Pick the stocks, insiders, or members of Congress you care about' },
         { step: '2', text: 'Seli checks every new SEC filing through the day' },
         { step: '3', text: 'Get an email the same day they file' },
       ],
@@ -1326,7 +1326,7 @@ function Badge({ type, children }) {
 // congressional insiders from corporate C-suite.
 function insiderRoleLabel(r) {
   if (r?.is_congress) return { badge: 'rel-strong', label: memberChamber({ title: r.insider_title || r.title }) };
-  if (r?.relationship === 'strong') return { badge: 'rel-strong', label: 'C-Suite' };
+  if (r?.relationship === 'strong') return { badge: 'rel-strong', label: 'Executive' };
   if (r?.relationship === 'medium') return { badge: 'rel-medium', label: 'Officer' };
   return { badge: 'rel-weak', label: weakRoleLabel(r?.insider_title || r?.title) };
 }
@@ -1334,7 +1334,7 @@ function insiderRoleLabel(r) {
 // to show as "Dir". Anyone who also checks Director stays "Dir".
 function weakRoleLabel(title) {
   const t = title || '';
-  return /10\s?%|ten percent/i.test(t) && !/director/i.test(t) ? '10% owner' : 'Dir';
+  return /10\s?%|ten percent/i.test(t) && !/director/i.test(t) ? '10%+ shareholder' : 'Board member';
 }
 
 // Inline info tooltip — hover to see explanation
@@ -1369,7 +1369,7 @@ const TIPS = {
   // Raw filing columns
   pctPosition: 'How much the insider\'s total holdings changed from this trade. +67% means they increased their position by two-thirds.',
   tradeValue: 'Dollar value of the transaction (shares × price).',
-  role: 'Insider\'s relationship to the company. C-Suite = CEO/CFO/COO/etc. Officer = SVP/VP/GC. Dir = board director. 10% owner = an investor or fund holding 10%+ of the company.',
+  role: 'Who made the trade. Blue tags with a Capitol icon are members of Congress. Everyone else is a company insider: an executive, officer, board member, or a 10%+ shareholder (an investor or fund that owns 10% or more of the company).',
   tradeType: 'Buy = open-market purchase. Sell = open-market sale. Only open-market trades are shown — option exercises and gifts are excluded.',
   // Insider profile
   hitRate: 'Percentage of priced trades where the stock moved in the insider\'s favor within 6 months. Requires 5+ priced trades to display.',
@@ -2909,12 +2909,18 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
   const isMobile = useIsMobile();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState(initialTab || 'signals');
+  const urlParams = useMemo(() => { try { return new URLSearchParams(window.location.search); } catch { return new URLSearchParams(); } }, []);
+  const [tab, setTab] = useState(() => initialTab || (urlParams.get('tab') === 'trades' ? 'raw' : 'signals'));
+  // "My watchlist": only stocks (and, on Every trade, people) you watch.
+  const [mineOnly, setMineOnly] = useState(() => urlParams.get('mine') === '1');
+  const watchTickers = useMemo(() => new Set((watchlist?.tickers || []).map(t => String(t).toUpperCase())), [watchlist?.tickers]);
+  const watchPeople = useMemo(() => new Set(watchlist?.insiders || []), [watchlist?.insiders]);
+  const watchCount = watchTickers.size + watchPeople.size;
   const [days, setDays] = useState(7);
   const [sourceF, setSourceF] = useState('');
   const [sectorF, setSectorF] = useState('');
   const [minStr, setMinStr] = useState(1);
-  const [txType, setTxType] = useState('all');
+  const [txType, setTxType] = useState(() => { try { const v = new URLSearchParams(window.location.search).get('side'); return v === 'buy' || v === 'sell' ? v : 'all'; } catch { return 'all'; } });
   const [rawRoleF, setRawRoleF] = useState('');
   const [minSize, setMinSize] = useState(0);
   const [search, setSearch] = useState('');
@@ -2923,7 +2929,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sigSort, setSigSort] = useState('conviction');
   const [sigDir, setSigDir] = useState(-1);
-  const [rawSort, setRawSort] = useState('date');
+  const [rawSort, setRawSort] = useState(() => { try { return new URLSearchParams(window.location.search).get('sort') === 'value' ? 'value' : 'date'; } catch { return 'date'; } });
   const [rawDir, setRawDir] = useState(-1);
   // Expanded rows — multiple can be open simultaneously
   const [expandedSigs, setExpandedSigs] = useState(new Set()); // Set of tickers
@@ -2961,10 +2967,11 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
   const allSignals = useMemo(() => {
     const result = filterAndScoreSignals(filings, { cutoff, sourceF, sectorF, strengthThreshold });
     const q = search.toLowerCase();
-    return result.filter(s => (!q || s.ticker.toLowerCase().includes(q) || (s.company || '').toLowerCase().includes(q))
+    return result.filter(s => (!mineOnly || watchTickers.has(String(s.ticker || '').toUpperCase()))
+      && (!q || s.ticker.toLowerCase().includes(q) || (s.company || '').toLowerCase().includes(q))
       && (txType === 'all' || (txType === 'buy' ? s.netValue > 0 : s.netValue < 0))
       && Math.abs(s.netValue || 0) >= minSize);
-  }, [filings, cutoff, sourceF, sectorF, strengthThreshold, search, txType, minSize]);
+  }, [filings, cutoff, sourceF, sectorF, strengthThreshold, search, txType, minSize, mineOnly, watchTickers]);
 
   const signals = useMemo(() =>
     [...allSignals].sort((a, b) => {
@@ -2979,6 +2986,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
     const q = search.toLowerCase();
     return filings.filter(f => {
       if (!f.isOpenMarket) return false;
+      if (mineOnly && !watchTickers.has(String(f.ticker || '').toUpperCase()) && !watchPeople.has(f.insiderName)) return false;
       if (sectorF && f.sector !== sectorF) return false;
       if (txType !== 'all' && f.transactionType !== txType) return false;
       const cg = f.relationship === 'congress' || /^CONGRESS/i.test(f.transactionCode || '');
@@ -2993,7 +3001,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
       if (q && !f.ticker?.toLowerCase().includes(q) && !(f.company || '').toLowerCase().includes(q) && !(f.insiderName || '').toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [filings, sectorF, txType, rawRoleF, rawCutoff, rawDateTo, search, sourceF, minSize]);
+  }, [filings, sectorF, txType, rawRoleF, rawCutoff, rawDateTo, search, sourceF, minSize, mineOnly, watchTickers, watchPeople]);
 
   const [rawPage, setRawPage] = useState(1);
   const rawFilings = useMemo(() =>
@@ -3006,8 +3014,8 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
 
   function onSigSort(col) { if (sigSort === col) setSigDir(d => -d); else { setSigSort(col); setSigDir(-1); } }
   function onRawSort(col) { if (rawSort === col) setRawDir(d => -d); else { setRawSort(col); setRawDir(-1); } }
-  const hasFilters = search || sectorF || sourceF || minStr > 1 || days !== 7 || dateFrom || dateTo || txType !== 'all' || minSize > 0 || rawRoleF !== '';
-  function resetFilters() { setSearch(''); setSectorF(''); setSourceF(''); setMinStr(1); setDays(7); setTxType('all'); setRawRoleF(''); setDateFrom(''); setDateTo(''); setMinSize(0); }
+  const hasFilters = search || sectorF || sourceF || minStr > 1 || days !== 7 || dateFrom || dateTo || txType !== 'all' || minSize > 0 || rawRoleF !== '' || mineOnly;
+  function resetFilters() { setSearch(''); setSectorF(''); setSourceF(''); setMinStr(1); setDays(7); setTxType('all'); setRawRoleF(''); setDateFrom(''); setDateTo(''); setMinSize(0); setMineOnly(false); }
 
   function toggleSig(ticker) {
     setExpandedSigs(prev => { const n = new Set(prev); n.has(ticker) ? n.delete(ticker) : n.add(ticker); return n; });
@@ -3029,7 +3037,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
       <header className="sx-head sx-head--page ws-data-head">
         <div className="sx-head__main">
           <h1 className="sx-head__title">Data</h1>
-          <p className="sx-head__desc">Every open-market insider and Congress trade, grouped by stock or one row per trade.{isMobile ? ' Tap a row for details.' : ''}</p>
+          <p className="sx-head__desc">Every open-market insider and Congress trade. Signals groups them by stock.{isMobile ? ' Tap a row for details.' : ''}</p>
         </div>
         <div className="sx-head__actions">
           <button className="sx-btn sx-btn--ghost sx-btn--sm" onClick={() => onUpgrade('data_export_direct')}><IconDownload style={{ width: 13, height: 13 }} /> Download dataset</button>
@@ -3042,7 +3050,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
           <div className="ws-toolbar-tabs">
             <button className={`ws-toolbar-tab${tab === 'signals' ? ' ws-toolbar-tab--active' : ''}`}
               onClick={() => { setTab('signals'); setExpandedRaws(new Set()); }}>
-              By stock <span className="ws-tile__count">{loading ? '…' : allSignals.length}</span>
+              Signals <span className="ws-tile__count">{loading ? '…' : allSignals.length}</span>
             </button>
             <button className={`ws-toolbar-tab${tab === 'raw' ? ' ws-toolbar-tab--active' : ''}`}
               onClick={() => { setTab('raw'); setExpandedSigs(new Set()); }}>
@@ -3058,11 +3066,13 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
         {!loading && (() => {
           const net = signals.reduce((sum, x) => sum + x.netValue, 0);
           const high = signals.filter(x => x.conviction >= 60).length;
+          let bought = 0, sold = 0;
+          if (tab !== 'signals') for (const f of allRaw) { if (f.transactionType === 'buy') bought += f.value || 0; else if (f.transactionType === 'sell') sold += f.value || 0; }
           return (
             <p className="ws-summary">
               {tab === 'signals'
-                ? <>{plural(signals.length, 'stock')} · {high} high conviction · net <b className={net >= 0 ? 'val-buy' : 'val-sell'}>{net >= 0 ? '+' : '−'}{fmt.money(Math.abs(net))}</b></>
-                : <>{plural(allRaw.length, 'trade')} · {plural(new Set(allRaw.map(f => f.ticker)).size, 'stock')}</>}
+                ? <>{plural(signals.length, 'stock')} · {high} high conviction · net <b className={net >= 0 ? 'val-buy' : 'val-sell'}>{net >= 0 ? '+' : '−'}{fmt.money(Math.abs(net))}</b> across these stocks</>
+                : <>{plural(allRaw.length, 'trade')} · {plural(new Set(allRaw.map(f => f.ticker)).size, 'stock')} · bought <b className="val-buy">{fmt.money(bought)}</b> · sold <b className="val-sell">{fmt.money(sold)}</b></>}
             </p>
           );
         })()}
@@ -3075,6 +3085,11 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
               <input className="ws-search-input" value={search} onChange={e => setSearch(e.target.value)} placeholder={tab === 'signals' ? 'Ticker or company…' : 'Ticker, company, or insider…'} />
               {search && <button className="ws-search-clear" onClick={() => setSearch('')}>×</button>}
             </div>
+            <button className={`ws-pill ws-pill--mine${mineOnly ? ' ws-pill--active' : ''}`} aria-pressed={mineOnly}
+              disabled={!watchCount && !mineOnly} title={watchCount ? 'Only stocks and people on your watchlist' : 'Add stocks to your watchlist first'}
+              onClick={() => setMineOnly(m => !m)}>
+              <IconFavorites style={{ width: 11, height: 11, marginRight: 4, verticalAlign: '-1px' }} />My watchlist{watchCount ? ` (${watchCount})` : ''}
+            </button>
             {isMobile && <button className="ws-filter-toggle" onClick={() => setFiltersOpen(f => !f)}>
               Filters{hasFilters ? ' ●' : ''} {filtersOpen ? '▴' : '▾'}
             </button>}
@@ -3096,7 +3111,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
               <div className="ws-filter-group">
                 <span className="ws-filter-label">Who</span>
                 <div className="ws-pills">
-                  {[['', 'Everyone'], ['corporate', 'Insiders'], ['political', 'Politicians']].map(([v, l]) => (
+                  {[['', 'Everyone'], ['corporate', 'Insiders'], ['political', 'Congress']].map(([v, l]) => (
                     <button key={v} className={`ws-pill${sourceF === v ? ' ws-pill--active' : ''}`} onClick={() => { setSourceF(v); if (v === 'political') setRawRoleF(''); }}>{l}</button>
                   ))}
                 </div>
@@ -3136,7 +3151,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                 <div className="ws-filter-group">
                   <span className="ws-filter-label">Role</span>
                   <div className="ws-pills">
-                    {[['', 'All'], ['strong', 'C-suite'], ['medium', 'Officer'], ['weak', 'Director & other']].map(([v, l]) => (
+                    {[['', 'All'], ['strong', 'Executives'], ['medium', 'Officers'], ['weak', 'Board & other']].map(([v, l]) => (
                       <button key={v} className={`ws-pill${rawRoleF === v ? ' ws-pill--active' : ''}`} onClick={() => setRawRoleF(v)}>{l}</button>
                     ))}
                   </div>
@@ -3170,8 +3185,9 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
         {tab === 'signals' && (
           loading ? <SkeletonRows count={10} /> : signals.length === 0 ? (
             <div className="ws-empty">{sourceF === 'political' && days != null && days < 90
-              ? 'No politician trades in this window. Members of Congress report trades up to 45 days late, so try 90d or All.'
-              : 'No signals match these filters. Try widening the date or clearing filters.'}</div>
+              ? 'No Congress trades in this window. Members of Congress report trades up to 45 days late, so try 90d or All.'
+              : mineOnly ? 'Nothing from your watchlist in this window. Try a longer date range, or turn off My watchlist.'
+                : 'No signals match these filters. Try widening the date or clearing filters.'}</div>
           ) : (
             <>
               {isMobile && <MobileSort value={sigSort} dir={sigDir} onSort={onSigSort}
@@ -3300,8 +3316,9 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
         {tab === 'raw' && (
           loading ? <SkeletonRows count={12} /> : rawFilings.length === 0 ? (
             <div className="ws-empty">{sourceF === 'political' && !dateFrom && days != null && days < 90
-              ? 'No politician trades in this window. Members of Congress report trades up to 45 days late, so try 90d or All.'
-              : 'No filings match these filters.'}</div>
+              ? 'No Congress trades in this window. Members of Congress report trades up to 45 days late, so try 90d or All.'
+              : mineOnly ? 'Nothing from your watchlist in this window. Try a longer date range, or turn off My watchlist.'
+                : 'No filings match these filters.'}</div>
           ) : (
             <>
               {/* Same outer width as signals. 7-col grid: chevron+date | ticker | insider | role | type | ±position | value */}
@@ -3320,6 +3337,9 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                   const isBuy = f.transactionType === 'buy';
                   const isExp = expandedRaws.has(i);
                   const secUrl = secFilingUrl(f.accessionNumber, f.cikIssuer);
+                  // Congress rows are stored as relationship "strong", so check the code too.
+                  const isCg = f.relationship === 'congress' || /^CONGRESS/i.test(f.transactionCode || '');
+                  const role = roleFromTitle(f.title, isCg ? 'congress' : f.relationship);
                   // Sibling filings for this insider × ticker combo
                   const siblingFilings = isExp ? filings.filter(x => x.ticker === f.ticker && x.insiderName === f.insiderName && x.isOpenMarket && x.accessionNumber !== f.accessionNumber).sort((a, b) => (b.transactionDate || b.date || '').localeCompare(a.transactionDate || a.date || '')).slice(0, 5) : [];
                   return (
@@ -3334,7 +3354,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                             <span className={`ws-mrow__amt${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(Math.abs(f.value || 0))}</span>
                           </div>
                           <div className="ws-mrow__sub">
-                            <span className="ws-mrow__name">{prettyPerson(f.insiderName, f.relationship === 'congress')}<span className="ws-mrow__role"> · {f.relationship === 'congress' ? memberRole({ title: f.title }) : f.relationship === 'strong' ? 'C-suite' : f.relationship === 'medium' ? 'Officer' : 'Director'}</span></span>
+                            <span className="ws-mrow__name">{prettyPerson(f.insiderName, isCg)} <RoleTag role={role} congress={isCg} title={f.title} /></span>
                             <span className="ws-mrow__date">{shortDate(f.transactionDate || f.date)}</span>
                           </div>
                         </div>
@@ -3352,7 +3372,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                         <div className="ws-row__cell ws-row__cell--muted" style={{ fontSize: 11 }}>
                           {fmt.dateShort(f.transactionDate || f.date)}
                         </div>
-                        {!isMobile && <div className="ws-row__cell"><Badge type={`rel-${f.relationship === 'congress' ? 'strong' : (f.relationship || 'weak')}`}>{f.relationship === 'congress' ? memberChamber({ title: f.title }) : f.relationship === 'strong' ? 'C-Suite' : f.relationship === 'medium' ? 'Officer' : weakRoleLabel(f.title)}</Badge></div>}
+                        {!isMobile && <div className="ws-row__cell"><RoleTag role={role} congress={isCg} title={f.title} /></div>}
                         <div className="ws-row__cell"><span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span></div>
                         {!isMobile && <div className="ws-row__cell ws-row__cell--right">
                           <span className={`ws-row__pos-change${isBuy ? ' val-buy' : ' val-sell'}`}>
@@ -3838,7 +3858,7 @@ function InsightsDrawer({ type, filings, onClose, sigSort, sigDir, sigOnSort, in
             <span className="topnav__wordmark" style={{ fontSize: 14 }}>Seli</span>
           </div>
           <div className="drawer__tabs">
-            {[['signals', 'By stock'], ['insiders', 'By insider'], ['data', 'Every trade']].map(([k, l]) => (
+            {[['signals', 'Signals'], ['insiders', 'By insider'], ['data', 'Every trade']].map(([k, l]) => (
               <button key={k}
                 className={`drawer__tab${activeTab === k ? ' drawer__tab--active' : ''}`}
                 onClick={() => switchTab(k)}>{l}</button>
@@ -4430,7 +4450,7 @@ function DataDrawer({ initialDetail, initialDetailStack, filterState, onClose, w
             <span className="topnav__wordmark" style={{ fontSize: 14 }}>Seli</span>
           </div>
           <div className="drawer__tabs">
-            {[['signals', 'By stock'], ['insiders', 'By insider'], ['data', 'Every trade']].map(([k, l]) => (
+            {[['signals', 'Signals'], ['insiders', 'By insider'], ['data', 'Every trade']].map(([k, l]) => (
               <button key={k}
                 className={`drawer__tab${k === 'data' ? ' drawer__tab--active' : ''}`}
                 onClick={() => { if (k !== 'data' && onSwitchTab) onSwitchTab(k); }}>{l}</button>
@@ -6616,7 +6636,7 @@ function LPFeatureMock({ type }) {
                 <div className="ins-lb-card__name">{r.n}</div>
                 <div className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.title}</div>
                 <div className="ins-lb-card__meta">
-                  <Badge type={`rel-${r.rel}`}>{r.rel === 'strong' ? 'Exec' : r.rel === 'medium' ? 'Officer' : 'Dir'}</Badge>
+                  <Badge type={`rel-${r.rel}`}>{r.rel === 'strong' ? 'Executive' : r.rel === 'medium' ? 'Officer' : 'Board member'}</Badge>
                   <span className="td-muted" style={{ fontSize: '0.6875rem' }}>{r.buys} · {r.val}</span>
                 </div>
               </div>

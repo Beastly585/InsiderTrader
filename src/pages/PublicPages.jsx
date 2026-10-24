@@ -8,7 +8,7 @@ import { SignInButton, useClerk } from '@clerk/clerk-react';
 import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink } from '../lib/nav.jsx';
 import { plural, shortDate, money, congressRange, PAGE_TITLES } from '../lib/text.js';
-import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness } from '../components/ui.jsx';
+import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag } from '../components/ui.jsx';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
 import { TradeTable } from './StockPage.jsx';
@@ -353,7 +353,7 @@ export function PublicHome() {
                   <div className="sx-row__main">
                     <div className="sx-row__title">{c.company}</div>
                     <div className="sx-row__sub">
-                      <InsiderLink raw={c.buyers[0].raw}>{c.buyers[0].name}</InsiderLink> ({c.buyers[0].role}){c.n_insiders > 1 ? ` + ${plural(c.n_insiders - 1, 'other')}` : ''}
+                      <InsiderLink raw={c.buyers[0].raw}>{c.buyers[0].name}</InsiderLink> <RoleTag role={c.buyers[0].role} />{c.n_insiders > 1 ? ` + ${plural(c.n_insiders - 1, 'other')}` : ''}
                     </div>
                   </div>
                   <span className="sx-row__amt sx-up">{money(c.total)}</span>
@@ -387,8 +387,8 @@ export function PublicHome() {
                 {(leaders.ranked || []).slice(0, 5).map(r => (
                   <li key={r.raw} className="sx-row">
                     <div className="sx-row__main">
-                      <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink></div>
-                      <div className="sx-row__sub">{r.role || r.title}{r.tickers?.[0] ? <> · <StockLink ticker={r.tickers[0]} plain className="sx-lb__tk" /></> : null} · {plural(r.priced || r.om_buys || 0, 'buy')}</div>
+                      <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <RoleTag role={r.role} congress={!!r.congress} title={r.title} /></div>
+                      <div className="sx-row__sub">{r.tickers?.[0] ? <> · <StockLink ticker={r.tickers[0]} plain className="sx-lb__tk" /></> : null} · {plural(r.priced || r.om_buys || 0, 'buy')}</div>
                     </div>
                     {r.excess != null && <span className={`sx-row__amt ${r.excess >= 0 ? 'sx-up' : 'sx-down'}`}>{r.excess >= 0 ? '+' : ''}{Math.round(r.excess)} pts</span>}
                   </li>

@@ -106,7 +106,7 @@ export function scoreTier(score) {
 }
 
 // Name formatting, same as the emails: 'HUANG JEN HSUN' -> 'Jen Hsun Huang'.
-const ENTITY_RE = /\b(INC|LLC|L\.?P\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|PARTNERS|HOLDINGS|MANAGEMENT|ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER)\b/i;
+const ENTITY_RE = /\b(INC|LLC|L\.?P\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|CAPITALES|PARTNERS|HOLDINGS|MANAGEMENT|ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER|LIMITED|COMPANY|GMBH|S\.A|C\.V|L\.L\.C)\b/i;
 const SUFFIXES = new Set(['JR', 'SR', 'II', 'III', 'IV', 'MD', 'PHD']);
 const SMALL = new Set(['of', 'and', 'the', 'for', '&']);
 const KEEP_UPPER = new Set(['LLC', 'LP', 'GP', 'PLC', 'USA', 'US', 'NV', 'SA', 'AG', 'REIT', 'ETF', 'II', 'III', 'IV', 'AT&T']);
@@ -205,6 +205,34 @@ export function memberRole(x) {
   if (r && r !== 'Congress') return r;
   const t = `${x?.title || ''} ${x?.insider_title || ''} ${x?.insiderTitle || ''}`;
   return /senat/i.test(t) ? 'Senator' : /house|represent/i.test(t) ? 'Representative' : 'Congress';
+}
+
+// ── Roles in plain words ─────────────────────────────────────────────────────
+// The Worker sends short role codes ("Director", "VP", "10% owner", ...),
+// which the scoring and the email sentences rely on. These turn them into
+// words a first-time visitor reads without a glossary. CEO, CFO, COO and
+// CTO stay: they're well known.
+const ROLE_WORDS = {
+  'C-suite exec': 'Executive', 'C-Suite': 'Executive', 'Exec': 'Executive',
+  Chair: 'Board chair', VP: 'Vice president',
+  'General Counsel': 'General counsel', '10% owner': '10%+ shareholder',
+  Director: 'Board member', Dir: 'Board member',
+};
+export const roleText = role => ROLE_WORDS[role] || role || 'Insider';
+export const isCongressRole = role => ['Senator', 'Representative', 'Congress'].includes(role);
+
+// Same rules as worker/lib/intel.js shortRole, for rows that arrive with a
+// raw Form 4 title (the Data page's trade list).
+const ROLE_PATTERNS = [
+  [/\bceo\b|chief executive/i, 'CEO'], [/\bcfo\b|chief financial/i, 'CFO'], [/\bcoo\b|chief operating/i, 'COO'],
+  [/\bcto\b|chief tech/i, 'CTO'], [/chief\s+\w+\s+officer|\bc[a-z]o\b/i, 'C-suite exec'], [/\bpresident\b/i, 'President'],
+  [/chair/i, 'Chair'], [/\bevp\b|\bsvp\b|vice pres|\bvp\b/i, 'VP'], [/general counsel/i, 'General Counsel'],
+  [/10%|ten percent/i, '10% owner'], [/director/i, 'Director'], [/^\s*officer\s*$/i, 'Officer'],
+];
+export function roleFromTitle(title, relationship) {
+  if (relationship === 'congress') return memberRole({ title });
+  for (const [rx, label] of ROLE_PATTERNS) if (rx.test(title || '')) return label;
+  return relationship === 'strong' || relationship === 'medium' ? 'Officer' : 'Insider';
 }
 
 // Short form for badges: "House" or "Senate".

@@ -170,7 +170,7 @@ function statusOut(s) {
     ticker: s.ticker, company: s.company, known: s.known, active: s.active, lines: s.lines,
     recent_buys: { n: s.recent_buys.n, v: s.recent_buys.v }, recent_sells: { n: s.recent_sells.n, v: s.recent_sells.v },
     yr_buys: { n: s.yr_buys.n, v: s.yr_buys.v }, yr_sells: { n: s.yr_sells.n, v: s.yr_sells.v },
-    recent_congress: s.recent_congress.n, last_buy: s.last_buy,
+    recent_congress: s.recent_congress.n, last_buy: s.last_buy, last_activity: s.last_activity || null,
   };
 }
 
@@ -429,6 +429,10 @@ async function insider(ctx, raw) {
 }
 
 // ── Personal: watchlist + holdings ───────────────────────────────────────────
+// Home and Watchlist describe the same stocks and people over the same
+// window, so one stock never tells two stories one click apart.
+const YOURS_DAYS = 30;
+
 async function loadWatchlist(ctx) {
   const { sqlVal } = ctx.deps;
   try {
@@ -479,12 +483,13 @@ async function watchlistSummary(ctx, holdings) {
   const names = items.filter(i => i.item_type === 'insider').map(i => i.item_value);
   const heldOnly = holdings.filter(t => !tickers.includes(t));
   const [status, people] = await Promise.all([
-    statusFor(ctx, [...tickers, ...heldOnly], 30),
-    peopleActivity(ctx, names, 90),
+    statusFor(ctx, [...tickers, ...heldOnly], YOURS_DAYS),
+    peopleActivity(ctx, names, YOURS_DAYS),
   ]);
   const alertsOf = (type, v) => items.find(i => i.item_type === type && i.item_value === v)?.alerts !== false;
   return {
     pro: await ctx.isPro(),
+    days: YOURS_DAYS,
     stocks: tickers.map(t => ({ ...(status[t] ? statusOut(status[t]) : { ticker: t, company: t, lines: [] }), alerts: alertsOf('ticker', t), held: holdings.includes(t) })),
     people: people.map(p => ({ ...p, alerts: alertsOf('insider', p.raw) })),
     holdings: heldOnly.map(t => (status[t] ? statusOut(status[t]) : { ticker: t, company: t, lines: [] })),
@@ -547,8 +552,10 @@ async function marketFeed(ctx) {
     ]);
     const all = buildClusters(buys, { includeCorporate: true, includeCongress: false });
     const congress = buildClusters(buys, { includeCorporate: false, includeCongress: true });
+    const featured = all[0] ? clusterOut(all[0], 'this week') : null;
+    if (featured) featured.why = featuredWhy(all[0], all);
     const data = {
-      featured: all[0] ? clusterOut(all[0], 'this week') : null,
+      featured,
       more: all.slice(1, 9).map(c => clusterOut(c, 'this week')),
       congress: congress.slice(0, 4).map(c => clusterOut(c, 'this week')),
       sells: sells.map(r => ({
@@ -563,6 +570,19 @@ async function marketFeed(ctx) {
     return data;
   })().catch(e => { feedCache.promise = null; throw e; });
   return feedCache.promise;
+}
+
+// One line on why this cluster leads the page. Only claims "most" or
+// "biggest" when it's true across this week's clusters.
+function featuredWhy(top, all) {
+  const n = c => Number(c.n_insiders) || 0;
+  const v = c => Number(c.total) || 0;
+  const mostPeople = all.every(c => c === top || n(c) < n(top));
+  const mostMoney = all.every(c => c === top || v(c) < v(top));
+  if (n(top) >= 2 && mostPeople) return `Most insiders buying one stock this week (${n(top)})`;
+  if (mostMoney) return n(top) >= 2 ? `Biggest insider buying this week, ${n(top)} insiders` : 'Biggest insider buy this week';
+  if (n(top) >= 2) return `${n(top)} insiders buying the same stock this week`;
+  return "This week's top-rated insider buy";
 }
 
 function pulse(rows) {
@@ -588,22 +608,44 @@ function pulse(rows) {
   return { buy_n: now.buy[0], buy_v: now.buy[1], sell_n: now.sell[0], sell_v: now.sell[1], line };
 }
 
+// Home's one-line pointer to the leaderboard: the top of the 12-month board.
+// Only ever reads a saved copy (memory, then R2). It never builds the board,
+// so it can't slow Home down; with nothing saved, Home just skips the line.
+let leaderCache = { at: 0, value: null };
+async function leaderTeaser(ctx) {
+  if (Date.now() - leaderCache.at < 30 * 60 * 1000) return leaderCache.value;
+  try {
+    const mem = lbCache.get('1|all');
+    const data = mem?.data || await Promise.race([lbStored(ctx.env, '1|all'), new Promise(r => setTimeout(() => r(null), 800))]);
+    const r = data?.ranked?.[0];
+    const value = r && r.excess != null ? {
+      raw: r.raw, name: r.name, role: r.role, title: r.title, congress: !!r.congress,
+      tickers: (r.tickers || []).slice(0, 1), excess: r.excess, scored: r.scored,
+    } : null;
+    if (data) leaderCache = { at: Date.now(), value };
+    return value;
+  } catch { return null; }
+}
+
 async function feed(ctx, holdings) {
-  const [market, items] = await Promise.all([marketFeed(ctx), loadWatchlist(ctx)]);
+  const [market, items, leader] = await Promise.all([marketFeed(ctx), loadWatchlist(ctx), leaderTeaser(ctx)]);
   const tickers = items.filter(i => i.item_type === 'ticker').map(i => String(i.item_value).toUpperCase());
   const names = items.filter(i => i.item_type === 'insider').map(i => i.item_value);
   const [status, people] = await Promise.all([
-    statusFor(ctx, [...tickers, ...holdings], 14),
-    peopleActivity(ctx, names, 14),
+    statusFor(ctx, [...tickers, ...holdings], YOURS_DAYS),
+    peopleActivity(ctx, names, YOURS_DAYS),
   ]);
+  // Newest activity first, then the quiet ones.
   const yours = [...new Set([...tickers, ...holdings])].map(t => status[t]).filter(Boolean)
     .map(s => ({ ...statusOut(s), held: holdings.includes(s.ticker), watched: tickers.includes(s.ticker) }))
-    .sort((a, b) => (b.active - a.active) || ((b.recent_buys.v + b.recent_sells.v) - (a.recent_buys.v + a.recent_sells.v)));
+    .sort((a, b) => (b.active - a.active) || String(b.last_activity || '').localeCompare(String(a.last_activity || ''))
+      || ((b.recent_buys.v + b.recent_sells.v) - (a.recent_buys.v + a.recent_sells.v)));
   return {
     pro: await ctx.isPro(),
     today: todayStr(),
-    yours: { stocks: yours, people, watching: tickers.length + names.length, holdings: holdings.length },
+    yours: { stocks: yours, people, watching: tickers.length + names.length, holdings: holdings.length, days: YOURS_DAYS },
     ...market,
+    leader,
   };
 }
 

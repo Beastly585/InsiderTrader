@@ -1,6 +1,7 @@
 // src/components/ui.jsx — small building blocks for the research pages.
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../lib/api.js';
+import { roleText, isCongressRole, memberChamber } from '../lib/text.js';
 
 // True below a width, kept in sync as the window resizes. Tables use it to
 // switch to stacked rows on phones instead of squeezing columns.
@@ -35,6 +36,20 @@ export function Card({ title, sub, action, children, className = '', id, pad = t
 
 export function Chip({ tone = 'neutral', children, title }) {
   return <span className={`sx-chip sx-chip--${tone}`} title={title}>{children}</span>;
+}
+
+// Who someone is, the same way everywhere. Members of Congress get a blue
+// tag with a Capitol icon reading House, Senate or Congress; company insiders get their role in plain words
+// as quiet grey text. So the two never blur together in a mixed list, and
+// nobody has to decode "Dir" or "C-suite exec".
+// Pass congress (bool) when known; otherwise it's read from the role.
+export function RoleTag({ role, congress, title, className = '' }) {
+  const cg = congress ?? isCongressRole(role);
+  if (cg) {
+    const chamber = memberChamber({ role, title }); // "House", "Senate" or "Congress"
+    return <span className={`sx-role sx-role--congress ${className}`} title={chamber === 'Congress' ? 'Member of Congress' : `Member of Congress, ${chamber}`}><Icon name="capitol" size={11} />{chamber}</span>;
+  }
+  return <span className={`sx-role ${className}`} title="Company insider">{roleText(role)}</span>;
 }
 
 export function TypeBadge({ type, om = true }) {
@@ -119,6 +134,7 @@ export function Icon({ name, size = 16, ...rest }) {
     case 'user': return <svg {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" /></svg>;
     case 'building': return <svg {...p}><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M9 21v-4h6v4M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01" /></svg>;
     case 'clock': return <svg {...p}><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></svg>;
+    case 'capitol': return <svg {...p}><path d="M3 21h18M4 18h16M6 18v-6M10 18v-6M14 18v-6M18 18v-6M3 12h18L12 5 3 12z" /></svg>;
     case 'info': return <svg {...p}><circle cx="12" cy="12" r="9" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>;
     default: return null;
   }

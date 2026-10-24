@@ -7,7 +7,7 @@ import { useApi } from '../lib/api.js';
 import { InsiderLink, StockLink, pushRecent } from '../lib/nav.jsx';
 import { money, amount, price, shares, pct, shortDate, ago, plural, codeLabel, edgarCompanyUrl, memberRole, stockTitle } from '../lib/text.js';
 import { secFilingUrl } from '../edgar.js';
-import { Card, TypeBadge, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, Icon, useNarrow } from '../components/ui.jsx';
+import { Card, TypeBadge, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, Icon, useNarrow, RoleTag } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
 import PriceChart from '../components/PriceChart.jsx';
 
@@ -139,7 +139,7 @@ function StockView({ d, watchlist, onUpgrade, renderProfile }) {
                   <li key={p.raw} className="sx-people__row">
                     <div className="sx-people__who">
                       <InsiderLink raw={p.raw} className="sx-people__name">{p.name}</InsiderLink>
-                      <span className="sx-people__role">{p.congress ? memberRole(p) : p.role !== 'Insider' ? p.role : (p.title || 'Insider')}</span>
+                      <RoleTag role={p.role} congress={!!p.congress} title={p.title} className="sx-people__role" />
                     </div>
                     <div className="sx-people__nums">
                       {/* Congress reports ranges, so summing them would invent a number: show counts. */}
@@ -177,17 +177,16 @@ function TradeList({ trades, showTicker, showInsider, showNow, membersOnly }) {
     <ul className="sx-trows">
       {trades.map((t, i) => {
         const since = sinceBuy(t, showNow);
-        const role = membersOnly ? '' : t.congress ? memberRole(t) : t.role;
         const detail = !t.om ? codeLabel(t.code) : t.routine ? 'Planned' : t.brk || '';
         // Who traded (stock pages), which company (multi-company people), or,
         // on a one-company insider page, the trade itself.
         const verb = t.type === 'buy' ? (t.om ? 'Bought' : 'Acquired') : t.type === 'sell' ? (t.om ? 'Sold' : 'Disposed') : 'Traded';
         const title = showInsider
-          ? <InsiderLink raw={t.raw}>{t.name}</InsiderLink>
+          ? <><InsiderLink raw={t.raw}>{t.name}</InsiderLink>{!membersOnly && <> <RoleTag role={t.role} congress={!!t.congress} title={t.title} /></>}</>
           : showTicker || t.congress || !t.shares
             ? <span>{t.company || t.ticker || verb}</span>
             : <span>{verb} {shares(t.shares)} {t.other_class ? 'local shares' : 'sh'}{t.price > 0 ? ` at ${price(t.price)}` : ''}</span>;
-        const sub = [shortDate(t.date), showInsider ? role : '', detail].filter(Boolean).join(' · ');
+        const sub = [shortDate(t.date), detail].filter(Boolean).join(' · ');
         return (
           <li key={`${t.acc}:${i}`} className={`sx-trow${t.om ? '' : ' sx-trow--muted'}`}>
             {showTicker && (t.ticker ? <StockLink ticker={t.ticker} /> : <span className="sx-trow__asset" title={t.company || ''}>Other</span>)}
@@ -240,7 +239,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
                 {showInsider && (
                   <td className="sx-table__who">
                     <InsiderLink raw={t.raw}>{t.name}</InsiderLink>
-                    {!membersOnly && <span className="sx-table__role">{t.congress ? memberRole(t) : t.role}</span>}
+                    {!membersOnly && <RoleTag role={t.role} congress={!!t.congress} title={t.title} className="sx-table__role" />}
                   </td>
                 )}
                 <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}{t.om && !t.routine && t.brk && <span className="sx-table__code sx-table__code--accent" title="This insider hadn't bought this stock on the open market in that long">{t.brk}</span>}</td>

@@ -51,7 +51,7 @@ export function ago(d, today = todayStr()) {
   return `${Math.floor(days / 365)} years ago`;
 }
 
-const ENTITY_RE = /\b(INC|LLC|L\.?P\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|PARTNERS|HOLDINGS|MANAGEMENT|ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER)\b/i;
+const ENTITY_RE = /\b(INC|LLC|L\.?P\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|CAPITALES|PARTNERS|HOLDINGS|MANAGEMENT|ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER|LIMITED|COMPANY|GMBH|S\.A|C\.V|L\.L\.C)\b/i;
 // Companies, funds and trusts that file as 'insiders' (e.g. 10% owners).
 export const isEntityName = name => ENTITY_RE.test(name || '');
 const SUFFIXES = new Set(['JR', 'SR', 'II', 'III', 'IV', 'MD', 'PHD']);
@@ -148,7 +148,7 @@ const ROLE_PATTERNS = [
   [/\bceo\b|chief executive/i, 'CEO'], [/\bcfo\b|chief financial/i, 'CFO'], [/\bcoo\b|chief operating/i, 'COO'],
   [/\bcto\b|chief tech/i, 'CTO'], [/chief\s+\w+\s+officer|\bc[a-z]o\b/i, 'C-suite exec'], [/\bpresident\b/i, 'President'],
   [/chair/i, 'Chair'], [/\bevp\b|\bsvp\b|vice pres|\bvp\b/i, 'VP'], [/general counsel/i, 'General Counsel'],
-  [/10%|ten percent/i, '10% owner'], [/director/i, 'Director'],
+  [/10%|ten percent/i, '10% owner'], [/director/i, 'Director'], [/^\s*officer\s*$/i, 'Officer'],
 ];
 export function shortRole(title, relationship) {
   // Congress disclosures carry the chamber as the title ("House", "Senate").
@@ -158,6 +158,14 @@ export function shortRole(title, relationship) {
   return relationship === 'strong' || relationship === 'medium' ? 'Officer' : 'Insider';
 }
 export const CSUITE_ROLES = new Set(['CEO', 'CFO', 'COO', 'CTO', 'President', 'C-suite exec']);
+
+// Role codes above drive scoring; these are the words people read. Same
+// list as src/lib/text.js roleText. CEO, CFO, COO and CTO stay as they are.
+const ROLE_WORDS = {
+  'C-suite exec': 'Executive', Chair: 'Board chair',
+  VP: 'Vice president', 'General Counsel': 'General counsel', '10% owner': '10%+ shareholder', Director: 'Board member',
+};
+export const roleWord = role => ROLE_WORDS[role] || role || 'Insider';
 
 export function isCongress(r) {
   return r.relationship === 'congress' || String(r.transaction_code || '').toUpperCase().startsWith('CONGRESS');
@@ -172,9 +180,13 @@ export function shortCompany(name) {
 
 function roleBit(role) {
   if (role === 'Congress') return 'a member of Congress';
-  if (role === '10% owner') return 'a 10% owner';
-  if (CSUITE_ROLES.has(role) || role === 'Chair' || role === 'General Counsel') return `the ${role}`;
-  const r = role.toLowerCase();
+  if (role === 'Senator') return 'a senator';
+  if (role === 'Representative') return 'a House member';
+  if (role === '10% owner') return 'a 10%+ shareholder';
+  if (role === 'C-suite exec') return 'a top executive';
+  if (['CEO', 'CFO', 'COO', 'CTO'].includes(role)) return `the ${role}`;
+  if (CSUITE_ROLES.has(role) || role === 'Chair' || role === 'General Counsel') return `the ${roleWord(role).toLowerCase()}`;
+  const r = roleWord(role).toLowerCase();
   return `${/^[aeiou]/.test(r) ? 'an' : 'a'} ${r}`;
 }
 
@@ -403,6 +415,8 @@ export function tickerStatus(tickers, rows, lastBuys, names, windowDays, today =
     };
     s.lines = statusLines(s, windowDays, today);
     s.active = !!(s.recent_buys.n || s.recent_sells.n || s.recent_congress.n);
+    // Newest trade in the window, so "newest activity first" really is.
+    s.last_activity = rs.filter(isRecent).map(r => asDate(r.trade_date)).filter(Boolean).sort().pop() || null;
     out[t] = s;
   }
   return out;
@@ -410,7 +424,7 @@ export function tickerStatus(tickers, rows, lastBuys, names, windowDays, today =
 
 function summarizePeople(people) {
   if (!people.length) return '';
-  const head = `${people[0].name} (${people[0].role})`;
+  const head = `${people[0].name} (${roleWord(people[0].role)})`;
   return people.length > 1 ? `${head} and ${plural(people.length - 1, 'other')}` : head;
 }
 
@@ -433,7 +447,7 @@ export function statusLines(s, windowDays, today = todayStr()) {
     if (ys.n) lines.push(`Insiders sold ${money(ys.v)} over the last 12 months (${plural(ys.n, 'sale')}).${yb.n ? '' : ' No open-market buys.'}`);
     if (!lines.length) lines.push('No open-market insider trades in the last 12 months.');
   }
-  if (lb && !rb.n) lines.push(`Last insider buy: ${lb.name} (${lb.role}), ${money(lb.value)}, ${ago(lb.date, today)}.`);
+  if (lb && !rb.n) lines.push(`Last insider buy: ${lb.name} (${roleWord(lb.role)}), ${money(lb.value)}, ${ago(lb.date, today)}.`);
   else if (!lb) lines.push('No open-market insider buys on record.');
   const c = rc.n ? rc.latest : yc.n ? yc.latest : null;
   if (c) lines.push(`Congress: ${c.name} ${c.type === 'buy' ? 'bought' : 'sold'} ${congressRange(c.value)}, ${ago(c.date, today)}.`);

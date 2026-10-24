@@ -5,7 +5,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link } from '../lib/nav.jsx';
 import { money, congressRange, ago, plural, prettyPerson } from '../lib/text.js';
-import { Card, Chip, Empty, Skeleton, ErrorNote, Icon } from '../components/ui.jsx';
+import { Card, Chip, Empty, Skeleton, ErrorNote, Icon, RoleTag } from '../components/ui.jsx';
 import WatchButton, { AlertBell } from '../components/WatchButton.jsx';
 import { SearchBox } from '../components/Search.jsx';
 
@@ -15,6 +15,7 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
   useEffect(() => { document.title = 'Watchlist · Seli'; }, []);
 
   const used = watchlist.tickers.length + watchlist.insiders.length;
+  const days = d?.days || 30; // same window as Home
   const pro = watchlist.pro;
   // Rows follow the live watchlist immediately; details fill in when the summary lands.
   const byTicker = Object.fromEntries((d?.stocks || []).map(s => [s.ticker, s]));
@@ -80,8 +81,8 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
                           <StockLink ticker={t} />
                           <span className="sx-wl__name">{s?.company && s.company !== t ? s.company : ''}</span>
                           {s?.held && <Chip tone="accent">You hold this</Chip>}
-                          {s?.recent_buys?.n > 0 && <Chip tone="buy">Buying · 30d</Chip>}
-                          {s?.recent_sells?.n > 0 && !s?.recent_buys?.n && <Chip tone="sell">Selling · 30d</Chip>}
+                          {s?.recent_buys?.n > 0 && <Chip tone="buy">Buying · {days}d</Chip>}
+                          {s?.recent_sells?.n > 0 && !s?.recent_buys?.n && <Chip tone="sell">Selling · {days}d</Chip>}
                         </div>
                         {s ? s.lines.slice(0, 2).map((l, i) => <p key={i} className={`sx-wl__line${i ? ' sx-muted' : ''}`}>{l}</p>) : pending(t) ? <Skeleton lines={1} height={12} /> : noDetail}
                       </div>
@@ -106,13 +107,13 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
                       <div className="sx-wl__main">
                         <div className="sx-wl__head">
                           <InsiderLink raw={n} className="sx-strong">{p?.name || prettyPerson(n)}</InsiderLink>
-                          {p?.role && <span className="sx-wl__name">{p.role}</span>}
+                          {p?.role && <RoleTag role={p.role} />}
                         </div>
                         {!p ? (pending(n) ? <Skeleton lines={1} height={12} /> : noDetail)
                           : p.recent.length ? p.recent.slice(0, 2).map((t, i) => (
                             <p key={i} className="sx-wl__line">{t.type === 'buy' ? 'Bought' : 'Sold'} <b className={t.type === 'buy' ? 'sx-up' : 'sx-down'}>{t.congress ? congressRange(t.value) : money(t.value)}</b> of <StockLink ticker={t.ticker} /> {ago(t.date)}.</p>
                           ))
-                            : <p className="sx-wl__line sx-muted">{p.last ? <>No trades in 90 days. Last: {p.last.type === 'buy' ? 'bought' : 'sold'} {money(p.last.value)} of <StockLink ticker={p.last.ticker} /> {ago(p.last.date)}.</> : 'No open-market trades on record.'}</p>}
+                            : <p className="sx-wl__line sx-muted">{p.last ? <>No trades in {days} days. Last: {p.last.type === 'buy' ? 'bought' : 'sold'} {money(p.last.value)} of <StockLink ticker={p.last.ticker} /> {ago(p.last.date)}.</> : 'No open-market trades on record.'}</p>}
                       </div>
                       <div className="sx-wl__ctl">
                         <AlertBell watchlist={watchlist} kind="person" id={n} onUpgrade={onUpgrade} />

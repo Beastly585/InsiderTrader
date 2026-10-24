@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, pushRecent } from '../lib/nav.jsx';
 import { money, amount, price, shares, pct, shortDate, ago, plural, prettyPerson, personTitle } from '../lib/text.js';
-import { Card, Chip, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat } from '../components/ui.jsx';
+import { Card, Chip, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, RoleTag } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
 import { TradeTable } from './StockPage.jsx';
 
@@ -81,10 +81,10 @@ function InsiderView({ d, watchlist, onUpgrade }) {
         <div className="sx-head__main">
           <div className="sx-head__row">
             <h1 className="sx-head__person">{d.name}</h1>
-            {d.congress && <Chip tone="accent">{chamberOf(primary) || 'Congress'}</Chip>}
+            {d.congress && <RoleTag congress role={chamberOf(primary) === 'Senate' ? 'Senator' : chamberOf(primary) === 'House' ? 'Representative' : 'Congress'} />}
           </div>
           <div className="sx-head__sub">
-            {primary && <span>{d.congress ? ({ House: 'U.S. Representative', Senate: 'U.S. Senator' }[chamberOf(primary)] || 'Member of Congress') : (realTitle(primary.title) || primary.role || 'Insider')}{!d.congress && <> at <StockLink plain ticker={primary.ticker}>{primary.company}</StockLink></>}</span>}
+            {primary && <span>{d.congress ? 'Member of Congress' : (realTitle(primary.title) || primary.role || 'Insider')}{!d.congress && <> at <StockLink plain ticker={primary.ticker}>{primary.company}</StockLink></>}</span>}
             {d.first_trade && <span className="sx-muted">Trades on record {shortDate(d.first_trade, { year: true })} to {shortDate(d.last_trade, { year: true })}</span>}
           </div>
         </div>
