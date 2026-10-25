@@ -1,17 +1,20 @@
 // src/pages/HomeFeed.jsx — /
-// Two parts, two timeframes:
-//   1. Your stocks and people, since your last visit (1 to 30 days). Anything
-//      with new filings gets a full row; the quiet ones share one line.
-//   2. This week across the market: the featured filing, more buying,
-//      Congress, the largest sales, then the week's totals and the
-//      leaderboard's top name as context at the bottom.
+// One timeframe, the last 7 days, in two parts:
+//   1. Your stocks and people. Anything with filings this week gets a full
+//      row (anything filed since your last visit is tagged New); the
+//      quiet ones share one line.
+//   2. This week across the market: the week's totals, the featured filing,
+//      more buying, Congress, the largest sales, and the leaderboard's top name.
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link, stockPath } from '../lib/nav.jsx';
 import { money, congressRange, ago, plural } from '../lib/text.js';
 import { Card, Chip, Skeleton, ErrorNote, Icon, Freshness, RoleTag } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
-import { visitSince, windowDays, sinceLabel, etDate } from '../lib/visit.js';
+import { visitSince, etDate } from '../lib/visit.js';
+
+const HOME_DAYS = 7; // matches "This week across the market"
+const range = ([lo, hi]) => `${money(lo)}–${money(hi).replace('$', '')}`;
 import { SearchBox } from '../components/Search.jsx';
 
 const STARTERS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'JPM'];
@@ -20,8 +23,7 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
   const h = (portfolioTickers || []).slice(0, 60).join(',');
   // Fixed for this page load: when your last visit ended (null until we know who you are).
   const since = useMemo(() => visitSince(user?.id), [user?.id]);
-  const days = windowDays(since);
-  const { data: d, error, reload } = useApi(user?.id ? `/api/feed?days=${days}${h ? `&h=${encodeURIComponent(h)}` : ''}` : null);
+  const { data: d, error, reload } = useApi(user?.id ? `/api/feed?days=${HOME_DAYS}${h ? `&h=${encodeURIComponent(h)}` : ''}` : null);
   useEffect(() => { document.title = 'Home · Seli'; }, []);
   const watchKey = `${watchlist.tickers.join(',')}|${watchlist.insiders.join(',')}`;
   // Re-pull "yours" when the watchlist changes (e.g. after a Watch click).
@@ -160,10 +162,13 @@ function Yours({ d, watchlist, since }) {
   }
 
   // "New": filed after the day of your last visit. (Filings from that same
-  // day may be ones you already saw, so they're in the list without the tag.)
-  // A first visit has nothing to compare against, so nothing is tagged.
-  const label = sinceLabel(since);
-  const sinceDay = Number.isFinite(since) && label !== 'Last 30 days' ? etDate(since) : null;
+  // day may be ones you already saw, so they're listed without the tag.)
+  // A first visit, or one more than a week ago, would tag everything, so
+  // nothing is tagged then.
+  const days = raw.days || HOME_DAYS;
+  const recentVisit = Number.isFinite(since) && Date.now() - since < days * 864e5;
+  const sinceDay = recentVisit ? etDate(since) : null;
+  const label = `Last ${days} days${sinceDay ? ' · New since your last visit' : ''}`;
   const isNewStock = s => !!(sinceDay && s.last_filed && s.last_filed > sinceDay);
   const isNewPerson = p => !!(sinceDay && p.recent.some(r => r.filed && r.filed > sinceDay));
 
@@ -186,6 +191,7 @@ function Yours({ d, watchlist, since }) {
     const b = s.recent_buys || {}, sl = s.recent_sells || {};
     // Active only because a member of Congress traded it: lead with that line
     // (it comes last from the server, after the 12-month company summary).
+    const cg = s.congress || { buys: 0, sells: 0, buy_range: [0, 0], sell_range: [0, 0] };
     const congressOnly = !b.n && !sl.n && s.recent_congress > 0;
     const lines = congressOnly ? [...s.lines.filter(l => l.startsWith('Congress:')), ...s.lines.filter(l => !l.startsWith('Congress:'))] : s.lines;
     return (
@@ -195,11 +201,19 @@ function Yours({ d, watchlist, since }) {
           <div className="sx-row__title"><Link to={stockPath(s.ticker)} className="sx-row__name">{s.company}</Link>{isNewStock(s) && <Chip tone="new">New</Chip>}{s.held && <Chip tone="accent">You hold this</Chip>}</div>
           {lines.slice(0, 2).map((l, i) => <div key={i} className="sx-row__sub">{l}</div>)}
         </div>
+        {/* Same shape on every row: amounts on top, how many trades under. Congress
+            amounts are disclosed as ranges, so their totals are ranges too. */}
         <div className="sx-row__end">
-          {congressOnly && <RoleTag congress role="Congress" />}
-          {b.n > 0 && <span className="sx-row__amt sx-up">+{money(b.v)}</span>}
-          {sl.n > 0 && <span className="sx-row__amt sx-down">−{money(sl.v)}</span>}
-          {(b.n > 0 || sl.n > 0) && <span className="sx-row__meta">{[b.n && plural(b.n, 'buy'), sl.n && plural(sl.n, 'sale')].filter(Boolean).join(' · ')}</span>}
+          {congressOnly ? (<>
+            {cg.buys > 0 && <span className="sx-row__amt sx-up">+{range(cg.buy_range)}</span>}
+            {cg.sells > 0 && <span className="sx-row__amt sx-down">−{range(cg.sell_range)}</span>}
+            <span className="sx-row__meta">{[cg.buys && plural(cg.buys, 'buy'), cg.sells && plural(cg.sells, 'sale')].filter(Boolean).join(' · ')}</span>
+            <span className="sx-row__meta sx-row__meta--congress">by Congress</span>
+          </>) : (<>
+            {b.n > 0 && <span className="sx-row__amt sx-up">+{money(b.v)}</span>}
+            {sl.n > 0 && <span className="sx-row__amt sx-down">−{money(sl.v)}</span>}
+            <span className="sx-row__meta">{[b.n && plural(b.n, 'buy'), sl.n && plural(sl.n, 'sale')].filter(Boolean).join(' · ')}</span>
+          </>)}
         </div>
       </li>
     );
@@ -219,6 +233,7 @@ function Yours({ d, watchlist, since }) {
         </div>
         <div className="sx-row__end">
           {t && <span className={`sx-row__amt ${t.type === 'buy' ? 'sx-up' : 'sx-down'}`}>{t.type === 'buy' ? '+' : '−'}{t.congress ? congressRange(t.value) : money(t.value)}</span>}
+          <span className="sx-row__meta">{plural(p.recent.length, 'trade')}</span>
         </div>
       </li>
     );

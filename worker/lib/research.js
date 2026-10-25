@@ -170,7 +170,9 @@ function statusOut(s) {
     ticker: s.ticker, company: s.company, known: s.known, active: s.active, lines: s.lines,
     recent_buys: { n: s.recent_buys.n, v: s.recent_buys.v }, recent_sells: { n: s.recent_sells.n, v: s.recent_sells.v },
     yr_buys: { n: s.yr_buys.n, v: s.yr_buys.v }, yr_sells: { n: s.yr_sells.n, v: s.yr_sells.v },
-    recent_congress: s.recent_congress.n, last_buy: s.last_buy, last_activity: s.last_activity || null, last_filed: s.last_filed || null,
+    recent_congress: s.recent_congress.n, last_buy: s.last_buy,
+    congress: s.recent_congress.n ? { members: s.recent_congress.members, buys: s.recent_congress.buys, sells: s.recent_congress.sells,
+      buy_range: s.recent_congress.buy_range, sell_range: s.recent_congress.sell_range } : null, last_activity: s.last_activity || null, last_filed: s.last_filed || null,
   };
 }
 

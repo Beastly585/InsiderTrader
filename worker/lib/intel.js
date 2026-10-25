@@ -379,13 +379,22 @@ function agg(rows) {
 
 const totalsOf = x => ({ n: Number(x?.n) || 0, v: Number(x?.v) || 0, insiders: 0, people: [] });
 
+// The disclosure band a stored Congress amount (the band's midpoint) came from.
+function bandOf(v) {
+  for (const b of CONGRESS_RANGES) if (Number(v) <= b[1]) return b;
+  return [50e6, 50e6];
+}
 function congressView(rs) {
   rs = [...rs].sort((a, b) => (asDate(b.trade_date) || '').localeCompare(asDate(a.trade_date) || ''));
+  // Totals as ranges: the low ends added up and the high ends added up.
+  const span = type => rs.filter(r => r.transaction_type === type && r.value != null)
+    .reduce(([lo, hi], r) => { const b = bandOf(r.value); return [lo + b[0], hi + b[1]]; }, [0, 0]);
   return {
     n: rs.length,
     members: new Set(rs.map(r => r.insider_name)).size,
     buys: rs.filter(r => r.transaction_type === 'buy').length,
     sells: rs.filter(r => r.transaction_type === 'sell').length,
+    buy_range: span('buy'), sell_range: span('sell'),
     latest: rs.length ? { raw: rs[0].insider_name, name: prettyPerson(rs[0].insider_name, true), type: rs[0].transaction_type, value: rs[0].value, date: asDate(rs[0].trade_date) } : null,
   };
 }
