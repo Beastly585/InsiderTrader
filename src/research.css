@@ -233,6 +233,7 @@
 .sx-section-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 14px 2px 2px; }
 .sx-section-head__title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -.1px; }
 .sx-section-head__sub { font-size: 12px; color: var(--text-3, var(--text-2)); }
+.sx-chip--rev { background: var(--amber-50); color: var(--amber-600); }
 .sx-row__meta--congress { color: var(--blue-600); }
 .sx-chip--new { background: var(--accent); color: #fff; text-transform: uppercase; letter-spacing: .4px; font-size: 10px; padding: 1px 6px; }
 .sx-row:not(.sx-row--yours) .sx-row__title .sx-chip { margin-left: 6px; vertical-align: 1px; }
@@ -861,4 +862,5 @@ body.drawer-open .sx-nav { z-index: 94; }
 .sx-hero .sx-fresh { margin-top: 14px; }
 .sx-plan__alt { margin: -4px 0 10px; font-size: 13px; font-weight: 600; color: var(--accent-strong); }
 .sx-table__code--accent { color: var(--accent-strong); font-weight: 600; }
+.sx-table__code--rev { color: var(--amber-600); font-weight: 600; }
 .sx-plan__beta { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; text-transform: none; color: var(--accent-strong); background: var(--accent-50); vertical-align: 1px; }

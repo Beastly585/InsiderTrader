@@ -3205,7 +3205,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                 {signals.map(s => {
                   const isBuy = s.direction !== 'sell';
                   const isExp = expandedSigs.has(s.ticker);
-                  const hasRev = detectReversalForTicker(s.ticker, filings);
+                  const hasRev = detectReversalForTicker(s.ticker, filings, cutoff);
                   const trades = isExp ? getSignalTrades(s) : [];
                   return (
                     <div key={s.ticker} className={`ws-row${isExp ? ' ws-row--open' : ''}`}
@@ -3215,7 +3215,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                         <div className="ws-mrow" onClick={() => toggleSig(s.ticker)}>
                           <div className="ws-mrow__top">
                             <span className="ticker">{s.ticker}</span>
-                            {hasRev && <span className="reversal-badge" style={{ fontSize: 9, padding: '0 3px' }}><IconReversal className="reversal-badge__icon" />rev</span>}
+                            {hasRev && <span className="reversal-badge" style={{ fontSize: 9, padding: '0 3px' }} title="Reversal: someone at the company bought after 2+ sales and no buys of this stock in the previous 2 years"><IconReversal className="reversal-badge__icon" />Reversal</span>}
                             <span onClick={e => e.stopPropagation()}><StarBtn ticker={s.ticker} watchlist={watchlist} /></span>
                             <span className={`ws-mrow__amt${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(Math.abs(s.netValue))}</span>
                           </div>
@@ -3232,7 +3232,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                             <span className="ws-row__chevron ws-row__chevron--lg">{isExp ? '▾' : '▸'}</span>
                             <span className="ticker">{s.ticker}</span>
-                            {hasRev && <span className="reversal-badge" style={{ fontSize: 9, padding: '0 3px' }}><IconReversal className="reversal-badge__icon" />rev</span>}
+                            {hasRev && <span className="reversal-badge" style={{ fontSize: 9, padding: '0 3px' }} title="Reversal: someone at the company bought after 2+ sales and no buys of this stock in the previous 2 years"><IconReversal className="reversal-badge__icon" />Reversal</span>}
                             <div onClick={e => e.stopPropagation()}>
                               <StarBtn ticker={s.ticker} watchlist={watchlist} />
                             </div>
@@ -3368,7 +3368,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                           </div>
                           {isMobile && <div className="ws-mob-sub" style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, paddingLeft: 18 }}>{prettyPerson(f.insiderName, f.relationship === 'congress')}</div>}
                         </div>
-                        {!isMobile && <div className="ws-row__cell ws-row__cell--overflow" style={{ fontSize: 12 }}>{prettyPerson(f.insiderName, f.relationship === 'congress')}</div>}
+                        {!isMobile && <div className="ws-row__cell ws-row__cell--overflow" style={{ fontSize: 12 }}>{prettyPerson(f.insiderName, f.relationship === 'congress')}{f.reversal && <span className="reversal-badge" style={{ fontSize: 9, padding: '0 4px', marginLeft: 6, verticalAlign: 1 }} title={f.reversal === 'buy' ? 'Reversal: bought after 2+ sales and no buys of this stock in the previous 2 years' : 'Reversal: sold (not a planned sale) after 2+ buys and no sales of this stock in the previous 2 years'}><IconReversal className="reversal-badge__icon" />Reversal</span>}</div>}
                         <div className="ws-row__cell ws-row__cell--muted" style={{ fontSize: 11 }}>
                           {fmt.dateShort(f.transactionDate || f.date)}
                         </div>
@@ -3458,14 +3458,14 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
 
 
 // ─── INSIGHTS PAGE ────────────────────────────────────────────────────────────
-// Helper — does this ticker have a reversal in the last 30d?
-// Cheap per-row check using cached reversal list passed in.
-function detectReversalForTicker(ticker, filings) {
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
-  const iso = cutoff.toISOString().split('T')[0];
-  const rows = filings.filter(f => f.ticker === ticker && f.isOpenMarket && (f.transactionDate || f.date || '') >= iso);
-  const types = new Set(rows.map(f => f.transactionType));
-  return types.has('buy') && types.has('sell');
+// Does this stock have a reversal buy in the window on screen? The rule lives
+// in the database (filings.reversal, db/migrations/2026-10-24_reversals.sql):
+// a company insider buys after 2+ sales and no buys of it in the previous 2
+// years. Same rule as stock pages, Home and the email alerts. (It used to mean
+// "someone bought and someone sold in the last 30 days", which flagged most
+// active stocks.)
+function detectReversalForTicker(ticker, filings, cutoff = '') {
+  return filings.some(f => f.ticker === ticker && f.isOpenMarket && f.reversal === 'buy' && (f.transactionDate || f.date || '') >= cutoff);
 }
 
 
@@ -6220,8 +6220,8 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
             )}
             <SxToggle label="Big executive buys" checked={pro && L.instant_high_conviction} disabled={lock} onChange={v => update({ instant_high_conviction: v })} />
           </SxSetting>
-          <SxSetting label="Change of direction" sub="An insider at a stock you watch starts buying after a run of selling, or the reverse." pro locked={lock}>
-            <SxToggle label="Change of direction" checked={pro && L.instant_reversal} disabled={lock} onChange={v => update({ instant_reversal: v })} />
+          <SxSetting label="Reversals" sub="A company insider at a stock you watch buys after 2+ sales and no buys in 2 years, or sells (unplanned) after 2+ buys." pro locked={lock}>
+            <SxToggle label="Reversals" checked={pro && L.instant_reversal} disabled={lock} onChange={v => update({ instant_reversal: v })} />
           </SxSetting>
           <SxSetting label="Market-wide buying in digests" sub={anyDigest ? 'Include the most notable insider buying across the market, not just your list.' : 'Turn on a digest first.'} pro locked={lock}>
             <SxToggle label="Market-wide buying" checked={pro ? marketWide : true} disabled={lock || !anyDigest} onChange={v => update({ digest_top_signals: v, digest_watchlist_only: !v })} />

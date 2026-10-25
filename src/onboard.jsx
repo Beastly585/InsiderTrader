@@ -484,7 +484,7 @@ function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, o
   const proAlerts = [
     { id: 'watchlist', label: 'Anything you watch', description: 'An email the day a new filing lands for a stock or person you watch.' },
     { id: 'conviction', label: 'Big executive buys', description: 'A CEO, CFO or other C-suite executive buys a lot of any stock.' },
-    { id: 'reversal', label: 'Direction reversals', description: 'An insider who usually sells starts buying, or vice versa.' },
+    { id: 'reversal', label: 'Reversals', description: 'A company insider who has been selling starts buying, or the reverse.' },
   ];
 
   return (

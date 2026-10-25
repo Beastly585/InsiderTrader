@@ -38,6 +38,24 @@ async function cached(key, ttlMs, fn) {
 
 export const DATA_ROUTES = { filings, trades, price, leaders, sectors, explore, samples };
 
+// Does public.filings have this column yet? Columns added by a migration can
+// ship in code before the migration is run; queries use a fallback until then.
+// "Yes" is remembered; "not yet" is re-checked every 10 minutes.
+const colSeen = new Map();
+export async function hasColumn(ctx, col) {
+  const hit = colSeen.get(col);
+  if (hit && (hit.has || Date.now() - hit.at < 600000)) return hit.has;
+  let has = false;
+  try {
+    has = (await ctx.db(`SELECT 1 FROM information_schema.columns
+                          WHERE table_schema = 'public' AND table_name = 'filings' AND column_name = '${col}'`)).length > 0;
+  } catch { /* treat as missing */ }
+  colSeen.set(col, { has, at: Date.now() });
+  return has;
+}
+// filings.reversal ('buy' / 'sell' / NULL), from db/migrations/2026-10-24_reversals.sql.
+export const reversalSql = async (ctx, alias = 'f.') => ((await hasColumn(ctx, 'reversal')) ? `${alias}reversal` : 'NULL::text');
+
 // ── /api/filings ─────────────────────────────────────────────────────────────
 async function filings(ctx, url) {
   const pro = await ctx.isPro();
@@ -46,12 +64,14 @@ async function filings(ctx, url) {
   if (!pro && (days == null || days > FREE_DAYS)) days = FREE_DAYS;
   const floor = days == null ? HARD_FLOOR : isoDaysAgo(days);
   const limit = days != null && days <= 7 ? 5000 : days != null && days <= 30 ? 15000 : 50000;
+  const REV = await reversalSql(ctx, '');
   const rows = await ctx.db(`
     SELECT accession_number, cik_issuer, filing_date AS date, transaction_date,
            company_name AS company, ticker, insider_name, insider_title AS title, is_officer,
            transaction_type, transaction_code, is_open_market,
            shares::float, price_per_share::float AS price, value::float,
-           shares_owned_after::float, pct_owned_change::float, sector, relationship, is_routine
+           shares_owned_after::float, pct_owned_change::float, sector, relationship, is_routine,
+           ${REV} AS reversal
       FROM public.filings
      WHERE COALESCE(transaction_date, filing_date) >= '${floor}'
        AND COALESCE(transaction_date, filing_date) <= CURRENT_DATE

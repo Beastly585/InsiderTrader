@@ -110,6 +110,7 @@ async function fetchFilings(daysBack = 90) {
     sector:               r.sector,
     relationship:         r.relationship,
     isRoutine:            r.is_routine,
+    reversal:             r.reversal || null,   // 'buy' | 'sell' | null (db/migrations/2026-10-24_reversals.sql)
   }));
 }
 

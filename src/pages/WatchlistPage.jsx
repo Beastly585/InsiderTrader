@@ -82,6 +82,7 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
                           <span className="sx-wl__name">{s?.company && s.company !== t ? s.company : ''}</span>
                           {s?.held && <Chip tone="accent">You hold this</Chip>}
                           {s?.recent_buys?.n > 0 && <Chip tone="buy">Buying · {days}d</Chip>}
+                          {s?.reversal && <Chip tone="rev" title="Someone at the company bought after 2+ sales and no buys of this stock in the previous 2 years">Reversal</Chip>}
                           {s?.recent_sells?.n > 0 && !s?.recent_buys?.n && <Chip tone="sell">Selling · {days}d</Chip>}
                         </div>
                         {s ? s.lines.slice(0, 2).map((l, i) => <p key={i} className={`sx-wl__line${i ? ' sx-muted' : ''}`}>{l}</p>) : pending(t) ? <Skeleton lines={1} height={12} /> : noDetail}

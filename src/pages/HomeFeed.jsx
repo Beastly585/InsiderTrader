@@ -198,7 +198,7 @@ function Yours({ d, watchlist, since }) {
       <li className="sx-row sx-row--yours">
         <StockLink ticker={s.ticker} />
         <div className="sx-row__main">
-          <div className="sx-row__title"><Link to={stockPath(s.ticker)} className="sx-row__name">{s.company}</Link>{isNewStock(s) && <Chip tone="new">New</Chip>}{s.held && <Chip tone="accent">You hold this</Chip>}</div>
+          <div className="sx-row__title"><Link to={stockPath(s.ticker)} className="sx-row__name">{s.company}</Link>{isNewStock(s) && <Chip tone="new">New</Chip>}{s.reversal && <Chip tone="rev" title="Someone at the company bought after 2+ sales and no buys of this stock in the previous 2 years">Reversal</Chip>}{s.held && <Chip tone="accent">You hold this</Chip>}</div>
           {lines.slice(0, 2).map((l, i) => <div key={i} className="sx-row__sub">{l}</div>)}
         </div>
         {/* Same shape on every row: amounts on top, how many trades under. Congress

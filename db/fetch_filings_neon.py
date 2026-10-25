@@ -793,8 +793,10 @@ def flag_suspect_trades(since: str) -> None:
       * obviously wrong amounts, like a typo'd price or share count
         (db/migrations/2026-10-06_suspect_trades.sql and later)
     Never fails the run."""
+    # mark_reversals runs last: it only counts trades that are still open-market.
     for fn, what in (("flag_duplicate_trades", "duplicate copies of the same trade set aside (see filings.duplicate_of)"),
-                     ("flag_suspect_trades", "trade(s) with implausible amounts set aside (see public.suspect_trades)")):
+                     ("flag_suspect_trades", "trade(s) with implausible amounts set aside (see public.suspect_trades)"),
+                     ("mark_reversals", "trade(s) marked or unmarked as reversals (see filings.reversal)")):
         try:
             conn = get_connection()
             try:
@@ -805,7 +807,7 @@ def flag_suspect_trades(since: str) -> None:
             finally:
                 conn.close()
             if n:
-                log.warning(f"          {n} {what}")
+                (log.info if fn == "mark_reversals" else log.warning)(f"          {n} {what}")
         except Exception as e:
             log.warning(f"  {fn} skipped: {e}")
 

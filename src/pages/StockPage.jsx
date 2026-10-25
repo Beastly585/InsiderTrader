@@ -15,6 +15,12 @@ const PAGE = 25;
 
 // publicMode: signed-out visitors (and Google). Reads /public/stock, the same
 // free-plan view, and the server already wrote the page's title and meta tags.
+// Same wording as the Data page and the email alerts (filings.reversal).
+const REV_TIP = {
+  buy: 'Reversal: bought after 2+ sales and no buys of this stock in the previous 2 years',
+  sell: 'Reversal: sold (not a planned sale) after 2+ buys and no sales of this stock in the previous 2 years',
+};
+
 export default function StockPage({ ticker, watchlist, onUpgrade, renderProfile, publicMode = false }) {
   const { data, error, loading, reload } = useApi(`/${publicMode ? 'public' : 'api'}/stock/${encodeURIComponent(ticker)}`);
   const d = data && data.ticker === ticker ? data : null;
@@ -177,7 +183,7 @@ function TradeList({ trades, showTicker, showInsider, showNow, membersOnly }) {
     <ul className="sx-trows">
       {trades.map((t, i) => {
         const since = sinceBuy(t, showNow);
-        const detail = !t.om ? codeLabel(t.code) : t.routine ? 'Planned' : t.brk || '';
+        const detail = !t.om ? codeLabel(t.code) : [t.routine ? 'Planned' : t.brk, t.rev && 'Reversal'].filter(Boolean).join(' · ');
         // Who traded (stock pages), which company (multi-company people), or,
         // on a one-company insider page, the trade itself.
         const verb = t.type === 'buy' ? (t.om ? 'Bought' : 'Acquired') : t.type === 'sell' ? (t.om ? 'Sold' : 'Disposed') : 'Traded';
@@ -242,7 +248,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
                     {!membersOnly && <span className="sx-table__role"><RoleTag role={t.role} congress={!!t.congress} title={t.title} name={t.raw} /></span>}
                   </td>
                 )}
-                <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}{t.om && !t.routine && t.brk && <span className="sx-table__code sx-table__code--accent" title="This insider hadn't bought this stock on the open market in that long">{t.brk}</span>}</td>
+                <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}{t.om && !t.routine && t.brk && <span className="sx-table__code sx-table__code--accent" title="This insider hadn't bought this stock on the open market in that long">{t.brk}</span>}{t.om && t.rev && <span className="sx-table__code sx-table__code--rev" title={REV_TIP[t.rev]}>Reversal</span>}</td>
                 <td className="sx-r sx-mono sx-hide-sm">{t.congress ? '—' : shares(t.shares)}</td>
                 <td className="sx-r sx-mono sx-hide-sm">{t.congress ? '—' : t.other_class
                   ? <span className="sx-otherclass" title={`${t.security || 'Local shares'}: priced per local share, not per ${t.ticker || 'US'} ADS. The dollar value is correct.`}>{price(t.price)}<small>local</small></span>

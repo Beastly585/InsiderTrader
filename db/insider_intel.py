@@ -31,6 +31,14 @@ from datetime import date, timedelta
 
 from email_kit import as_date, congress_range, money, plural, pretty_company, pretty_person, short_role
 
+# Plain-word roles for chips (same words as the site's role tags).
+_ROLE_WORDS = {"C-suite exec": "Executive", "Chair": "Board chair", "VP": "Vice president",
+               "General Counsel": "General counsel", "10% owner": "10%+ shareholder", "Director": "Board member"}
+
+
+def ek_role_word(role: str) -> str:
+    return _ROLE_WORDS.get(role, role or "Insider")
+
 CSUITE_ROLES = {"CEO", "CFO", "COO", "CTO", "President", "C-suite exec"}
 
 
@@ -80,7 +88,7 @@ WEEK_BUYS_SQL = """
 SELECT f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship,
        f.transaction_code, f.value::float AS value, f.price_per_share::float AS price,
        f.pct_owned_change::float AS pct, f.shares_owned_before::float AS owned_before,
-       f.is_routine, f.filing_date,
+       f.is_routine, f.filing_date, /*REVERSAL*/ AS reversal,
        COALESCE(f.transaction_date, f.filing_date) AS trade_date,
        (SELECT MAX(COALESCE(p.transaction_date, p.filing_date))
           FROM public.filings p
@@ -107,9 +115,22 @@ SELECT f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship
 """
 
 
+_HAS_REVERSAL = None
+
+
+def _reversal_sql(cur) -> str:
+    """filings.reversal (db/migrations/2026-10-24_reversals.sql), or NULL before it's run."""
+    global _HAS_REVERSAL
+    if _HAS_REVERSAL is None:
+        cur.execute("""SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'filings' AND column_name = 'reversal'""")
+        _HAS_REVERSAL = cur.fetchone() is not None
+    return "f.reversal" if _HAS_REVERSAL else "NULL::text"
+
+
 def week_buys(conn, start: date, end: date, min_value: float = 10_000) -> list[dict]:
     cur = conn.cursor()
-    cur.execute(WEEK_BUYS_SQL, {"start": start, "end": end, "min_value": min_value})
+    cur.execute(WEEK_BUYS_SQL.replace("/*REVERSAL*/", _reversal_sql(cur)), {"start": start, "end": end, "min_value": min_value})
     rows = _rows(cur)
     cur.close()
     return rows
@@ -204,7 +225,7 @@ def build_clusters(buys: list[dict], *, include_corporate: bool = True, include_
                 "relationship": r.get("relationship"),
                 "value": 0.0, "pct": None, "owned_before": r.get("owned_before"),
                 "last_trade": None, "prior_buy_date": r.get("prior_buy_date"), "first_seen": r.get("first_seen"),
-                "nonroutine": False, "congress": is_congress(r),
+                "nonroutine": False, "congress": is_congress(r), "reversal": False,
             })
             b["value"] += r.get("value") or 0
             if r.get("pct") is not None:
@@ -214,6 +235,8 @@ def build_clusters(buys: list[dict], *, include_corporate: bool = True, include_
                 b["last_trade"] = td
             if r.get("is_routine") is False:
                 b["nonroutine"] = True
+            if r.get("reversal") == "buy":  # same rule as the site
+                b["reversal"] = True
             # most recent earlier buy wins (each row's value is already a MAX)
             if r.get("prior_buy_date") and (b["prior_buy_date"] is None or as_date(r["prior_buy_date"]) > as_date(b["prior_buy_date"])):
                 b["prior_buy_date"] = r["prior_buy_date"]
@@ -239,6 +262,7 @@ def build_clusters(buys: list[dict], *, include_corporate: bool = True, include_
             "nonroutine": any(b["nonroutine"] for b in blist),
             "max_pct": max((b["pct"] or 0) for b in blist),
             "first_buy": [b for b in blist if b["first_buy"] and b["role"] != "10% owner"],
+            "reversals": [b for b in blist if b["reversal"]],
             "last_trade": max((b["last_trade"] for b in blist if b["last_trade"]), default=None),
         }
         c["score"] = rank_score(c)
@@ -270,6 +294,10 @@ def cluster_facts(c: dict) -> list[tuple[str, str]]:
     # record" and "Non-routine" were true of nearly every row.
     if c["first_buy"]:
         f.append((c["first_buy"][0]["break"][0], "accent"))
+    # Sold 2+ times and bought nothing in the 2 years before this buy.
+    if c.get("reversals"):
+        rv = c["reversals"]
+        f.append((f"{len(rv)} reversals" if len(rv) > 1 else f"Reversal ({ek_role_word(rv[0]['role'])})", "accent"))
     # Same person the lead sentence is about, so the chip and the sentence agree.
     lead = c["buyers"][0]
     stakes = [b for b in c["buyers"] if b["stake"]]

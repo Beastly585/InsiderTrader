@@ -257,7 +257,7 @@ export function buildClusters(buys, { includeCorporate = true, includeCongress =
         raw: r.insider_name, name: prettyPerson(r.insider_name, cg), title: r.insider_title || '',
         role: shortRole(r.insider_title, cg ? 'congress' : r.relationship), value: 0, pct: null,
         owned_before: r.owned_before, last_trade: null, prior_buy_date: asDate(r.prior_buy_date), first_seen: asDate(r.first_seen),
-        nonroutine: false, congress: cg,
+        nonroutine: false, congress: cg, reversal: false,
       });
       const b = buyers.get(r.insider_name);
       b.value += Number(r.value) || 0;
@@ -265,6 +265,7 @@ export function buildClusters(buys, { includeCorporate = true, includeCongress =
       const td = asDate(r.trade_date);
       if (td && (!b.last_trade || td > b.last_trade)) b.last_trade = td;
       if (r.is_routine === false) b.nonroutine = true;
+      if (r.reversal === 'buy') b.reversal = true; // see db/migrations/2026-10-24_reversals.sql
       const pb = asDate(r.prior_buy_date);
       if (pb && (!b.prior_buy_date || pb > b.prior_buy_date)) b.prior_buy_date = pb;
       const fs = asDate(r.first_seen);
@@ -284,6 +285,7 @@ export function buildClusters(buys, { includeCorporate = true, includeCongress =
       congress: blist.some(b => b.congress), nonroutine: blist.some(b => b.nonroutine),
       max_pct: Math.max(0, ...blist.map(b => b.pct || 0)),
       first_buy: blist.filter(b => b.first_buy && b.role !== '10% owner'),
+      reversals: blist.filter(b => b.reversal),
       last_trade: blist.map(b => b.last_trade).filter(Boolean).sort().pop() || null,
     };
     c.score = rankScore(c);
@@ -306,6 +308,8 @@ export function clusterFacts(c) {
   if (c.csuite.length) f.push([`${rolesPhrase(c.csuite)} buying`, 'buy']);
   else if (c.congress) f.push(['Member of Congress', 'accent']);
   if (c.first_buy.length) f.push([c.first_buy[0].break[0], 'accent']);
+  // Sold 2+ times and bought nothing in the 2 years before this buy.
+  if (c.reversals.length) f.push([c.reversals.length > 1 ? `${c.reversals.length} reversals` : `Reversal (${roleWord(c.reversals[0].role)})`, 'rev']);
   // Same person the lead sentence is about, so the chip and the sentence agree.
   // If the top buyer has no stake figure, name whose stake it is.
   const top = c.buyers[0];
@@ -432,6 +436,8 @@ export function tickerStatus(tickers, rows, lastBuys, names, windowDays, today =
     s.active = !!(s.recent_buys.n || s.recent_sells.n || s.recent_congress.n);
     // Newest trade in the window, so "newest activity first" really is.
     s.last_activity = rs.filter(isRecent).map(r => asDate(r.trade_date)).filter(Boolean).sort().pop() || null;
+    // A reversal buy in the window (filings.reversal; same rule everywhere).
+    s.reversal = corp.some(r => isRecent(r) && r.reversal === 'buy') ? 'buy' : null;
     // Newest filing in the window, so Home can mark what arrived since the last visit.
     s.last_filed = rs.filter(isRecent).map(r => asDate(r.filing_date)).filter(Boolean).sort().pop() || null;
     out[t] = s;

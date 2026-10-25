@@ -29,9 +29,10 @@ Four trigger types, matching the Settings > Instant alerts UI exactly:
                                evaluative language like "high conviction",
                                to stay clearly informational rather than
                                reading as a recommendation.
-  - instant_reversal         : an insider on a watched ticker changes
-                               direction from their immediately prior trade
-                               (subject to their instant_min_value floor)
+  - instant_reversal         : a reversal on a watched ticker (filings.reversal:
+                               2+ sales and no buys in the prior 2 years, then
+                               a buy; or 2+ buys, then an unplanned sale),
+                               subject to their instant_min_value floor
 """
 from __future__ import annotations
 import os, sys, re, time, logging, requests
@@ -82,7 +83,7 @@ REASON_LABEL = {
     "portfolio_holding": "In your portfolio",
     "followed_insider":  "Person you follow",
     "high_conviction":   "Large executive buy",
-    "reversal":          "Direction change",
+    "reversal":          "Reversal",
 }
 # When one trade matches several settings, show the most specific reason first.
 REASON_ORDER = ["portfolio_holding", "followed_insider", "watchlist_ticker", "reversal", "high_conviction"]
@@ -287,18 +288,18 @@ def main():
     cur.execute("""SELECT 1 FROM information_schema.columns
                     WHERE table_schema = 'public' AND table_name = 'filings' AND column_name = 'planned'""")
     planned_sql = "f.planned" if cur.fetchone() else "NULL::boolean"
+    # filings.reversal comes from db/migrations/2026-10-24_reversals.sql (same
+    # rule as the site's Reversal tag). Until it's run, no reversal alerts.
+    cur.execute("""SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'filings' AND column_name = 'reversal'""")
+    reversal_sql = "f.reversal" if cur.fetchone() else "NULL::text"
     cur.execute("""
         SELECT f.accession_number, f.ticker, f.company_name, f.insider_name, f.insider_title,
                f.transaction_type, f.transaction_code, f.value, f.is_open_market,
                f.shares, f.price_per_share, f.cik_issuer, f.filing_date,
                f.pct_owned_change::float AS pct, /*PLANNED*/ AS planned,
                COALESCE(f.transaction_date, f.filing_date) AS trade_date,
-               (SELECT p.transaction_type FROM public.filings p
-                WHERE p.insider_name = f.insider_name AND p.ticker = f.ticker
-                  AND p.is_open_market = true
-                  AND COALESCE(p.transaction_date, p.filing_date) < COALESCE(f.transaction_date, f.filing_date)
-                ORDER BY COALESCE(p.transaction_date, p.filing_date) DESC LIMIT 1
-               ) AS prior_type
+               /*REVERSAL*/ AS reversal
         FROM public.filings f
         WHERE f.alerted_at IS NULL AND f.is_open_market = true
           AND f.duplicate_of IS NULL
@@ -322,7 +323,7 @@ def main():
           AND COALESCE(f.filing_date, f.transaction_date) >= CURRENT_DATE - INTERVAL '5 days'
         ORDER BY COALESCE(f.filing_date, f.transaction_date), COALESCE(f.transaction_date, f.filing_date)
         LIMIT %s
-    """.replace("/*PLANNED*/", planned_sql), (BATCH_LIMIT,))
+    """.replace("/*PLANNED*/", planned_sql).replace("/*REVERSAL*/", reversal_sql), (BATCH_LIMIT,))
     cols = [d.name for d in cur.description]
     new_filings = [dict(zip(cols, row)) for row in cur.fetchall()]
 
@@ -386,7 +387,10 @@ def main():
         per_user_matches.setdefault(uid, []).append(m)
 
     for f in new_filings:
-        is_reversal = f["prior_type"] is not None and f["prior_type"] != f["transaction_type"]
+        # Same rule as the site: 2+ sales and no buys in the 2 years before a
+        # buy (or 2+ buys and no sales before an unplanned sale), same person
+        # and stock, company insiders only. Worked out in the database.
+        is_reversal = f.get("reversal") in ("buy", "sell")
         is_csuite_buy = (
             f["transaction_type"] == "buy"
             and f["value"] is not None
