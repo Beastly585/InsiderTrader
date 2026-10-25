@@ -41,7 +41,7 @@ export async function handleResearch(request, env, origin, url, deps) {
     if (parts[1] === 'search') body = await search(ctx, url.searchParams.get('q') || '');
     else if (parts[1] === 'stock' && parts[2]) body = await stock(ctx, decodeURIComponent(parts[2]).toUpperCase());
     else if (parts[1] === 'insider' && parts[2]) body = await insider(ctx, decodeURIComponent(parts.slice(2).join('/')));
-    else if (parts[1] === 'feed') body = await feed(ctx, holdingsParam(url));
+    else if (parts[1] === 'feed') body = await feed(ctx, holdingsParam(url), url.searchParams.get('days'));
     else if (parts[1] === 'watchlist' && parts[2] === 'summary') body = await watchlistSummary(ctx, holdingsParam(url));
     else if (parts[1] === 'leaderboard') body = await leaderboard(ctx, url);
     else if (parts[1] === 'latest') body = await latest(ctx);
@@ -170,7 +170,7 @@ function statusOut(s) {
     ticker: s.ticker, company: s.company, known: s.known, active: s.active, lines: s.lines,
     recent_buys: { n: s.recent_buys.n, v: s.recent_buys.v }, recent_sells: { n: s.recent_sells.n, v: s.recent_sells.v },
     yr_buys: { n: s.yr_buys.n, v: s.yr_buys.v }, yr_sells: { n: s.yr_sells.n, v: s.yr_sells.v },
-    recent_congress: s.recent_congress.n, last_buy: s.last_buy, last_activity: s.last_activity || null,
+    recent_congress: s.recent_congress.n, last_buy: s.last_buy, last_activity: s.last_activity || null, last_filed: s.last_filed || null,
   };
 }
 
@@ -627,13 +627,16 @@ async function leaderTeaser(ctx) {
   } catch { return null; }
 }
 
-async function feed(ctx, holdings) {
+// Home's top section covers "since your last visit": the app sends how many
+// days that is (1 to 30). Older apps that don't send it get 30.
+async function feed(ctx, holdings, daysParam) {
+  const days = Math.min(30, Math.max(1, Math.round(Number(daysParam)) || YOURS_DAYS));
   const [market, items, leader] = await Promise.all([marketFeed(ctx), loadWatchlist(ctx), leaderTeaser(ctx)]);
   const tickers = items.filter(i => i.item_type === 'ticker').map(i => String(i.item_value).toUpperCase());
   const names = items.filter(i => i.item_type === 'insider').map(i => i.item_value);
   const [status, people] = await Promise.all([
-    statusFor(ctx, [...tickers, ...holdings], YOURS_DAYS),
-    peopleActivity(ctx, names, YOURS_DAYS),
+    statusFor(ctx, [...tickers, ...holdings], days),
+    peopleActivity(ctx, names, days),
   ]);
   // Newest activity first, then the quiet ones.
   const yours = [...new Set([...tickers, ...holdings])].map(t => status[t]).filter(Boolean)
@@ -643,7 +646,7 @@ async function feed(ctx, holdings) {
   return {
     pro: await ctx.isPro(),
     today: todayStr(),
-    yours: { stocks: yours, people, watching: tickers.length + names.length, holdings: holdings.length, days: YOURS_DAYS },
+    yours: { stocks: yours, people, watching: tickers.length + names.length, holdings: holdings.length, days },
     ...market,
     leader,
   };

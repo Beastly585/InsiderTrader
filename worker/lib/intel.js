@@ -417,6 +417,8 @@ export function tickerStatus(tickers, rows, lastBuys, names, windowDays, today =
     s.active = !!(s.recent_buys.n || s.recent_sells.n || s.recent_congress.n);
     // Newest trade in the window, so "newest activity first" really is.
     s.last_activity = rs.filter(isRecent).map(r => asDate(r.trade_date)).filter(Boolean).sort().pop() || null;
+    // Newest filing in the window, so Home can mark what arrived since the last visit.
+    s.last_filed = rs.filter(isRecent).map(r => asDate(r.filing_date)).filter(Boolean).sort().pop() || null;
     out[t] = s;
   }
   return out;
@@ -432,7 +434,8 @@ function summarizePeople(people) {
 // Mirrors send_welcome.follow_row (long view) + send_digests.status_row (recent view).
 export function statusLines(s, windowDays, today = todayStr()) {
   const { recent_buys: rb, recent_sells: rs, yr_buys: yb, yr_sells: ys, last_buy: lb, yr_congress: yc, recent_congress: rc } = s;
-  const period = windowDays <= 1 ? 'today' : windowDays <= 7 ? 'this week' : `in the last ${windowDays} days`;
+  // Exact, since Home's window is "since your last visit" (any 1 to 30 days).
+  const period = windowDays <= 1 ? 'today' : windowDays === 7 ? 'this week' : `in the last ${windowDays} days`;
   const lines = [];
   if (!s.known) return ['No insider filings on record yet.'];
   if (rb.n) {

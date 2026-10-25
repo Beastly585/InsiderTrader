@@ -48,7 +48,7 @@ function withTimeout(signal, ms) {
 const EDGE_PATHS = /^\/public\/(stocks|congress|insider-buying|leaderboard|pricing|data-stats|stock\/|insider\/)/;
 async function fromEdge(path, signal) {
   if (typeof window === 'undefined' || !EDGE_PATHS.test(path)) return null;
-  const t = withTimeout(signal, 5000);
+  const t = withTimeout(signal, 7000); // the edge itself gives up at 6s
   try {
     const res = await fetch(`/edge-data${path}`, { signal: t.signal });
     if (!(res.ok || res.status === 404) || !(res.headers.get('Content-Type') || '').includes('application/json')) return null;

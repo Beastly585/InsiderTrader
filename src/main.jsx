@@ -22,6 +22,10 @@ const posthogOptions = {
   on_xhr_error: () => {},
   // Reduce retry noise — if the first request is blocked, retries will be too.
   request_batching: { max_batch_size: 1 },
+  // Page-speed tracking (web vitals) isn't used, and its add-on script throws
+  // "Cannot read properties of undefined (reading 'startTime')" when an ad
+  // blocker half-blocks it. Events, pageviews and session data are unaffected.
+  capture_performance: false,
 }
 
 

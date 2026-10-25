@@ -35,11 +35,16 @@ export const amt = (v, congress) => (congress ? congressRange(v) : money(v));
 // when it has been idle. Only a page nobody has opened in 6 hours (in that
 // region) is fetched while the visitor waits. If the Worker fails, any saved
 // copy is better than the bare fallback page.
-async function fetchFromWorker(context, path) {
+// A visitor waits at most 6 seconds. A background refresh can take longer:
+// nobody is waiting on it, and giving up at 6s on a slow query (Neon waking
+// up on a weekend) meant the copy was never saved and every visit stayed slow.
+const FOREGROUND_MS = 6000;
+const BACKGROUND_MS = 25000;
+async function fetchFromWorker(context, path, ms = FOREGROUND_MS) {
   const base = (context.env.WORKER_URL || DEFAULT_WORKER).replace(/\/$/, '');
   const headers = { Accept: 'application/json' };
   if (context.env.EDGE_KEY) headers['X-Seli-Edge'] = context.env.EDGE_KEY; // skips the Worker's per-IP rate limit
-  const res = await fetch(base + path, { headers, signal: AbortSignal.timeout(6000) });
+  const res = await fetch(base + path, { headers, signal: AbortSignal.timeout(ms) });
   const text = await res.text();
   let data = null;
   try { data = JSON.parse(text); } catch { /* not JSON */ }
@@ -54,19 +59,36 @@ async function saveToCache(cache, key, got) {
   }));
 }
 
+// One background refresh per path per edge instance at a time, so a burst
+// of visitors to a page with an old copy doesn't send a burst of refreshes.
+const refreshing = new Set();
+function refreshInBackground(context, cache, key, path) {
+  if (!cache || refreshing.has(path)) return;
+  refreshing.add(path);
+  context.waitUntil(fetchFromWorker(context, path, BACKGROUND_MS)
+    .then(got => saveToCache(cache, key, got))
+    .catch(() => {})
+    .finally(() => refreshing.delete(path)));
+}
+
 export async function workerJson(context, path) {
   const cache = typeof caches !== 'undefined' ? caches.default : null;
   const key = new Request(`${SITE}/__data${path}`);
   const hit = cache ? await cache.match(key).catch(() => null) : null;
   if (hit) {
     const age = (Date.now() - Number(hit.headers.get('X-Fetched-At') || 0)) / 1000;
-    if (age > DATA_TTL) {
-      context.waitUntil(fetchFromWorker(context, path).then(got => saveToCache(cache, key, got)).catch(() => {}));
-    }
+    if (age > DATA_TTL) refreshInBackground(context, cache, key, path);
     return { status: hit.status, data: await hit.json() };
   }
-  const got = await fetchFromWorker(context, path);
-  if (got.data) context.waitUntil(saveToCache(cache, key, got).catch(() => {}));
+  // Nothing saved yet: one request to the Worker, allowed the longer
+  // background time and saved whenever it lands. The visitor waits at most
+  // FOREGROUND_MS for it; if it's slower, they get the fallback page (or the
+  // app's own retry) and the next visitor gets the saved copy.
+  // (The Worker itself runs one query per page at a time, so a burst of
+  // misses doesn't turn into a burst of database work.)
+  const pending = fetchFromWorker(context, path, BACKGROUND_MS);
+  context.waitUntil(pending.then(got => saveToCache(cache, key, got)).catch(() => {}));
+  const got = await Promise.race([pending, new Promise((_, no) => setTimeout(() => no(new Error('Worker slow')), FOREGROUND_MS))]);
   return { status: got.status, data: got.data };
 }
 
