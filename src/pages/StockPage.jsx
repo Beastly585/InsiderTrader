@@ -100,9 +100,9 @@ function StockView({ d, watchlist, onUpgrade, renderProfile }) {
             ) : <p className="sx-muted">No open-market insider trades on record.</p>}
             {s && (
               <div className="sx-stats">
-                <Stat label="Bought · 12 mo" value={s.yr_buys.n ? money(s.yr_buys.v) : 'None'} sub={s.yr_buys.n ? plural(s.yr_buys.n, 'buy') : 'no open-market buys'} tone={s.yr_buys.n ? 'buy' : undefined} />
-                <Stat label="Sold · 12 mo" value={s.yr_sells.n ? money(s.yr_sells.v) : 'None'} sub={s.yr_sells.n ? plural(s.yr_sells.n, 'sale') : 'no open-market sales'} tone={s.yr_sells.n ? 'sell' : undefined} />
-                <Stat label="Last insider buy" value={s.last_buy ? ago(s.last_buy.date) : 'Never'} sub={s.last_buy ? <><InsiderLink raw={s.last_buy.raw}>{s.last_buy.name}</InsiderLink> · {money(s.last_buy.value)}</> : 'on record'} />
+                <Stat label="Insiders bought · 12 mo" value={s.yr_buys.n ? money(s.yr_buys.v) : 'None'} sub={`${s.yr_buys.n ? plural(s.yr_buys.n, 'buy') : 'no open-market buys'} by company insiders`} tone={s.yr_buys.n ? 'buy' : undefined} />
+                <Stat label="Insiders sold · 12 mo" value={s.yr_sells.n ? money(s.yr_sells.v) : 'None'} sub={`${s.yr_sells.n ? plural(s.yr_sells.n, 'sale') : 'no open-market sales'} by company insiders`} tone={s.yr_sells.n ? 'sell' : undefined} />
+                <Stat label="Last company insider buy" value={s.last_buy ? ago(s.last_buy.date) : 'Never'} sub={s.last_buy ? <><InsiderLink raw={s.last_buy.raw}>{s.last_buy.name}</InsiderLink> · {money(s.last_buy.value)}</> : 'on record'} />
               </div>
             )}
           </Card>
@@ -139,7 +139,7 @@ function StockView({ d, watchlist, onUpgrade, renderProfile }) {
                   <li key={p.raw} className="sx-people__row">
                     <div className="sx-people__who">
                       <InsiderLink raw={p.raw} className="sx-people__name">{p.name}</InsiderLink>
-                      <RoleTag role={p.role} congress={!!p.congress} title={p.title} name={p.raw} className="sx-people__role" />
+                      <span className="sx-people__role"><RoleTag role={p.role} congress={!!p.congress} title={p.title} name={p.raw} /></span>
                     </div>
                     <div className="sx-people__nums">
                       {/* Congress reports ranges, so summing them would invent a number: show counts. */}
@@ -239,7 +239,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
                 {showInsider && (
                   <td className="sx-table__who">
                     <InsiderLink raw={t.raw}>{t.name}</InsiderLink>
-                    {!membersOnly && <RoleTag role={t.role} congress={!!t.congress} title={t.title} name={t.raw} className="sx-table__role" />}
+                    {!membersOnly && <span className="sx-table__role"><RoleTag role={t.role} congress={!!t.congress} title={t.title} name={t.raw} /></span>}
                   </td>
                 )}
                 <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}{t.om && !t.routine && t.brk && <span className="sx-table__code sx-table__code--accent" title="This insider hadn't bought this stock on the open market in that long">{t.brk}</span>}</td>

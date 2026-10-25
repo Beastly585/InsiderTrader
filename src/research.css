@@ -67,7 +67,7 @@
 .sx-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; line-height: 1.5; }
 .sx-chip--buy { background: var(--green-50); color: var(--green-600); }
 .sx-chip--sell { background: var(--red-50); color: var(--red-600); }
-.sx-role { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; white-space: nowrap; vertical-align: 1px; line-height: 1.5; }
+.sx-role { width: fit-content; max-width: 100%; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; white-space: nowrap; vertical-align: 1px; line-height: 1.5; }
 .sx-role svg { flex: none; }
 /* A row title with a role tag wraps instead of cutting the tag off (long fund names). */
 .sx-row__title:has(.sx-role) { white-space: normal; }

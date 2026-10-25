@@ -381,7 +381,13 @@ const totalsOf = x => ({ n: Number(x?.n) || 0, v: Number(x?.v) || 0, insiders: 0
 
 function congressView(rs) {
   rs = [...rs].sort((a, b) => (asDate(b.trade_date) || '').localeCompare(asDate(a.trade_date) || ''));
-  return { n: rs.length, latest: rs.length ? { raw: rs[0].insider_name, name: prettyPerson(rs[0].insider_name, true), type: rs[0].transaction_type, value: rs[0].value, date: asDate(rs[0].trade_date) } : null };
+  return {
+    n: rs.length,
+    members: new Set(rs.map(r => r.insider_name)).size,
+    buys: rs.filter(r => r.transaction_type === 'buy').length,
+    sells: rs.filter(r => r.transaction_type === 'sell').length,
+    latest: rs.length ? { raw: rs[0].insider_name, name: prettyPerson(rs[0].insider_name, true), type: rs[0].transaction_type, value: rs[0].value, date: asDate(rs[0].trade_date) } : null,
+  };
 }
 
 // rows: open-market buy/sell rows for these tickers in the last ~380 days.
@@ -445,14 +451,29 @@ export function statusLines(s, windowDays, today = todayStr()) {
     lines.push(l);
   }
   if (rs.n) lines.push(`${summarizePeople(rs.people)} sold ${money(rs.v)} ${period}.`);
+  // These lines are about company insiders (executives, board members, big
+  // shareholders). Congress gets its own line below, so say which is which:
+  // "no buys" next to a House member's buy reads like a contradiction.
   if (!rb.n && !rs.n) {
-    if (yb.n && yb.v >= 100000) lines.push(`Insiders bought ${money(yb.v)} over the last 12 months (${plural(yb.n, 'buy')}).`);
-    if (ys.n) lines.push(`Insiders sold ${money(ys.v)} over the last 12 months (${plural(ys.n, 'sale')}).${yb.n ? '' : ' No open-market buys.'}`);
-    if (!lines.length) lines.push('No open-market insider trades in the last 12 months.');
+    if (yb.n && yb.v >= 100000) lines.push(`Company insiders bought ${money(yb.v)} over the last 12 months (${plural(yb.n, 'buy')}).`);
+    if (ys.n) lines.push(`Company insiders sold ${money(ys.v)} over the last 12 months (${plural(ys.n, 'sale')})${yb.n ? '.' : ', with no open-market buys.'}`);
+    if (!lines.length) lines.push('No open-market trades by company insiders in the last 12 months.');
   }
-  if (lb && !rb.n) lines.push(`Last insider buy: ${lb.name} (${roleWord(lb.role)}), ${money(lb.value)}, ${ago(lb.date, today)}.`);
-  else if (!lb) lines.push('No open-market insider buys on record.');
-  const c = rc.n ? rc.latest : yc.n ? yc.latest : null;
-  if (c) lines.push(`Congress: ${c.name} ${c.type === 'buy' ? 'bought' : 'sold'} ${congressRange(c.value)}, ${ago(c.date, today)}.`);
+  if (lb && !rb.n) lines.push(`Last company insider buy: ${lb.name} (${roleWord(lb.role)}), ${money(lb.value)}, ${ago(lb.date, today)}.`);
+  else if (!lb) lines.push('No open-market buys by company insiders on record.');
+  // Congress: everyone who traded it in the window, then the latest trade.
+  // Outside the window, just the most recent trade in the past year.
+  const cv = rc.n ? rc : yc.n ? yc : null;
+  if (cv) {
+    const c = cv.latest;
+    const latest = `${c.name} ${c.type === 'buy' ? 'bought' : 'sold'} ${congressRange(c.value)}, ${ago(c.date, today)}`;
+    if (rc.n && (cv.members > 1 || cv.n > 1)) {
+      const counts = [cv.buys && plural(cv.buys, 'buy'), cv.sells && plural(cv.sells, 'sale')].filter(Boolean).join(', ');
+      const who = cv.members > 1 ? `${cv.members} members traded it` : `${c.name} traded it`;
+      lines.push(`Congress: ${who} ${period} (${counts}). Latest: ${latest}.`);
+    } else {
+      lines.push(`Congress: ${latest}.`);
+    }
+  }
   return lines;
 }
