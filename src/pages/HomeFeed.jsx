@@ -62,9 +62,19 @@ export function MarketSections({ d, watchlist, signedIn = false, onHome = false 
   return (
     <>
     {onHome && (
-      <div className="sx-section-head">
-        <h2 className="sx-section-head__title">This week across the market</h2>
-        <span className="sx-section-head__sub">Filed in the last 7 days</span>
+      <div className="sx-week">
+        <div className="sx-section-head">
+          <h2 className="sx-section-head__title">This week across the market</h2>
+          <span className="sx-section-head__sub">Filed in the last 7 days</span>
+        </div>
+        {/* The week's totals, as a one-line summary before the details. */}
+        {d.pulse && (
+          <p className="sx-week__stats">
+            Insiders and Congress bought <b className="sx-up">{money(d.pulse.buy_v)}</b> ({plural(d.pulse.buy_n, 'filing')}) and sold <b className="sx-down">{money(d.pulse.sell_v)}</b> ({plural(d.pulse.sell_n, 'filing')}).
+            {d.pulse.line && <> {shortPulse(d.pulse.line)}.</>}
+            {signedIn && <> <Link to="/data?tab=trades" className="sx-link">See every trade <Icon name="arrow" size={12} /></Link></>}
+          </p>
+        )}
       </div>
     )}
     {/* The public buying page leads with the totals; Home keeps them for the end. */}
@@ -99,7 +109,7 @@ export function MarketSections({ d, watchlist, signedIn = false, onHome = false 
                 <li key={`${r.ticker}:${r.raw}`} className="sx-row">
                   <StockLink ticker={r.ticker} />
                   <div className="sx-row__main">
-                    <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <RoleTag role={r.role} /></div>
+                    <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <RoleTag role={r.role} name={r.raw} /></div>
                     <div className="sx-row__sub">{r.company}{r.planned ? ' · pre-scheduled plan' : ''}</div>
                   </div>
                   <span className="sx-row__amt sx-down">{money(r.value)}</span>
@@ -111,12 +121,7 @@ export function MarketSections({ d, watchlist, signedIn = false, onHome = false 
         )}
       </div>
     </div>
-    {onHome && (d.pulse || d.leader) && (
-      <Card className="sx-context" title="Market context" pad={false}>
-        {d.pulse && <Pulse p={d.pulse} signedIn={signedIn} />}
-        {d.leader && <Leader l={d.leader} />}
-      </Card>
-    )}
+    {onHome && d.leader && <Leader l={d.leader} />}
     </>
   );
 }
@@ -179,14 +184,19 @@ function Yours({ d, watchlist, since }) {
 
   const Stock = ({ s }) => {
     const b = s.recent_buys || {}, sl = s.recent_sells || {};
+    // Active only because a member of Congress traded it: lead with that line
+    // (it comes last from the server, after the 12-month company summary).
+    const congressOnly = !b.n && !sl.n && s.recent_congress > 0;
+    const lines = congressOnly ? [...s.lines.filter(l => l.startsWith('Congress:')), ...s.lines.filter(l => !l.startsWith('Congress:'))] : s.lines;
     return (
       <li className="sx-row sx-row--yours">
         <StockLink ticker={s.ticker} />
         <div className="sx-row__main">
           <div className="sx-row__title"><Link to={stockPath(s.ticker)} className="sx-row__name">{s.company}</Link>{isNewStock(s) && <Chip tone="new">New</Chip>}{s.held && <Chip tone="accent">You hold this</Chip>}</div>
-          {s.lines.slice(0, 2).map((l, i) => <div key={i} className="sx-row__sub">{l}</div>)}
+          {lines.slice(0, 2).map((l, i) => <div key={i} className="sx-row__sub">{l}</div>)}
         </div>
         <div className="sx-row__end">
+          {congressOnly && <RoleTag congress role="Congress" />}
           {b.n > 0 && <span className="sx-row__amt sx-up">+{money(b.v)}</span>}
           {sl.n > 0 && <span className="sx-row__amt sx-down">−{money(sl.v)}</span>}
           {(b.n > 0 || sl.n > 0) && <span className="sx-row__meta">{[b.n && plural(b.n, 'buy'), sl.n && plural(sl.n, 'sale')].filter(Boolean).join(' · ')}</span>}
@@ -201,7 +211,7 @@ function Yours({ d, watchlist, since }) {
       <li className="sx-row sx-row--yours">
         <span className="sx-avatar-sm" aria-hidden="true">{initials}</span>
         <div className="sx-row__main">
-          <div className="sx-row__title"><InsiderLink raw={p.raw}>{p.name}</InsiderLink>{p.role && <RoleTag role={p.role} className="sx-row__role" />}{isNewPerson(p) && <Chip tone="new">New</Chip>}</div>
+          <div className="sx-row__title"><InsiderLink raw={p.raw}>{p.name}</InsiderLink>{p.role && <RoleTag role={p.role} name={p.raw} className="sx-row__role" />}{isNewPerson(p) && <Chip tone="new">New</Chip>}</div>
           {p.recent.slice(0, 3).map((r, i) => (
             <div key={i} className="sx-row__sub">
               {r.type === 'buy' ? 'Bought' : 'Sold'} {r.congress ? congressRange(r.value) : money(r.value)} of <StockLink ticker={r.ticker} plain /> {ago(r.date)}
@@ -244,6 +254,15 @@ function Yours({ d, watchlist, since }) {
       </div>
     </Card>
   );
+}
+
+// "Less insider buying than usual this week: 42% below the 12-week average
+// number of buys. Sales usually..." -> "Less insider buying than usual this
+// week (42% below the 12-week average)".
+function shortPulse(line) {
+  const [head, rest] = String(line).split(': ');
+  const first = s => s.split('. ')[0].replace(/\.$/, '');
+  return rest ? `${head} (${first(rest).replace(' number of buys', '')})` : first(head);
 }
 
 // Every open-market buy and sale filed in the last 7 days, all stocks.
@@ -295,7 +314,7 @@ function Featured({ c, watchlist }) {
         <ul className="sx-buyers">
           {c.buyers.map(b => (
             <li key={b.raw}>
-              <span><InsiderLink raw={b.raw} className="sx-strong">{b.name}</InsiderLink> <RoleTag role={b.role} /></span>
+              <span><InsiderLink raw={b.raw} className="sx-strong">{b.name}</InsiderLink> <RoleTag role={b.role} name={b.raw} /></span>
               <span>{b.stake && <Chip>{b.stake}</Chip>}<b className="sx-mono sx-up">{money(b.value)}</b></span>
             </li>
           ))}
@@ -324,7 +343,7 @@ function ClusterRow({ c }) {
       <div className="sx-row__main">
         <div className="sx-row__title">{c.company}</div>
         <div className="sx-row__sub">
-          {facts.length ? facts.join(' · ') : <><InsiderLink raw={top.raw}>{top.name}</InsiderLink> <RoleTag role={top.role} /></>}
+          {facts.length ? facts.join(' · ') : <><InsiderLink raw={top.raw}>{top.name}</InsiderLink> <RoleTag role={top.role} name={top.raw} /></>}
         </div>
       </div>
       <span className="sx-row__amt sx-up">{money(c.total)}</span>

@@ -353,7 +353,7 @@ export function PublicHome() {
                   <div className="sx-row__main">
                     <div className="sx-row__title">{c.company}</div>
                     <div className="sx-row__sub">
-                      <InsiderLink raw={c.buyers[0].raw}>{c.buyers[0].name}</InsiderLink> <RoleTag role={c.buyers[0].role} />{c.n_insiders > 1 ? ` + ${plural(c.n_insiders - 1, 'other')}` : ''}
+                      <InsiderLink raw={c.buyers[0].raw}>{c.buyers[0].name}</InsiderLink> <RoleTag role={c.buyers[0].role} name={c.buyers[0].raw} />{c.n_insiders > 1 ? ` + ${plural(c.n_insiders - 1, 'other')}` : ''}
                     </div>
                   </div>
                   <span className="sx-row__amt sx-up">{money(c.total)}</span>

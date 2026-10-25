@@ -107,7 +107,7 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
                       <div className="sx-wl__main">
                         <div className="sx-wl__head">
                           <InsiderLink raw={n} className="sx-strong">{p?.name || prettyPerson(n)}</InsiderLink>
-                          {p?.role && <RoleTag role={p.role} />}
+                          {p?.role && <RoleTag role={p.role} name={n} />}
                         </div>
                         {!p ? (pending(n) ? <Skeleton lines={1} height={12} /> : noDetail)
                           : p.recent.length ? p.recent.slice(0, 2).map((t, i) => (

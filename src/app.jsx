@@ -3354,7 +3354,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                             <span className={`ws-mrow__amt${isBuy ? ' val-buy' : ' val-sell'}`}>{isBuy ? '+' : '−'}{fmt.money(Math.abs(f.value || 0))}</span>
                           </div>
                           <div className="ws-mrow__sub">
-                            <span className="ws-mrow__name">{prettyPerson(f.insiderName, isCg)} <RoleTag role={role} congress={isCg} title={f.title} /></span>
+                            <span className="ws-mrow__name">{prettyPerson(f.insiderName, isCg)} <RoleTag role={role} congress={isCg} title={f.title} name={f.insiderName} /></span>
                             <span className="ws-mrow__date">{shortDate(f.transactionDate || f.date)}</span>
                           </div>
                         </div>
@@ -3372,7 +3372,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
                         <div className="ws-row__cell ws-row__cell--muted" style={{ fontSize: 11 }}>
                           {fmt.dateShort(f.transactionDate || f.date)}
                         </div>
-                        {!isMobile && <div className="ws-row__cell"><RoleTag role={role} congress={isCg} title={f.title} /></div>}
+                        {!isMobile && <div className="ws-row__cell"><RoleTag role={role} congress={isCg} title={f.title} name={f.insiderName} /></div>}
                         <div className="ws-row__cell"><span className={`ws-type-badge${isBuy ? ' ws-type-badge--buy' : ' ws-type-badge--sell'}`}>{isBuy ? 'Buy' : 'Sell'}</span></div>
                         {!isMobile && <div className="ws-row__cell ws-row__cell--right">
                           <span className={`ws-row__pos-change${isBuy ? ' val-buy' : ' val-sell'}`}>
