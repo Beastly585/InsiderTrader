@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { InsiderLink, StockLink } from '../lib/nav.jsx';
 import { useApi } from '../lib/api.js';
 import { money, pct, plural, PAGE_TITLES } from '../lib/text.js';
-import { Card, Segmented, Skeleton, ErrorNote, Gate, useNarrow, RoleTag } from '../components/ui.jsx';
+import { Card, Segmented, Skeleton, ErrorNote, Gate, useNarrow, RoleTag, Icon } from '../components/ui.jsx';
 
 const LIST = { rank: 'ranked', hit: 'by_hit', ret: 'by_return', buys: 'by_buying' };
 const signed = (v, d = 1) => `${v >= 0 ? '+' : ''}${Number(v).toFixed(d)}`;
@@ -58,6 +58,8 @@ function LeaderList({ rows, sort }) {
 }
 
 
+const PHONE_PAGE = 25;
+
 export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) {
   const [years, setYears] = useState(pro ? 2 : 1);
   const [source, setSource] = useState('all');
@@ -66,6 +68,10 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
   useEffect(() => { if (!pro && years !== 1) setYears(1); }, [pro]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const narrow = useNarrow();
+  // Phones show the list in pages of 25 (Pro gets up to 200 rows, which
+  // made an endless scroll). Desktop shows the whole table as before.
+  const [shown, setShown] = useState(PHONE_PAGE);
+  useEffect(() => { setShown(PHONE_PAGE); }, [sort, source, years]);
   const { data, error, loading } = useApi(`/${publicMode ? 'public' : 'api'}/leaderboard?years=${years}&source=${source}`);
   const visible = data ? data[LIST[sort]] || [] : null;
   const rules = data?.rules || { min_scored: 3, min_avg_buy: 25000 };
@@ -98,7 +104,17 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
         {visible && !visible.length && !loading && (
           <div className="sx-empty"><div className="sx-empty__body">Nobody has {rules.min_scored} or more scored open-market buys in this window yet. Try a longer window or a different group.</div></div>
         )}
-        {visible && visible.length > 0 && narrow && <div className={loading ? 'sx-dim' : ''}><LeaderList rows={visible} sort={sort} /></div>}
+        {visible && visible.length > 0 && narrow && (
+          <div className={loading ? 'sx-dim' : ''}>
+            <LeaderList rows={visible.slice(0, shown)} sort={sort} />
+            {visible.length > shown && (
+              <button className="sx-more" onClick={() => setShown(n => n + PHONE_PAGE)}>
+                Show {Math.min(PHONE_PAGE, visible.length - shown)} more <span className="sx-muted">({shown} of {visible.length})</span>
+                <Icon name="chevron" size={12} />
+              </button>
+            )}
+          </div>
+        )}
         {visible && visible.length > 0 && !narrow && (
           <div className={`sx-table-wrap${loading ? ' sx-dim' : ''}`}>
             <table className="sx-table sx-table--lb">

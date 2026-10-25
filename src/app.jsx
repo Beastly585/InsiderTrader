@@ -7471,8 +7471,11 @@ function AppInner() {
           {page === 'stocks' && <StocksPage />}
           {page === 'watchlist' && <WatchlistPage watchlist={watchlist} portfolioTickers={billingPro ? portfolioTickers : []} onUpgrade={onUpgrade} alertsMasterOn={alertsMaster} />}
           {page === 'account' && <AccountPage user={user} onUpgrade={onUpgrade} dark={dark} setDark={setDark} />}
+          {/* Phones: the footer scrolls with the page and ends above the tab bar.
+              (The one below stays pinned on desktop and is hidden on phones.) */}
+          <PublicFooter logoSrc={logoSimple} className="sx-app-foot sx-app-foot--m" />
         </main>
-        <PublicFooter logoSrc={logoSimple} className="sx-app-foot" />
+        <PublicFooter logoSrc={logoSimple} className="sx-app-foot sx-app-foot--d" />
         {watchlist.showUpgrade && <UpgradeModal feature={watchlist.showUpgrade} pro={billingPro} onClose={() => watchlist.setShowUpgrade(null)} />}
         {showUpgradeModal && <UpgradeModal feature={showUpgradeModal} pro={billingPro} onClose={() => setShowUpgradeModal(null)} />}
       </div>

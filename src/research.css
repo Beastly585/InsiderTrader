@@ -351,7 +351,7 @@
 
 /* ── Mobile ─────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .sx-page { padding: 14px 12px 88px; gap: 12px; }
+  .sx-page { padding: 14px 12px 20px; gap: 12px; }
   .sx-head__ticker { font-size: 24px; }
   .sx-head__person { font-size: 22px; }
   .sx-head__actions { width: 100%; }

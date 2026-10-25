@@ -3228,7 +3228,21 @@ td { padding:7px 11px; vertical-align:middle; }
   .topnav__links,.topnav__upgrade{ display:none; }
   .topnav{ padding:0 14px; }
   .topnav__logo{ margin-right:0; }
-  .ws-main{ padding-bottom:60px; }
+  .ws-main{ padding-bottom:0; }
+  /* The tab bar is fixed over the bottom 56px. A spacer as the last item in
+     the scrolling area keeps the end of every page (the footer) above it;
+     bottom padding on this scroll container is ignored by Safari. */
+  .ws-main::after { content:''; flex:0 0 calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .bottomnav { height: calc(56px + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  /* The active tab's highlight spans the button, so longer labels ("Leaderboard") sit inside it. */
+  .bottomnav__btn--active::before { inset: 4px 6px; width: auto; }
+}
+/* One footer per screen size (see app.jsx): pinned on desktop, end of the page on phones.
+   (footer.x beats research.css's .sx-pub__foot { display: flex }, which loads later.) */
+footer.sx-app-foot--m { display: none; }
+@media(max-width:640px){
+  footer.sx-app-foot--d { display: none; }
+  footer.sx-app-foot--m { display: flex; padding-bottom: 12px; }
 }
 
 /* ── Main + background wash ────────────────────────────────────────── */
