@@ -21,7 +21,7 @@
 import {
   tickerStatus, buildClusters, clusterOut, prettyPerson, prettyCompany, shortRole, isCongress, asDate, todayStr, isEntityName, buyBreak, isPlaceholderTicker,
 } from './intel.js';
-import { DATA_ROUTES, reversalSql, offeringSql } from './data.js';
+import { DATA_ROUTES, reversalSql, offeringSql, hasColumn } from './data.js';
 
 const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,9}$/;
 const FREE_DAYS = 365;
@@ -183,16 +183,10 @@ function statusOut(s) {
 // Until that's been run, pages fall back to is_routine as before, so
 // deploying this first can't break them. Checked once per Worker instance
 // (a "not there yet" answer is re-checked after 10 minutes).
-let _plannedSql = null, _plannedAt = 0;
+// filings.planned (10b5-1 plan), from db/migrations/2026-10-22_ingest_runs_and_planned.sql.
+// Same quick catalog lookup as the other optional columns (hasColumn in data.js).
 async function plannedSql(ctx) {
-  if (_plannedSql && (_plannedSql !== 'f.is_routine' || Date.now() - _plannedAt < 600000)) return _plannedSql;
-  try {
-    const r = await ctx.db(`SELECT 1 FROM information_schema.columns
-                             WHERE table_schema = 'public' AND table_name = 'filings' AND column_name = 'planned'`);
-    _plannedSql = r.length ? 'COALESCE(f.planned, f.is_routine)' : 'f.is_routine';
-  } catch { _plannedSql = 'f.is_routine'; }
-  _plannedAt = Date.now();
-  return _plannedSql;
+  return (await hasColumn(ctx, 'planned')) ? 'COALESCE(f.planned, f.is_routine)' : 'f.is_routine';
 }
 
 async function stock(ctx, ticker) {
@@ -503,11 +497,15 @@ async function watchlistSummary(ctx, holdings) {
 
 // ── Home feed ────────────────────────────────────────────────────────────────
 const FEED_TTL_MS = 10 * 60 * 1000;
-let feedCache = { at: 0, data: null, promise: null };
+let feedCache = { at: 0, data: null, promise: null, started: 0 };
 
 async function marketFeed(ctx) {
   if (feedCache.data && Date.now() - feedCache.at < FEED_TTL_MS) return feedCache.data;
-  if (feedCache.promise) return feedCache.promise;
+  // A request already in flight is shared, unless it's been pending 25s+: if
+  // the visitor who started it left, Cloudflare may have cancelled it and it
+  // would never finish, leaving everyone after them waiting.
+  if (feedCache.promise && Date.now() - feedCache.started < 25000) return feedCache.promise;
+  feedCache.started = Date.now();
   feedCache.promise = (async () => {
     const [PLANNED, REV] = await Promise.all([plannedSql(ctx), reversalSql(ctx)]);
     const [buys, sells, pulseRows] = await Promise.all([
@@ -571,7 +569,7 @@ async function marketFeed(ctx) {
       pulse: pulse(pulseRows),
       generated_at: new Date().toISOString(),
     };
-    feedCache = { at: Date.now(), data, promise: null };
+    feedCache = { at: Date.now(), data, promise: null, started: 0 };
     return data;
   })().catch(e => { feedCache.promise = null; throw e; });
   return feedCache.promise;
@@ -680,7 +678,7 @@ async function leaderboard(ctx, url) {
   const hit = lbCache.get(key);
   let data;
   if (hit && Date.now() - hit.at < LB_TTL_MS) data = hit.data;
-  else if (hit?.promise) data = await hit.promise;
+  else if (hit?.promise && Date.now() - hit.started < 25000) data = await hit.promise; // see marketFeed
   else {
     // Memory first, then the copy the daily cron saved to R2, and only then
     // the live query (5-10s). Fresh Worker instances start with empty memory,
@@ -689,7 +687,7 @@ async function leaderboard(ctx, url) {
       lbSave(ctx.env, key, d); // so the next fresh instance doesn't rebuild either
       return d;
     }));
-    lbCache.set(key, { at: 0, promise });
+    lbCache.set(key, { at: 0, promise, started: Date.now() });
     try { data = await promise; lbCache.set(key, { at: Date.now(), data }); }
     catch (e) { lbCache.delete(key); throw e; }
   }

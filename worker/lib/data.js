@@ -29,9 +29,12 @@ const cache = new Map();
 async function cached(key, ttlMs, fn) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < ttlMs) return hit.value;
-  if (hit?.promise) return hit.promise;
+  // A request already in flight is shared, unless it's been pending 25s+: if
+  // the visitor who started it left, Cloudflare may have cancelled it and it
+  // would never finish, leaving everyone after them waiting.
+  if (hit?.promise && Date.now() - hit.started < 25000) return hit.promise;
   const promise = fn();
-  cache.set(key, { at: 0, promise });
+  cache.set(key, { at: 0, promise, started: Date.now() });
   try { const value = await promise; cache.set(key, { at: Date.now(), value }); return value; }
   catch (e) { cache.delete(key); throw e; }
 }
@@ -40,18 +43,40 @@ export const DATA_ROUTES = { filings, trades, price, leaders, sectors, explore, 
 
 // Does public.filings have this column yet? Columns added by a migration can
 // ship in code before the migration is run; queries use a fallback until then.
-// "Yes" is remembered; "not yet" is re-checked every 10 minutes.
-const colSeen = new Map();
+//
+// Reads the column list straight from Postgres's catalog (pg_attribute), one
+// query for all columns, about a millisecond. It used to ask
+// information_schema.columns once per column, which walks every column of
+// every table in the database; with TimescaleDB's internal tables that took
+// long enough that requests timed out, and a request the visitor gave up on
+// never saved its answer, so the next one paid again.
+//
+// The list is kept for 10 minutes per Worker instance. A lookup that fails or
+// takes more than 3 seconds counts as "column not there yet" (the queries
+// still work, just without that column) and is retried a minute later.
+let colList = { at: 0, ttl: 0, cols: null, pending: null, started: 0 };
+async function filingsColumns(ctx) {
+  const now = Date.now();
+  if (colList.cols && now - colList.at < colList.ttl) return colList.cols;
+  // Reuse a lookup already in flight, unless it's stuck (its request may have
+  // been cancelled before it finished).
+  if (colList.pending && now - colList.started < 5000) return colList.pending;
+  colList.started = now;
+  colList.pending = Promise.race([
+    ctx.db(`SELECT attname FROM pg_catalog.pg_attribute
+             WHERE attrelid = 'public.filings'::regclass AND attnum > 0 AND NOT attisdropped`)
+      .then(rows => ({ cols: new Set(rows.map(r => r.attname)), ok: true })),
+    new Promise(res => setTimeout(() => res(null), 3000)),
+  ]).catch(() => null).then(r => {
+    colList = r?.ok
+      ? { at: Date.now(), ttl: 10 * 60 * 1000, cols: r.cols, pending: null, started: 0 }
+      : { at: Date.now(), ttl: 60 * 1000, cols: colList.cols || new Set(), pending: null, started: 0 };
+    return colList.cols;
+  });
+  return colList.pending;
+}
 export async function hasColumn(ctx, col) {
-  const hit = colSeen.get(col);
-  if (hit && (hit.has || Date.now() - hit.at < 600000)) return hit.has;
-  let has = false;
-  try {
-    has = (await ctx.db(`SELECT 1 FROM information_schema.columns
-                          WHERE table_schema = 'public' AND table_name = 'filings' AND column_name = '${col}'`)).length > 0;
-  } catch { /* treat as missing */ }
-  colSeen.set(col, { has, at: Date.now() });
-  return has;
+  return (await filingsColumns(ctx)).has(col);
 }
 // filings.reversal ('buy' / 'sell' / NULL), from db/migrations/2026-10-24_reversals.sql.
 export const reversalSql = async (ctx, alias = 'f.') => ((await hasColumn(ctx, 'reversal')) ? `${alias}reversal` : 'NULL::text');

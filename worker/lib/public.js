@@ -32,9 +32,12 @@ const mem = new Map();
 async function cached(key, ttl, fn) {
   const hit = mem.get(key);
   if (hit && Date.now() - hit.at < ttl) return hit.value;
-  if (hit?.promise) return hit.promise;
+  // A request already in flight is shared, unless it's been pending 25s+: if
+  // the visitor who started it left, Cloudflare may have cancelled it and it
+  // would never finish, leaving everyone after them waiting.
+  if (hit?.promise && Date.now() - hit.started < 25000) return hit.promise;
   const promise = fn();
-  mem.set(key, { at: 0, promise });
+  mem.set(key, { at: 0, promise, started: Date.now() });
   try {
     const value = await promise;
     mem.delete(key);
