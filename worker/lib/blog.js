@@ -140,7 +140,7 @@ ${bodyHtml}
 
 const P = (html, size = 14, color = '#111827') => `<p style="font-size:${size}px;line-height:1.6;color:${color};margin:0 0 10px;">${html}</p>`;
 
-export async function handleBlogReview(request, env, url, { neonFetch, sqlVal }) {
+export async function handleBlogReview(request, env, url, { neonFetch, sqlVal, forgetBlog }) {
   const id = parseInt(url.searchParams.get('id'), 10);
   const token = url.searchParams.get('t') || '';
   const bad = () => page('Link not valid', P("That review link doesn't match a post. It may have been regenerated; check the latest email."));
@@ -194,8 +194,9 @@ export async function handleBlogReview(request, env, url, { neonFetch, sqlVal })
     console.error('[Worker] blog review update failed:', e.message);
     return page('Something broke', P("Couldn't save that. Try again in a minute."));
   }
+  forgetBlog?.();
   if (action === 'publish') {
-    return page('Published', head + P(`Live at <a href="${esc(live)}" style="color:#5A4FE8;">${esc(live.replace('https://', ''))}</a>. The blog page picks it up within about 15 minutes.`) + btn('Undo (take it down)', 'reject', false));
+    return page('Published', head + P(`Live at <a href="${esc(live)}" style="color:#5A4FE8;">${esc(live.replace('https://', ''))}</a>. It shows on the blog within a minute.`) + btn('Undo (take it down)', 'reject', false));
   }
   return page('Rejected', head + P("Done. It won't show on the blog and won't be rewritten.", 13, '#6B7280'));
 }

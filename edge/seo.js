@@ -71,13 +71,28 @@ function refreshInBackground(context, cache, key, path) {
     .finally(() => refreshing.delete(path)));
 }
 
+// The blog changes the moment a post is published, and an old copy there
+// shows up as "my post didn't go live". Its pages keep a copy for one minute,
+// and an older copy is fetched again while the visitor waits (falling back to
+// the old one only if the Worker doesn't answer).
+const isBlog = path => path.startsWith('/public/blog');
+const BLOG_TTL = 60;
+
 export async function workerJson(context, path) {
   const cache = typeof caches !== 'undefined' ? caches.default : null;
   const key = new Request(`${SITE}/__data${path}`);
   const hit = cache ? await cache.match(key).catch(() => null) : null;
   if (hit) {
     const age = (Date.now() - Number(hit.headers.get('X-Fetched-At') || 0)) / 1000;
-    if (age > DATA_TTL) refreshInBackground(context, cache, key, path);
+    if (isBlog(path) && age > BLOG_TTL) {
+      try {
+        const got = await fetchFromWorker(context, path, FOREGROUND_MS);
+        if (got.data && (got.status === 200 || got.status === 404)) {
+          context.waitUntil(saveToCache(cache, key, got).catch(() => {}));
+          return { status: got.status, data: got.data };
+        }
+      } catch { /* the old copy below beats nothing */ }
+    } else if (age > DATA_TTL) refreshInBackground(context, cache, key, path);
     return { status: hit.status, data: await hit.json() };
   }
   // Nothing saved yet: one request to the Worker, allowed the longer

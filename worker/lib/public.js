@@ -29,6 +29,12 @@ const TTL = { page: 30 * 60 * 1000, hub: 15 * 60 * 1000, sitemap: 6 * 3600 * 100
 const MAX_ENTRIES = 600;
 const mem = new Map();
 
+// Publishing or taking down a post clears this instance's blog copies at once
+// (called from the review page in blog.js).
+export function forgetBlog() {
+  for (const k of [...mem.keys()]) if (k.startsWith('blog') || k === 'sm|blog') mem.delete(k);
+}
+
 async function cached(key, ttl, fn) {
   const hit = mem.get(key);
   if (hit && Date.now() - hit.at < ttl) return hit.value;
@@ -84,7 +90,7 @@ export async function handlePublic(request, env, origin, url, deps) {
     }
     if (parts[1] === 'blog' && !parts[2]) {
       const key = `blog|${['page', 'q', 'ticker', 'insider', 'kind', 'limit'].map(k => url.searchParams.get(k) || '').join('|')}`.toLowerCase();
-      return json(await cached(key, 5 * 60 * 1000, () => blogList(ctx, url)), 200, 300);
+      return json(await cached(key, 60 * 1000, () => blogList(ctx, url)), 200, 0);
     }
     if (parts[1] === 'blog' && parts[2] === 'post' && parts[3] && !parts[4]) {
       const slug = decodeURIComponent(parts[3]).toLowerCase();
@@ -95,7 +101,7 @@ export async function handlePublic(request, env, origin, url, deps) {
       }
       // 200 with known: false for a missing post, so the app shows its own
       // "not found" and the site's page sets a 404 itself.
-      return json(await cached(`blogpost|${slug}`, 5 * 60 * 1000, () => blogPost(ctx, slug)), 200, 300);
+      return json(await cached(`blogpost|${slug}`, 60 * 1000, () => blogPost(ctx, slug)), 200, 0);
     }
     if (parts[1] === 'congress' && !parts[2]) return json(await cached('congress', TTL.hub, () => congressHub(ctx)));
     if (parts[1] === 'stocks' && !parts[2]) return json(await cached('stocks', TTL.sitemap, () => stocksDirectory(ctx)), 200, 3600);
@@ -112,7 +118,7 @@ export async function handlePublic(request, env, origin, url, deps) {
       const name = parts[2].replace(/\.xml$/, '');
       if (name === 'static') return xml(staticSitemap());
       if (name === 'stocks') return xml(await cached('sm|stocks', TTL.sitemap, () => stockSitemap(ctx)));
-      if (name === 'blog') return xml(await cached('sm|blog', 30 * 60 * 1000, () => blogSitemap(ctx, urlset)));
+      if (name === 'blog') return xml(await cached('sm|blog', 10 * 60 * 1000, () => blogSitemap(ctx, urlset)));
       if (name === 'congress') return xml(await cached('sm|congress', TTL.sitemap, () => peopleSitemap(ctx, true, 1)));
       const m = /^insiders-(\d{1,2})$/.exec(name);
       if (m) return xml(await cached(`sm|ins|${m[1]}`, TTL.sitemap, () => peopleSitemap(ctx, false, Number(m[1]))));

@@ -49,7 +49,7 @@ import { encryptSecret, decryptSecret } from './lib/crypto.js';
 import { computeSignature } from './lib/snaptrade-sign.js';
 import { handleBlogReview } from './lib/blog.js';
 import { handleResearch, refreshLeaderboards, ensureLeaderboards } from './lib/research.js';
-import { handlePublic } from './lib/public.js';
+import { handlePublic, forgetBlog } from './lib/public.js';
 import { sendEmail, dataExportEmail, proWelcomeEmail, testEmail } from './lib/email.js';
 import * as Sentry from '@sentry/cloudflare';
 // ── Streaming ZIP writer — Archive Utility compatible ─────────────────────
@@ -492,7 +492,7 @@ async function handleFetchInner(request, env, origin, ctx) {
     // Origin or JWT; the per-post review token in the link IS the auth. GET
     // shows Publish / Reject buttons, only the POST changes anything.
     if (url.pathname === '/blog/review') {
-      return handleBlogReview(request, env, url, { neonFetch, sqlVal });
+      return handleBlogReview(request, env, url, { neonFetch, sqlVal, forgetBlog });
     }
 
     // Allow GET and POST
