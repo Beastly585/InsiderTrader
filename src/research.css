@@ -864,3 +864,83 @@ body.drawer-open .sx-nav { z-index: 94; }
 .sx-table__code--accent { color: var(--accent-strong); font-weight: 600; }
 .sx-table__code--rev { color: var(--amber-600); font-weight: 600; }
 .sx-plan__beta { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; text-transform: none; color: var(--accent-strong); background: var(--accent-50); vertical-align: 1px; }
+
+/* ── Blog (/blog, /blog/:slug) ─────────────────────────────────────────── */
+.sx-blog { max-width: 860px; }
+.sx-blog__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 4px 0 14px; }
+.sx-blog__search { flex: 1 1 320px; max-width: 420px; }
+.sx-blog__filter { margin: -4px 0 12px; font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+.sx-blog__filter .sx-link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
+.sx-blog__tags { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.sx-blog__pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 18px 0 6px; }
+.sx-empty .sx-link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
+
+/* Timeline: each day is a stop on a line, newest on top. */
+.sx-tl { list-style: none; margin: 0; padding: 0; }
+.sx-tl__day { position: relative; padding: 0 0 6px 22px; }
+.sx-tl__day::before { content: ''; position: absolute; left: 5px; top: 8px; bottom: -8px; width: 1px; background: var(--border-md); }
+.sx-tl__day:last-child::before { bottom: 12px; }
+.sx-tl__date { position: relative; margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.sx-tl__date::before { content: ''; position: absolute; left: -21px; top: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); box-sizing: border-box; }
+.sx-tl__posts { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.sx-tl__post { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; border-left: 3px solid var(--border-md); }
+.sx-tl__post--buy { border-left-color: var(--green-600); }
+.sx-tl__post--sell { border-left-color: var(--red-600); }
+.sx-tl__post--roundup { border-left-color: var(--accent); }
+.sx-tl__title { margin: 8px 0 4px; font-size: 16px; line-height: 1.35; font-weight: 700; letter-spacing: -.01em; }
+.sx-tl__title a { color: var(--text); text-decoration: none; }
+.sx-tl__title a:hover { color: var(--accent-strong); }
+.sx-tl__sum { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-2); }
+.sx-tl__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0 0; font-size: 12.5px; }
+.sx-tl__meta:empty { display: none; }
+
+/* One post */
+.sx-post__draft { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 12px; border-radius: var(--radius-md); background: var(--amber-50); color: var(--amber-600); font-size: 13px; font-weight: 600; }
+.sx-post__crumbs { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 12.5px; color: var(--text-3); }
+.sx-post__crumbs a { color: var(--text-2); }
+.sx-post article { display: flex; flex-direction: column; gap: 14px; }
+.sx-post__head { margin: 0; }
+.sx-blog .sx-row__title { white-space: normal; }
+.sx-post__title { margin: 10px 0 8px; font-size: 26px; line-height: 1.25; font-weight: 800; letter-spacing: -.02em; color: var(--text); }
+.sx-post__by { margin: 0; font-size: 13px; color: var(--text-3); }
+.sx-post__lead { margin: 0; font-size: 16px; line-height: 1.65; color: var(--text); }
+.sx-post__grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px 16px; align-items: start; }
+.sx-post__links { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
+.sx-post__links a { display: inline-flex; align-items: center; gap: 4px; color: var(--accent-strong); text-decoration: none; }
+.sx-post__links a:hover { text-decoration: underline; }
+.sx-post__follow .sx-small { margin: 0 0 10px; color: var(--text-2); }
+.sx-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: 13.5px; }
+.sx-facts dt { color: var(--text-3); }
+.sx-facts dd { margin: 0; font-weight: 600; color: var(--text); }
+.sx-post__sec { margin: 4px 0; }
+.sx-post__sec h2 { margin: 0 0 8px; font-size: 16px; font-weight: 700; color: var(--text); }
+.sx-post__sec ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14.5px; line-height: 1.6; color: var(--text); }
+.sx-post__people td.sx-r { text-align: right; white-space: nowrap; }
+.sx-post .sx-table td.sx-r { text-align: right; white-space: nowrap; }
+.sx-post__who { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.sx-post__flags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; }
+.sx-post__more { margin: 0; font-size: 13.5px; color: var(--text-2); }
+.sx-post article > .sx-note { margin: 0; }
+
+/* 52-week range bar */
+.sx-range { margin: 16px 0 2px; }
+.sx-range__track { position: relative; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--green-50), var(--surface-2) 50%, var(--red-50)); border: 0.5px solid var(--border-md); }
+.sx-range__mark { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; border: 2px solid var(--surface); box-sizing: border-box; }
+.sx-range__mark--buy, .sx-range__dot--buy { background: var(--green-600); }
+.sx-range__mark--sell, .sx-range__dot--sell { background: var(--red-600); }
+.sx-range__mark--now, .sx-range__dot--now { background: var(--text); }
+.sx-range__ends { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11.5px; color: var(--text-3); }
+.sx-range__key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 12px; color: var(--text-2); }
+.sx-range__key span { display: inline-flex; align-items: center; gap: 6px; }
+.sx-range__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+
+@media (max-width: 760px) {
+  .sx-blog__search { max-width: none; flex-basis: 100%; }
+  .sx-post__title { font-size: 21px; }
+  .sx-post__lead { font-size: 15px; }
+  .sx-post__grid { grid-template-columns: minmax(0, 1fr); }
+  .sx-tl__day { padding-left: 18px; }
+  .sx-tl__date::before { left: -17px; }
+  .sx-tl__post { padding: 12px 13px; }
+  .sx-tl__title { font-size: 15px; }
+}

@@ -649,6 +649,39 @@ def review_email(post: dict, row: dict) -> None:
     ek.send(to_email=OPS_EMAIL, subject=subject, html_doc=html_doc, from_name="Seli", clerk_user_id="ops", kind="blog_review")
 
 
+def review_digest(items: list[tuple[dict, dict]]) -> None:
+    """One email per run, listing every new draft (title, why, a Review
+    button each), instead of one email per post."""
+    if not items:
+        return
+    if not OPS_EMAIL:
+        log.warning("  No OPS_EMAIL set; drafts saved without an email.")
+        return
+    live = all(row.get("status") == "published" for _, row in items)
+    blocks = []
+    for post, row in items:
+        b = post["body"]
+        url = (f"{ek.APP_URL}/blog/{row['slug']}" if row.get("status") == "published"
+               else f"{ek.WORKER_URL}/blog/review?id={row['id']}&t={row['review_token']}")
+        why = "".join(ek.p("&bull; " + ek.esc(x), 13, ek.TEXT_2, "0 0 4px") for x in b.get("why", [])[:3])
+        blocks.append(
+            ek.p(" &nbsp;".join(ek.chip(t, "accent") for t in post["tags"]), 12, ek.MUTED, "18px 0 6px")
+            + ek.p(f"<b>{ek.esc(post['title'])}</b>", 16, ek.TEXT, "0 0 6px")
+            + ek.p(ek.esc(post["summary"]), 13, ek.MUTED, "0 0 8px")
+            + why
+            + ek.p(ek.a(url, "Open it live" if row.get("status") == "published" else "Review and publish"), 13, ek.TEXT, "6px 0 0"))
+    n = len(items)
+    head = (ek.p(f"{n} new post{'s' if n != 1 else ''} went live." if live else
+                 f"{n} new draft{'s' if n != 1 else ''} cleared the bar. Nothing goes live until you publish it; ignore any you don't want.",
+                 14, ek.TEXT, "0 0 4px"))
+    rows = f'<tr><td class="px" style="padding:22px 28px 0;">{head}{"".join(blocks)}</td></tr>'
+    subject = (f"Blog: {n} new post{'s' if n != 1 else ''}" if live else f"Blog: {n} draft{'s' if n != 1 else ''} to review") \
+        + f" ({', '.join(p['ticker'] for p, _ in items if p.get('ticker'))[:80]})"
+    html_doc = ek.shell(title=subject, preheader=items[0][0]["title"], label="Blog", body_rows=rows,
+                        footer_html=ek.p("Sent to you only, from db/blog_generate.py.", 11, ek.FAINT, "0"))
+    ek.send(to_email=OPS_EMAIL, subject=subject, html_doc=html_doc, from_name="Seli", clerk_user_id="ops", kind="blog_review")
+
+
 # ── Weekly roundup ───────────────────────────────────────────────────────────
 def roundup(cur, cols: set[str], as_of: date) -> dict | None:
     """Monday to as_of. The biggest buying and selling by company insiders,
@@ -743,11 +776,13 @@ def run_daily(conn, as_of: date) -> None:
     cols = columns(cur)
     posts = candidates(cur, cols, as_of)
     log.info(f"{len(posts)} stock(s) cleared the bar for {as_of}")
+    new = []
     for post in posts:
         what, row = save(conn, post)
         log.info(f"  {what:8} {post['title']}")
         if what == "new":
-            review_email(post, row)
+            new.append((post, row))
+    review_digest(new)
 
 
 def run_roundup(conn, as_of: date) -> None:
