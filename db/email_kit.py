@@ -166,8 +166,14 @@ def plural(n: int, one: str, many: str | None = None) -> str:
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
-_ENTITY_RE = re.compile(r"\b(INC|LLC|L\.?P\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|PARTNERS|HOLDINGS|MANAGEMENT|"
-                        r"ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER)\b", re.I)
+_ENTITY_RE = re.compile(r"\b(INC|LLC|L\.?P\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|CAPITALES|PARTNERS|HOLDINGS|MANAGEMENT|"
+                        r"ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER|"
+                        r"LIMITED|COMPANY|GMBH|S\.A|C\.V|L\.L\.C)\b", re.I)
+
+
+def is_entity_name(name) -> bool:
+    """A fund or company filing as an insider (same list as the site)."""
+    return bool(_ENTITY_RE.search(name or ""))
 _SUFFIXES = {"JR", "SR", "II", "III", "IV", "MD", "PHD"}
 _SMALL = {"of", "and", "the", "for", "&"}
 _KEEP_UPPER = {"LLC", "LP", "GP", "PLC", "USA", "US", "NV", "SA", "AG", "REIT", "ETF", "II", "III", "IV", "AT&T"}

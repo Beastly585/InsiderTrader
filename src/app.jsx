@@ -23,6 +23,7 @@ import HomeFeed from './pages/HomeFeed.jsx';
 import WatchlistPage from './pages/WatchlistPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
 import { PublicShell, PublicFooter, CongressPage, InsiderBuyingPage, StocksPage, PublicHome, usePublicWatchlist } from './pages/PublicPages.jsx';
+import { BlogTimeline, BlogPostPage } from './pages/BlogPages.jsx';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 // (fmt now lives in src/lib/format.js — imported above — with real test
@@ -5812,119 +5813,6 @@ const DEFAULT_PREFS = {
   csuite_only: false,
 };
 
-// ── Blog ──────────────────────────────────────────────────────────────────────
-const BLOG_ARTICLES = [
-  { slug: 'what-is-insider-trading-signal', tag: 'Fundamentals', tagColor: null,
-    title: 'What is an insider trading signal — and why do they outperform?',
-    desc: 'SEC Form 4 filings reveal when corporate officers, directors, and 10% owners trade their company\'s stock. Academic research consistently shows these trades outperform the market by 4–5% annually. Here\'s what drives the edge, how conviction scoring separates noise from signal, and what retail investors should actually do with the data.',
-    read: '12 min read', date: 'Updated Sep 2026', featured: true },
-  { slug: 'conviction-scoring-explained', tag: 'How Seli works', tagColor: null,
-    title: 'How conviction scoring ranks insider trades',
-    desc: 'Not every insider trade matters. A CEO buying $2M of their own stock on the open market is a fundamentally different signal than a director exercising options. Seli\'s scoring system weighs who traded, how much, whether multiple insiders are buying, and historical accuracy to surface the trades with real predictive power.',
-    read: '8 min read', date: 'Sep 2026' },
-  { slug: 'congressional-trading-stock-act', tag: 'Congressional trades', tagColor: 'green',
-    title: 'Congressional stock trading: what the STOCK Act disclosures actually tell you',
-    desc: 'Members of Congress are required to disclose their stock trades within 45 days. Some do it in 2. Seli tracks every STOCK Act filing alongside corporate insider trades, scored with the same conviction system. Here\'s how to read them, what the reporting lag means, and which members trade most actively.',
-    read: '10 min read', date: 'Sep 2026' },
-  { slug: 'cluster-buying-explained', tag: 'Strategy', tagColor: null,
-    title: 'Cluster buying: when multiple insiders buy the same stock',
-    desc: 'A single insider buying is a data point. Three insiders buying the same stock in the same week is a pattern. Cluster buying events have historically preceded significant price moves. We break down what qualifies as a cluster, how to spot them in real time, and what the historical data says about their hit rate.',
-    read: '7 min read', date: 'Sep 2026' },
-  { slug: 'sec-form-4-guide', tag: 'Reference', tagColor: null,
-    title: 'How to read an SEC Form 4 filing',
-    desc: 'Every insider trade filed with the SEC follows the same format — but reading raw EDGAR filings is tedious. This is a field guide to Form 4: what each section means, the difference between transaction codes, and how to distinguish open-market purchases from option exercises.',
-    read: '6 min read', date: 'Sep 2026' },
-  { slug: 'insider-selling-vs-buying', tag: 'Analysis', tagColor: 'red',
-    title: 'Why insider selling is usually noise — and when it isn\'t',
-    desc: 'Insiders sell for dozens of reasons: tax planning, diversification, estate liquidity. Most selling is financially meaningless. But some patterns — unusual volume, first-time sellers, sales after quiet periods — do carry signal. Here\'s how to tell the difference.',
-    read: '9 min read', date: 'Sep 2026' },
-  { slug: 'portfolio-alerts-insider-activity', tag: 'Product', tagColor: null,
-    title: 'Get alerted when insiders trade stocks in your portfolio',
-    desc: 'Seli Pro lets you connect your brokerage and get instant email alerts when any corporate insider or member of Congress trades a stock you hold. No more checking EDGAR manually. Here\'s how to set it up and what the alerts contain.',
-    read: '4 min read', date: 'Sep 2026' },
-  { slug: 'form-4-dataset-csv', tag: 'Data', tagColor: null,
-    title: 'The complete SEC Form 4 dataset: 10+ years, every insider trade, one download',
-    desc: 'Seli\'s CSV export contains every corporate insider trade and congressional stock disclosure from 2013 to present. 18 fields per transaction, split by year, linked to the original EDGAR filing. Built for quant researchers, data journalists, and anyone who needs the raw data.',
-    read: '5 min read', date: 'Sep 2026' },
-];
-
-function BlogPage({ dark, setDark }) {
-  useEffect(() => {
-    document.title = 'Seli Blog — Insider Trading Intelligence, SEC Form 4 Analysis & Market Signals';
-  }, []);
-
-  return (
-    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
-      <nav className="lp-nav">
-        <div className="lp-nav__frame">
-          <a href="/" className="lp-nav__logo">
-            <img src="/favicon.png" alt="Seli" className="lp-logo-mark lp-logo-mark--sm" />
-            <span className="lp-wordmark">Seli</span>
-          </a>
-          <div className="lp-nav__links">
-            <a href="/" className="lp-nav__link">App</a>
-            <a href="/data-download" className="lp-nav__link">Data</a>
-            <a href="/blog" className="lp-nav__link" style={{ color: 'var(--accent-strong)' }}>Blog</a>
-          </div>
-          <div className="lp-nav__actions">
-            <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'}>
-              {dark ? <IconSun style={{ width: 14, height: 14 }} /> : <IconMoon style={{ width: 14, height: 14 }} />}
-            </button>
-            <a href="/" className="lp-btn-primary" style={{ textDecoration: 'none' }}>Try free</a>
-          </div>
-        </div>
-      </nav>
-
-      <div className="blog-page">
-        <div className="blog-hero">
-          <h1>Insider trading intelligence, demystified</h1>
-          <p>Research, analysis, and strategy for tracking what corporate insiders and members of Congress are buying and selling — and why it matters for your portfolio.</p>
-        </div>
-
-        <div className="blog-articles">
-          {BLOG_ARTICLES.map((a, i) => (
-            <a key={a.slug} href={`/blog/${a.slug}`} className={`blog-card${a.featured ? ' blog-card--featured' : ''}`}>
-              <span className={`blog-card__tag${a.tagColor === 'green' ? ' blog-card__tag--green' : a.tagColor === 'red' ? ' blog-card__tag--red' : ''}`}>{a.tag}</span>
-              <h2>{a.title}</h2>
-              <p>{a.desc}</p>
-              <div className="blog-card__meta">
-                <span>{a.read}</span>
-                <span className="blog-card__dot" />
-                <span>{a.date}</span>
-              </div>
-            </a>
-          ))}
-        </div>
-
-        <div className="blog-cta">
-          <div className="blog-cta__inner">
-            <h3>See what insiders are buying before the market reacts</h3>
-            <p>Real-time SEC Form 4 signals scored by conviction. Watchlists, alerts, congressional trades, and full data export.</p>
-            <a href="/" className="blog-cta__btn">Start free — no credit card</a>
-            <div className="blog-cta__note">Pro unlocks full history, instant alerts, and portfolio linking for $6.99/mo</div>
-          </div>
-        </div>
-      </div>
-
-      <footer className="lp-footer">
-        <div className="lp-footer__frame">
-          <div className="lp-footer__logo">
-            <img src="/favicon.png" alt="Seli" className="lp-logo-mark lp-logo-mark--sm" />
-            <span className="lp-wordmark">Seli</span>
-          </div>
-          <div className="lp-footer__links">
-            <span>© 2026 Seli</span>
-            <a href="/terms" className="lp-footer__link-muted">Terms</a>
-            <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
-            <a href="/help" className="lp-footer__link-muted">Help</a>
-            <span className="lp-footer__link-muted">Private Beta · Not financial advice.</span>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
 function useNotificationPrefs(userId, pro) {
   const [prefs, setPrefs] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -7096,6 +6984,14 @@ function routeFromLocation(loc = window.location) {
   if (a === 'congress' && !b) return { page: 'congress' };
   if (a === 'insider-buying' && !b) return { page: 'insiderBuying' };
   if (a === 'stocks' && !b) return { page: 'stocks' };
+  if (a === 'blog') {
+    if (!b) return { page: 'blog', n: 1 };
+    if (b === 'page') {
+      const n = parseInt(parts[2], 10);
+      return n > 1 ? { page: 'blog', n } : { page: 'blog', n: 1, canonical: '/blog' };
+    }
+    return { page: 'blogPost', slug: decodeURIComponent(b).toLowerCase() };
+  }
   if (a === 'data') return { page: 'dashboard' };
   if (a === 'leaderboard') return { page: 'leaderboard' };
   if (a === 'insights' || a === 'insiders') return { page: 'leaderboard', canonical: '/leaderboard' };
@@ -7106,7 +7002,7 @@ function routeFromLocation(loc = window.location) {
 }
 const PAGE_PATHS = { home: '/', dashboard: '/data', data: '/data', signals: '/leaderboard', leaderboard: '/leaderboard', watchlist: '/watchlist', settings: '/account', account: '/account' };
 const PAGE_TITLES = { home: 'Home', dashboard: 'Data', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
-const PUBLIC_PAGES = ['home', 'stock', 'insider', 'congress', 'insiderBuying', 'leaderboard', 'stocks'];
+const PUBLIC_PAGES = ['home', 'stock', 'insider', 'congress', 'insiderBuying', 'leaderboard', 'stocks', 'blog', 'blogPost'];
 const STANDALONE_PATHS = ['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/about', '/onboard'];
 
 import * as Sentry from '@sentry/react';
@@ -7389,7 +7285,6 @@ function AppInner() {
   if (path === '/privacy') return <PrivacyPage />;
   if (path === '/cookies') return <CookiePage />;
   if (path === '/help') return <HelpCenterPage />;
-  if (path === '/blog' || path.startsWith('/blog/')) return <BlogPage dark={dark} setDark={setDark} />;
   if (path === '/data-download') return <DataDownloadPage />;
   if (path === '/purchase-complete') return <PurchaseCompletePage />;
   if (path === '/redownload') return <RedownloadPage />;
@@ -7409,6 +7304,8 @@ function AppInner() {
         {route.page === 'stocks' && <StocksPage />}
         {route.page === 'leaderboard' && <LeaderboardPage pro={false} onUpgrade={publicWatchlist.upgrade} publicMode />}
         {route.page === 'home' && <PublicHome />}
+        {route.page === 'blog' && <BlogTimeline key={route.n} pageNo={route.n} />}
+        {route.page === 'blogPost' && <BlogPostPage key={route.slug} slug={route.slug} watchlist={publicWatchlist} />}
       </PublicShell>
     );
   }
@@ -7469,6 +7366,8 @@ function AppInner() {
           {page === 'congress' && <CongressPage />}
           {page === 'insiderBuying' && <InsiderBuyingPage watchlist={watchlist} />}
           {page === 'stocks' && <StocksPage />}
+          {page === 'blog' && <BlogTimeline key={route.n} pageNo={route.n} />}
+          {page === 'blogPost' && <BlogPostPage key={route.slug} slug={route.slug} watchlist={watchlist} />}
           {page === 'watchlist' && <WatchlistPage watchlist={watchlist} portfolioTickers={billingPro ? portfolioTickers : []} onUpgrade={onUpgrade} alertsMasterOn={alertsMaster} />}
           {page === 'account' && <AccountPage user={user} onUpgrade={onUpgrade} dark={dark} setDark={setDark} />}
           {/* Phones: the footer scrolls with the page and ends above the tab bar.
@@ -7543,7 +7442,6 @@ const SEO_TITLES = {
   '/data': 'Insider Trading Signals & Raw SEC Filings | Market Data — Seli',
   '/insights': 'Top Insider Traders Ranked by Performance | Leaderboard — Seli',
   '/home': 'Seli: Insider Trading & Congress Stock Tracker',
-  '/blog': 'Seli Blog — Insider Trading Intelligence, SEC Form 4 Analysis & Market Signals',
   '/onboard': 'Get Started — Seli',
 };
 const SEO_DESCRIPTIONS = {
@@ -7552,7 +7450,6 @@ const SEO_DESCRIPTIONS = {
   '/data-download': 'Download the complete SEC Form 4 insider trading dataset. 10+ years of corporate executive trades as structured CSV. One-time purchase, $39.99. Works with Excel, Python, R.',
   '/data': 'Live feed of SEC Form 4 insider trades scored by conviction. Filter by sector, type, role, and date. Export to CSV.',
   '/insiders': 'See which corporate insiders have the best track records. Ranked by hit rate, average return, and proxy score across 10+ years of open-market trades.',
-  '/blog': 'Research, analysis, and strategy for tracking SEC Form 4 insider trades. Conviction scoring, cluster detection, congressional trade tracking, and dataset guides.',
   '/onboard': 'Interactive onboarding guide for Seli. Learn how insider trading signals work, build your watchlist, and set up alerts.',
 };
 

@@ -21,7 +21,7 @@
 import {
   tickerStatus, buildClusters, clusterOut, prettyPerson, prettyCompany, shortRole, isCongress, asDate, todayStr, isEntityName, buyBreak, isPlaceholderTicker,
 } from './intel.js';
-import { DATA_ROUTES, reversalSql } from './data.js';
+import { DATA_ROUTES, reversalSql, offeringSql } from './data.js';
 
 const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,9}$/;
 const FREE_DAYS = 365;
@@ -201,7 +201,7 @@ async function stock(ctx, ticker) {
   const T = sqlVal(ticker);
   const date = 'COALESCE(f.transaction_date, f.filing_date)';
   const in1y = `${date} >= CURRENT_DATE - ${FREE_DAYS}`;
-  const [PLANNED, REV] = await Promise.all([plannedSql(ctx), reversalSql(ctx)]);
+  const [PLANNED, REV, OFF] = await Promise.all([plannedSql(ctx), reversalSql(ctx), offeringSql(ctx)]);
   // Everything runs in parallel, including the plan check. Queries fetch the
   // Pro-sized window and the free window is applied afterwards in JS.
   const [pro, meta, trades, older, people, prices, status] = await Promise.all([
@@ -213,7 +213,7 @@ async function stock(ctx, ticker) {
              f.transaction_type, f.is_open_market, ${PLANNED} AS is_routine, f.shares::float AS shares,
              f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
              f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date,
-             f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class, ${REV} AS reversal,
+             f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class, ${REV} AS reversal, ${OFF} AS offering,
              -- For the "First buy in 4 yrs" tag (buyBreak in intel.js): this
              -- person's last open-market buy at least a month before, and how
              -- far back their trades in this stock go.
@@ -302,6 +302,7 @@ function tradeOut(r) {
     shares: num(r.shares), price: num(r.price), value: num(r.value), pct: num(r.pct), owned_after: num(r.owned_after),
     filed: asDate(r.filing_date), date: asDate(r.trade_date),
     ...(r.reversal === 'buy' || r.reversal === 'sell' ? { rev: r.reversal } : {}),
+    ...(r.offering === true ? { offering: true } : {}), // bought in a stock offering, not on the open market
     ...(r.other_class ? { other_class: true, security: r.security_title || '' } : {}),
     // "First buy in 4 yrs", only where the query supplied the history for it.
     ...('first_seen' in r && r.is_open_market && r.transaction_type === 'buy' && !cg
@@ -317,7 +318,7 @@ async function insider(ctx, raw) {
   if (!raw.trim()) return { __status: 400, error: 'Missing name' };
   const N = sqlVal(raw);
   const date = 'COALESCE(f.transaction_date, f.filing_date)';
-  const [PLANNED, REV] = await Promise.all([plannedSql(ctx), reversalSql(ctx)]);
+  const [PLANNED, REV, OFF] = await Promise.all([plannedSql(ctx), reversalSql(ctx), offeringSql(ctx)]);
   // The plan check runs alongside the main query instead of after it: one
   // fewer database round trip before the page can render.
   const [rows, pro] = await Promise.all([ctx.db(`
@@ -325,7 +326,7 @@ async function insider(ctx, raw) {
            f.transaction_code, f.transaction_type, f.is_open_market, ${PLANNED} AS is_routine, f.shares::float AS shares,
            f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
            f.shares_owned_after::float AS owned_after, f.filing_date, ${date} AS trade_date,
-           f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class, ${REV} AS reversal
+           f.security_title, ${OTHER_CLASS_SQL('f')} AS other_class, ${REV} AS reversal, ${OFF} AS offering
       FROM public.filings f
      WHERE f.insider_name = ${N} AND f.transaction_type IN ('buy','sell')
      ORDER BY ${date} DESC LIMIT 800`), ctx.isPro()]);

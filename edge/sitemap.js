@@ -1,7 +1,7 @@
-// Fetches a sitemap from the Worker and caches it at the edge for 6 hours.
+// Fetches a sitemap from the Worker and caches it at the edge (6 hours unless told otherwise).
 const DEFAULT_WORKER = 'https://neon-proxy.beastly-insider-trades.workers.dev';
 
-export async function proxyXml(context, path) {
+export async function proxyXml(context, path, maxAge = 21600) {
   const cache = caches.default;
   const key = new Request(new URL(path.replace('/public', ''), context.request.url).toString());
   const hit = await cache.match(key);
@@ -11,7 +11,7 @@ export async function proxyXml(context, path) {
   const res = await fetch(base + path, { headers, signal: AbortSignal.timeout(15000) });
   if (!res.ok) return new Response('Sitemap unavailable', { status: 503, headers: { 'Retry-After': '600' } });
   const out = new Response(await res.text(), {
-    headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=21600' },
+    headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': `public, max-age=${maxAge}` },
   });
   context.waitUntil(cache.put(key, out.clone()));
   return out;

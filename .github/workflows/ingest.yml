@@ -180,6 +180,31 @@ jobs:
           cd db
           python send_lifecycle.py
 
+      # seli.app/blog: writes up the few trades that clear the bar (see
+      # db/blog_generate.py) as drafts and emails each one to you to publish.
+      # Set the BLOG_AUTO_PUBLISH secret to "true" to skip the review step.
+      # Friday's after-close run also drafts the weekly roundup.
+      # A problem here never fails the ingest run.
+      - name: Blog posts
+        if: ${{ !cancelled() && steps.backup.outputs.skip != 'true' && github.event.inputs.dry_run != 'true' && steps.ingest.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERTS_FROM_EMAIL: ${{ secrets.ALERTS_FROM_EMAIL }}
+          APP_URL: ${{ secrets.APP_URL }}
+          NEON_PROXY_URL: ${{ secrets.NEON_PROXY_URL }}
+          EMAIL_LINK_SECRET: ${{ secrets.EMAIL_LINK_SECRET }}
+          MAILING_ADDRESS: ${{ secrets.MAILING_ADDRESS }}
+          OPS_EMAIL: ${{ secrets.OPS_EMAIL || secrets.WELCOME_REPLY_TO }}
+          BLOG_AUTO_PUBLISH: ${{ secrets.BLOG_AUTO_PUBLISH }}
+        run: |
+          cd db
+          python blog_generate.py
+          if [ "${{ steps.vars.outputs.tier }}" = "post" ] && [ "$(date -u +%u)" = "5" ]; then
+            python blog_generate.py --roundup
+          fi
+
       - name: Generate signal cards for Twitter
         if: success() && steps.backup.outputs.skip != 'true' && steps.vars.outputs.update_prices == 'true'
         env:

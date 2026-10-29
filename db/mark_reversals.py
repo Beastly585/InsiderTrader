@@ -55,7 +55,8 @@ def months(start: date, end: date):
         y, m = y2, m2
 
 
-def main():
+def run(fn: str, migration: str, summary_sql: str, summary):
+    """Calls public.<fn>(month_start, month_end) for every month since --since."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default="2013-01-01")
     args = ap.parse_args()
@@ -64,9 +65,9 @@ def main():
 
     conn = connect()
     with conn.cursor() as cur:
-        cur.execute("SELECT to_regproc('public.mark_reversals')")
+        cur.execute(f"SELECT to_regproc('public.{fn}')")
         if cur.fetchone()[0] is None:
-            sys.exit("public.mark_reversals() doesn't exist yet. Run STEPS 1-2 of db/migrations/2026-10-24_reversals.sql first.")
+            sys.exit(f"public.{fn}() doesn't exist yet. Run the first steps of db/migrations/{migration} first.")
     conn.commit()
 
     t0, total = time.time(), 0
@@ -74,7 +75,7 @@ def main():
         for attempt in range(1, 6):
             try:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT public.mark_reversals(%s::date, %s::date)", (a, b))
+                    cur.execute(f"SELECT public.{fn}(%s::date, %s::date)", (a, b))
                     n = cur.fetchone()[0]
                 conn.commit()
                 break
@@ -93,12 +94,13 @@ def main():
         print(f"  {a:%Y-%m}: {n:,} marked", flush=True)
 
     with conn.cursor() as cur:
-        cur.execute("SELECT reversal, COUNT(*) FROM public.filings WHERE reversal IS NOT NULL GROUP BY 1 ORDER BY 1")
-        counts = dict(cur.fetchall())
+        cur.execute(summary_sql)
+        rows = cur.fetchall()
     conn.close()
-    print(f"Done in {time.time() - t0:.0f}s. {total:,} rows changed. "
-          f"Reversals on record: {counts.get('buy', 0):,} buys, {counts.get('sell', 0):,} sales.")
+    print(f"Done in {time.time() - t0:.0f}s. {total:,} rows changed. {summary(rows)}")
 
 
 if __name__ == "__main__":
-    main()
+    run("mark_reversals", "2026-10-24_reversals.sql",
+        "SELECT reversal, COUNT(*) FROM public.filings WHERE reversal IS NOT NULL GROUP BY 1 ORDER BY 1",
+        lambda rows: (lambda c: f"Reversals on record: {c.get('buy', 0):,} buys, {c.get('sell', 0):,} sales.")(dict(rows)))

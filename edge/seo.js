@@ -92,7 +92,7 @@ export async function workerJson(context, path) {
   return { status: got.status, data: got.data };
 }
 
-// page: { status, title, description, canonical, jsonld, body, prefetch: {path, data}, noindex }
+// page: { status, title, description, canonical, jsonld, body, prefetch: {path, data}, noindex, headHtml, ogType }
 export async function renderShell(context, page) {
   const { request, env } = context;
   const shell = await env.ASSETS.fetch(new URL('/', request.url));
@@ -110,6 +110,7 @@ export async function renderShell(context, page) {
     attr('meta[property="og:title"]', 'content', page.title),
     attr('meta[property="og:description"]', 'content', description),
     attr('meta[property="og:url"]', 'content', canonical),
+    ...(page.ogType ? [attr('meta[property="og:type"]', 'content', page.ogType)] : []),
     attr('meta[name="twitter:title"]', 'content', page.title),
     attr('meta[name="twitter:description"]', 'content', description),
     attr('meta[name="twitter:url"]', 'content', canonical),
@@ -117,7 +118,7 @@ export async function renderShell(context, page) {
     attr('meta[name="robots"]', 'content', page.noindex ? 'noindex, follow' : 'index, follow'),
     // The homepage's generic WebApplication block doesn't describe this page.
     ...(page.keepJsonLd ? [] : [['script[type="application/ld+json"]', { element(el) { el.remove(); } }]]),
-    ['head', { element(el) { el.append(ld + prefetch, { html: true }); } }],
+    ['head', { element(el) { el.append(ld + prefetch + (page.headHtml || ''), { html: true }); } }],
     ['#root', { element(el) { el.setInnerContent(page.body, { html: true }); } }],
     // The homepage's noscript pitch would be duplicate text on every page.
     ...(page.keepJsonLd ? [] : [['body noscript', { element(el) { el.remove(); } }]]),
@@ -155,11 +156,11 @@ export const crumbs = items => ({
 export function layout(inner) {
   return `<div class="seo-shell">
 <header class="seo-top"><a href="/" class="seo-logo">Seli</a>
-<nav><a href="/stocks">Stocks</a> <a href="/insider-buying">Insider buying</a> <a href="/congress">Congress trades</a> <a href="/leaderboard">Leaderboard</a> <a href="/">Sign up free</a></nav></header>
+<nav><a href="/stocks">Stocks</a> <a href="/insider-buying">Insider buying</a> <a href="/congress">Congress trades</a> <a href="/leaderboard">Leaderboard</a> <a href="/blog">News</a> <a href="/">Sign up free</a></nav></header>
 <main class="sx-page">${inner}</main>
 <footer class="seo-foot"><p>Seli tracks SEC Form 4 insider filings and STOCK Act disclosures from members of Congress.
 Data comes from SEC EDGAR and congressional disclosures. Not financial advice.</p>
-<p><a href="/stocks">All stocks A to Z</a> · <a href="/insider-buying">Insider buying this week</a> · <a href="/congress">Congress stock trades</a> · <a href="/about">About the data</a> · <a href="/data-download">Download the dataset</a></p></footer>
+<p><a href="/stocks">All stocks A to Z</a> · <a href="/blog">Insider trading news</a> · <a href="/insider-buying">Insider buying this week</a> · <a href="/congress">Congress stock trades</a> · <a href="/about">About the data</a> · <a href="/data-download">Download the dataset</a></p></footer>
 </div>`;
 }
 

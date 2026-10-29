@@ -21,6 +21,8 @@ const ALLOWED = [
   /^\/public\/data-stats$/,
   /^\/public\/stock\/[A-Za-z0-9.\-%]{1,30}$/,
   /^\/public\/insider\/[^?#]{1,400}$/,
+  /^\/public\/blog$/,
+  /^\/public\/blog\/post\/[a-z0-9-]{1,160}$/,
 ];
 
 const reply = (body, status, maxAge = 0) => new Response(JSON.stringify(body), {
@@ -32,9 +34,10 @@ export async function onRequestGet(context) {
   const url = new URL(context.request.url);
   const path = url.pathname.replace(/^\/edge-data/, '');
   if (!ALLOWED.some(re => re.test(path))) return reply({ error: 'Not found' }, 404);
-  // Only the leaderboard takes options; keep its query string so each
-  // variant is cached on its own. Everything else ignores query strings.
-  const full = path === '/public/leaderboard' ? path + url.search : path;
+  // Only the leaderboard and the blog list take options; keep their query
+  // string so each variant is cached on its own. Everything else ignores it
+  // (so a blog draft preview can never come from, or land in, this cache).
+  const full = (path === '/public/leaderboard' || path === '/public/blog') ? path + url.search : path;
   try {
     const { status, data } = await workerJson(context, full);
     if (!data || status >= 500) return reply({ error: 'Unavailable' }, 502);

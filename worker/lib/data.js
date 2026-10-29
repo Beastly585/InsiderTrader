@@ -55,6 +55,8 @@ export async function hasColumn(ctx, col) {
 }
 // filings.reversal ('buy' / 'sell' / NULL), from db/migrations/2026-10-24_reversals.sql.
 export const reversalSql = async (ctx, alias = 'f.') => ((await hasColumn(ctx, 'reversal')) ? `${alias}reversal` : 'NULL::text');
+// filings.offering (bought in a stock offering), from db/migrations/2026-10-28_offerings.sql.
+export const offeringSql = async (ctx, alias = 'f.') => ((await hasColumn(ctx, 'offering')) ? `${alias}offering` : 'NULL::boolean');
 
 // ── /api/filings ─────────────────────────────────────────────────────────────
 async function filings(ctx, url) {

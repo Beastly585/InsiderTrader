@@ -47,6 +47,7 @@ import { sqlVal } from './lib/sql.js';
 import { verifyClerkWebhook } from './lib/clerk-webhook.js';
 import { encryptSecret, decryptSecret } from './lib/crypto.js';
 import { computeSignature } from './lib/snaptrade-sign.js';
+import { handleBlogReview } from './lib/blog.js';
 import { handleResearch, refreshLeaderboards, ensureLeaderboards } from './lib/research.js';
 import { handlePublic } from './lib/public.js';
 import { sendEmail, dataExportEmail, proWelcomeEmail, testEmail } from './lib/email.js';
@@ -485,6 +486,13 @@ async function handleFetchInner(request, env, origin, ctx) {
     // the JWT check below, same reasoning as the two webhooks above.
     if (url.pathname === '/email/unsubscribe') {
       return handleEmailUnsubscribe(request, env, url);
+    }
+
+    // ── Blog review (from the draft email). Opened from an inbox, so no
+    // Origin or JWT; the per-post review token in the link IS the auth. GET
+    // shows Publish / Reject buttons, only the POST changes anything.
+    if (url.pathname === '/blog/review') {
+      return handleBlogReview(request, env, url, { neonFetch, sqlVal });
     }
 
     // Allow GET and POST

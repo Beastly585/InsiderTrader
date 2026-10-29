@@ -12,7 +12,8 @@
 //   GET /public/freshness                when the ingest last checked SEC (the "checked N min ago" line)
 //   GET /public/pricing                  { annual } whether yearly Pro is on sale
 //   GET /public/sitemap.xml              sitemap index
-//   GET /public/sitemap/{static,stocks,congress,insiders-N}.xml
+//   GET /public/sitemap/{static,stocks,congress,blog,insiders-N}.xml
+//   GET /public/blog, /public/blog/post/:slug   the blog (see blog.js)
 //
 // Everything is cached in memory per Worker isolate (Cache API doesn't work on
 // workers.dev), and the site's Pages Functions cache again at the edge, so
@@ -20,6 +21,7 @@
 // neon-proxy.js runs before this, same as every other route.
 
 import { stock, insider, marketFeed, search, leaderboard, tradeOut, TICKER_RE, FREE_DAYS } from './research.js';
+import { blogList, blogPost, blogSitemap } from './blog.js';
 import { prettyPerson, prettyCompany, shortRole, asDate, isPlaceholderTicker } from './intel.js';
 
 const SITE = 'https://seli.app';
@@ -77,6 +79,21 @@ export async function handlePublic(request, env, origin, url, deps) {
       const q = (url.searchParams.get('q') || '').trim().slice(0, 60).toLowerCase();
       return json(q ? await cached(`search|${q}`, TTL.hub, () => search(ctx, q)) : { stocks: [], people: [] }, 200, 300);
     }
+    if (parts[1] === 'blog' && !parts[2]) {
+      const key = `blog|${['page', 'q', 'ticker', 'insider', 'kind', 'limit'].map(k => url.searchParams.get(k) || '').join('|')}`.toLowerCase();
+      return json(await cached(key, 5 * 60 * 1000, () => blogList(ctx, url)), 200, 300);
+    }
+    if (parts[1] === 'blog' && parts[2] === 'post' && parts[3] && !parts[4]) {
+      const slug = decodeURIComponent(parts[3]).toLowerCase();
+      const preview = (url.searchParams.get('preview') || '').slice(0, 64);
+      if (preview) {
+        // A draft for review: never cached anywhere.
+        return json(await blogPost(ctx, slug, preview), 200, 0);
+      }
+      // 200 with known: false for a missing post, so the app shows its own
+      // "not found" and the site's page sets a 404 itself.
+      return json(await cached(`blogpost|${slug}`, 5 * 60 * 1000, () => blogPost(ctx, slug)), 200, 300);
+    }
     if (parts[1] === 'congress' && !parts[2]) return json(await cached('congress', TTL.hub, () => congressHub(ctx)));
     if (parts[1] === 'stocks' && !parts[2]) return json(await cached('stocks', TTL.sitemap, () => stocksDirectory(ctx)), 200, 3600);
     if (parts[1] === 'freshness' && !parts[2]) return json(await cached('freshness', 60 * 1000, () => freshness(ctx)), 200, 60);
@@ -92,6 +109,7 @@ export async function handlePublic(request, env, origin, url, deps) {
       const name = parts[2].replace(/\.xml$/, '');
       if (name === 'static') return xml(staticSitemap());
       if (name === 'stocks') return xml(await cached('sm|stocks', TTL.sitemap, () => stockSitemap(ctx)));
+      if (name === 'blog') return xml(await cached('sm|blog', 30 * 60 * 1000, () => blogSitemap(ctx, urlset)));
       if (name === 'congress') return xml(await cached('sm|congress', TTL.sitemap, () => peopleSitemap(ctx, true, 1)));
       const m = /^insiders-(\d{1,2})$/.exec(name);
       if (m) return xml(await cached(`sm|ins|${m[1]}`, TTL.sitemap, () => peopleSitemap(ctx, false, Number(m[1]))));
@@ -225,7 +243,7 @@ async function sitemapIndex(ctx) {
   const [cnt] = await ctx.db(`SELECT COUNT(*)::int AS n FROM public.search_entities WHERE ${PEOPLE_WHERE(false)}`);
   const files = Math.min(10, Math.max(1, Math.ceil((Number(cnt?.n) || 0) / PER_FILE)));
   const today = new Date().toISOString().slice(0, 10);
-  const maps = ['static', 'stocks', 'congress', ...Array.from({ length: files }, (_, i) => `insiders-${i + 1}`)];
+  const maps = ['static', 'blog', 'stocks', 'congress', ...Array.from({ length: files }, (_, i) => `insiders-${i + 1}`)];
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
     maps.map(m => `  <sitemap><loc>${SITE}/sitemap/${m}.xml</loc><lastmod>${today}</lastmod></sitemap>`).join('\n')
   }\n</sitemapindex>\n`;
