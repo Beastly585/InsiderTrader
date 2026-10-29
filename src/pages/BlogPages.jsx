@@ -20,7 +20,6 @@ import WatchButton from '../components/WatchButton.jsx';
 
 export const BLOG_TITLE = 'Insider Trading News: Notable Insider Buys and Sells | Seli';
 const KIND_LABEL = { buy: 'Insider buy', sell: 'Insider sale', roundup: 'Weekly roundup' };
-const KIND_CLASS = { buy: 'sx-chip--buy', sell: 'sx-chip--sell', roundup: 'sx-chip--accent' };
 
 const track = (event, props) => { try { window.posthog?.capture?.(event, props); } catch { /* analytics never breaks a page */ } };
 const navClick = path => e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); go(path); };
@@ -38,14 +37,19 @@ function dayLabel(key) {
 }
 const longDate = iso => (iso ? new Date(`${dayKey(iso)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '');
 
-function Tags({ post }) {
+// Time of day in New York, where filings are dated: "2:14 PM".
+const etTime = iso => (iso ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '');
+
+// One line above a headline: what kind of post, then its tags. Reads like a
+// newsroom kicker instead of a row of badges.
+function Kicker({ post, time }) {
+  const tags = (post.tags || []).filter(t => t !== 'Weekly roundup');
   return (
-    <span className="sx-blog__tags">
-      <span className={`sx-chip ${KIND_CLASS[post.kind] || ''}`}>{KIND_LABEL[post.kind] || post.kind}</span>
-      {(post.tags || []).filter(t => t !== 'Weekly roundup').map(t => (
-        <span key={t} className={`sx-chip${/reversal/i.test(t) ? ' sx-chip--rev' : ''}`}>{t}</span>
-      ))}
-    </span>
+    <p className="sx-kick">
+      {time && <span className="sx-kick__time">{time}</span>}
+      <span className={`sx-kick__kind sx-kick__kind--${post.kind}`}>{KIND_LABEL[post.kind] || post.kind}</span>
+      {tags.map(t => <span key={t} className={`sx-kick__tag${/reversal/i.test(t) ? ' sx-kick__tag--rev' : ''}`}>{t}</span>)}
+    </p>
   );
 }
 
@@ -94,11 +98,17 @@ export function BlogTimeline({ pageNo = 1 }) {
 
   return (
     <div className="sx-page sx-blog">
-      <header className="sx-head sx-head--page">
-        <div className="sx-head__main">
-          <h1 className="sx-head__title">Insider trading news</h1>
-          <p className="sx-head__desc">The insider trades worth a closer look, written up from SEC Form 4 filings as they come in: big and first-time buys, several insiders buying together, and heavy unplanned selling. Planned 10b5-1 trades, offering purchases and option exercises don't make the cut.</p>
-        </div>
+      <header className="sx-wire__head">
+        <p className="sx-wire__eyebrow"><span className="sx-wire__pulse" aria-hidden="true" />Seli newswire</p>
+        <h1 className="sx-wire__title">Insider trading news</h1>
+        <p className="sx-wire__desc">The insider trades worth a closer look, written up from SEC Form 4 filings as they're filed: big and first-time buys, several insiders buying together, and heavy unplanned selling. Planned 10b5-1 trades, offering purchases and option exercises don't make the cut.</p>
+        {d?.posts?.length > 0 && !filtered && (
+          <p className="sx-wire__stats">
+            <span>{d.total} {d.total === 1 ? 'post' : 'posts'}</span>
+            <span>Latest {dayLabel(dayKey(d.posts[0].published_at)).toLowerCase()} at {etTime(d.posts[0].published_at)} ET</span>
+            <a href="/blog/rss.xml" className="sx-link">RSS feed</a>
+          </p>
+        )}
       </header>
 
       <div className="sx-blog__bar">
@@ -125,23 +135,37 @@ export function BlogTimeline({ pageNo = 1 }) {
         </Empty></Card>
       )}
       {d && d.posts.length > 0 && (
-        <ol className="sx-tl" aria-label="Posts, newest first">
-          {groups.map(([k, posts]) => (
-            <li key={k} className="sx-tl__day">
-              <h2 className="sx-tl__date"><time dateTime={k}>{dayLabel(k)}</time></h2>
-              <ul className="sx-tl__posts">
-                {posts.map(p => (
-                  <li key={p.slug} className={`sx-tl__post sx-tl__post--${p.kind}`}>
-                    <Tags post={p} />
-                    <h3 className="sx-tl__title"><a href={blogPath(p.slug)} onClick={navClick(blogPath(p.slug))}>{p.title}</a></h3>
-                    <p className="sx-tl__sum">{p.summary}</p>
-                    <p className="sx-tl__meta">
-                      {p.ticker && <StockLink ticker={p.ticker} />}
-                      {(p.insiders || []).slice(0, 3).map(i => <InsiderLink key={i.raw} raw={i.raw}>{i.name}</InsiderLink>)}
-                      {(p.insiders || []).length > 3 && <span className="sx-muted">+{p.insiders.length - 3} more</span>}
-                    </p>
-                  </li>
-                ))}
+        <ol className="sx-wire" aria-label="Posts, newest first">
+          {groups.map(([k, posts], gi) => (
+            <li key={k} className="sx-wire__day">
+              <h2 className="sx-wire__date"><time dateTime={k}>{dayLabel(k)}</time><span>{posts.length} {posts.length === 1 ? 'post' : 'posts'}</span></h2>
+              <ul className="sx-wire__list">
+                {posts.map((p, i) => {
+                  const lead = gi === 0 && i === 0 && page === 1 && !filtered;
+                  const names = p.insiders || [];
+                  return (
+                    <li key={p.slug} className={`sx-wire__item sx-wire__item--${p.kind}${lead ? ' sx-wire__item--lead' : ''}`}>
+                      <time className="sx-wire__time" dateTime={p.published_at}>{etTime(p.published_at)}</time>
+                      <span className="sx-wire__dot" aria-hidden="true" />
+                      <article className="sx-wire__body">
+                        <Kicker post={p} time={etTime(p.published_at)} />
+                        <h3 className="sx-wire__headline"><a href={blogPath(p.slug)} onClick={navClick(blogPath(p.slug))}>{p.title}</a></h3>
+                        <p className="sx-wire__sum">{p.summary}</p>
+                        {(p.ticker || names.length > 0) && <p className="sx-wire__foot">
+                          {p.ticker && <StockLink ticker={p.ticker} />}
+                          {p.amount != null && p.kind !== 'roundup' && <span className={`sx-wire__amt ${p.kind === 'sell' ? 'sx-down' : 'sx-up'}`}>{money(p.amount)}</span>}
+                          {names.length > 0 && (
+                            <span className="sx-wire__names">
+                              {names.slice(0, 3).map((n, j) => <React.Fragment key={n.raw}>{j > 0 && ', '}<InsiderLink raw={n.raw}>{n.name}</InsiderLink></React.Fragment>)}
+                              {names.length > 3 && <span className="sx-muted"> +{names.length - 3} more</span>}
+                            </span>
+                          )}
+                          <a className="sx-wire__read" href={blogPath(p.slug)} onClick={navClick(blogPath(p.slug))} aria-label={`Read: ${p.title}`}>Read <Icon name="arrow" size={12} /></a>
+                        </p>}
+                      </article>
+                    </li>
+                  );
+                })}
               </ul>
             </li>
           ))}
@@ -191,9 +215,9 @@ export function BlogPostPage({ slug, watchlist }) {
       </nav>
       <article>
         <header className="sx-post__head">
-          <Tags post={post} />
+          <Kicker post={post} />
           <h1 className="sx-post__title">{post.title}</h1>
-          <p className="sx-post__by">By {b.author || 'Kevin Maresca'} · <time dateTime={post.published_at || post.created_at}>{longDate(post.published_at || post.created_at)}</time>
+          <p className="sx-post__by">By <b>{b.author || 'Kevin Maresca'}</b> · <time dateTime={post.published_at || post.created_at}>{longDate(post.published_at || post.created_at)}, {etTime(post.published_at || post.created_at)} ET</time>
             {post.updated_at && post.published_at && dayKey(post.updated_at) !== dayKey(post.published_at) && <> · Updated {longDate(post.updated_at)}</>}
           </p>
         </header>

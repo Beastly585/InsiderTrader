@@ -61,7 +61,7 @@ function timeline(context, url, n) {
       description: n > 1 ? `Older insider trading write-ups from SEC Form 4 filings, page ${n}.` : (tickers.length ? `${DESC} Latest: ${tickers.join(', ')}.` : DESC),
       body: layout(`
 <header class="sx-head sx-head--page"><div class="sx-head__main"><h1 class="sx-head__title">Insider trading news${n > 1 ? `, page ${n}` : ''}</h1><p class="sx-head__desc">${h(DESC)}</p></div></header>
-<ol class="sx-tl">${posts.map(entry).join('') || '<li>The first write-ups land here as notable trades are filed.</li>'}</ol>
+<ol class="sx-wire">${posts.map(entry).join('') || '<li>The first write-ups land here as notable trades are filed.</li>'}</ol>
 ${nav ? `<p>${nav}</p>` : ''}`),
       prefetch: { path, data: d },
       jsonld: [

@@ -875,24 +875,60 @@ body.drawer-open .sx-nav { z-index: 94; }
 .sx-blog__pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 18px 0 6px; }
 .sx-empty .sx-link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
 
-/* Timeline: each day is a stop on a line, newest on top. */
-.sx-tl { list-style: none; margin: 0; padding: 0; }
-.sx-tl__day { position: relative; padding: 0 0 6px 22px; }
-.sx-tl__day::before { content: ''; position: absolute; left: 5px; top: 8px; bottom: -8px; width: 1px; background: var(--border-md); }
-.sx-tl__day:last-child::before { bottom: 12px; }
-.sx-tl__date { position: relative; margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
-.sx-tl__date::before { content: ''; position: absolute; left: -21px; top: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); box-sizing: border-box; }
-.sx-tl__posts { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
-.sx-tl__post { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; border-left: 3px solid var(--border-md); }
-.sx-tl__post--buy { border-left-color: var(--green-600); }
-.sx-tl__post--sell { border-left-color: var(--red-600); }
-.sx-tl__post--roundup { border-left-color: var(--accent); }
-.sx-tl__title { margin: 8px 0 4px; font-size: 16px; line-height: 1.35; font-weight: 700; letter-spacing: -.01em; }
-.sx-tl__title a { color: var(--text); text-decoration: none; }
-.sx-tl__title a:hover { color: var(--accent-strong); }
-.sx-tl__sum { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-2); }
-.sx-tl__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0 0; font-size: 12.5px; }
-.sx-tl__meta:empty { display: none; }
+/* Newswire: a rail down the left with each post's time and a dot in its
+   color (buy green, sale red, roundup accent), newest on top. */
+.sx-wire__head { margin: 6px 0 18px; max-width: 720px; }
+.sx-wire__eyebrow { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-strong); }
+.sx-wire__pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--green-600); box-shadow: 0 0 0 0 var(--green-600); animation: sx-pulse 2.4s ease-out infinite; }
+@keyframes sx-pulse { 0% { box-shadow: 0 0 0 0 rgba(62, 207, 142, .5); } 70% { box-shadow: 0 0 0 7px rgba(62, 207, 142, 0); } 100% { box-shadow: 0 0 0 0 rgba(62, 207, 142, 0); } }
+@media (prefers-reduced-motion: reduce) { .sx-wire__pulse { animation: none; } }
+.sx-wire__title { margin: 0 0 8px; font-size: 30px; line-height: 1.15; font-weight: 800; letter-spacing: -.025em; color: var(--text); }
+.sx-wire__desc { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-2); }
+.sx-wire__stats { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 12px 0 0; font-size: 12px; color: var(--text-3); }
+
+.sx-wire { list-style: none; margin: 4px 0 0; padding: 0; position: relative; }
+.sx-wire__day { position: relative; }
+.sx-wire__date { display: flex; align-items: baseline; gap: 10px; margin: 0; padding: 18px 0 10px 96px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text); border-bottom: 0.5px solid var(--border); }
+.sx-wire__date span { font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-3); }
+.sx-wire__day:first-child .sx-wire__date { padding-top: 6px; }
+.sx-wire__list { list-style: none; margin: 0; padding: 0; position: relative; }
+/* The rail: one continuous line through every dot. */
+.sx-wire__list::before { content: ''; position: absolute; left: 81px; top: 0; bottom: 0; width: 1px; background: var(--border-md); }
+.sx-wire__item { position: relative; display: grid; grid-template-columns: 70px 22px minmax(0, 1fr); column-gap: 4px; padding: 16px 0; border-bottom: 0.5px solid var(--border); }
+.sx-wire__item:last-child { border-bottom: none; }
+.sx-wire__time { padding-top: 2px; font: 600 11.5px var(--font-mono); color: var(--text-3); text-align: right; white-space: nowrap; }
+.sx-wire__dot { position: relative; z-index: 1; justify-self: center; width: 11px; height: 11px; margin-top: 3px; border-radius: 50%; background: var(--bg, #0b0c10); border: 2px solid var(--border-md); box-sizing: border-box; }
+.sx-wire__item--buy .sx-wire__dot { border-color: var(--green-600); }
+.sx-wire__item--sell .sx-wire__dot { border-color: var(--red-600); }
+.sx-wire__item--roundup .sx-wire__dot { border-color: var(--accent); }
+.sx-wire__item--buy:hover .sx-wire__dot { background: var(--green-600); }
+.sx-wire__item--sell:hover .sx-wire__dot { background: var(--red-600); }
+.sx-wire__item--roundup:hover .sx-wire__dot { background: var(--accent); }
+.sx-wire__body { min-width: 0; padding: 0 4px 0 6px; }
+.sx-wire__headline { margin: 6px 0 6px; font-size: 17px; line-height: 1.32; font-weight: 700; letter-spacing: -.012em; }
+.sx-wire__headline a { color: var(--text); text-decoration: none; }
+.sx-wire__headline a:hover { color: var(--accent-strong); }
+.sx-wire__sum { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sx-wire__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0 0; font-size: 12.5px; color: var(--text-2); }
+.sx-wire__amt { font: 700 13px var(--font-mono); }
+.sx-wire__names { min-width: 0; }
+.sx-wire__read { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--accent-strong); text-decoration: none; opacity: 0; transition: opacity .12s; }
+.sx-wire__item:hover .sx-wire__read, .sx-wire__read:focus-visible { opacity: 1; }
+/* The newest post on page one reads like a lead story. */
+.sx-wire__item--lead .sx-wire__headline { font-size: 23px; line-height: 1.25; letter-spacing: -.02em; margin: 8px 0 8px; }
+.sx-wire__item--lead .sx-wire__sum { font-size: 15px; -webkit-line-clamp: 3; color: var(--text); opacity: .86; }
+.sx-wire__item--lead .sx-wire__amt { font-size: 15px; }
+.sx-wire__item--lead .sx-wire__dot { width: 13px; height: 13px; margin-top: 2px; }
+
+/* Kicker: the line above a headline. */
+.sx-kick { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); }
+.sx-kick__tag::before, .sx-kick__time::after { content: '·'; margin: 0 7px; color: var(--text-3); font-weight: 400; }
+.sx-kick__kind--buy { color: var(--green-600); }
+.sx-kick__kind--sell { color: var(--red-600); }
+.sx-kick__kind--roundup { color: var(--accent-strong); }
+.sx-kick__tag { color: var(--text-2); }
+.sx-kick__tag--rev { color: var(--amber-600); }
+.sx-kick__time { display: none; font-weight: 600; letter-spacing: .02em; }
 
 /* One post */
 .sx-post__draft { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 8px 12px; border-radius: var(--radius-md); background: var(--amber-50); color: var(--amber-600); font-size: 13px; font-weight: 600; }
@@ -901,7 +937,7 @@ body.drawer-open .sx-nav { z-index: 94; }
 .sx-post article { display: flex; flex-direction: column; gap: 14px; }
 .sx-post__head { margin: 0; }
 .sx-blog .sx-row__title { white-space: normal; }
-.sx-post__title { margin: 10px 0 8px; font-size: 26px; line-height: 1.25; font-weight: 800; letter-spacing: -.02em; color: var(--text); }
+.sx-post__title { margin: 10px 0 10px; font-size: 30px; line-height: 1.25; font-weight: 800; letter-spacing: -.02em; color: var(--text); }
 .sx-post__by { margin: 0; font-size: 13px; color: var(--text-3); }
 .sx-post__lead { margin: 0; font-size: 16px; line-height: 1.65; color: var(--text); }
 .sx-post__grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px 16px; align-items: start; }
@@ -939,8 +975,14 @@ body.drawer-open .sx-nav { z-index: 94; }
   .sx-post__title { font-size: 21px; }
   .sx-post__lead { font-size: 15px; }
   .sx-post__grid { grid-template-columns: minmax(0, 1fr); }
-  .sx-tl__day { padding-left: 18px; }
-  .sx-tl__date::before { left: -17px; }
-  .sx-tl__post { padding: 12px 13px; }
-  .sx-tl__title { font-size: 15px; }
+  .sx-wire__title { font-size: 24px; }
+  .sx-wire__date { padding-left: 26px; }
+  .sx-wire__list::before { left: 7px; }
+  .sx-wire__item { grid-template-columns: 16px minmax(0, 1fr); column-gap: 8px; padding: 14px 0; }
+  .sx-wire__time { display: none; }
+  .sx-kick__time { display: inline; }
+  .sx-wire__headline { font-size: 16px; }
+  .sx-wire__item--lead .sx-wire__headline { font-size: 19px; }
+  .sx-wire__item--lead .sx-wire__sum { font-size: 14px; }
+  .sx-wire__read { display: none; }
 }
