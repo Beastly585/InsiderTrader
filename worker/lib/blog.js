@@ -6,6 +6,7 @@
 //   GET  /public/blog/post/:slug                       one post plus related posts
 //   GET  /public/blog/post/:slug?preview=<token>       a draft, for the review email (never cached)
 //   GET  /public/sitemap/blog.xml                      (via public.js)
+//   GET  /public/sitemap/news.xml                      (via public.js) posts from the last 2 days, Google News format
 //   GET  /blog/review?id=&t=                           review page: Publish / Reject buttons
 //   POST /blog/review?id=&t=                           does it
 //
@@ -121,6 +122,58 @@ export async function blogSitemap(ctx, urlset) {
   ]);
 }
 
+// ── Google News sitemap ──────────────────────────────────────────────────────
+// Google News only reads posts from the last two days, so that's all this
+// lists; older posts stay in the regular blog sitemap. Empty is fine.
+// https://developers.google.com/search/docs/crawling-indexing/sitemaps/news-sitemap
+const xmlEsc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+export async function blogNewsSitemap(ctx) {
+  let rows = [];
+  try {
+    rows = await ctx.db(`SELECT slug, title, ticker, tags, published_at FROM public.blog_posts
+                          WHERE status = 'published' AND published_at > now() - interval '2 days'
+                          ORDER BY published_at DESC LIMIT 1000`);
+  } catch (e) { if (!missingTable(e)) throw e; }
+  const items = rows.map(r => `  <url>
+    <loc>${SITE}/blog/${xmlEsc(r.slug)}</loc>
+    <news:news>
+      <news:publication><news:name>Seli</news:name><news:language>en</news:language></news:publication>
+      <news:publication_date>${new Date(r.published_at).toISOString()}</news:publication_date>
+      <news:title>${xmlEsc(r.title)}</news:title>
+    </news:news>
+  </url>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+${items}
+</urlset>
+`;
+}
+
+// ── IndexNow ─────────────────────────────────────────────────────────────────
+// Tells Bing (and through it DuckDuckGo, Yahoo, ChatGPT search; also Yandex,
+// Naver, Seznam) that a page just changed, so it's crawled in minutes instead
+// of days. Google doesn't use IndexNow; it reads the news sitemap above.
+// Needs the INDEXNOW_KEY secret and the same key served at
+// https://seli.app/<key>.txt (public/<key>.txt). Without them it does nothing.
+// Never throws: a ping that fails is only logged.
+export async function indexNow(env, urls) {
+  const key = (env.INDEXNOW_KEY || '').trim();
+  if (!key || !urls.length) return false;
+  try {
+    const res = await fetch('https://api.indexnow.org/indexnow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ host: 'seli.app', key, keyLocation: `${SITE}/${key}.txt`, urlList: urls }),
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok && res.status !== 202) console.error('[IndexNow] ping returned', res.status, (await res.text()).slice(0, 200));
+    return res.ok || res.status === 202;
+  } catch (e) {
+    console.error('[IndexNow] ping failed:', e.message);
+    return false;
+  }
+}
+
 // ── Review (from the draft email) ────────────────────────────────────────────
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -195,6 +248,8 @@ export async function handleBlogReview(request, env, url, { neonFetch, sqlVal, f
     return page('Something broke', P("Couldn't save that. Try again in a minute."));
   }
   forgetBlog?.();
+  // The post went live or came down: tell the search engines that take pings.
+  await indexNow(env, [live, `${SITE}/blog`]);
   if (action === 'publish') {
     return page('Published', head + P(`Live at <a href="${esc(live)}" style="color:#5A4FE8;">${esc(live.replace('https://', ''))}</a>. It shows on the blog within a minute.`) + btn('Undo (take it down)', 'reject', false));
   }

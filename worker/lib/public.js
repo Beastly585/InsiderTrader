@@ -12,7 +12,7 @@
 //   GET /public/freshness                when the ingest last checked SEC (the "checked N min ago" line)
 //   GET /public/pricing                  { annual } whether yearly Pro is on sale
 //   GET /public/sitemap.xml              sitemap index
-//   GET /public/sitemap/{static,stocks,congress,blog,insiders}.xml
+//   GET /public/sitemap/{static,stocks,congress,blog,news,insiders}.xml
 //   GET /public/blog, /public/blog/post/:slug   the blog (see blog.js)
 //
 // Everything is cached in memory per Worker isolate (Cache API doesn't work on
@@ -21,7 +21,7 @@
 // neon-proxy.js runs before this, same as every other route.
 
 import { stock, insider, marketFeed, search, leaderboard, tradeOut, TICKER_RE, FREE_DAYS } from './research.js';
-import { blogList, blogPost, blogSitemap } from './blog.js';
+import { blogList, blogPost, blogSitemap, blogNewsSitemap } from './blog.js';
 import { prettyPerson, prettyCompany, shortRole, asDate, isPlaceholderTicker, isEntityName } from './intel.js';
 
 const SITE = 'https://seli.app';
@@ -32,7 +32,7 @@ const mem = new Map();
 // Publishing or taking down a post clears this instance's blog copies at once
 // (called from the review page in blog.js).
 export function forgetBlog() {
-  for (const k of [...mem.keys()]) if (k.startsWith('blog') || k === 'sm|blog') mem.delete(k);
+  for (const k of [...mem.keys()]) if (k.startsWith('blog') || k === 'sm|blog' || k === 'sm|news') mem.delete(k);
 }
 
 async function cached(key, ttl, fn) {
@@ -119,6 +119,7 @@ export async function handlePublic(request, env, origin, url, deps) {
       if (name === 'static') return xml(staticSitemap());
       if (name === 'stocks') return xml(await cached('sm|stocks', TTL.sitemap, () => stockSitemap(ctx)));
       if (name === 'blog') return xml(await cached('sm|blog', 10 * 60 * 1000, () => blogSitemap(ctx, urlset)));
+      if (name === 'news') return xml(await cached('sm|news', 5 * 60 * 1000, () => blogNewsSitemap(ctx)));
       if (name === 'congress') return xml(await cached('sm|congress', TTL.sitemap, () => congressSitemap(ctx)));
       // insiders-1.xml is the old name Google already knows; insiders-2 and up
       // no longer exist and answer with an empty list so Google drops them.
@@ -220,6 +221,7 @@ async function congressHub(ctx) {
 //
 //   static    the hub pages
 //   blog      /blog and every published post (blog.js)
+//   news      posts from the last 2 days, in Google News format (blog.js)
 //   stocks    an open-market buy or sale by a company insider in 12 months
 //   insiders  company insiders with an open-market trade in 12 months and
 //             2+ trades or $100K+ (funds and holding companies left out),
@@ -268,7 +270,7 @@ const CONGRESS_WHERE = `kind = 'person' AND congress = true AND last_date >= CUR
 
 async function sitemapIndex() {
   const today = new Date().toISOString().slice(0, 10);
-  const maps = ['static', 'blog', 'stocks', 'insiders', 'congress'];
+  const maps = ['static', 'blog', 'news', 'stocks', 'insiders', 'congress'];
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
     maps.map(m => `  <sitemap><loc>${SITE}/sitemap/${m}.xml</loc><lastmod>${today}</lastmod></sitemap>`).join('\n')
   }\n</sitemapindex>\n`;
