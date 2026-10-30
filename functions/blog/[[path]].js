@@ -87,11 +87,14 @@ ${b.context?.length ? `<section class="sx-post__sec"><h2>Context</h2><ul>${li(b.
 <p><a href="${stockHref(p.ticker)}">Every ${h(p.ticker)} insider trade, with a price chart</a>${(b.people || [])[0] ? ` · <a href="${personHref(b.people[0].raw)}">${h(b.people[0].name)}'s trades</a>` : ''}</p>`;
 }
 function roundupHtml(b) {
-  const rows = (list, sell) => (list || []).map(r => `<tr><td><a href="${stockHref(r.ticker)}">${h(r.ticker)}</a> ${h(r.company)}</td><td>${r.insiders}</td><td>${money(r.value)}</td>${
-    sell ? `<td>${r.planned} of ${r.trades} planned</td>` : `<td>${price(r.avg_price)}</td><td>${r.now ? price(r.now) : ''}</td>`}</tr>`).join('');
+  const v2 = (b.v || 1) >= 2; // who by role, discretionary sells, stake sold
+  const sellCell = r => (v2 ? `<td>${r.stake ? `${h(r.stake.role)} sold ${r.stake.pct}% of their shares` : ''}</td>` : `<td>${r.planned} of ${r.trades} planned</td>`);
+  const rows = (list, sell) => (list || []).map(r => `<tr><td><a href="${stockHref(r.ticker)}">${h(r.ticker)}</a> ${h(r.company)}</td><td>${v2 ? h(r.who) : r.insiders}</td><td>${money(r.value)}</td>${
+    sell ? sellCell(r) : `<td>${price(r.avg_price)}</td><td>${r.now ? price(r.now) : ''}</td>${v2 ? `<td>${h((r.signal || []).join(', '))}</td>` : ''}`}</tr>`).join('');
   return `<p class="sx-post__lead">${h(b.lead)}</p>
-${b.buys?.length ? `<section class="sx-card"><div class="sx-card__body"><h2 class="sx-card__title">Biggest buying</h2><table class="sx-table"><thead><tr><th>Stock</th><th>Insiders</th><th>Bought</th><th>Avg price</th><th>Now</th></tr></thead><tbody>${rows(b.buys, false)}</tbody></table></div></section>` : ''}
-${b.sells?.length ? `<section class="sx-card"><div class="sx-card__body"><h2 class="sx-card__title">Biggest selling</h2><table class="sx-table"><thead><tr><th>Stock</th><th>Insiders</th><th>Sold</th><th>Planned</th></tr></thead><tbody>${rows(b.sells, true)}</tbody></table></div></section>` : ''}
+${b.buys?.length ? `<section class="sx-card"><div class="sx-card__body"><h2 class="sx-card__title">Biggest buying</h2><table class="sx-table"><thead><tr><th>Stock</th><th>${v2 ? 'Who' : 'Insiders'}</th><th>Bought</th><th>Avg price</th><th>Now</th>${v2 ? '<th>Signal</th>' : ''}</tr></thead><tbody>${rows(b.buys, false)}</tbody></table></div></section>` : ''}
+${b.sells?.length ? `<section class="sx-card"><div class="sx-card__body"><h2 class="sx-card__title">${v2 ? 'Biggest discretionary selling' : 'Biggest selling'}</h2><table class="sx-table"><thead><tr><th>Stock</th><th>${v2 ? 'Who' : 'Insiders'}</th><th>Sold</th><th>${v2 ? 'Stake sold' : 'Planned'}</th></tr></thead><tbody>${rows(b.sells, true)}</tbody></table></div></section>` : ''}
+${v2 && b.planned_sold ? `<p>Planned 10b5-1 sales this week (not shown): ${money(b.planned_sold)} across ${b.planned_stocks} stocks.</p>` : ''}
 ${b.method ? `<p>${h(b.method)}</p>` : ''}`;
 }
 

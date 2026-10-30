@@ -29,6 +29,7 @@ with a link to publish them. BLOG_AUTO_PUBLISH=true publishes straight away.
                                              90 days (writes blog_backtest.md, changes nothing)
     python blog_generate.py --roundup        the weekly "Insider Buying This Week" post
                                              (Fridays), plus the same tables as Reddit markdown
+    python blog_generate.py --roundup --resend   same, and email the Reddit version again
 
 Needs DATABASE_URL, and db/migrations/2026-10-28_blog.sql run for anything but --backtest.
 Env: OPS_EMAIL (review emails), BLOG_AUTO_PUBLISH, DRY_RUN, plus email_kit's.
@@ -683,66 +684,169 @@ def review_digest(items: list[tuple[dict, dict]]) -> None:
 
 
 # ── Weekly roundup ───────────────────────────────────────────────────────────
+# Monday to as_of: the biggest open-market buying and the biggest
+# DISCRETIONARY selling by company insiders. Planned 10b5-1 sales are counted
+# in one line under the sells table, not shown in it (they carry far less
+# signal). Funds, holding companies and offering purchases are left out, same
+# as the posts. For each stock: who (by role), what they paid vs now and the
+# 52-week range; buys get a Signal (cluster, first buy in years, reversal),
+# sells get how much of their own stake the heaviest seller sold.
+ROLE_RANK = ["CEO", "CFO", "President", "Chair", "COO", "CTO", "C-suite exec", "VP", "Director", "10% owner"]
+STAKE_FLAG = 0.5   # selling half or more of their own shares gets called out
+
+
+def _role_rank(role: str) -> int:
+    return ROLE_RANK.index(role) if role in ROLE_RANK else len(ROLE_RANK)
+
+
+def who_txt(roles: list[str]) -> str:
+    """'CEO + 2 others', 'Director', 'CFO + 1 other'."""
+    if not roles:
+        return "n/a"
+    lead = min(roles, key=_role_rank)
+    lead = role_title(lead) if lead not in ("CEO", "CFO", "COO", "CTO") else lead
+    n = len(roles) - 1
+    return lead if n == 0 else f"{lead} + {n} other{'s' if n > 1 else ''}"
+
+
 def roundup(cur, cols: set[str], as_of: date) -> dict | None:
-    """Monday to as_of. The biggest buying and selling by company insiders,
-    open-market only, with price context and how much of the selling was planned."""
     start = as_of - timedelta(days=as_of.weekday())
     planned = "COALESCE(f.planned, false)" if "planned" in cols else "false"
     dup = "f.duplicate_of IS NULL" if "duplicate_of" in cols else "TRUE"
+    rev = "f.reversal" if "reversal" in cols else "NULL::text"
+    trade = "COALESCE(f.transaction_date, f.filing_date)"
     per_person = fetch(cur, f"""
         SELECT f.ticker, MAX(f.company_name) AS company, f.transaction_type AS type, f.insider_name,
+               ({planned}) AS planned,
+               MODE() WITHIN GROUP (ORDER BY f.insider_title) AS title,
+               MODE() WITHIN GROUP (ORDER BY f.relationship) AS relationship,
                COUNT(*)::int AS trades, SUM(f.value)::float AS value, SUM(f.shares)::float AS shares,
-               COUNT(*) FILTER (WHERE {planned})::int AS planned
+               MIN({trade}) AS first, MAX({trade}) AS last,
+               -- shares still held after their last trade this week (Form 4 column 5)
+               (ARRAY_AGG(f.shares_owned_after::float ORDER BY {trade} DESC, f.shares_owned_after ASC)
+                  FILTER (WHERE f.shares_owned_after IS NOT NULL))[1] AS owned_after,
+               BOOL_OR({rev} = f.transaction_type) AS reversal,
+               ARRAY_AGG(DISTINCT f.accession_number) AS accessions
           FROM public.filings f
          WHERE f.is_open_market AND f.transaction_code IN ('P', 'S') AND {dup}
            AND f.ticker IS NOT NULL AND COALESCE(f.price_per_share, 0) >= 1
            AND COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%%'
            AND f.filing_date BETWEEN %(s)s AND %(e)s
-           AND f.filing_date - COALESCE(f.transaction_date, f.filing_date) <= {FRESH_DAYS}
-         GROUP BY f.ticker, f.transaction_type, f.insider_name""", {"s": start, "e": as_of})
-    # Company insiders only, same as the posts: funds and companies filing as
-    # big holders are left out, and so are closed-end funds.
+           AND f.filing_date - {trade} <= {FRESH_DAYS}
+         GROUP BY f.ticker, f.transaction_type, f.insider_name, ({planned})""", {"s": start, "e": as_of})
+
     agg: dict = {}
+    planned_sold, planned_tickers = 0.0, set()
     for r in per_person:
         if ii.is_fund_name(r["company"]) or ek.is_entity_name(r["insider_name"]):
             continue
+        if r["planned"]:
+            # Planned 10b5-1 trades: sales are totalled for one line under the
+            # table; planned buys (rare) are left out like in the posts.
+            if r["type"] == "sell":
+                planned_sold += r["value"] or 0
+                planned_tickers.add(r["ticker"])
+            continue
         a = agg.setdefault((r["ticker"], r["type"]), {"ticker": r["ticker"], "company": r["company"], "type": r["type"],
-                                                      "insiders": 0, "trades": 0, "value": 0.0, "shares": 0.0, "planned": 0})
-        a["insiders"] += 1
-        for k in ("trades", "value", "shares", "planned"):
-            a[k] += r[k] or 0
+                                                      "people": [], "trades": 0, "value": 0.0, "shares": 0.0, "accessions": set()})
+        a["people"].append({
+            "raw": r["insider_name"], "name": ek.pretty_person(r["insider_name"]),
+            "role": ek.short_role(r["title"], r["relationship"]), "value": r["value"] or 0, "shares": r["shares"] or 0,
+            "first": ek.as_date(r["first"]), "last": ek.as_date(r["last"]), "owned_after": r["owned_after"],
+            "reversal": bool(r["reversal"]),
+        })
+        a["trades"] += r["trades"]
+        a["value"] += r["value"] or 0
+        a["shares"] += r["shares"] or 0
+        a["accessions"] |= set(r["accessions"] or [])
     rows = list(agg.values())
+
+    def buy_signal(r) -> list[str]:
+        ppl = r["people"]
+        sig = []
+        real = [p for p in ppl if p["value"] >= BUY_CLUSTER_EACH]
+        if len(real) >= BUY_CLUSTER_N and r["value"] >= BUY_CLUSTER_MIN:
+            sig.append("Cluster")
+        # First buy in N years: same rule as the posts and the app (buy_break).
+        for p in sorted(ppl, key=lambda p: -p["value"]):
+            if p["value"] < BUY_SIGNAL_MIN or p["role"] == "10% owner" or not p["first"]:
+                continue
+            h = fetch(cur, f"""
+                SELECT (SELECT MAX({trade}) FROM public.filings f
+                         WHERE f.insider_name = %(n)s AND f.ticker = %(t)s AND f.is_open_market AND f.transaction_type = 'buy'
+                           AND {trade} < %(d)s::date - 30) AS prior,
+                       (SELECT MIN({trade}) FROM public.filings f WHERE f.insider_name = %(n)s AND f.ticker = %(t)s) AS seen""",
+                       {"n": p["raw"], "t": r["ticker"], "d": p["first"]})[0]
+            brk = ii.buy_break(ek.as_date(h["prior"]), ek.as_date(h["seen"]), p["last"])
+            if brk:
+                sig.append(brk[0])
+                break
+        if any(p["reversal"] and p["value"] >= BUY_SIGNAL_MIN for p in ppl):
+            sig.append("Reversal")
+        return sig
+
+    def stake_sold(r):
+        """The seller who let go of the biggest share of their own holding:
+        shares sold / (sold + still held after). None when no Form 4 says
+        what they still hold."""
+        best = None
+        for p in r["people"]:
+            if p["owned_after"] is None or not p["shares"]:
+                continue
+            frac = p["shares"] / (p["shares"] + max(p["owned_after"], 0))
+            if best is None or frac > best[1]:
+                best = (p, frac)
+        if not best:
+            return None
+        p, frac = best
+        return {"role": p["role"] if p["role"] in ("CEO", "CFO", "COO", "CTO") else role_title(p["role"]),
+                "name": p["name"], "pct": round(frac * 100), "flag": frac >= STAKE_FLAG}
+
     def table(kind, n=8):
         out = []
         for r in sorted([r for r in rows if r["type"] == kind and r["value"] >= ROUNDUP_MIN], key=lambda r: -r["value"])[:n]:
             pctx = price_context(cur, r["ticker"], as_of)
             avg = r["value"] / r["shares"] if r["shares"] else None
-            out.append({"ticker": r["ticker"], "company": short_company(ek.pretty_company(r["company"]) or r["ticker"]),
-                        "insiders": r["insiders"], "trades": r["trades"], "value": round(r["value"]),
-                        "avg_price": round(avg, 2) if avg else None, "now": pctx["now"] if pctx else None,
-                        "chg": ((pctx["now"] - avg) / avg * 100) if pctx and avg else None,
-                        "range_pos": range_pos(pctx, avg) if pctx and avg else None,
-                        "planned": r["planned"]})
+            row = {"ticker": r["ticker"], "company": short_company(ek.pretty_company(r["company"]) or r["ticker"]),
+                   "insiders": len(r["people"]), "who": who_txt([p["role"] for p in r["people"]]),
+                   "trades": r["trades"], "value": round(r["value"]),
+                   "avg_price": round(avg, 2) if avg else None, "now": pctx["now"] if pctx else None,
+                   "chg": ((pctx["now"] - avg) / avg * 100) if pctx and avg else None,
+                   "range_pos": range_pos(pctx, avg) if pctx and avg else None,
+                   "planned": 0}
+            if kind == "buy":
+                row["signal"] = buy_signal(r)
+            else:
+                row["stake"] = stake_sold(r)
+            out.append(row)
         return out
+
     buys, sells = table("buy"), table("sell")
     if not buys and not sells:
         return None
-    tb, ts = sum(r["value"] for r in rows if r["type"] == "buy"), sum(r["value"] for r in rows if r["type"] == "sell")
+    tb = sum(r["value"] for r in rows if r["type"] == "buy")
+    ts = sum(r["value"] for r in rows if r["type"] == "sell")
     span = f"{start:%b} {start.day} to {as_of:%b} {as_of.day}" if start.month != as_of.month else f"{start:%b} {start.day} to {as_of.day}"
     top_b = buys[0] if buys else None
     title = f"Insider Buying This Week ({span}): {top_b['company']} ({top_b['ticker']}) Leads" if top_b else f"Insider Trading This Week ({span})"
-    summary = (f"Company insiders bought {ek.money(tb)} and sold {ek.money(ts)} on the open market this week. "
-               f"The biggest buying and selling, with what they paid, where the stock sits now, and which sales were planned.")
+    summary = (f"Company insiders bought {ek.money(tb)} and made {ek.money(ts)} of discretionary sales on the open market this week. "
+               f"Who bought, what they paid, where the stock sits now, and how much of their own stake the sellers let go.")
+    big_stake = [r for r in sells if r.get("stake") and r["stake"]["flag"]]
     return {
         "slug": slugify("insider-buying-this-week", str(start), str(as_of)), "kind": "roundup", "ticker": None, "company": None,
         "insiders": [], "tags": ["Weekly roundup"], "title": title, "summary": summary, "amount": round(tb),
-        "accessions": [], "event_key": f"roundup|{start}",
+        # Every filing behind the tables, so a rerun later in the week updates
+        # the same post when new filings came in.
+        "accessions": sorted({a for r in rows for a in r["accessions"]}), "event_key": f"roundup|{start}",
         "search": (title + " " + " ".join(r["ticker"] + " " + r["company"] for r in buys + sells)).lower(),
-        "body": {"v": 1, "kind": "roundup", "author": AUTHOR, "as_of": str(as_of), "start": str(start),
+        "body": {"v": 2, "kind": "roundup", "author": AUTHOR, "as_of": str(as_of), "start": str(start),
                  "lead": summary.split(". ")[0] + ".", "bought": round(tb), "sold": round(ts),
+                 "planned_sold": round(planned_sold), "planned_stocks": len(planned_tickers),
                  "buys": buys, "sells": sells,
-                 "method": "Open-market Form 4 trades by company insiders, filed this week. Funds, offering purchases and filings more than 5 days late are left out. "
-                           "Planned means the trade was set up in advance under a 10b5-1 plan."},
+                 "callouts": [f"{r['ticker']}: {r['stake']['role']} {r['stake']['name']} sold {r['stake']['pct']}% of their shares."
+                              for r in big_stake],
+                 "method": "Open-market Form 4 trades by company insiders, filed this week. Planned 10b5-1 trades, funds, offering purchases "
+                           "and filings more than 5 days late are left out of the tables. Stake sold = shares sold / (sold + still held after)."},
     }
 
 
@@ -752,21 +856,40 @@ def reddit_markdown(post: dict) -> str:
         return "n/a" if p is None else f"{range_word(p)} ({p * 100:.0f}%)"
     def px(v):
         return price_txt(v) if v else "n/a"
+    def now_cell(r):
+        return px(r["now"]) + (f" ({pct_txt(r['chg'], 1)})" if r["chg"] is not None else "")
+    def stake_cell(r):
+        s = r.get("stake")
+        if not s:
+            return "n/a"
+        pct = f"**{s['pct']}%**" if s["flag"] else f"{s['pct']}%"
+        return f"{s['role']}, {pct}"
     out = [f"# {post['title']}", "", "**TL;DR**",
-           f"* Insiders bought {ek.money(b['bought'])} and sold {ek.money(b['sold'])} on the open market this week", ""]
+           f"* Insiders bought {ek.money(b['bought'])} on the open market this week",
+           f"* Discretionary selling: {ek.money(b['sold'])}"
+           + (f" (plus {ek.money(b['planned_sold'])} of planned 10b5-1 sales, not shown)" if b.get("planned_sold") else ""), ""]
     if b["buys"]:
-        out += ["## Biggest buying", "", "| Ticker | Insiders | Bought | Avg price | Now | 52-wk range |", "|---|---|---|---|---|---|"]
-        def now_cell(r):
-            return px(r["now"]) + (f" ({pct_txt(r['chg'], 1)})" if r["chg"] is not None else "")
-        out += [f"| {r['ticker']} | {r['insiders']} | {ek.money(r['value'])} | {px(r['avg_price'])} | {now_cell(r)} | {rng(r['range_pos'])} |"
+        out += ["## Biggest buying", "", "| Ticker | Who | Bought | Paid | Now | 52-wk range | Signal |", "|---|---|---|---|---|---|---|"]
+        out += [f"| {r['ticker']} | {r['who']} | {ek.money(r['value'])} | {px(r['avg_price'])} | {now_cell(r)} | {rng(r['range_pos'])} | {', '.join(r.get('signal') or []) or '-'} |"
                 for r in b["buys"]]
         out.append("")
     if b["sells"]:
-        out += ["## Biggest selling", "", "| Ticker | Insiders | Sold | Planned 10b5-1 | 52-wk range |", "|---|---|---|---|---|"]
-        out += [f"| {r['ticker']} | {r['insiders']} | {ek.money(r['value'])} | {r['planned']} of {r['trades']} | {rng(r['range_pos'])} |"
+        out += ["## Biggest discretionary selling", "", "| Ticker | Who | Sold | Most of own stake sold | Now vs sale | 52-wk range |", "|---|---|---|---|---|---|"]
+        out += [f"| {r['ticker']} | {r['who']} | {ek.money(r['value'])} | {stake_cell(r)} | {pct_txt(r['chg'], 1) if r['chg'] is not None else 'n/a'} | {rng(r['range_pos'])} |"
                 for r in b["sells"]]
         out.append("")
-    out += ["---", "", "**Notes**", "", "[your notes]", "", f"*{b['method']} Not advice, just what got filed.*"]
+    if b.get("planned_sold"):
+        out += [f"Planned 10b5-1 sales this week (set up months in advance, not shown): {ek.money(b['planned_sold'])} across {plural0(b['planned_stocks'], 'stock')}.", ""]
+    for c in b.get("callouts", []):
+        out.append(f"* {c}")
+    if b.get("callouts"):
+        out.append("")
+    out += ["---", "", "**Notes**", ""]
+    if b["buys"]:
+        out.append(f"* {b['buys'][0]['ticker']}: [why were insiders buying? news, earnings, a trial readout?]")
+    if b["sells"]:
+        out.append(f"* {b['sells'][0]['ticker']}: [right after earnings (trading window), or out of nowhere?]")
+    out += ["", f"*{b['method']} Not advice, just what got filed.*"]
     return "\n".join(out)
 
 
@@ -785,7 +908,10 @@ def run_daily(conn, as_of: date) -> None:
     review_digest(new)
 
 
-def run_roundup(conn, as_of: date) -> None:
+def run_roundup(conn, as_of: date, resend: bool = False) -> None:
+    """Saves (or refreshes) this week's roundup and emails the Reddit version.
+    A rerun with new filings updates the same post; resend=True emails the
+    Reddit version again even when nothing changed."""
     cur = conn.cursor()
     post = roundup(cur, columns(cur), as_of)
     if not post:
@@ -796,6 +922,7 @@ def run_roundup(conn, as_of: date) -> None:
     Path(os.environ.get("ROUNDUP_OUT", "weekly_roundup.md")).write_text(md)
     if what == "new":
         review_email(post, row)
+    if what in ("new", "updated") or resend:
         if OPS_EMAIL:
             html_doc = ek.shell(title="Reddit post: " + post["title"], preheader="This week's tables, ready to paste", label="Weekly roundup",
                                 body_rows=f'<tr><td class="px" style="padding:22px 28px 0;">'
@@ -849,6 +976,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backtest", type=int, metavar="DAYS")
     ap.add_argument("--roundup", action="store_true")
+    ap.add_argument("--resend", action="store_true", help="with --roundup: email the Reddit version again")
     ap.add_argument("--as-of", help="YYYY-MM-DD (default today)")
     ap.add_argument("--out", default="blog_backtest.md")
     args = ap.parse_args()
@@ -863,7 +991,7 @@ def main():
         return
     conn.commit()
     if args.roundup:
-        run_roundup(conn, as_of)
+        run_roundup(conn, as_of, resend=args.resend)
     else:
         run_daily(conn, as_of)
 

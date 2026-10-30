@@ -336,6 +336,10 @@ const rangeTxt = p => (p == null ? '—' : `${p < 0.25 ? 'Near the low' : p >= 0
 const chgTxt = c => (c == null ? '' : Math.abs(c) < 0.05 ? ' (flat)' : ` (${c >= 0 ? '+' : ''}${c.toFixed(1)}%)`);
 
 function RoundupBody({ b, cta }) {
+  // v2 roundups (from Oct 30, 2026): who by role, a signal for buys, and how
+  // much of their own stake the heaviest seller sold; sells are discretionary
+  // only. Older roundups keep the columns they were written with.
+  const v2 = (b.v || 1) >= 2;
   return (
     <>
       <p className="sx-post__lead">{b.lead}</p>
@@ -343,16 +347,17 @@ function RoundupBody({ b, cta }) {
         <Card title="Biggest buying" sub="What they paid, where the stock is now, and where it sits in its 52-week range" pad={false}>
           <div className="sx-table-wrap">
             <table className="sx-table">
-              <thead><tr><th>Stock</th><th className="sx-r">Insiders</th><th className="sx-r">Bought</th><th className="sx-r">Avg price</th><th className="sx-r">Now</th><th>52-wk range</th></tr></thead>
+              <thead><tr><th>Stock</th><th className={v2 ? '' : 'sx-r'}>{v2 ? 'Who' : 'Insiders'}</th><th className="sx-r">Bought</th><th className="sx-r">Avg price</th><th className="sx-r">Now</th><th>52-wk range</th>{v2 && <th>Signal</th>}</tr></thead>
               <tbody>
                 {b.buys.map(r => (
                   <tr key={r.ticker}>
                     <td><StockLink ticker={r.ticker} onClick={cta('roundup_stock')} /> <span className="sx-muted">{r.company}</span></td>
-                    <td className="sx-r">{r.insiders}</td>
+                    {v2 ? <td>{r.who}</td> : <td className="sx-r">{r.insiders}</td>}
                     <td className="sx-r sx-up">{money(r.value)}</td>
                     <td className="sx-r">{price(r.avg_price)}</td>
                     <td className="sx-r">{r.now ? price(r.now) : '—'}<span className="sx-muted">{chgTxt(r.chg)}</span></td>
                     <td>{rangeTxt(r.range_pos)}</td>
+                    {v2 && <td>{(r.signal || []).length ? r.signal.join(', ') : '—'}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -361,17 +366,20 @@ function RoundupBody({ b, cta }) {
         </Card>
       )}
       {(b.sells || []).length > 0 && (
-        <Card title="Biggest selling" sub="Planned means set up in advance under a 10b5-1 plan" pad={false}>
+        <Card title={v2 ? 'Biggest discretionary selling' : 'Biggest selling'}
+          sub={v2 ? 'Sales not set up in advance under a 10b5-1 plan. Stake sold: how much of their own shares the heaviest seller let go.' : 'Planned means set up in advance under a 10b5-1 plan'} pad={false}>
           <div className="sx-table-wrap">
             <table className="sx-table">
-              <thead><tr><th>Stock</th><th className="sx-r">Insiders</th><th className="sx-r">Sold</th><th className="sx-r">Planned</th><th>52-wk range</th></tr></thead>
+              <thead><tr><th>Stock</th><th className={v2 ? '' : 'sx-r'}>{v2 ? 'Who' : 'Insiders'}</th><th className="sx-r">Sold</th><th className="sx-r">{v2 ? 'Stake sold' : 'Planned'}</th><th>52-wk range</th></tr></thead>
               <tbody>
                 {b.sells.map(r => (
                   <tr key={r.ticker}>
                     <td><StockLink ticker={r.ticker} onClick={cta('roundup_stock')} /> <span className="sx-muted">{r.company}</span></td>
-                    <td className="sx-r">{r.insiders}</td>
+                    {v2 ? <td>{r.who}</td> : <td className="sx-r">{r.insiders}</td>}
                     <td className="sx-r sx-down">{money(r.value)}</td>
-                    <td className="sx-r">{r.planned} of {r.trades}</td>
+                    <td className="sx-r">{v2
+                      ? (r.stake ? <>{r.stake.role} <b className={r.stake.flag ? 'sx-down' : ''}>{r.stake.pct}%</b></> : '—')
+                      : `${r.planned} of ${r.trades}`}</td>
                     <td>{rangeTxt(r.range_pos)}</td>
                   </tr>
                 ))}
@@ -379,6 +387,10 @@ function RoundupBody({ b, cta }) {
             </table>
           </div>
         </Card>
+      )}
+      {v2 && b.planned_sold > 0 && <p className="sx-post__more">Planned 10b5-1 sales this week (set up months in advance, not shown): {money(b.planned_sold)} across {b.planned_stocks} {b.planned_stocks === 1 ? 'stock' : 'stocks'}.</p>}
+      {v2 && (b.callouts || []).length > 0 && (
+        <section className="sx-post__sec"><h2>Worth a look</h2><ul>{b.callouts.map((c, i) => <li key={i}>{c}</li>)}</ul></section>
       )}
       {b.method && <p className="sx-note">{b.method}</p>}
       <p className="sx-post__more">See every trade as it's filed on <a href="/insider-buying" onClick={e => { cta('insider_buying')(); navClick('/insider-buying')(e); }}>Insider buying this week</a>.</p>
