@@ -5,5 +5,6 @@ Disallow: /watchlist
 Disallow: /onboard
 Disallow: /purchase-complete
 Disallow: /redownload
+Disallow: /edge-data/
 
 Sitemap: https://seli.app/sitemap.xml

@@ -12,7 +12,7 @@
 //   GET /public/freshness                when the ingest last checked SEC (the "checked N min ago" line)
 //   GET /public/pricing                  { annual } whether yearly Pro is on sale
 //   GET /public/sitemap.xml              sitemap index
-//   GET /public/sitemap/{static,stocks,congress,blog,insiders-N}.xml
+//   GET /public/sitemap/{static,stocks,congress,blog,insiders}.xml
 //   GET /public/blog, /public/blog/post/:slug   the blog (see blog.js)
 //
 // Everything is cached in memory per Worker isolate (Cache API doesn't work on
@@ -22,7 +22,7 @@
 
 import { stock, insider, marketFeed, search, leaderboard, tradeOut, TICKER_RE, FREE_DAYS } from './research.js';
 import { blogList, blogPost, blogSitemap } from './blog.js';
-import { prettyPerson, prettyCompany, shortRole, asDate, isPlaceholderTicker } from './intel.js';
+import { prettyPerson, prettyCompany, shortRole, asDate, isPlaceholderTicker, isEntityName } from './intel.js';
 
 const SITE = 'https://seli.app';
 const TTL = { page: 30 * 60 * 1000, hub: 15 * 60 * 1000, sitemap: 6 * 3600 * 1000 };
@@ -113,15 +113,17 @@ export async function handlePublic(request, env, origin, url, deps) {
       const d = await marketFeed(ctx); // has its own 10-minute cache
       return json({ ...d, today: new Date().toISOString().slice(0, 10) }, 200, 300);
     }
-    if (parts[1] === 'sitemap.xml') return xml(await cached('sm|index', TTL.sitemap, () => sitemapIndex(ctx)));
+    if (parts[1] === 'sitemap.xml') return xml(await cached('sm|index', TTL.sitemap, () => sitemapIndex()));
     if (parts[1] === 'sitemap' && parts[2]) {
       const name = parts[2].replace(/\.xml$/, '');
       if (name === 'static') return xml(staticSitemap());
       if (name === 'stocks') return xml(await cached('sm|stocks', TTL.sitemap, () => stockSitemap(ctx)));
       if (name === 'blog') return xml(await cached('sm|blog', 10 * 60 * 1000, () => blogSitemap(ctx, urlset)));
-      if (name === 'congress') return xml(await cached('sm|congress', TTL.sitemap, () => peopleSitemap(ctx, true, 1)));
-      const m = /^insiders-(\d{1,2})$/.exec(name);
-      if (m) return xml(await cached(`sm|ins|${m[1]}`, TTL.sitemap, () => peopleSitemap(ctx, false, Number(m[1]))));
+      if (name === 'congress') return xml(await cached('sm|congress', TTL.sitemap, () => congressSitemap(ctx)));
+      // insiders-1.xml is the old name Google already knows; insiders-2 and up
+      // no longer exist and answer with an empty list so Google drops them.
+      if (name === 'insiders' || name === 'insiders-1') return xml(await cached('sm|ins', TTL.sitemap, () => insiderSitemap(ctx)));
+      if (/^insiders-\d{1,2}$/.test(name)) return xml(urlset([]));
     }
     return json({ error: 'Not found' }, 404);
   } catch (e) {
@@ -210,19 +212,36 @@ async function congressHub(ctx) {
 }
 
 // ── Sitemaps ─────────────────────────────────────────────────────────────────
-// Built from public.search_entities (the search index the 6am cron refreshes),
-// so a sitemap never scans the filings table.
-const PER_FILE = 40000;
+// Only pages that show something real go in: a stock or person page is listed
+// when it has open-market trades in its 12-month view, not just grants or a
+// filing from years ago. A new site that offers Google tens of thousands of
+// near-empty pages gets them "discovered, not indexed" and the whole site
+// judged thin; a few thousand solid ones get crawled and kept.
+//
+//   static    the hub pages
+//   blog      /blog and every published post (blog.js)
+//   stocks    an open-market buy or sale by a company insider in 12 months
+//   insiders  company insiders with an open-market trade in 12 months and
+//             2+ trades or $100K+ (funds and holding companies left out),
+//             top 15,000 by dollars
+//   congress  members with a trade in the last 2 years
+//
+// lastmod is the page's latest trade, so it only moves when the page does.
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 const urlset = urls => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
   urls.map(u => `  <url><loc>${esc(u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}</url>`).join('\n')
 }\n</urlset>\n`;
 const day = d => asDate(d) || null;
+const SM_TICKER = /^[A-Z0-9][A-Z0-9.\-]{0,9}$/;
+const SM_PEOPLE_MAX = 15000;
+const CORP = `COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%'`;
 
-export const STATIC_PATHS = ['/', '/stocks', '/congress', '/insider-buying', '/leaderboard', '/about', '/data-download', '/help', '/terms', '/privacy'];
+// Terms and privacy stay linked from every page's footer; they don't need to
+// be in a sitemap. /blog is listed in the blog sitemap.
+export const STATIC_PATHS = ['/', '/stocks', '/insider-buying', '/congress', '/leaderboard', '/about', '/data-download', '/help'];
 function staticSitemap() {
   const today = new Date().toISOString().slice(0, 10);
-  return urlset(STATIC_PATHS.map(p => ({ loc: SITE + p, lastmod: ['/', '/stocks', '/congress', '/insider-buying'].includes(p) ? today : null })));
+  return urlset(STATIC_PATHS.map(p => ({ loc: SITE + p, lastmod: ['/', '/stocks', '/congress', '/insider-buying', '/leaderboard'].includes(p) ? today : null })));
 }
 
 // Which stocks get a sitemap entry and a spot in the /stocks directory: a real
@@ -245,14 +264,11 @@ async function stocksDirectory(ctx) {
   };
 }
 
-const PEOPLE_WHERE = (congress) => `kind = 'person' AND congress = ${congress ? 'true' : 'false'}
-   AND last_date >= CURRENT_DATE - ${congress ? 1825 : 730} AND n >= ${congress ? 1 : 2}`;
+const CONGRESS_WHERE = `kind = 'person' AND congress = true AND last_date >= CURRENT_DATE - 730 AND n >= 1`;
 
-async function sitemapIndex(ctx) {
-  const [cnt] = await ctx.db(`SELECT COUNT(*)::int AS n FROM public.search_entities WHERE ${PEOPLE_WHERE(false)}`);
-  const files = Math.min(10, Math.max(1, Math.ceil((Number(cnt?.n) || 0) / PER_FILE)));
+async function sitemapIndex() {
   const today = new Date().toISOString().slice(0, 10);
-  const maps = ['static', 'blog', 'stocks', 'congress', ...Array.from({ length: files }, (_, i) => `insiders-${i + 1}`)];
+  const maps = ['static', 'blog', 'stocks', 'insiders', 'congress'];
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
     maps.map(m => `  <sitemap><loc>${SITE}/sitemap/${m}.xml</loc><lastmod>${today}</lastmod></sitemap>`).join('\n')
   }\n</sitemapindex>\n`;
@@ -260,16 +276,36 @@ async function sitemapIndex(ctx) {
 
 async function stockSitemap(ctx) {
   const rows = await ctx.db(`
-    SELECT e.key, e.last_date FROM public.search_entities e
-     WHERE ${STOCK_OK} AND e.last_date >= CURRENT_DATE - 1095
-     ORDER BY e.n DESC LIMIT ${PER_FILE}`);
-  return urlset(rows.map(r => ({ loc: `${SITE}/stock/${encodeURIComponent(r.key)}`, lastmod: day(r.last_date) })));
+    SELECT f.ticker, MAX(f.filing_date) AS last
+      FROM public.filings f
+     WHERE f.is_open_market AND f.transaction_type IN ('buy', 'sell') AND ${CORP}
+       AND f.filing_date >= CURRENT_DATE - 365 AND f.filing_date <= CURRENT_DATE
+       AND f.ticker IS NOT NULL
+     GROUP BY f.ticker
+     ORDER BY COUNT(*) DESC`);
+  return urlset(rows.filter(r => SM_TICKER.test(r.ticker) && !isPlaceholderTicker(r.ticker))
+    .map(r => ({ loc: `${SITE}/stock/${encodeURIComponent(r.ticker)}`, lastmod: day(r.last) })));
 }
 
-async function peopleSitemap(ctx, congress, page) {
+async function insiderSitemap(ctx) {
+  const rows = await ctx.db(`
+    SELECT f.insider_name AS name, MAX(f.filing_date) AS last
+      FROM public.filings f
+     WHERE f.is_open_market AND f.transaction_type IN ('buy', 'sell') AND ${CORP}
+       AND f.filing_date >= CURRENT_DATE - 365 AND f.filing_date <= CURRENT_DATE
+       AND f.insider_name IS NOT NULL AND f.insider_name <> ''
+     GROUP BY f.insider_name
+    HAVING COUNT(*) >= 2 OR SUM(f.value) >= 100000
+     ORDER BY SUM(f.value) DESC NULLS LAST
+     LIMIT ${SM_PEOPLE_MAX + 3000}`);
+  return urlset(rows.filter(r => !isEntityName(r.name)).slice(0, SM_PEOPLE_MAX)
+    .map(r => ({ loc: `${SITE}/insider/${encodeURIComponent(r.name)}`, lastmod: day(r.last) })));
+}
+
+async function congressSitemap(ctx) {
   const rows = await ctx.db(`
     SELECT key, last_date FROM public.search_entities
-     WHERE ${PEOPLE_WHERE(congress)}
-     ORDER BY n DESC, key LIMIT ${PER_FILE} OFFSET ${(Math.max(1, page) - 1) * PER_FILE}`);
+     WHERE ${CONGRESS_WHERE}
+     ORDER BY n DESC, key LIMIT 2000`);
   return urlset(rows.map(r => ({ loc: `${SITE}/insider/${encodeURIComponent(r.key)}`, lastmod: day(r.last_date) })));
 }
