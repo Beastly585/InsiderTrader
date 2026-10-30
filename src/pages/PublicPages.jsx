@@ -16,9 +16,12 @@ import { MarketSections } from './HomeFeed.jsx';
 
 const PUBLIC_LINKS = [
   { id: 'insiderBuying', label: 'Insider buying', short: 'Insider buys', path: '/insider-buying' },
-  { id: 'congress', label: 'Congress trades', short: 'Congress trades', path: '/congress' },
+  { id: 'congress', label: 'Congress trades', short: 'Congress', path: '/congress' },
   { id: 'leaderboard', label: 'Leaderboard', short: 'Leaderboard', path: '/leaderboard' },
+  { id: 'blog', label: 'News', short: 'News', path: '/blog' },
 ];
+// A blog post counts as being in News for the highlighted tab.
+const isOn = (page, id) => page === id || (id === 'blog' && page === 'blogPost');
 const POPULAR = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'JPM', 'PLTR', 'AMD'];
 
 const navClick = path => e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(path); };
@@ -70,8 +73,8 @@ export function PublicShell({ page, logoSrc, isMobile, watchTarget, children }) 
           <div className="sx-nav__mid">
             <nav className="sx-nav__links" aria-label="Main">
               {PUBLIC_LINKS.map(n => (
-                <a key={n.id} href={n.path} aria-current={page === n.id ? 'page' : undefined}
-                  className={`sx-nav__link${page === n.id ? ' sx-nav__link--on' : ''}`} onClick={navClick(n.path)}>{n.label}</a>
+                <a key={n.id} href={n.path} aria-current={isOn(page, n.id) ? 'page' : undefined}
+                  className={`sx-nav__link${isOn(page, n.id) ? ' sx-nav__link--on' : ''}`} onClick={navClick(n.path)}>{n.label}</a>
               ))}
             </nav>
             <div className="sx-nav__end">
@@ -88,7 +91,7 @@ export function PublicShell({ page, logoSrc, isMobile, watchTarget, children }) 
       {isMobile && (
         <nav className="sx-pub__tabs" aria-label="Browse">
           {PUBLIC_LINKS.map(n => (
-            <a key={n.id} href={n.path} className={page === n.id ? 'is-on' : ''} onClick={navClick(n.path)}>{n.short || n.label}</a>
+            <a key={n.id} href={n.path} className={isOn(page, n.id) ? 'is-on' : ''} onClick={navClick(n.path)}>{n.short || n.label}</a>
           ))}
         </nav>
       )}
@@ -133,7 +136,7 @@ function PopularStocks() {
   );
 }
 
-const FOOT_LINKS = [['All stocks', '/stocks'], ['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
+const FOOT_LINKS = [['All stocks', '/stocks'], ['Insider trading news', '/blog'], ['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
 
 export function PublicFooter({ logoSrc, className = '' }) {
   return (
@@ -306,6 +309,8 @@ const WHY = [
     body: 'The leaderboard shows which insiders and members of Congress have bought ahead of gains.' },
 ];
 
+const NEWS_KIND = { buy: 'Insider buy', sell: 'Insider sale', roundup: 'Weekly roundup' };
+
 // The front door: what Seli is, a search box, real data from this week, and
 // pricing. Same look as every other public page, no mock screenshots.
 export function PublicHome() {
@@ -315,6 +320,7 @@ export function PublicHome() {
   const { data: congress, error: congressErr, reload: reloadCongress } = useApi('/public/congress');
   const { data: leaders, error: leadersErr, reload: reloadLeaders } = useApi('/public/leaderboard?years=1&source=all');
   const { data: pricing } = useApi('/public/pricing');
+  const { data: news } = useApi('/public/blog?page=1&limit=3');
   // Each card shows its own "couldn't load" instead of pulsing forever.
   const loadingOr = (err, retry, lines) => err
     ? <div className="sx-card__body"><ErrorNote message="Couldn't load this right now." onRetry={retry} /></div>
@@ -399,6 +405,26 @@ export function PublicHome() {
         </div>
       </div>
 
+      {(news?.posts || []).length > 0 && (
+        <Card title="Latest from the newswire" sub="Notable insider trades, written up as they're filed" pad={false}
+          action={<a href="/blog" className="sx-link" onClick={navClick('/blog')}>All news <Icon name="arrow" size={12} /></a>}>
+          <ul className="sx-rows">
+            {news.posts.map(p => (
+              <li key={p.slug} className="sx-row">
+                {p.ticker && <StockLink ticker={p.ticker} />}
+                <div className="sx-row__main">
+                  <div className="sx-row__title" style={{ whiteSpace: 'normal' }}><a href={`/blog/${p.slug}`} onClick={navClick(`/blog/${p.slug}`)}>{p.title}</a></div>
+                  <div className="sx-row__sub">
+                    <span className={p.kind === 'sell' ? 'sx-down' : p.kind === 'buy' ? 'sx-up' : ''}>{NEWS_KIND[p.kind] || 'News'}</span>
+                    {p.published_at ? ` · ${shortDate(p.published_at.slice(0, 10))}` : ''}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <section className="sx-why">
         <h2 className="sx-section-title">Why use Seli</h2>
         <ul className="sx-why__list">
@@ -458,3 +484,4 @@ export function PublicHome() {
     </div>
   );
 }
+
