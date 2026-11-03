@@ -19,6 +19,16 @@ export const SITE = 'https://seli.app';
 const DEFAULT_WORKER = 'https://neon-proxy.beastly-insider-trades.workers.dev';
 const DATA_TTL = 15 * 60;       // seconds: after this, refresh in the background
 const STALE_MAX = 6 * 3600;     // seconds: up to this old, serve instantly while refreshing
+// Stock and people pages (and the A to Z list) only change when new filings
+// arrive, and crawlers revisit thousands of them around the clock. Refreshing
+// them every 15 minutes meant every crawler visit went to the database and
+// kept it from ever sleeping (Neon bills for every awake minute). Their copy
+// is refreshed after 6 hours and kept up to 3 days. The hub pages (insider
+// buying, Congress, leaderboard) stay at 15 minutes. Signed-in users don't
+// read these copies; their pages are always live.
+const SLOW = /^\/public\/(stock\/|insider\/|stocks$)/;
+const ttlFor = path => (SLOW.test(path) ? 6 * 3600 : DATA_TTL);
+const keepFor = path => (SLOW.test(path) ? 3 * 86400 : STALE_MAX);
 
 export const h = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const clip = (s, n = 158) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : s; };
@@ -51,11 +61,11 @@ async function fetchFromWorker(context, path, ms = FOREGROUND_MS) {
   return { status: res.status, data, text };
 }
 
-async function saveToCache(cache, key, got) {
+async function saveToCache(cache, key, got, path = '') {
   if (!cache || !got.data || !(got.status === 200 || got.status === 404)) return;
   await cache.put(key, new Response(got.text, {
     status: got.status,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${STALE_MAX}`, 'X-Fetched-At': String(Date.now()) },
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${keepFor(path)}`, 'X-Fetched-At': String(Date.now()) },
   }));
 }
 
@@ -66,7 +76,7 @@ function refreshInBackground(context, cache, key, path) {
   if (!cache || refreshing.has(path)) return;
   refreshing.add(path);
   context.waitUntil(fetchFromWorker(context, path, BACKGROUND_MS)
-    .then(got => saveToCache(cache, key, got))
+    .then(got => saveToCache(cache, key, got, path))
     .catch(() => {})
     .finally(() => refreshing.delete(path)));
 }
@@ -88,11 +98,11 @@ export async function workerJson(context, path) {
       try {
         const got = await fetchFromWorker(context, path, FOREGROUND_MS);
         if (got.data && (got.status === 200 || got.status === 404)) {
-          context.waitUntil(saveToCache(cache, key, got).catch(() => {}));
+          context.waitUntil(saveToCache(cache, key, got, path).catch(() => {}));
           return { status: got.status, data: got.data };
         }
       } catch { /* the old copy below beats nothing */ }
-    } else if (age > DATA_TTL) refreshInBackground(context, cache, key, path);
+    } else if (age > ttlFor(path)) refreshInBackground(context, cache, key, path);
     return { status: hit.status, data: await hit.json() };
   }
   // Nothing saved yet: one request to the Worker, allowed the longer
@@ -102,7 +112,7 @@ export async function workerJson(context, path) {
   // (The Worker itself runs one query per page at a time, so a burst of
   // misses doesn't turn into a burst of database work.)
   const pending = fetchFromWorker(context, path, BACKGROUND_MS);
-  context.waitUntil(pending.then(got => saveToCache(cache, key, got)).catch(() => {}));
+  context.waitUntil(pending.then(got => saveToCache(cache, key, got, path)).catch(() => {}));
   const got = await Promise.race([pending, new Promise((_, no) => setTimeout(() => no(new Error('Worker slow')), FOREGROUND_MS))]);
   return { status: got.status, data: got.data };
 }

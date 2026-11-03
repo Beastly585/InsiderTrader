@@ -310,15 +310,17 @@ const workerHandler = {
     // Cron work can legitimately run long queries; give it 10 minutes
     // instead of the 45s visitor-request limit in neonFetch.
     env = { ...env, NEON_TIMEOUT_MS: 600_000 };
-    // The */4 cron starts GitHub runs and keeps Neon awake, but only when
-    // people are likely around: weekdays 7am to 9pm Eastern. Pinging around
-    // the clock kept the database billing 24/7 (Neon sleeps after about 5
-    // idle minutes and charges only while awake). Outside that window it
-    // sleeps; the first request after that waits about half a second while
-    // it wakes, and public pages don't wait at all (edge/seo.js serves its
-    // saved copy and refreshes it in the background). The ingest wakes it
-    // on its own schedule, so data stays fresh either way.
-    // KEEP_WARM (Worker variable): 'always' | 'off' | default weekday daytime.
+    // The */4 cron starts the GitHub runs. It no longer keeps Neon awake by
+    // default: Neon bills for every minute it's awake and sleeps after ~5
+    // idle minutes, and pinging it every 4 minutes from 7am to 9pm on
+    // weekdays was most of the bill. Public pages come from the edge copy
+    // (edge/seo.js), so visitors don't wait on a sleeping database; a
+    // signed-in page after a quiet stretch waits about half a second while
+    // it wakes. The ingest runs wake it on their own schedule.
+    // KEEP_WARM (optional Worker variable) brings the ping back:
+    //   'market'  weekdays 9am to 4:30pm Eastern
+    //   'day'     weekdays 7am to 9pm Eastern (the old default)
+    //   'always'  around the clock
     if (event.cron === '*/4 * * * *') {
       if (shouldKeepWarm(env, new Date(event.scheduledTime || Date.now()))) {
         try {
@@ -344,8 +346,11 @@ const workerHandler = {
       } catch (e) {
         console.error('[Scheduled] ingestion health check threw:', String(e), e?.stack?.slice(0, 500));
       }
-      // Fill in at most one missing/stale saved leaderboard per tick.
-      try {
+      // Fill in at most one missing/stale saved leaderboard, once an hour
+      // (not every 4 minutes: the 6am cron rebuilds all of them, and if a
+      // save ever failed this would rerun a heavy query, and keep the
+      // database awake, every tick around the clock).
+      if (new Date(event.scheduledTime || Date.now()).getUTCMinutes() < 4) try {
         const built = await ensureLeaderboards(env, neonFetch, sqlVal);
         if (built) console.log('[Scheduled] leaderboard built:', built);
       } catch (e) {
@@ -3883,14 +3888,15 @@ async function sendProWelcome(env, clerkUserId, sub, periodEnd) {
 
 // Whether the */4 cron should keep Neon awake right now (see scheduled()).
 function shouldKeepWarm(env, now) {
-  const mode = (env.KEEP_WARM || '').toLowerCase();
+  const mode = (env.KEEP_WARM || 'off').toLowerCase();
   if (mode === 'always') return true;
-  if (mode === 'off') return false;
+  if (mode !== 'market' && mode !== 'day') return false;
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', hour12: false,
+    timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false,
   }).formatToParts(now).map(p => [p.type, p.value]));
-  const hour = Number(parts.hour) % 24;
-  return !['Sat', 'Sun'].includes(parts.weekday) && hour >= 7 && hour < 21;
+  if (['Sat', 'Sun'].includes(parts.weekday)) return false;
+  const t = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
+  return mode === 'market' ? t >= 9 * 60 && t < 16 * 60 + 30 : t >= 7 * 60 && t < 21 * 60;
 }
 
 // Things people did that an email may follow up on (db/send_lifecycle.py).
