@@ -344,20 +344,22 @@
 .hx-pulse__label { font-size: 12px; color: var(--text-2); }
 .hx-pulse__val { margin-top: 4px; font-family: var(--font-mono); font-size: 22px; font-weight: 600; }
 .hx-pulse__n { font-size: 12px; color: var(--text-2); }
-.hx-topbuy { display: flex; flex-direction: column; margin-bottom: 34px; padding: 16px 18px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--surface); color: var(--text); text-decoration: none; }
-.hx-topbuy:hover { border-color: var(--accent); text-decoration: none; color: var(--text); }
+.hx-topbuy { display: flex; flex-direction: column; margin-bottom: 34px; padding: 16px 18px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--surface); color: var(--text); }
 .hx-topbuy__label { font-size: 12px; color: var(--text-2); font-weight: 500; }
-.hx-topbuy__head { margin-top: 10px; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.hx-topbuy__head b { font-size: 15px; flex: none; }
+.hx-topbuy__head { margin-top: 10px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hx-topbuy__tk { font-size: 15px; font-weight: 600; color: var(--text); flex: none; text-decoration: none; }
+.hx-topbuy__co { color: var(--text); text-decoration: none; }
+.hx-topbuy__tk:hover, .hx-topbuy__co:hover { color: var(--accent-strong); text-decoration: none; }
+.hx-topbuy__head .sx-watch { flex: none; margin-left: auto; }
 .hx-topbuy__co { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hx-topbuy__amt { flex: none; font-family: var(--font-mono); font-size: 18px; font-weight: 600; }
+.hx-topbuy__amt { margin-top: 6px; font-family: var(--font-mono); font-size: 22px; font-weight: 600; }
 .hx-topbuy__people { margin-top: 10px; padding-top: 10px; border-top: 0.5px solid var(--border); display: flex; flex-direction: column; gap: 7px; }
 .hx-topbuy__who { display: flex; align-items: center; gap: 7px; font-size: 13.5px; min-width: 0; }
-.hx-topbuy__who > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hx-topbuy__who > a:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hx-topbuy__who .sx-role { align-self: center; flex: none; }
 .hx-topbuy__v { margin-left: auto; font-size: 12.5px; flex: none; }
 .hx-topbuy__more { font-size: 12px; color: var(--text-2); }
-.hx-topbuy__go { margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--accent-strong); display: inline-flex; align-items: center; gap: 5px; }
+.hx-topbuy__go { align-self: flex-start; text-decoration: none; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--accent-strong); display: inline-flex; align-items: center; gap: 5px; }
 
 /* Left column: the hero block sits in the middle of the first screen, not at the top. */
 @media (min-width: 981px) {
@@ -381,4 +383,11 @@
   .hx-filters__q { max-width: none; margin-left: 0; flex-basis: 100%; }
   .hx-filters__q .sx-search__input { height: 44px; font-size: 16px; }
   .hx-topbuy { margin-bottom: 22px; }
+}
+
+/* Hero a touch above center, and a slimmer main search */
+@media (min-width: 981px) {
+  .hx--out .hx__main { padding-top: 24px; padding-bottom: 150px; }
+  .hx-search .sx-search__input { height: 50px; }
+  .hx--in .hx-search .sx-search__input { height: 46px; }
 }

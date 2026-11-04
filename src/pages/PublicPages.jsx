@@ -12,6 +12,7 @@ import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segment
 import '../home.css';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
+import WatchButton from '../components/WatchButton.jsx';
 import { TradeTable } from './StockPage.jsx';
 import { MarketSections } from './HomeFeed.jsx';
 
@@ -474,18 +475,24 @@ function HowItWorks({ c, signUp }) {
 // The week's biggest open-market insider buy, raw facts only, pointing at the
 // full insider buying page. Sits above the newswire on the signed-out home.
 function TopBuyTile({ c }) {
+  const watchlist = usePublicWatchlist(); // Watch opens sign-up, then adds the stock
   return (
-    <a className="hx-topbuy" href="/insider-buying" onClick={navClick('/insider-buying')}>
+    <div className="hx-topbuy">
       <span className="hx-topbuy__label">Biggest insider buying this week</span>
-      <span className="hx-topbuy__head"><b className="sx-mono">{c.ticker}</b><span className="hx-topbuy__co">{c.company}</span><span className="hx-topbuy__amt sx-up">+{money(c.total)}</span></span>
+      <span className="hx-topbuy__head">
+        <a className="sx-mono hx-topbuy__tk" href={stockPath(c.ticker)} onClick={navClick(stockPath(c.ticker))}>{c.ticker}</a>
+        <a className="hx-topbuy__co" href={stockPath(c.ticker)} onClick={navClick(stockPath(c.ticker))}>{c.company}</a>
+        <WatchButton watchlist={watchlist} kind="stock" id={c.ticker} />
+      </span>
+      <span className="hx-topbuy__amt sx-up">+{money(c.total)}</span>
       <span className="hx-topbuy__people">
         {(c.buyers || []).slice(0, 2).map(b => (
-          <span key={b.raw} className="hx-topbuy__who"><span>{b.name}</span><RoleTag role={b.role} name={b.raw} /><span className="sx-mono sx-up hx-topbuy__v">{money(b.value)}</span></span>
+          <span key={b.raw} className="hx-topbuy__who"><InsiderLink raw={b.raw}>{b.name}</InsiderLink><RoleTag role={b.role} name={b.raw} /><span className="sx-mono sx-up hx-topbuy__v">{money(b.value)}</span></span>
         ))}
         {c.n_insiders > 2 && <span className="hx-topbuy__more">+ {plural(c.n_insiders - 2, 'more insider')}</span>}
       </span>
-      <span className="hx-topbuy__go">All insider buying this week <Icon name="arrow" size={12} /></span>
-    </a>
+      <a className="hx-topbuy__go" href="/insider-buying" onClick={navClick('/insider-buying')}>All insider buying this week <Icon name="arrow" size={12} /></a>
+    </div>
   );
 }
 
