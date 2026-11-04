@@ -9,6 +9,7 @@
 //   GET /public/search?q=nvda            search box for signed-out visitors
 //   GET /public/leaderboard?source=      top 10 insiders, last 12 months
 //   GET /public/stocks                   A to Z directory of stocks with recent Form 4s
+//   GET /public/trades?days=&type=&source=&min=&q=&sort=&page=   raw open-market trades, last 12 months
 //   GET /public/freshness                when the ingest last checked SEC (the "checked N min ago" line)
 //   GET /public/pricing                  { annual } whether yearly Pro is on sale
 //   GET /public/sitemap.xml              sitemap index
@@ -22,6 +23,7 @@
 
 import { stock, insider, marketFeed, search, leaderboard, tradeOut, TICKER_RE, FREE_DAYS } from './research.js';
 import { blogList, blogPost, blogSitemap, blogNewsSitemap } from './blog.js';
+import { explore } from './data.js';
 import { prettyPerson, prettyCompany, shortRole, asDate, isPlaceholderTicker, isEntityName } from './intel.js';
 
 const SITE = 'https://seli.app';
@@ -104,6 +106,26 @@ export async function handlePublic(request, env, origin, url, deps) {
       return json(await cached(`blogpost|${slug}`, 60 * 1000, () => blogPost(ctx, slug)), 200, 0);
     }
     if (parts[1] === 'congress' && !parts[2]) return json(await cached('congress', TTL.hub, () => congressHub(ctx)));
+    if (parts[1] === 'trades' && !parts[2]) {
+      // The signed-out Trades page: raw open-market trades (no grants or
+      // exercises), at most the last 12 months (explore() enforces that for
+      // anyone who isn't Pro). Only whitelisted values are passed through, so
+      // the cache key space stays small; each combination is kept 10 minutes.
+      const p = url.searchParams;
+      const days = [7, 30, 90, 365].includes(Number(p.get('days'))) ? Number(p.get('days')) : 30;
+      const q = new URLSearchParams({ om: '1', days: String(days) });
+      if (['buy', 'sell'].includes(p.get('type'))) q.set('type', p.get('type'));
+      if (['corporate', 'political'].includes(p.get('source'))) q.set('source', p.get('source'));
+      if (['100000', '1000000'].includes(p.get('min'))) q.set('min', p.get('min'));
+      if (p.get('sort') === 'value') q.set('sort', 'value');
+      const page = Math.max(0, Math.min(Number(p.get('page')) || 0, 9));
+      if (page) q.set('page', String(page));
+      const text = (p.get('q') || '').trim().slice(0, 40);
+      if (text.length >= 2) q.set('q', text);
+      const key = `trades|${q.toString().toLowerCase()}`;
+      const d = await cached(key, 10 * 60 * 1000, () => explore(ctx, new URL(`https://x/?${q}`)));
+      return json({ ...d, days }, 200, 300);
+    }
     if (parts[1] === 'stocks' && !parts[2]) return json(await cached('stocks', TTL.sitemap, () => stocksDirectory(ctx)), 200, 3600);
     if (parts[1] === 'freshness' && !parts[2]) return json(await cached('freshness', 60 * 1000, () => freshness(ctx)), 200, 60);
     // Whether the yearly Pro price is set up, so the pricing card only

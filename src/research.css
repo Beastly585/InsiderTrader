@@ -116,6 +116,7 @@
 .sx-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 4px 2px 2px; }
 .sx-head__main { min-width: 0; flex: 1; }
 .sx-head__row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sx-head__row > .sx-role { align-self: center; } /* .sx-role defaults to flex-start, which pinned it to the top of a big heading */
 .sx-head__ticker { font-family: var(--font-mono); font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin: 0; color: var(--text); }
 .sx-head__person { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin: 0; color: var(--text); }
 .sx-head__name { font-size: 16px; color: var(--text-2); font-weight: 500; }

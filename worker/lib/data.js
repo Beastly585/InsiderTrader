@@ -40,6 +40,7 @@ async function cached(key, ttlMs, fn) {
 }
 
 export const DATA_ROUTES = { filings, trades, price, leaders, sectors, explore, samples };
+export { explore };
 
 // Does public.filings have this column yet? Columns added by a migration can
 // ship in code before the migration is run; queries use a fallback until then.
@@ -202,6 +203,9 @@ async function explore(ctx, url) {
   const sector = (p.get('sector') || '').slice(0, 60);
   if (sector) c.push(`sector = ${sqlVal(sector)}`);
   if (p.get('om') === '1') c.push('is_open_market = true');
+  // Smallest trade to include, in dollars (whole number only, so it's safe in SQL).
+  const min = Math.floor(Number(p.get('min')));
+  if (min > 0) c.push(`value >= ${Math.min(min, 1e11)}`);
   if (p.get('source') === 'corporate') c.push(`(transaction_code IS NULL OR transaction_code NOT LIKE 'CONGRESS%')`);
   if (p.get('source') === 'political') c.push(`transaction_code LIKE 'CONGRESS%'`);
   if (p.has('tickers')) {
