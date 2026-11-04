@@ -3,8 +3,8 @@
    news (and, signed in, this week's feed) on the right. The rail drops under
    the page below 980px. Uses the app's theme variables, so light mode works. */
 
-.hx { width: 100%; max-width: 1120px; margin: 0 auto; box-sizing: border-box; padding: 0 20px 56px; }
-.hx__grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+.hx { width: 100%; max-width: 1240px; margin: 0 auto; box-sizing: border-box; padding: 0 20px 56px; }
+.hx__grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
 
 .hx__main { min-width: 0; padding: 48px 48px 40px 0; }
 .hx__rail { min-width: 0; padding: 28px 0 28px 28px; border-left: 0.5px solid var(--border); align-self: stretch; }
@@ -294,3 +294,36 @@
 }
 
 .hx-fine { margin-top: 20px; }
+
+/* ── Spacing pass (Quiver-style): fewer lines, more air ─────────────────────
+   Sections are separated by space rather than divider lines, the two columns
+   get a wider gutter, and the hero sits lower. Desktop only; phones keep the
+   tighter spacing set above. */
+.hx-why, .hx-how { border-top: 0; }
+@media (min-width: 981px) {
+  .hx__main { padding: 72px 72px 56px 0; }
+  .hx--in .hx__main { padding-top: 48px; }
+  .hx__rail { padding: 48px 0 40px 44px; }
+  .hx-h1 { margin-top: 40px; }
+  .hx--out .hx-h1 { font-size: 64px; letter-spacing: -0.04em; }
+  .hx-sub { margin-top: 20px; font-size: 19px; line-height: 1.6; max-width: 640px; }
+  .hx--in .hx-sub { margin-top: 10px; font-size: 17px; }
+  .hx-search { margin-top: 40px; max-width: 720px; }
+  .hx--in .hx-search { margin-top: 30px; }
+  .hx-fresh { margin-top: 12px; }
+  .hx-label { margin: 48px 0 14px; font-size: 13.5px; }
+  .hx-sechead { margin: 52px 0 16px; }
+  .hx-duo { margin-top: 44px; gap: 16px; }
+  .hx-scroll__track { gap: 14px; }
+  .hx-post { padding: 22px 0; }
+  .hx-post__title { font-size: 17px; line-height: 1.4; }
+  .hx-post:first-child .hx-post__title { font-size: 20px; }
+  .hx-allnews { margin-top: 10px; }
+  .hx-why { margin-top: 64px; padding-top: 0; }
+  .hx-why__grid { margin-top: 28px; gap: 34px 48px; }
+  .hx--out .hx-plans { margin-top: 96px; }
+  .hx-how { margin-top: 104px; padding-top: 0; }
+  .hx-how__flow { margin-top: 32px; gap: 14px; }
+  .hx-fine { margin-top: 40px; }
+  .hx .sx-section-title { font-size: 26px; letter-spacing: -0.02em; }
+}

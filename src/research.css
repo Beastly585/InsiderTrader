@@ -4,11 +4,11 @@
    design tokens only. */
 
 /* ── Page frame ─────────────────────────────────────────────────────────── */
-.sx-page { width: 100%; max-width: 1120px; margin: 0 auto; padding: 22px 20px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; }
+.sx-page { width: 100%; max-width: 1240px; margin: 0 auto; padding: 22px 20px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; }
 .sx-page--narrow { max-width: 780px; }
-.sx-page--feed { max-width: 1120px; }
+.sx-page--feed { max-width: 1240px; }
 /* Data page (style.css .ws-page) uses the same content width as everything else. */
-.ws-page:not(.ws-page--narrow) { max-width: 1120px; }
+.ws-page:not(.ws-page--narrow) { max-width: 1240px; }
 .sx-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
 .sx-grid__main, .sx-grid__side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 @media (max-width: 960px) { .sx-grid { grid-template-columns: minmax(0, 1fr); } }
@@ -380,7 +380,7 @@
 /* Three columns: logo | content-width column | avatar. The middle column
    matches .sx-page's content box (1120 max - 2x20 padding), so the first link
    lines up with the page's left edge and search ends at its right edge. */
-.sx-nav { --sx-content: 1080px; position: sticky; top: 0; z-index: 100; height: 52px; flex-shrink: 0; display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, var(--sx-content)) minmax(max-content, 1fr); align-items: center; column-gap: 12px; padding: 0 20px; background: var(--surface); border-bottom: 0.5px solid var(--border); }
+.sx-nav { --sx-content: 1200px; position: sticky; top: 0; z-index: 100; height: 52px; flex-shrink: 0; display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, var(--sx-content)) minmax(max-content, 1fr); align-items: center; column-gap: 12px; padding: 0 20px; background: var(--surface); border-bottom: 0.5px solid var(--border); }
 .sx-nav__logo { justify-self: start; display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); font-size: 16px; font-weight: 800; letter-spacing: -0.4px; }
 .sx-nav__logo img { width: 24px; height: 24px; border-radius: 6px; object-fit: contain; }
 .sx-nav__mid { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 100%; min-width: 0; }
@@ -474,7 +474,7 @@ body.drawer-open .sx-nav { z-index: 94; }
 .sx-pub__tabs { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 0.5px solid var(--border); background: var(--surface); position: sticky; top: 50px; z-index: 90; }
 .sx-pub__tabs a { flex: 1; text-align: center; padding: 7px 10px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); text-decoration: none; background: var(--surface-2); }
 .sx-pub__tabs a.is-on { color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--accent); }
-.sx-pub__band { width: 100%; max-width: 1120px; margin: 8px auto 0; padding: 0 20px; box-sizing: border-box; }
+.sx-pub__band { width: 100%; max-width: 1240px; margin: 8px auto 0; padding: 0 20px; box-sizing: border-box; }
 .sx-pub__band { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .sx-pub__band > div { flex: 1; min-width: 0; background: none; }
 .sx-pub__band h2 { margin: 0; font-size: 17px; letter-spacing: -0.2px; }
@@ -496,7 +496,7 @@ body.drawer-open .sx-nav { z-index: 94; }
 .seo-shell .sx-card { margin-top: 2px; }
 .seo-shell .sx-card ul { margin: 8px 0 0; padding-left: 18px; line-height: 1.6; font-size: 13.5px; }
 .seo-cta { font-weight: 600; }
-.seo-foot { max-width: 1080px; margin: 24px auto 0; padding: 20px; font-size: 12.5px; color: var(--text-3, #8a8a96); border-top: 0.5px solid var(--border, #26262e); }
+.seo-foot { max-width: 1200px; margin: 24px auto 0; padding: 20px; font-size: 12.5px; color: var(--text-3, #8a8a96); border-top: 0.5px solid var(--border, #26262e); }
 .sx-head__h1 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .sx-head__h1 .sx-head__name { font-family: var(--font); letter-spacing: 0; }
 
@@ -585,8 +585,8 @@ body.drawer-open .sx-nav { z-index: 94; }
 .sx-pub .sx-nav { grid-template-columns: minmax(max-content, 1fr) minmax(0, var(--sx-content)) 1fr; }
 .sx-pub__main { display: flex; flex-direction: column; min-height: calc(100vh - 52px); }
 .sx-pub__content { flex: 1 0 auto; }
-/* Same width as page content (1080px with 20px gutters), so divider lines stop at the content edges. */
-.sx-pub__popular, .sx-pub__foot, .sx-pub .sx-pub__band { width: calc(100% - 40px); max-width: 1080px; margin-left: auto; margin-right: auto; padding-left: 0; padding-right: 0; box-sizing: border-box; }
+/* Same width as page content (1200px with 20px gutters), so divider lines stop at the content edges. */
+.sx-pub__popular, .sx-pub__foot, .sx-pub .sx-pub__band { width: calc(100% - 40px); max-width: 1200px; margin-left: auto; margin-right: auto; padding-left: 0; padding-right: 0; box-sizing: border-box; }
 .sx-pub__popular { padding-top: 18px; padding-bottom: 18px; border-top: 0.5px solid var(--border); }
 .sx-pub__popular h2 { margin: 0 0 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); }
 .sx-pub__foot { display: flex; align-items: center; gap: 10px 24px; flex-wrap: wrap; padding-top: 18px; padding-bottom: 28px; border-top: 0.5px solid var(--border); font-size: 13px; }
@@ -767,7 +767,7 @@ body.drawer-open .sx-nav { z-index: 94; }
 
 /* Stock and person pages, signed out: one line saying what Seli is and what
    the page's Watch button gets you. */
-.sx-pub__watchbar { display: flex; align-items: flex-start; gap: 10px; width: calc(100% - 40px); max-width: 1080px; margin: 14px auto 0; padding: 10px 12px 10px 16px; box-sizing: border-box;
+.sx-pub__watchbar { display: flex; align-items: flex-start; gap: 10px; width: calc(100% - 40px); max-width: 1200px; margin: 14px auto 0; padding: 10px 12px 10px 16px; box-sizing: border-box;
   background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border: 0.5px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: var(--radius-lg); font-size: 13.5px; line-height: 1.4; color: var(--text-2); }
 .sx-pub__watchbar b { color: var(--text); font-weight: 600; }
 .sx-pub__watchbar > svg { flex-shrink: 0; margin-top: 2px; color: var(--accent); }
@@ -866,7 +866,7 @@ body.drawer-open .sx-nav { z-index: 94; }
 .sx-plan__beta { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; text-transform: none; color: var(--accent-strong); background: var(--accent-50); vertical-align: 1px; }
 
 /* ── Blog (/blog, /blog/:slug) ─────────────────────────────────────────── */
-.sx-blog { max-width: 1120px; }
+.sx-blog { max-width: 1240px; }
 .sx-blog.sx-post { max-width: 860px; }
 .sx-blog__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 4px 0 14px; }
 .sx-blog__search { flex: 1 1 320px; max-width: 420px; }
