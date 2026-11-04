@@ -3,7 +3,7 @@
 // insider-buying URLs: the real pages, read-only, with the free plan's 12
 // months of data. Anything that needs an account (watching, alerts, Pro)
 // opens sign-up instead. Signed-in users get the same URLs inside the app.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SignInButton, useClerk } from '@clerk/clerk-react';
 import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink, NAV_TABS, tabOf, stockPath, insiderPath } from '../lib/nav.jsx';
@@ -60,7 +60,7 @@ export function PublicShell({ page, logoSrc, isMobile, watchTarget, children }) 
     </div>
   );
   return (
-    <div className="ws-shell sx-pub">
+    <div className={`ws-shell sx-pub${page === 'home' ? ' ws-shell--wide' : ''}`}>
       {isMobile ? (
         <header className="sx-nav">{logo}{actions}</header>
       ) : (
@@ -302,6 +302,33 @@ export function StocksPage() {
 const initialsOf = name => String(name || '').split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 const postPath = p => `/blog/${p.slug}`;
 
+// One row that scrolls sideways. Arrow buttons and a fade show on the side
+// that has more (desktop); on phones it's a plain swipe.
+export function ScrollRow({ children, label, className = '' }) {
+  const ref = useRef(null);
+  const [edge, setEdge] = useState({ l: false, r: false });
+  const measure = () => {
+    const el = ref.current;
+    if (!el) return;
+    const l = el.scrollLeft > 4, r = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+    setEdge(e => (e.l === l && e.r === r ? e : { l, r }));
+  };
+  useEffect(() => {
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (ro && ref.current) ro.observe(ref.current);
+    return () => ro?.disconnect();
+  });
+  const by = dir => () => ref.current?.scrollBy({ left: dir * Math.max(240, ref.current.clientWidth * 0.8), behavior: 'smooth' });
+  return (
+    <div className={`hx-scroll${edge.l ? ' can-l' : ''}${edge.r ? ' can-r' : ''} ${className}`}>
+      <div className="hx-scroll__track" ref={ref} onScroll={measure} role="list" aria-label={label}>{children}</div>
+      {edge.l && <button type="button" className="hx-scroll__btn hx-scroll__btn--l" onClick={by(-1)} aria-label="Scroll left"><Icon name="arrow" size={14} style={{ transform: 'rotate(180deg)' }} /></button>}
+      {edge.r && <button type="button" className="hx-scroll__btn hx-scroll__btn--r" onClick={by(1)} aria-label="Scroll right"><Icon name="arrow" size={14} /></button>}
+    </div>
+  );
+}
+
 // "New: <latest post title>" link above both homes' headlines.
 export function LatestPostPill({ post }) {
   if (!post) return <div className="hx-new hx-new--empty" aria-hidden="true" />;
@@ -408,30 +435,25 @@ export function PublicHome() {
           <Freshness className="hx-fresh" />
 
           <p className="hx-label">Active this week</p>
-          {loadingChips && <div className="hx-chips"><span className="hx-chip hx-chip--ghost" /><span className="hx-chip hx-chip--ghost" /><span className="hx-chip hx-chip--ghost" /></div>}
-          {people.length > 0 && (
-            <div className="hx-chips hx-chips--scroll">
+          {loadingChips ? <div className="hx-chips"><span className="hx-chip hx-chip--ghost" /><span className="hx-chip hx-chip--ghost" /><span className="hx-chip hx-chip--ghost" /></div> : (
+            <ScrollRow label="Active this week">
               {people.map(p => (
-                <a key={p.raw} className="hx-chip" href={insiderPath(p.raw)} onClick={navClick(insiderPath(p.raw))}>
+                <a key={p.raw} role="listitem" className="hx-chip" href={insiderPath(p.raw)} onClick={navClick(insiderPath(p.raw))}>
                   <span className={`hx-av${p.congress ? ' hx-av--cg' : ''}`} aria-hidden="true">{initialsOf(p.name)}</span>
                   <span className="hx-chip__text"><b>{p.name}</b><small>{p.sub} · <span className={p.tone === 'up' ? 'sx-up' : 'sx-down'}>{p.line}</span></small></span>
                 </a>
               ))}
-            </div>
-          )}
-          {tickers.length > 0 && (
-            <div className="hx-chips hx-chips--scroll">
               {tickers.map(t => (
-                <a key={t.ticker} className="hx-chip hx-chip--tk" href={stockPath(t.ticker)} onClick={navClick(stockPath(t.ticker))}>
+                <a key={t.ticker} role="listitem" className="hx-chip hx-chip--tk" href={stockPath(t.ticker)} onClick={navClick(stockPath(t.ticker))}>
                   <span className={`hx-tk hx-tk--${t.tone}`} aria-hidden="true">{t.ticker.slice(0, 4)}</span>
                   <span className="hx-chip__text"><b className="sx-mono">{t.ticker}</b><small>{t.line}</small></span>
                 </a>
               ))}
-            </div>
+            </ScrollRow>
           )}
 
           <p className="hx-label">What you get with a free account</p>
-          <div className="hx-previews">
+          <ScrollRow label="What you get with a free account" className="hx-previews">
             <button type="button" className="hx-prev" onClick={signUp}>
               <div className="hx-prev__art">
                 <div className="hx-notif">
@@ -460,7 +482,7 @@ export function PublicHome() {
               <span className="hx-prev__name">Track records</span>
               <span className="hx-prev__desc">Whose buys have actually beaten the market.</span>
             </a>
-          </div>
+          </ScrollRow>
         </section>
 
         <aside className="hx__rail" aria-label="Latest news">

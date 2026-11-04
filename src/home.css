@@ -4,7 +4,18 @@
    the page below 980px. Uses the app's theme variables, so light mode works. */
 
 .hx { width: 100%; max-width: 1240px; margin: 0 auto; box-sizing: border-box; padding: 0 20px 56px; }
-.hx__grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; align-items: start; }
+.hx__grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
+/* Home is wider than the other pages. The nav's middle column takes the same
+   width, so the tabs line up with the page's left edge and search ends where
+   the news column ends. Side columns keep at least ~110px for the logo. */
+.ws-shell--wide { --hx-w: min(1320px, calc(100vw - 240px)); }
+@media (min-width: 981px) {
+  .ws-shell.ws-shell--wide .sx-nav { grid-template-columns: minmax(0, 1fr) minmax(0, var(--hx-w)) minmax(0, 1fr); }
+  .ws-shell--wide .sx-nav__links { margin-left: 0; }
+  .ws-shell--wide .sx-nav__link:first-child { padding-left: 0; }
+  .ws-shell--wide .sx-nav__link:first-child::before { left: -10px; }
+  .ws-shell--wide .hx { max-width: none; width: var(--hx-w); padding-left: 0; padding-right: 0; }
+}
 .hx__main { min-width: 0; padding: 48px 48px 40px 0; }
 .hx__rail { min-width: 0; padding: 28px 0 28px 28px; border-left: 0.5px solid var(--border); align-self: stretch; }
 .hx--in .hx__main { padding-top: 34px; }
@@ -49,8 +60,22 @@
 .hx-tk--down { background: var(--red-50); color: var(--red-600); }
 .hx-tk--cg { background: var(--blue-50); color: var(--blue-600); }
 
+/* Rows that scroll sideways (ScrollRow) */
+.hx-scroll { position: relative; }
+.hx-scroll__track { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; overscroll-behavior-x: contain; padding: 2px 0; }
+.hx-scroll__track::-webkit-scrollbar { display: none; }
+.hx-scroll__track > * { flex: none; scroll-snap-align: start; }
+.hx-scroll.can-r .hx-scroll__track { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 64px), transparent); }
+.hx-scroll.can-l .hx-scroll__track { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 64px), transparent); }
+.hx-scroll.can-l.can-r .hx-scroll__track { -webkit-mask-image: linear-gradient(to right, transparent, #000 64px, #000 calc(100% - 64px), transparent); mask-image: linear-gradient(to right, transparent, #000 64px, #000 calc(100% - 64px), transparent); }
+.hx-scroll__btn { position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%; border: 0.5px solid var(--border-md); background: var(--surface-2); color: var(--text); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow-sm); z-index: 2; }
+.hx-scroll__btn:hover { border-color: var(--accent); }
+.hx-scroll__btn--l { left: -6px; }
+.hx-scroll__btn--r { right: -6px; }
+@media (hover: none) { .hx-scroll__btn { display: none; } }
+
 /* "What you get" preview cards */
-.hx-previews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.hx-previews .hx-prev { width: 290px; }
 .hx-prev { display: flex; flex-direction: column; text-align: left; padding: 0; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; overflow: hidden; text-decoration: none; }
 .hx-prev:hover { border-color: var(--accent); text-decoration: none; color: var(--text); }
 .hx-prev__art { height: 112px; box-sizing: border-box; padding: 14px; background: var(--bg); display: flex; flex-direction: column; justify-content: center; gap: 7px; font-size: 12px; color: var(--text-2); border-bottom: 0.5px solid var(--border); }
@@ -93,8 +118,7 @@
 .hx-sechead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 34px 0 14px; }
 .hx-sechead h2 { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); }
 .hx-sechead__links { display: flex; gap: 16px; font-size: 13.5px; }
-.hx-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
-.hx-tile { position: relative; display: flex; flex-direction: column; min-height: 132px; box-sizing: border-box; padding: 15px 16px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--surface); }
+.hx-tile { position: relative; width: 200px; display: flex; flex-direction: column; min-height: 118px; box-sizing: border-box; padding: 15px 16px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--surface); }
 .hx-tile:hover { border-color: var(--accent); }
 .hx-tile--buy { border-color: color-mix(in srgb, var(--green-600) 35%, var(--border-md)); }
 .hx-tile--sell { border-color: color-mix(in srgb, var(--red-600) 32%, var(--border-md)); }
@@ -118,7 +142,16 @@
 .hx-tile__meta { font-size: 12px; color: var(--text-2); }
 .hx-quiet { margin: 12px 0 0; font-size: 13px; color: var(--text-2); }
 .hx-quiet .sx-tk, .hx-quiet .sx-person { margin-left: 6px; }
-.hx-in-extra { margin-top: 28px; display: flex; flex-direction: column; gap: 14px; }
+.hx-duo { margin-top: 28px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.hx-mini { display: flex; flex-direction: column; padding: 16px 18px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--surface); min-width: 0; }
+.hx-mini__label { font-size: 12px; color: var(--text-2); font-weight: 500; }
+.hx-mini__head { margin-top: 10px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.hx-mini__co { font-size: 15px; font-weight: 600; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hx-mini__head .sx-role { flex: none; }
+.hx-mini__big { margin-top: 10px; font-family: var(--font-mono); font-size: 26px; font-weight: 600; }
+.hx-mini__sub { margin-top: 2px; font-size: 13px; color: var(--text-2); }
+.hx-mini__tags { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.hx-mini__link { margin-top: auto; padding-top: 12px; font-size: 13px; }
 
 /* "This week on Seli" in the rail */
 .hx-feed__title { margin: 0; font-size: 17px; font-weight: 700; color: var(--text); }
@@ -150,9 +183,7 @@
   .hx__rail { border-left: 0; border-top: 0.5px solid var(--border); padding: 24px 0 8px; }
 }
 @media (max-width: 760px) {
-  .hx-previews { grid-template-columns: minmax(0, 1fr); }
-  .hx-prev { flex-direction: row; flex-wrap: wrap; }
-  .hx-prev__art { width: 100%; }
+  .hx-duo { grid-template-columns: minmax(0, 1fr); }
   .hx-steps { grid-template-columns: minmax(0, 1fr); gap: 18px; padding: 26px 0; }
 }
 @media (max-width: 640px) {
@@ -166,18 +197,17 @@
   .hx-sub { font-size: 15.5px; margin-top: 10px; }
   .hx-search { margin-top: 20px; }
   .hx-search .sx-search__input, .hx--in .hx-search .sx-search__input { height: 50px; font-size: 16px; } /* 16px+ so iPhone doesn't zoom */
-  /* Chips scroll sideways in one row instead of wrapping into a wall. */
-  .hx-chips--scroll { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; }
-  .hx-chips--scroll::-webkit-scrollbar { display: none; }
-  .hx-chip { flex: none; }
+  /* Rows run to the screen edge so it's obvious they swipe. */
+  .hx-scroll { margin: 0 -16px; }
+  .hx-scroll__track { padding: 2px 16px; scroll-padding: 0 16px; }
+  .hx-scroll.can-r .hx-scroll__track, .hx-scroll.can-l .hx-scroll__track, .hx-scroll.can-l.can-r .hx-scroll__track { -webkit-mask-image: none; mask-image: none; }
+  .hx-previews .hx-prev { width: 260px; }
   .hx-label { margin-top: 24px; }
-  .hx-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .hx-tile { min-height: 118px; padding: 12px; }
+  .hx-tile { width: 168px; min-height: 108px; padding: 12px; }
   .hx-tile__tk { font-size: 15px; }
   .hx-tile__tags .hx-tag:not(:first-child) { display: none; }
   .hx-tile__line { font-size: 12.5px; }
   .hx-tile__amt { font-size: 16px; }
-  .hx-tile__co { display: none; }
   .hx-sechead { margin-top: 26px; }
   .hx-post:first-child .hx-post__title { font-size: 16px; }
   .hx-go { min-height: 36px; }
@@ -185,3 +215,12 @@
 }
 .sx-gate--signup .sx-btn { flex-shrink: 0; white-space: nowrap; }
 @media (max-width: 640px) { .sx-gate--signup { flex-direction: column; align-items: stretch; gap: 10px; } .sx-gate--signup .sx-btn { min-height: 40px; } }
+
+/* Tile tags stay on one line; a third tag is dropped rather than wrapping. */
+.hx-tile__tags { flex-wrap: nowrap; }
+.hx-tile__tags .hx-tag:nth-child(n+3) { display: none; }
+.hx-tile { width: 216px; }
+@media (min-width: 981px) {
+  .ws-shell--wide .sx-pub__foot { max-width: none; width: var(--hx-w); }
+}
+@media (max-width: 640px) { .hx-tile { width: 168px; } }

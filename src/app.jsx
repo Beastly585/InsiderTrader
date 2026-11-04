@@ -7358,7 +7358,7 @@ function AppInner() {
         </div>
       )}
       {notice && <div className="sx-toast" role="status"><Icon name="check" size={14} />{notice}</div>}
-      <div className="ws-shell">
+      <div className={`ws-shell${page === 'home' ? ' ws-shell--wide' : ''}`}>
         <TopNav page={page} user={user} dark={dark} setDark={setDark} lastFilingDate={lastFilingDate} isDataStale={isDataStale} />
         <main className="ws-main" ref={mainRef}>
           {page === 'home' && <HomeFeed watchlist={watchlist} portfolioTickers={portfolioTickers} user={user} />}
