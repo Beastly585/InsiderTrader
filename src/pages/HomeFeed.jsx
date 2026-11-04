@@ -75,6 +75,8 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
 // actually holds (the feed is a server snapshot; a stock removed a moment ago
 // shouldn't linger here while it's already gone from Watchlist).
 function visibleYours(raw, watchlist) {
+  // A feed without the watchlist part (an error, an old Worker) shows as empty, not a crash.
+  if (!raw || !Array.isArray(raw.stocks)) return { stocks: [], people: [], watching: 0, holdings: 0, days: HOME_DAYS };
   if (!watchlist.ready) return raw;
   const t = new Set(watchlist.tickers.map(x => String(x).toUpperCase()));
   const p = new Set(watchlist.insiders);
@@ -194,8 +196,8 @@ const QUIET_PREVIEW = 16;
 
 function Yours({ d, watchlist, since }) {
   const [expanded, setExpanded] = useState(false);
-  const raw = d.yours;
-  const y = visibleYours(raw, watchlist);
+  const y = visibleYours(d.yours, watchlist);
+  const raw = y;
   if (!y.watching && !y.holdings) {
     return (
       <>

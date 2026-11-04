@@ -7,8 +7,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SignInButton, useClerk } from '@clerk/clerk-react';
 import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink, NAV_TABS, tabOf, stockPath, insiderPath } from '../lib/nav.jsx';
-import { plural, shortDate, money, congressRange, PAGE_TITLES, roleText } from '../lib/text.js';
-import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segmented, PublicViewContext } from '../components/ui.jsx';
+import { plural, shortDate, money, congressRange, PAGE_TITLES, roleText, amount, shares, price, prettyPerson, prettyCompany, roleFromTitle } from '../lib/text.js';
+import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segmented, PublicViewContext, TypeBadge } from '../components/ui.jsx';
 import '../home.css';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
@@ -471,6 +471,34 @@ function HowItWorks({ c, signUp }) {
   );
 }
 
+// The week's biggest open-market insider buy, raw facts only, pointing at the
+// full insider buying page. Sits above the newswire on the signed-out home.
+function TopBuyTile({ c }) {
+  return (
+    <a className="hx-topbuy" href="/insider-buying" onClick={navClick('/insider-buying')}>
+      <span className="hx-topbuy__label">Biggest insider buying this week</span>
+      <span className="hx-topbuy__head"><b className="sx-mono">{c.ticker}</b><span className="hx-topbuy__co">{c.company}</span><span className="hx-topbuy__amt sx-up">+{money(c.total)}</span></span>
+      <span className="hx-topbuy__people">
+        {(c.buyers || []).slice(0, 2).map(b => (
+          <span key={b.raw} className="hx-topbuy__who"><span>{b.name}</span><RoleTag role={b.role} name={b.raw} /><span className="sx-mono sx-up hx-topbuy__v">{money(b.value)}</span></span>
+        ))}
+        {c.n_insiders > 2 && <span className="hx-topbuy__more">+ {plural(c.n_insiders - 2, 'more insider')}</span>}
+      </span>
+      <span className="hx-topbuy__go">All insider buying this week <Icon name="arrow" size={12} /></span>
+    </a>
+  );
+}
+
+// Totals for the week: every open-market buy and sale filed in the last 7 days.
+function WeekPulse({ p }) {
+  return (
+    <div className="hx-pulse" aria-label="Insider trading this week">
+      <div><span className="hx-pulse__label">Bought this week</span><span className="hx-pulse__val sx-up">{money(p.buy_v)}</span><span className="hx-pulse__n">{plural(p.buy_n, 'filing')}</span></div>
+      <div><span className="hx-pulse__label">Sold this week</span><span className="hx-pulse__val sx-down">{money(p.sell_v)}</span><span className="hx-pulse__n">{plural(p.sell_n, 'filing')}</span></div>
+    </div>
+  );
+}
+
 export function PublicHome() {
   const clerk = useClerk();
   const since = useDataSinceYear();
@@ -525,6 +553,8 @@ export function PublicHome() {
         </section>
 
         <aside className="hx__rail" aria-label="Latest news">
+          {buying?.pulse && <WeekPulse p={buying.pulse} />}
+          {buying?.featured && <TopBuyTile c={buying.featured} />}
           <NewsRail posts={news ? news.posts || [] : null} limit={3} />
         </aside>
       </div>
@@ -594,83 +624,145 @@ export function PublicHome() {
 }
 
 // ── /trades for signed-out visitors ─────────────────────────────────────────
-// The raw feed: this week's biggest open-market buys and sales and the latest
-// Congress disclosures. No reads or flags on top (those need an account).
+// The raw feed: every open-market insider and Congress trade from the last 12
+// months, with filters. Straight from the filings, no reads or flags on top
+// (those need an account). Signed in, /trades is the Data page instead.
+const TRADE_PERIODS = [{ value: 7, label: '7D' }, { value: 30, label: '30D' }, { value: 90, label: '90D' }, { value: 365, label: '1Y' }];
+const TRADE_PAGE = 50; // rows shown at a time (the Worker sends 200 per page)
+const isCongressRow = r => r.relationship === 'congress' || String(r.transaction_code || '').startsWith('CONGRESS');
+
 export function TradesPage() {
   const clerk = useClerk();
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
-  const [tab, setTab] = useState('buys');
-  const { data: buying, error: bErr, reload: bReload } = useApi('/public/insider-buying');
-  const { data: congress, error: cErr, reload: cReload } = useApi(tab === 'congress' ? '/public/congress' : null);
-  useEffect(() => { document.title = 'Latest insider and Congress trades · Seli'; }, []);
-  const clusters = [buying?.featured, ...(buying?.more || [])].filter(Boolean);
+  const narrow = useNarrow();
+  const [days, setDays] = useState(30);
+  const [side, setSide] = useState('all');
+  const [source, setSource] = useState('all');
+  const [min, setMin] = useState('0');
+  const [sort, setSort] = useState('date');
+  const [text, setText] = useState('');
+  const [q, setQ] = useState('');
+  const [page, setPage] = useState(0); // Worker page (200 rows)
+  const [shown, setShown] = useState(TRADE_PAGE);
+  const [total, setTotal] = useState(null);
+  useEffect(() => { document.title = 'Insider and Congress Trades, Last 12 Months | Seli'; }, []);
+  // Wait for a pause in typing before searching.
+  useEffect(() => { const t = setTimeout(() => setQ(text.trim().length >= 2 ? text.trim() : ''), 350); return () => clearTimeout(t); }, [text]);
+  useEffect(() => { setPage(0); setShown(TRADE_PAGE); setTotal(null); }, [days, side, source, min, sort, q]);
+
+  const params = new URLSearchParams({ days: String(days) });
+  if (side !== 'all') params.set('type', side);
+  if (source !== 'all') params.set('source', source);
+  if (min !== '0') params.set('min', min);
+  if (sort === 'value') params.set('sort', 'value');
+  if (q) params.set('q', q);
+  if (page) params.set('page', String(page));
+  const { data: d, error, reload, loading } = useApi(`/public/trades?${params}`);
+  useEffect(() => { if (d?.total != null && !page) setTotal(d.total); }, [d, page]);
+  const rows = d?.rows || [];
+  const visible = rows.slice(0, shown);
+  const pageSize = d?.page_size || 200;
+  const lastPage = total != null ? Math.min(9, Math.ceil(total / pageSize) - 1) : 0;
+
+  const who = r => ({ raw: r.insider_name, name: prettyPerson(r.insider_name, isCongressRow(r)), role: roleFromTitle(r.insider_title, isCongressRow(r) ? 'congress' : r.relationship), congress: isCongressRow(r) });
+  const dateOf = r => String(r.transaction_date || r.filing_date || '').slice(0, 10);
+
   return (
-    <div className="sx-page sx-page--feed hx-trades">
+    <div className="sx-page hx-trades">
       <header className="sx-head sx-head--page">
         <div className="sx-head__main">
-          <h1 className="sx-head__title">Latest trades</h1>
-          <p className="sx-head__desc">Open-market insider buys and sales filed with the SEC in the last 7 days, and the newest Congress disclosures. Grants and option exercises are left out.</p>
+          <h1 className="sx-head__title">Trades</h1>
+          <p className="sx-head__desc">Every open-market insider and Congress stock trade from the last 12 months, straight from the filings. Grants, option exercises and tax withholding are left out.</p>
           <Freshness />
         </div>
       </header>
-      <div className="sx-toolbar">
-        <Segmented size="sm" value={tab} onChange={setTab} options={[
-          { value: 'buys', label: 'Insider buys' }, { value: 'sells', label: 'Insider sales' }, { value: 'congress', label: 'Congress' },
-        ]} />
+
+      <div className="hx-filters">
+        <Segmented size="sm" value={days} onChange={setDays} options={TRADE_PERIODS} />
+        <Segmented size="sm" value={side} onChange={setSide} options={[{ value: 'all', label: 'All' }, { value: 'buy', label: 'Buys' }, { value: 'sell', label: 'Sales' }]} />
+        <Segmented size="sm" value={source} onChange={setSource} options={[{ value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'political', label: 'Congress' }]} />
+        <label className="hx-filters__min">
+          <select value={min} onChange={e => setMin(e.target.value)} aria-label="Smallest trade">
+            <option value="0">Any size</option>
+            <option value="100000">$100K+</option>
+            <option value="1000000">$1M+</option>
+          </select>
+        </label>
+        <div className="sx-search__field hx-filters__q">
+          <span className="sx-search__icon"><Icon name="search" size={14} /></span>
+          <input className="sx-search__input" type="search" value={text} onChange={e => setText(e.target.value)} placeholder="Ticker, company or person" aria-label="Filter by ticker, company or person" />
+        </div>
       </div>
-      {tab !== 'congress' && bErr && !buying && <ErrorNote message={bErr} onRetry={bReload} />}
-      {tab !== 'congress' && !buying && !bErr && <Card><Skeleton lines={6} /></Card>}
-      {tab === 'buys' && buying && (
-        <Card title="Biggest insider buys this week" sub="Open-market purchases of $10K+, by total" pad={false}
-          action={<a href="/insider-buying" className="sx-link" onClick={navClick('/insider-buying')}>Insider buying page <Icon name="arrow" size={12} /></a>}>
-          <ul className="sx-rows">
-            {clusters.map(c => (
-              <li key={c.ticker} className="sx-row">
-                <StockLink ticker={c.ticker} />
-                <div className="sx-row__main">
-                  <div className="sx-row__title">{c.company}</div>
-                  <div className="sx-row__sub">
-                    {c.buyers.slice(0, 2).map((b, i) => <React.Fragment key={b.raw}>{i > 0 && ', '}<InsiderLink raw={b.raw}>{b.name}</InsiderLink> <RoleTag role={b.role} name={b.raw} /></React.Fragment>)}
-                    {c.n_insiders > 2 ? ` + ${plural(c.n_insiders - 2, 'other')}` : ''}
-                  </div>
+
+      <Card pad={false}>
+        <div className="hx-trades__bar">
+          <span className="sx-muted sx-small" role="status">
+            {total != null ? `${total.toLocaleString('en-US')} ${total === 1 ? 'trade' : 'trades'}` : loading ? 'Loading…' : ''}
+            {d?.from ? ` · ${shortDate(d.from, { year: true })} to ${shortDate(d.to, { year: true })}` : ''}
+          </span>
+          <Segmented size="sm" value={sort} onChange={setSort} options={[{ value: 'date', label: 'Newest' }, { value: 'value', label: 'Largest' }]} />
+        </div>
+        {error && !d && <div className="sx-card__body"><ErrorNote message={error} onRetry={reload} /></div>}
+        {!d && !error && <div className="sx-card__body"><Skeleton lines={10} /></div>}
+        {d && !rows.length && <div className="sx-empty"><div className="sx-empty__body">No trades match these filters.</div></div>}
+        {d && rows.length > 0 && (narrow ? (
+          <ul className={`sx-trows${loading ? ' sx-dim' : ''}`}>
+            {visible.map((r, i) => { const p = who(r); return (
+              <li key={`${page}:${i}`} className="sx-trow">
+                {r.ticker ? <StockLink ticker={r.ticker} /> : <span className="sx-trow__asset">Other</span>}
+                <div className="sx-trow__main">
+                  <div className="sx-trow__title"><InsiderLink raw={p.raw}>{p.name}</InsiderLink></div>
+                  <div className="sx-trow__sub">{shortDate(dateOf(r))} · {p.congress ? 'Congress' : roleText(p.role)}</div>
                 </div>
-                <span className="sx-row__amt sx-up">{money(c.total)}</span>
-              </li>
-            ))}
-            {!clusters.length && <li className="sx-row sx-muted">No open-market insider buys filed yet this week.</li>}
-          </ul>
-        </Card>
-      )}
-      {tab === 'sells' && buying && (
-        <Card title="Biggest insider sales this week" sub="Open-market sales by company insiders" pad={false}>
-          <ul className="sx-rows">
-            {(buying.sells || []).map(r => (
-              <li key={`${r.ticker}:${r.raw}`} className="sx-row">
-                <StockLink ticker={r.ticker} />
-                <div className="sx-row__main">
-                  <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <RoleTag role={r.role} name={r.raw} /></div>
-                  <div className="sx-row__sub">{r.company}{r.n > 1 ? ` · ${plural(r.n, 'sale')}` : ''}{r.date ? ` · ${shortDate(r.date)}` : ''}</div>
+                <div className="sx-trow__end">
+                  <span className={`sx-trow__amt ${r.transaction_type === 'buy' ? 'sx-up' : 'sx-down'}`}>{amount(r.value, p.congress)}</span>
+                  <span className="sx-trow__meta"><TypeBadge type={r.transaction_type} /></span>
                 </div>
-                <span className="sx-row__amt sx-down">{money(r.value)}</span>
               </li>
-            ))}
-            {!(buying.sells || []).length && <li className="sx-row sx-muted">No open-market insider sales filed yet this week.</li>}
+            ); })}
           </ul>
-        </Card>
-      )}
-      {tab === 'congress' && (
-        <Card title="Latest Congress disclosures" sub="Amounts are reported as ranges, usually within 45 days" pad={false}
-          action={<a href="/congress" className="sx-link" onClick={navClick('/congress')}>All Congress trades <Icon name="arrow" size={12} /></a>}>
-          {cErr && !congress && <div className="sx-card__body"><ErrorNote message={cErr} onRetry={cReload} /></div>}
-          {!congress && !cErr && <div className="sx-card__body"><Skeleton lines={6} /></div>}
-          {congress && <TradeTable trades={(congress.recent || []).slice(0, 30)} showTicker personLabel="Member" membersOnly />}
-        </Card>
-      )}
+        ) : (
+          <div className={`sx-table-wrap${loading ? ' sx-dim' : ''}`}>
+            <table className="sx-table hx-trades__table">
+              <thead>
+                <tr>
+                  <th>Date</th><th>Stock</th><th>Person</th><th>Type</th>
+                  <th className="sx-r">Shares</th><th className="sx-r">Price</th><th className="sx-r">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r, i) => { const p = who(r); return (
+                  <tr key={`${page}:${i}`}>
+                    <td className="sx-nowrap">{shortDate(dateOf(r), { year: days > 90 })}</td>
+                    <td className="hx-trades__stock">{r.ticker ? <StockLink ticker={r.ticker} /> : null}<span className="hx-trades__co">{prettyCompany(r.company_name) || ''}</span></td>
+                    <td className="sx-table__who"><InsiderLink raw={p.raw}>{p.name}</InsiderLink><span className="sx-table__role"><RoleTag role={p.role} congress={p.congress} title={r.insider_title} name={p.raw} /></span></td>
+                    <td><TypeBadge type={r.transaction_type} /></td>
+                    <td className="sx-r sx-mono">{p.congress || !r.shares ? '—' : shares(r.shares)}</td>
+                    <td className="sx-r sx-mono">{p.congress || !r.price_per_share ? '—' : price(r.price_per_share)}</td>
+                    <td className={`sx-r sx-mono sx-strong ${r.transaction_type === 'buy' ? 'sx-up' : 'sx-down'}`}>{amount(r.value, p.congress)}</td>
+                  </tr>
+                ); })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+        {rows.length > shown && (
+          <button className="sx-more" onClick={() => setShown(n => n + TRADE_PAGE)}>Show {Math.min(TRADE_PAGE, rows.length - shown)} more <Icon name="chevron" size={12} /></button>
+        )}
+        {rows.length <= shown && (page > 0 || page < lastPage) && (
+          <div className="hx-trades__pager">
+            <button className="sx-btn sx-btn--ghost sx-btn--sm" disabled={page === 0} onClick={() => { setPage(p => p - 1); setShown(TRADE_PAGE); }}>Newer</button>
+            <span className="sx-muted sx-small">Page {page + 1}{lastPage ? ` of ${lastPage + 1}` : ''}</span>
+            <button className="sx-btn sx-btn--ghost sx-btn--sm" disabled={page >= lastPage} onClick={() => { setPage(p => p + 1); setShown(TRADE_PAGE); }}>Older</button>
+          </div>
+        )}
+      </Card>
+
       <div className="sx-gate sx-gate--signup">
-        <span className="sx-gate__text"><Icon name="lock" size={13} /> A free account adds every trade with filters and sorting, plus Seli's reads: first buys, reversals and track records.</span>
+        <span className="sx-gate__text"><Icon name="lock" size={13} /> This is the raw feed. A free account adds Seli's reads on top: first buys in years, several insiders at once, planned sales and track records.</span>
         <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={signUp}>Create free account</button>
       </div>
-      <p className="sx-note sx-note--center"><a href="/stocks" className="sx-link" onClick={navClick('/stocks')}>Browse every stock A to Z</a></p>
+      <p className="sx-note sx-note--center"><a href="/insider-buying" className="sx-link" onClick={navClick('/insider-buying')}>Insider buying this week</a> · <a href="/congress" className="sx-link" onClick={navClick('/congress')}>Congress trades</a> · <a href="/stocks" className="sx-link" onClick={navClick('/stocks')}>Every stock A to Z</a></p>
     </div>
   );
 }
