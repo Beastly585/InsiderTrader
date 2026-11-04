@@ -6,22 +6,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SignInButton, useClerk } from '@clerk/clerk-react';
 import { useApi, useDataSinceYear } from '../lib/api.js';
-import { go, StockLink, InsiderLink } from '../lib/nav.jsx';
-import { plural, shortDate, money, congressRange, PAGE_TITLES } from '../lib/text.js';
-import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag } from '../components/ui.jsx';
+import { go, StockLink, InsiderLink, NAV_TABS, tabOf, stockPath, insiderPath } from '../lib/nav.jsx';
+import { plural, shortDate, money, congressRange, PAGE_TITLES, roleText } from '../lib/text.js';
+import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segmented, PublicViewContext } from '../components/ui.jsx';
+import '../home.css';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
 import { TradeTable } from './StockPage.jsx';
 import { MarketSections } from './HomeFeed.jsx';
 
-const PUBLIC_LINKS = [
-  { id: 'insiderBuying', label: 'Insider buying', short: 'Insider buys', path: '/insider-buying' },
-  { id: 'congress', label: 'Congress trades', short: 'Congress', path: '/congress' },
-  { id: 'leaderboard', label: 'Leaderboard', short: 'Leaderboard', path: '/leaderboard' },
-  { id: 'blog', label: 'News', short: 'News', path: '/blog' },
-];
-// A blog post counts as being in News for the highlighted tab.
-const isOn = (page, id) => page === id || (id === 'blog' && page === 'blogPost');
+// Same four tabs as the signed-in app (lib/nav.jsx).
+const PUBLIC_LINKS = NAV_TABS;
+const isOn = (page, id) => tabOf(page) === id;
 const POPULAR = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'JPM', 'PLTR', 'AMD'];
 
 const navClick = path => e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(path); };
@@ -91,7 +87,7 @@ export function PublicShell({ page, logoSrc, isMobile, watchTarget, children }) 
       {isMobile && (
         <nav className="sx-pub__tabs" aria-label="Browse">
           {PUBLIC_LINKS.map(n => (
-            <a key={n.id} href={n.path} className={isOn(page, n.id) ? 'is-on' : ''} onClick={navClick(n.path)}>{n.short || n.label}</a>
+            <a key={n.id} href={n.path} className={isOn(page, n.id) ? 'is-on' : ''} aria-current={isOn(page, n.id) ? 'page' : undefined} onClick={navClick(n.path)}>{n.short || n.label}</a>
           ))}
         </nav>
       )}
@@ -105,9 +101,12 @@ export function PublicShell({ page, logoSrc, isMobile, watchTarget, children }) 
               ? <>insiders trade <b>{watchTarget.id}</b>.</> : <>this person trades.</>}</span>
           </p>
         )}
-        <div className="sx-pub__content">{children}</div>
-        <SignupBand onSignUp={signUp} />
-        <PopularStocks />
+        <PublicViewContext.Provider value={signUp}>
+          <div className="sx-pub__content">{children}</div>
+        </PublicViewContext.Provider>
+        {/* Home has its own sign-up and ticker chips. */}
+        {page !== 'home' && <SignupBand onSignUp={signUp} />}
+        {page !== 'home' && <PopularStocks />}
         <PublicFooter logoSrc={logoSrc} />
       </main>
     </div>
@@ -136,7 +135,7 @@ function PopularStocks() {
   );
 }
 
-const FOOT_LINKS = [['All stocks', '/stocks'], ['Insider trading news', '/blog'], ['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
+const FOOT_LINKS = [['All stocks', '/stocks'], ['Insider buying', '/insider-buying'], ['Congress trades', '/congress'], ['Insider trading news', '/blog'], ['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
 
 export function PublicFooter({ logoSrc, className = '' }) {
   return (
@@ -299,146 +298,190 @@ export function StocksPage() {
   );
 }
 
-// ── / for signed-out visitors ────────────────────────────────────────────────
-const WHY = [
-  { icon: 'bell', title: "Don't get blindsided on what you own.",
-    body: 'If the CEO dumps half his shares, you hear about it the same day, not in a news story three weeks later.' },
-  { icon: 'search', title: 'Check before you buy.',
-    body: 'See whether the people running the company are buying or selling before you put your money in.' },
-  { icon: 'user', title: "Follow people who've been right.",
-    body: 'The leaderboard shows which insiders and members of Congress have bought ahead of gains.' },
-];
+// ── Shared bits for both homes ───────────────────────────────────────────────
+const initialsOf = name => String(name || '').split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+const postPath = p => `/blog/${p.slug}`;
 
+// "New: <latest post title>" link above both homes' headlines.
+export function LatestPostPill({ post }) {
+  if (!post) return <div className="hx-new hx-new--empty" aria-hidden="true" />;
+  return (
+    <a className="hx-new" href={postPath(post)} onClick={navClick(postPath(post))}>
+      <span className="hx-new__dot" aria-hidden="true" /><b>New:</b><span className="hx-new__title">{post.title}</span><Icon name="arrow" size={12} />
+    </a>
+  );
+}
+
+// The newswire in a column: kind and date, the headline, and a button into
+// the stock it's about.
+export function NewsRail({ posts, limit = 5, title = 'Latest from the newswire', compact = false }) {
+  const list = (posts || []).slice(0, limit);
+  return (
+    <div className={`hx-rail__news${compact ? ' hx-rail__news--compact' : ''}`}>
+      <a className="hx-rail__title" href="/blog" onClick={navClick('/blog')}>{title} <Icon name="arrow" size={13} /></a>
+      {!posts && <Skeleton lines={4} />}
+      {posts && !list.length && <p className="sx-muted sx-small">No posts yet this week.</p>}
+      <ul className="hx-posts">
+        {list.map(p => (
+          <li key={p.slug} className="hx-post">
+            <div className="hx-post__meta">
+              <span className={p.kind === 'sell' ? 'sx-down' : p.kind === 'buy' ? 'sx-up' : ''}>{NEWS_KIND[p.kind] || 'News'}</span>
+              {p.published_at ? ` · ${shortDate(p.published_at.slice(0, 10))}` : ''}
+            </div>
+            <a className="hx-post__title" href={postPath(p)} onClick={navClick(postPath(p))}>{p.title}</a>
+            {!compact && (p.ticker
+              ? <a className="hx-go" href={stockPath(p.ticker)} onClick={navClick(stockPath(p.ticker))}>See {p.ticker} <Icon name="arrow" size={11} /></a>
+              : <a className="hx-go" href={postPath(p)} onClick={navClick(postPath(p))}>Read it <Icon name="arrow" size={11} /></a>)}
+          </li>
+        ))}
+      </ul>
+      {posts && list.length > 0 && <a className="hx-allnews" href="/blog" onClick={navClick('/blog')}>All news</a>}
+    </div>
+  );
+}
+
+// ── / for signed-out visitors ────────────────────────────────────────────────
 const NEWS_KIND = { buy: 'Insider buy', sell: 'Insider sale', roundup: 'Weekly roundup' };
 
-// The front door: what Seli is, a search box, real data from this week, and
-// pricing. Same look as every other public page, no mock screenshots.
+const STEPS = [
+  ['Add the stocks you own', 'Just tickers. No brokerage login needed.'],
+  ['Seli reads every filing', 'SEC Form 4s and Congress disclosures, all day. Planned sales, grants and option exercises get flagged.'],
+  ['Hear about the real ones', 'A weekly email on what your stocks and people did. Pro sends it the same day.'],
+];
+
+// People and stocks with filings this week, raw facts only (who, what, how much).
+function useTrending(buying, congress) {
+  return useMemo(() => {
+    const clusters = [buying?.featured, ...(buying?.more || [])].filter(Boolean);
+    const people = [];
+    const seen = new Set();
+    for (const c of clusters) {
+      const b = c.buyers?.[0];
+      if (!b || seen.has(b.raw) || people.length >= 2) continue;
+      seen.add(b.raw);
+      people.push({ raw: b.raw, name: b.name, sub: `${roleText(b.role)} · ${c.ticker}`, line: `Bought ${money(b.value)}`, tone: 'up', congress: false });
+    }
+    for (const t of congress?.recent || []) {
+      if (people.length >= 4) break;
+      if (!t.raw || seen.has(t.raw)) continue;
+      seen.add(t.raw);
+      people.push({ raw: t.raw, name: t.name, sub: `Congress · ${t.ticker}`, line: `${t.type === 'buy' ? 'Bought' : 'Sold'} ${congressRange(t.value)}`, tone: t.type === 'buy' ? 'up' : 'down', congress: true });
+    }
+    const tickers = [];
+    const tk = new Set();
+    const add = (ticker, line, tone) => { if (ticker && !tk.has(ticker) && tickers.length < 6) { tk.add(ticker); tickers.push({ ticker, line, tone }); } };
+    clusters.slice(0, 3).forEach(c => add(c.ticker, `Insiders bought ${money(c.total)}`, 'up'));
+    (buying?.sells || []).slice(0, 2).forEach(r => add(r.ticker, `Insider sold ${money(r.value)}`, 'down'));
+    (congress?.recent || []).slice(0, 4).forEach(t => add(t.ticker, 'Congress trade', 'cg'));
+    return { people, tickers };
+  }, [buying, congress]);
+}
+
 export function PublicHome() {
   const clerk = useClerk();
   const since = useDataSinceYear();
-  const { data: buying, error: buyingErr, reload: reloadBuying } = useApi('/public/insider-buying');
-  const { data: congress, error: congressErr, reload: reloadCongress } = useApi('/public/congress');
-  const { data: leaders, error: leadersErr, reload: reloadLeaders } = useApi('/public/leaderboard?years=1&source=all');
+  const { data: buying } = useApi('/public/insider-buying');
+  const { data: congress } = useApi('/public/congress');
+  const { data: leaders } = useApi('/public/leaderboard?years=1&source=all');
   const { data: pricing } = useApi('/public/pricing');
-  const { data: news } = useApi('/public/blog?page=1&limit=3');
-  // Each card shows its own "couldn't load" instead of pulsing forever.
-  const loadingOr = (err, retry, lines) => err
-    ? <div className="sx-card__body"><ErrorNote message="Couldn't load this right now." onRetry={retry} /></div>
-    : <div className="sx-card__body"><Skeleton lines={lines} /></div>;
+  const { data: news } = useApi('/public/blog?page=1&limit=5');
   useEffect(() => { document.title = PAGE_TITLES.home; }, []);
   const narrow = useNarrow();
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
   const goPro = () => openSignUp(clerk, { kind: 'upgrade' });
-  const clusters = [buying?.featured, ...(buying?.more || [])].filter(Boolean).slice(0, 9);
+  const { people, tickers } = useTrending(buying, congress);
+  const top = buying?.featured;
+  const recap = [...[buying?.featured, ...(buying?.more || [])].filter(Boolean).slice(0, 2).map(c => ({ t: c.ticker, v: `+${money(c.total)}`, tone: 'sx-up' })),
+    ...(buying?.sells || []).slice(0, 1).map(r => ({ t: r.ticker, v: `−${money(r.value)}`, tone: 'sx-down' }))];
+  const loadingChips = !buying && !congress;
 
   return (
-    <div className="sx-page sx-page--feed sx-home">
-      <section className="sx-hero">
-        <p className="sx-hero__eyebrow">Insider trading &amp; Congress stock tracker</p>
-        <h1 className="sx-hero__title">See what insiders buy with their own money.</h1>
-        <p className="sx-hero__sub">{narrow
-          ? 'Executive and Congress trades in plain English, emailed when they touch your stocks.'
-          : 'Every SEC Form 4 and Congress stock disclosure, explained in plain English. Get an email when someone trades a stock you own.'}</p>
-        <div className="sx-hero__search"><SearchBox variant="inline" placeholder={narrow ? 'Search a stock or person' : 'Search a ticker, company, executive or member of Congress'} /></div>
-        <p className="sx-hero__browse">or <a href="/stocks" className="sx-link" onClick={navClick('/stocks')}>browse every stock A to Z</a></p>
-        <div className="sx-hero__cta">
-          <button className="sx-btn sx-btn--accent" onClick={signUp}>Get started free</button>
-          <span className="sx-muted sx-small">{narrow ? 'Free. No card needed.' : 'No card needed. Data from SEC EDGAR and congressional disclosures.'}</span>
-        </div>
-        <Freshness />
-      </section>
+    <div className="hx hx--out">
+      <div className="hx__grid">
+        <section className="hx__main">
+          <LatestPostPill post={news?.posts?.[0]} />
+          <h1 className="hx-h1">Insider trades,{' '}<br />minus the noise.</h1>
+          <p className="hx-sub">{narrow
+            ? 'What CEOs, directors and Congress are buying and selling, from the filings themselves.'
+            : 'See what CEOs, directors and members of Congress are buying and selling with their own money, straight from SEC and congressional filings.'}</p>
+          <div className="hx-search"><SearchBox variant="inline" placeholder={narrow ? 'Stock, CEO, or member of Congress' : 'Search a stock, CEO, or member of Congress...'} /></div>
+          <Freshness className="hx-fresh" />
 
-      <div className="sx-feed-cols">
-        <Card title="Insider buying this week" sub="Open-market purchases, biggest first" pad={false}
-          action={<a href="/insider-buying" className="sx-link" onClick={navClick('/insider-buying')}>See all <Icon name="arrow" size={12} /></a>}>
-          {!buying ? loadingOr(buyingErr, reloadBuying, 5) : (
-            <ul className="sx-rows">
-              {clusters.map(c => (
-                <li key={c.ticker} className="sx-row">
-                  <StockLink ticker={c.ticker} />
-                  <div className="sx-row__main">
-                    <div className="sx-row__title">{c.company}</div>
-                    <div className="sx-row__sub">
-                      <InsiderLink raw={c.buyers[0].raw}>{c.buyers[0].name}</InsiderLink> <RoleTag role={c.buyers[0].role} name={c.buyers[0].raw} />{c.n_insiders > 1 ? ` + ${plural(c.n_insiders - 1, 'other')}` : ''}
-                    </div>
-                  </div>
-                  <span className="sx-row__amt sx-up">{money(c.total)}</span>
-                </li>
+          <p className="hx-label">Active this week</p>
+          {loadingChips && <div className="hx-chips"><span className="hx-chip hx-chip--ghost" /><span className="hx-chip hx-chip--ghost" /><span className="hx-chip hx-chip--ghost" /></div>}
+          {people.length > 0 && (
+            <div className="hx-chips hx-chips--scroll">
+              {people.map(p => (
+                <a key={p.raw} className="hx-chip" href={insiderPath(p.raw)} onClick={navClick(insiderPath(p.raw))}>
+                  <span className={`hx-av${p.congress ? ' hx-av--cg' : ''}`} aria-hidden="true">{initialsOf(p.name)}</span>
+                  <span className="hx-chip__text"><b>{p.name}</b><small>{p.sub} · <span className={p.tone === 'up' ? 'sx-up' : 'sx-down'}>{p.line}</span></small></span>
+                </a>
               ))}
-              {!clusters.length && <li className="sx-row sx-muted">No notable insider buying filed yet this week.</li>}
-            </ul>
+            </div>
           )}
-        </Card>
-        <div className="sx-feed-stack">
-          <Card title="Latest from Congress" sub="STOCK Act disclosures, most recent trades" pad={false}
-            action={<a href="/congress" className="sx-link" onClick={navClick('/congress')}>See all <Icon name="arrow" size={12} /></a>}>
-            {!congress ? loadingOr(congressErr, reloadCongress, 4) : (
-              <ul className="sx-rows">
-                {(congress.recent || []).slice(0, 5).map((t, i) => (
-                  <li key={`${t.acc}:${i}`} className="sx-row">
-                    <StockLink ticker={t.ticker} />
-                    <div className="sx-row__main">
-                      <div className="sx-row__title"><InsiderLink raw={t.raw}>{t.name}</InsiderLink> {t.type === 'buy' ? 'bought' : 'sold'}</div>
-                      <div className="sx-row__sub">{congressRange(t.value)} · {shortDate(t.date)}</div>
-                    </div>
-                  </li>
+          {tickers.length > 0 && (
+            <div className="hx-chips hx-chips--scroll">
+              {tickers.map(t => (
+                <a key={t.ticker} className="hx-chip hx-chip--tk" href={stockPath(t.ticker)} onClick={navClick(stockPath(t.ticker))}>
+                  <span className={`hx-tk hx-tk--${t.tone}`} aria-hidden="true">{t.ticker.slice(0, 4)}</span>
+                  <span className="hx-chip__text"><b className="sx-mono">{t.ticker}</b><small>{t.line}</small></span>
+                </a>
+              ))}
+            </div>
+          )}
+
+          <p className="hx-label">What you get with a free account</p>
+          <div className="hx-previews">
+            <button type="button" className="hx-prev" onClick={signUp}>
+              <div className="hx-prev__art">
+                <div className="hx-notif">
+                  <span className="hx-notif__logo" aria-hidden="true">S</span>
+                  <span><b>{top ? `${top.ticker} · Insider buy` : 'Insider buy'}</b><br />{top ? `${top.buyers[0].name} bought ${money(top.buyers[0].value)}` : 'An insider bought on the open market'}</span>
+                </div>
+              </div>
+              <span className="hx-prev__name">Alerts on your stocks</span>
+              <span className="hx-prev__desc">An email when an insider or member of Congress trades a stock you watch.</span>
+            </button>
+            <button type="button" className="hx-prev" onClick={signUp}>
+              <div className="hx-prev__art hx-prev__art--list">
+                {recap.length ? recap.map(r => <div key={r.t + r.v}><span className="sx-mono">{r.t}</span><span className={`sx-mono ${r.tone}`}>{r.v}</span></div>)
+                  : <Skeleton lines={3} />}
+              </div>
+              <span className="hx-prev__name">Weekly recap</span>
+              <span className="hx-prev__desc">What your stocks and people did this week, in a two-minute read.</span>
+            </button>
+            <a className="hx-prev" href="/leaderboard" onClick={navClick('/leaderboard')}>
+              <div className="hx-prev__art hx-prev__art--list">
+                {(leaders?.ranked || []).slice(0, 3).map((r, i) => (
+                  <div key={r.raw}><span className="hx-prev__rank">{i + 1}</span><span className="hx-prev__who">{r.name}</span>{r.excess != null && <span className={`sx-mono ${r.excess >= 0 ? 'sx-up' : 'sx-down'}`}>{r.excess >= 0 ? '+' : ''}{Math.round(r.excess)} pts</span>}</div>
                 ))}
-              </ul>
-            )}
-          </Card>
-          <Card title="Insider leaderboard" sub="Points their buys beat the S&P 500 by, last 12 months" pad={false}
-            action={<a href="/leaderboard" className="sx-link" onClick={navClick('/leaderboard')}>See all <Icon name="arrow" size={12} /></a>}>
-            {!leaders ? loadingOr(leadersErr, reloadLeaders, 4) : (
-              <ul className="sx-rows">
-                {(leaders.ranked || []).slice(0, 5).map(r => (
-                  <li key={r.raw} className="sx-row">
-                    <div className="sx-row__main">
-                      <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <RoleTag role={r.role} congress={!!r.congress} title={r.title} /></div>
-                      <div className="sx-row__sub">{r.tickers?.[0] ? <> · <StockLink ticker={r.tickers[0]} plain className="sx-lb__tk" /></> : null} · {plural(r.priced || r.om_buys || 0, 'buy')}</div>
-                    </div>
-                    {r.excess != null && <span className={`sx-row__amt ${r.excess >= 0 ? 'sx-up' : 'sx-down'}`}>{r.excess >= 0 ? '+' : ''}{Math.round(r.excess)} pts</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </div>
+                {!leaders && <Skeleton lines={3} />}
+              </div>
+              <span className="hx-prev__name">Track records</span>
+              <span className="hx-prev__desc">Whose buys have actually beaten the market.</span>
+            </a>
+          </div>
+        </section>
+
+        <aside className="hx__rail" aria-label="Latest news">
+          <NewsRail posts={news ? news.posts || [] : null} limit={narrow ? 3 : 5} />
+        </aside>
       </div>
 
-      {(news?.posts || []).length > 0 && (
-        <Card title="Latest from the newswire" sub="Notable insider trades, written up as they're filed" pad={false}
-          action={<a href="/blog" className="sx-link" onClick={navClick('/blog')}>All news <Icon name="arrow" size={12} /></a>}>
-          <ul className="sx-rows">
-            {news.posts.map(p => (
-              <li key={p.slug} className="sx-row">
-                {p.ticker && <StockLink ticker={p.ticker} />}
-                <div className="sx-row__main">
-                  <div className="sx-row__title" style={{ whiteSpace: 'normal' }}><a href={`/blog/${p.slug}`} onClick={navClick(`/blog/${p.slug}`)}>{p.title}</a></div>
-                  <div className="sx-row__sub">
-                    <span className={p.kind === 'sell' ? 'sx-down' : p.kind === 'buy' ? 'sx-up' : ''}>{NEWS_KIND[p.kind] || 'News'}</span>
-                    {p.published_at ? ` · ${shortDate(p.published_at.slice(0, 10))}` : ''}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      <section className="sx-why">
-        <h2 className="sx-section-title">Why use Seli</h2>
-        <ul className="sx-why__list">
-          {WHY.map(w => (
-            <li key={w.icon}>
-              <span className="sx-why__icon"><Icon name={w.icon} size={16} /></span>
-              <div><b>{w.title}</b><p>{w.body}</p></div>
-            </li>
-          ))}
-        </ul>
-        <p className="sx-why__fine">Pulled from SEC and congressional filings the day they're published, and explained in plain English.</p>
+      <section className="hx-steps">
+        {STEPS.map(([t, d], i) => (
+          <div key={t} className="hx-step">
+            <span className="hx-step__n">0{i + 1}</span>
+            <div><b>{t}</b><p>{d}</p></div>
+          </div>
+        ))}
+        <div className="hx-step hx-step--cta">
+          <button className="sx-btn sx-btn--accent" onClick={signUp}>Get started free</button>
+          <a href="#pricing" className="sx-link sx-small">See pricing</a>
+        </div>
       </section>
 
-      <section className="sx-plans" id="pricing">
+      <section className="sx-plans hx-plans" id="pricing">
         <h2 className="sx-section-title">Pricing</h2>
         <div className="sx-plans__grid">
           <div className="sx-plan">
@@ -448,7 +491,7 @@ export function PublicHome() {
             <ul className="sx-plan__list">
               <li>Watch 3 stocks or people</li>
               <li>A weekly email on what they did</li>
-              <li>Your own Home feed and watchlist</li>
+              <li>Plain-English reads, first-buy and reversal flags, track records</li>
               <li>12 months of trades on every page</li>
             </ul>
             <button className="sx-btn" onClick={signUp}>Get started free</button>
@@ -485,3 +528,84 @@ export function PublicHome() {
   );
 }
 
+// ── /trades for signed-out visitors ─────────────────────────────────────────
+// The raw feed: this week's biggest open-market buys and sales and the latest
+// Congress disclosures. No reads or flags on top (those need an account).
+export function TradesPage() {
+  const clerk = useClerk();
+  const signUp = () => openSignUp(clerk, { kind: 'signup' });
+  const [tab, setTab] = useState('buys');
+  const { data: buying, error: bErr, reload: bReload } = useApi('/public/insider-buying');
+  const { data: congress, error: cErr, reload: cReload } = useApi(tab === 'congress' ? '/public/congress' : null);
+  useEffect(() => { document.title = 'Latest insider and Congress trades · Seli'; }, []);
+  const clusters = [buying?.featured, ...(buying?.more || [])].filter(Boolean);
+  return (
+    <div className="sx-page sx-page--feed hx-trades">
+      <header className="sx-head sx-head--page">
+        <div className="sx-head__main">
+          <h1 className="sx-head__title">Latest trades</h1>
+          <p className="sx-head__desc">Open-market insider buys and sales filed with the SEC in the last 7 days, and the newest Congress disclosures. Grants and option exercises are left out.</p>
+          <Freshness />
+        </div>
+      </header>
+      <div className="sx-toolbar">
+        <Segmented size="sm" value={tab} onChange={setTab} options={[
+          { value: 'buys', label: 'Insider buys' }, { value: 'sells', label: 'Insider sales' }, { value: 'congress', label: 'Congress' },
+        ]} />
+      </div>
+      {tab !== 'congress' && bErr && !buying && <ErrorNote message={bErr} onRetry={bReload} />}
+      {tab !== 'congress' && !buying && !bErr && <Card><Skeleton lines={6} /></Card>}
+      {tab === 'buys' && buying && (
+        <Card title="Biggest insider buys this week" sub="Open-market purchases of $10K+, by total" pad={false}
+          action={<a href="/insider-buying" className="sx-link" onClick={navClick('/insider-buying')}>Insider buying page <Icon name="arrow" size={12} /></a>}>
+          <ul className="sx-rows">
+            {clusters.map(c => (
+              <li key={c.ticker} className="sx-row">
+                <StockLink ticker={c.ticker} />
+                <div className="sx-row__main">
+                  <div className="sx-row__title">{c.company}</div>
+                  <div className="sx-row__sub">
+                    {c.buyers.slice(0, 2).map((b, i) => <React.Fragment key={b.raw}>{i > 0 && ', '}<InsiderLink raw={b.raw}>{b.name}</InsiderLink> <RoleTag role={b.role} name={b.raw} /></React.Fragment>)}
+                    {c.n_insiders > 2 ? ` + ${plural(c.n_insiders - 2, 'other')}` : ''}
+                  </div>
+                </div>
+                <span className="sx-row__amt sx-up">{money(c.total)}</span>
+              </li>
+            ))}
+            {!clusters.length && <li className="sx-row sx-muted">No open-market insider buys filed yet this week.</li>}
+          </ul>
+        </Card>
+      )}
+      {tab === 'sells' && buying && (
+        <Card title="Biggest insider sales this week" sub="Open-market sales by company insiders" pad={false}>
+          <ul className="sx-rows">
+            {(buying.sells || []).map(r => (
+              <li key={`${r.ticker}:${r.raw}`} className="sx-row">
+                <StockLink ticker={r.ticker} />
+                <div className="sx-row__main">
+                  <div className="sx-row__title"><InsiderLink raw={r.raw}>{r.name}</InsiderLink> <RoleTag role={r.role} name={r.raw} /></div>
+                  <div className="sx-row__sub">{r.company}{r.n > 1 ? ` · ${plural(r.n, 'sale')}` : ''}{r.date ? ` · ${shortDate(r.date)}` : ''}</div>
+                </div>
+                <span className="sx-row__amt sx-down">{money(r.value)}</span>
+              </li>
+            ))}
+            {!(buying.sells || []).length && <li className="sx-row sx-muted">No open-market insider sales filed yet this week.</li>}
+          </ul>
+        </Card>
+      )}
+      {tab === 'congress' && (
+        <Card title="Latest Congress disclosures" sub="Amounts are reported as ranges, usually within 45 days" pad={false}
+          action={<a href="/congress" className="sx-link" onClick={navClick('/congress')}>All Congress trades <Icon name="arrow" size={12} /></a>}>
+          {cErr && !congress && <div className="sx-card__body"><ErrorNote message={cErr} onRetry={cReload} /></div>}
+          {!congress && !cErr && <div className="sx-card__body"><Skeleton lines={6} /></div>}
+          {congress && <TradeTable trades={(congress.recent || []).slice(0, 30)} showTicker personLabel="Member" membersOnly />}
+        </Card>
+      )}
+      <div className="sx-gate sx-gate--signup">
+        <span className="sx-gate__text"><Icon name="lock" size={13} /> A free account adds every trade with filters and sorting, plus Seli's reads: first buys, reversals and track records.</span>
+        <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={signUp}>Create free account</button>
+      </div>
+      <p className="sx-note sx-note--center"><a href="/stocks" className="sx-link" onClick={navClick('/stocks')}>Browse every stock A to Z</a></p>
+    </div>
+  );
+}

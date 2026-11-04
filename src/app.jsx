@@ -11,7 +11,7 @@ import cfg from './config.js';
 import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
 import OnboardingFlow from './onboard.jsx';
 import './research.css';
-import { go, stockPath, insiderPath } from './lib/nav.jsx';
+import { go, stockPath, insiderPath, NAV_TABS, tabOf } from './lib/nav.jsx';
 import { clearApiCache, refreshApi, api, useDataSinceYear } from './lib/api.js';
 import { prettyPerson, prettyCompany, shortDate, plural, memberRole, memberChamber, roleFromTitle, roleText } from './lib/text.js';
 import { peekIntent, clearIntent } from './lib/intent.js';
@@ -22,7 +22,7 @@ import InsiderPage from './pages/InsiderPage.jsx';
 import HomeFeed from './pages/HomeFeed.jsx';
 import WatchlistPage from './pages/WatchlistPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
-import { PublicShell, PublicFooter, CongressPage, InsiderBuyingPage, StocksPage, PublicHome, usePublicWatchlist } from './pages/PublicPages.jsx';
+import { PublicShell, PublicFooter, CongressPage, InsiderBuyingPage, StocksPage, PublicHome, TradesPage, usePublicWatchlist } from './pages/PublicPages.jsx';
 import { BlogTimeline, BlogPostPage } from './pages/BlogPages.jsx';
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -1485,6 +1485,8 @@ function ConvictionBar({ score, max = 100, showLabel = false }) {
 const ICON_PROPS = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
 function IconHome(p) { return <svg {...ICON_PROPS} {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>; }
 function IconInsights(p) { return <svg {...ICON_PROPS} {...p}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>; }
+function IconUsers(p) { return <svg {...ICON_PROPS} {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>; }
+function IconNews(p) { return <svg {...ICON_PROPS} {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="7" y1="9" x2="17" y2="9" /><line x1="7" y1="13" x2="17" y2="13" /><line x1="7" y1="17" x2="12" y2="17" /></svg>; }
 function IconData(p) { return <svg {...ICON_PROPS} {...p}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>; }
 function IconFavorites(p) { return <svg {...ICON_PROPS} {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>; }
 
@@ -1512,12 +1514,10 @@ function IconLock(p) { return <svg {...ICON_PROPS} {...p}><rect x="3" y="11" wid
 // Logo, four text links, search, and your avatar. Everything that isn't a
 // place (theme, help, feedback, account, sign out, data freshness) lives in
 // the avatar menu instead of a row of icons.
-const NAV_LINKS = [
-  { id: 'home', label: 'Home', short: 'Home', Icon: IconHome, path: '/' },
-  { id: 'watchlist', label: 'Watchlist', short: 'Watchlist', Icon: IconFavorites, path: '/watchlist' },
-  { id: 'leaderboard', label: 'Leaderboard', short: 'Leaderboard', Icon: IconInsights, path: '/leaderboard' },
-  { id: 'dashboard', label: 'Data', short: 'Data', Icon: IconData, path: '/data' },
-];
+// Same four tabs as signed-out visitors see (lib/nav.jsx). Watchlist lives
+// in the avatar menu and on Home.
+const NAV_ICONS = { home: IconHome, trades: IconInsights, insiders: IconUsers, news: IconNews };
+const NAV_LINKS = NAV_TABS.map(t => ({ ...t, short: t.label, Icon: NAV_ICONS[t.id] }));
 
 function AccountMenu({ user, dark, setDark, lastFilingDate, isDataStale }) {
   const { pro } = useBilling();
@@ -1550,6 +1550,7 @@ function AccountMenu({ user, dark, setDark, lastFilingDate, isDataStale }) {
             <div className="sx-menu__name">{name || email}{pro && <span className="sx-pro">Pro</span>}</div>
             {name && email && <div className="sx-menu__email">{email}</div>}
           </div>
+          <button role="menuitem" className="sx-menu__item" onClick={pick(() => go('/watchlist'))}>Watchlist</button>
           <button role="menuitem" className="sx-menu__item" onClick={pick(() => go('/account'))}>Account and emails</button>
           {!pro && <button role="menuitem" className="sx-menu__item sx-menu__item--accent" onClick={pick(() => go('/account#billing'))}>See Pro · {PRO_PRICE_LABEL}</button>}
           <button role="menuitem" className="sx-menu__item" onClick={pick(() => clerk?.openUserProfile?.())}>Login and security</button>
@@ -1595,7 +1596,7 @@ function TopNav({ page, user, dark, setDark, lastFilingDate, isDataStale }) {
         {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} />}
         <nav className="bottomnav">
           {NAV_LINKS.map(n => (
-            <button key={n.id} className={`bottomnav__btn${page === n.id ? ' bottomnav__btn--active' : ''}`} onClick={() => go(n.path)} aria-current={page === n.id ? 'page' : undefined}>
+            <button key={n.id} className={`bottomnav__btn${tabOf(page) === n.id ? ' bottomnav__btn--active' : ''}`} onClick={() => go(n.path)} aria-current={tabOf(page) === n.id ? 'page' : undefined}>
               <n.Icon style={{ width: 20, height: 20 }} /><span className="bottomnav__label">{n.short}</span>
             </button>
           ))}
@@ -1611,8 +1612,8 @@ function TopNav({ page, user, dark, setDark, lastFilingDate, isDataStale }) {
       <div className="sx-nav__mid">
         <nav className="sx-nav__links" aria-label="Main">
           {NAV_LINKS.map(n => (
-            <a key={n.id} href={n.path} aria-current={page === n.id ? 'page' : undefined}
-              className={`sx-nav__link${page === n.id ? ' sx-nav__link--on' : ''}`}
+            <a key={n.id} href={n.path} aria-current={tabOf(page) === n.id ? 'page' : undefined}
+              className={`sx-nav__link${tabOf(page) === n.id ? ' sx-nav__link--on' : ''}`}
               onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(n.path); }}>{n.label}</a>
           ))}
         </nav>
@@ -3037,7 +3038,7 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
     <div className="ws-page">
       <header className="sx-head sx-head--page ws-data-head">
         <div className="sx-head__main">
-          <h1 className="sx-head__title">Data</h1>
+          <h1 className="sx-head__title">Trades</h1>
           <p className="sx-head__desc">Every open-market insider and Congress trade. Signals groups them by stock.{isMobile ? ' Tap a row for details.' : ''}</p>
         </div>
         <div className="sx-head__actions">
@@ -4944,7 +4945,7 @@ const HELP_SECTIONS = [
         <h3>Watchlist</h3>
         <p>The stocks and people you watch, plus your brokerage holdings if you've linked one. Each row says what insiders did. Pro accounts get a bell on each row for same-day email alerts.</p>
         <h3>Data and Leaderboard</h3>
-        <p><strong>Data</strong> is the full feed: scored signals grouped by stock, or every raw filing, with filters. <strong>Leaderboard</strong> ranks insiders by how their buys have done.</p>
+        <p><strong>Trades</strong> is the full feed: scored signals grouped by stock, or every raw filing, with filters. <strong>Insiders</strong> ranks insiders by how their buys have done.</p>
         <h3>Account</h3>
         <p>Your plan, which emails you get, and your linked brokerage.</p>
       </>
@@ -6993,6 +6994,7 @@ function routeFromLocation(loc = window.location) {
     return { page: 'blogPost', slug: decodeURIComponent(b).toLowerCase() };
   }
   if (a === 'data') return { page: 'dashboard' };
+  if (a === 'trades' && !b) return { page: 'trades' };
   if (a === 'leaderboard') return { page: 'leaderboard' };
   if (a === 'insights' || a === 'insiders') return { page: 'leaderboard', canonical: '/leaderboard' };
   if (a === 'watchlist') return { page: 'watchlist' };
@@ -7000,9 +7002,9 @@ function routeFromLocation(loc = window.location) {
   if (a === 'settings') return { page: 'account', canonical: '/account' };
   return { page: 'home', canonical: '/' };
 }
-const PAGE_PATHS = { home: '/', dashboard: '/data', data: '/data', signals: '/leaderboard', leaderboard: '/leaderboard', watchlist: '/watchlist', settings: '/account', account: '/account' };
-const PAGE_TITLES = { home: 'Home', dashboard: 'Data', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
-const PUBLIC_PAGES = ['home', 'stock', 'insider', 'congress', 'insiderBuying', 'leaderboard', 'stocks', 'blog', 'blogPost'];
+const PAGE_PATHS = { home: '/', trades: '/trades', dashboard: '/data', data: '/data', signals: '/leaderboard', leaderboard: '/leaderboard', watchlist: '/watchlist', settings: '/account', account: '/account' };
+const PAGE_TITLES = { home: 'Home', dashboard: 'Trades', trades: 'Trades', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
+const PUBLIC_PAGES = ['home', 'trades', 'stock', 'insider', 'congress', 'insiderBuying', 'leaderboard', 'stocks', 'blog', 'blogPost'];
 const STANDALONE_PATHS = ['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/about', '/onboard'];
 
 import * as Sentry from '@sentry/react';
@@ -7057,7 +7059,8 @@ function AppInner() {
     const link = document.querySelector('link[rel="canonical"]');
     if (link) link.href = 'https://seli.app' + (window.location.pathname === '/' ? '' : window.location.pathname);
   }, [route, isSignedIn]);
-  const page = route.page;
+  // Signed in, /trades is the Data page (signed out it's the public feed).
+  const page = route.page === 'trades' && isLoaded && isSignedIn ? 'dashboard' : route.page;
   const isAboutPath = window.location.pathname === '/about';
 
   const [filings, setFilings] = useState([]);
@@ -7304,6 +7307,7 @@ function AppInner() {
         {route.page === 'stocks' && <StocksPage />}
         {route.page === 'leaderboard' && <LeaderboardPage pro={false} onUpgrade={publicWatchlist.upgrade} publicMode />}
         {route.page === 'home' && <PublicHome />}
+        {route.page === 'trades' && <TradesPage />}
         {route.page === 'blog' && <BlogTimeline key={route.n} pageNo={route.n} />}
         {route.page === 'blogPost' && <BlogPostPage key={route.slug} slug={route.slug} watchlist={publicWatchlist} />}
       </PublicShell>

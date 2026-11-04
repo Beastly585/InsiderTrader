@@ -60,3 +60,21 @@ export function pushRecent(item) { // {kind:'stock'|'person', id, label, sub}
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
   } catch { /* storage unavailable */ }
 }
+
+// ── Main tabs (signed in and signed out get the same four) ─────────────────
+// Trades is the Data page when signed in and the raw public feed when not.
+// Insiders is the leaderboard. Pages without their own tab light up the one
+// they belong to (a stock's Congress page is under Trades, a blog post under News).
+export const NAV_TABS = [
+  { id: 'home', label: 'Home', path: '/' },
+  { id: 'trades', label: 'Trades', path: '/trades' },
+  { id: 'insiders', label: 'Insiders', path: '/leaderboard' },
+  { id: 'news', label: 'News', path: '/blog' },
+];
+const TAB_OF = {
+  home: 'home',
+  trades: 'trades', dashboard: 'trades', insiderBuying: 'trades', congress: 'trades', stocks: 'trades',
+  leaderboard: 'insiders', insider: 'insiders',
+  blog: 'news', blogPost: 'news',
+};
+export const tabOf = page => TAB_OF[page] || null;

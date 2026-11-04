@@ -7,7 +7,7 @@ import { useApi } from '../lib/api.js';
 import { InsiderLink, StockLink, pushRecent } from '../lib/nav.jsx';
 import { money, amount, price, shares, pct, shortDate, ago, plural, codeLabel, edgarCompanyUrl, memberRole, stockTitle } from '../lib/text.js';
 import { secFilingUrl } from '../edgar.js';
-import { Card, TypeBadge, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, Icon, useNarrow, RoleTag } from '../components/ui.jsx';
+import { Card, TypeBadge, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, Icon, useNarrow, RoleTag, usePublicView, SignupTeaser } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
 import PriceChart from '../components/PriceChart.jsx';
 
@@ -57,6 +57,7 @@ function StockHeaderSkeleton({ ticker }) {
 
 function StockView({ d, watchlist, onUpgrade, renderProfile }) {
   const s = d.summary;
+  const pub = usePublicView(); // signed out: the numbers, not Seli's read on them
   const hasCongress = d.trades.some(t => t.congress);
   const [filter, setFilter] = useState('om');
   const [shown, setShown] = useState(PAGE);
@@ -99,7 +100,9 @@ function StockView({ d, watchlist, onUpgrade, renderProfile }) {
       <div className="sx-grid">
         <div className="sx-grid__main">
           <Card title="What insiders are doing" className="sx-summary">
-            {s?.lines?.length ? (
+            {pub && s?.lines?.length ? (
+              <SignupTeaser>Seli's plain-English read on {d.ticker}'s insiders (first buys in years, reversals, clusters) is free with an account.</SignupTeaser>
+            ) : s?.lines?.length ? (
               <div className="sx-lines">
                 {s.lines.map((l, i) => <p key={i} className={i === 0 ? 'sx-lines__lead' : ''}>{l}</p>)}
               </div>
@@ -179,11 +182,12 @@ function sinceBuy(t, showNow) {
 //   [ticker]  Who / what                  $value
 //             date · role/detail          Buy · +12%
 function TradeList({ trades, showTicker, showInsider, showNow, membersOnly }) {
+  const pub = usePublicView();
   return (
     <ul className="sx-trows">
       {trades.map((t, i) => {
         const since = sinceBuy(t, showNow);
-        const detail = !t.om ? codeLabel(t.code) : [t.routine ? 'Planned' : t.brk, t.rev && 'Reversal'].filter(Boolean).join(' · ');
+        const detail = !t.om ? codeLabel(t.code) : [t.routine ? 'Planned' : !pub && t.brk, !pub && t.rev && 'Reversal'].filter(Boolean).join(' · ');
         // Who traded (stock pages), which company (multi-company people), or,
         // on a one-company insider page, the trade itself.
         const verb = t.type === 'buy' ? (t.om ? 'Bought' : 'Acquired') : t.type === 'sell' ? (t.om ? 'Sold' : 'Disposed') : 'Traded';
@@ -214,8 +218,11 @@ function TradeList({ trades, showTicker, showInsider, showNow, membersOnly }) {
   );
 }
 
-export function TradeTable({ trades, showTicker = false, showInsider = true, showNow = false, personLabel = 'Insider', membersOnly = false }) {
+export function TradeTable({ trades, showTicker = false, showInsider = true, showNow: showNowProp = false, personLabel = 'Insider', membersOnly = false }) {
   const narrow = useNarrow();
+  // Signed out: raw filings only. No first-buy or reversal flags, no return since the buy.
+  const pub = usePublicView();
+  const showNow = showNowProp && !pub;
   if (!trades.length) return null;
   if (narrow) return <TradeList trades={trades} showTicker={showTicker} showInsider={showInsider} showNow={showNow} membersOnly={membersOnly} />;
   return (
@@ -248,7 +255,7 @@ export function TradeTable({ trades, showTicker = false, showInsider = true, sho
                     {!membersOnly && <span className="sx-table__role"><RoleTag role={t.role} congress={!!t.congress} title={t.title} name={t.raw} /></span>}
                   </td>
                 )}
-                <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}{t.om && !t.routine && t.brk && <span className="sx-table__code sx-table__code--accent" title="This insider hadn't bought this stock on the open market in that long">{t.brk}</span>}{t.om && t.rev && <span className="sx-table__code sx-table__code--rev" title={REV_TIP[t.rev]}>Reversal</span>}</td>
+                <td><TypeBadge type={t.type} om={t.om} />{!t.om && <span className="sx-table__code" title={codeLabel(t.code)}>{codeLabel(t.code)}</span>}{t.om && t.routine && <span className="sx-table__code" title="Filed under a pre-scheduled 10b5-1 trading plan">Planned</span>}{!pub && t.om && !t.routine && t.brk && <span className="sx-table__code sx-table__code--accent" title="This insider hadn't bought this stock on the open market in that long">{t.brk}</span>}{!pub && t.om && t.rev && <span className="sx-table__code sx-table__code--rev" title={REV_TIP[t.rev]}>Reversal</span>}</td>
                 <td className="sx-r sx-mono sx-hide-sm">{t.congress ? '—' : shares(t.shares)}</td>
                 <td className="sx-r sx-mono sx-hide-sm">{t.congress ? '—' : t.other_class
                   ? <span className="sx-otherclass" title={`${t.security || 'Local shares'}: priced per local share, not per ${t.ticker || 'US'} ADS. The dollar value is correct.`}>{price(t.price)}<small>local</small></span>

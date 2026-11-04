@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, pushRecent } from '../lib/nav.jsx';
 import { money, amount, price, shares, pct, shortDate, ago, plural, prettyPerson, personTitle } from '../lib/text.js';
-import { Card, Chip, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, RoleTag } from '../components/ui.jsx';
+import { Card, Chip, Segmented, Empty, Skeleton, ErrorNote, Gate, Stat, RoleTag, usePublicView, SignupTeaser } from '../components/ui.jsx';
 import WatchButton from '../components/WatchButton.jsx';
 import { TradeTable } from './StockPage.jsx';
 
@@ -68,6 +68,7 @@ function TrackRecord({ r, congress }) {
 }
 
 function InsiderView({ d, watchlist, onUpgrade }) {
+  const pub = usePublicView(); // signed out: trades and holdings, no track record
   const primary = d.companies[0];
   const [filter, setFilter] = useState('om');
   const [shown, setShown] = useState(PAGE);
@@ -96,7 +97,9 @@ function InsiderView({ d, watchlist, onUpgrade }) {
       <div className="sx-grid">
         <div className="sx-grid__main">
           <Card title="Track record" sub="How this person's open-market buys have done since">
-            <TrackRecord r={d.record} congress={d.congress} />
+            {pub
+              ? <SignupTeaser>See how {d.name}'s buys have done since: hit rate, average return and how they stack up against the S&amp;P 500. Free with an account.</SignupTeaser>
+              : <TrackRecord r={d.record} congress={d.congress} />}
           </Card>
 
           <Card title="Trades" pad={false}
@@ -130,7 +133,7 @@ function InsiderView({ d, watchlist, onUpgrade }) {
                   {!d.congress && c.owned != null && c.owned > 0 && (
                     <div className="sx-cos__hold">
                       Holds {shares(c.owned)} shares{c.est_value ? <> · about <b>{money(c.est_value)}</b></> : ''}
-                      {c.avg_buy && c.since_avg_buy != null && <span className={c.since_avg_buy >= 0 ? 'sx-up' : 'sx-down'}> · avg buy {price(c.avg_buy)} ({pct(c.since_avg_buy)})</span>}
+                      {!pub && c.avg_buy && c.since_avg_buy != null && <span className={c.since_avg_buy >= 0 ? 'sx-up' : 'sx-down'}> · avg buy {price(c.avg_buy)} ({pct(c.since_avg_buy)})</span>}
                     </div>
                   )}
                 </li>
