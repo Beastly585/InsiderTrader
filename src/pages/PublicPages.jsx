@@ -9,7 +9,7 @@ import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink, NAV_TABS, tabOf, stockPath, insiderPath } from '../lib/nav.jsx';
 import { plural, shortDate, money, congressRange, PAGE_TITLES, roleText, amount, shares, price, prettyPerson, prettyCompany, roleFromTitle, isEntityName, pct } from '../lib/text.js';
 import { secFilingUrl } from '../edgar.js';
-import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segmented, PublicViewContext, TypeBadge } from '../components/ui.jsx';
+import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segmented, PublicViewContext, TypeBadge, StarButton } from '../components/ui.jsx';
 import '../home.css';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
@@ -648,10 +648,12 @@ export function PublicHome() {
 // (those need an account). Signed in, /trades is the Data page instead.
 // Filters, sort and page live in the URL, so a view can be shared or reloaded.
 const TRADE_PERIODS = [{ value: 7, label: '7D' }, { value: 30, label: '30D' }, { value: 90, label: '90D' }, { value: 365, label: '1Y' }];
+// Pro sees further back (the Worker caps everyone else at 12 months anyway).
+const PRO_PERIODS = [...TRADE_PERIODS, { value: 730, label: '2Y' }, { value: 1825, label: '5Y' }];
 const TRADE_ROWS = 50;    // rows per page on screen
 const WORKER_ROWS = 200;  // rows the Worker sends per request (4 screen pages)
 const TRADE_SORTS = { date: 'transaction_date', ticker: 'ticker', person: 'insider_name', shares: 'shares', price: 'price_per_share', value: 'value', stake: 'pct_owned_change' };
-const TRADE_DEFAULTS = { days: 30, side: 'all', source: 'all', role: 'all', min: '0', sort: 'date', dir: 'desc', q: '', page: 0 };
+const TRADE_DEFAULTS = { days: 30, side: 'all', source: 'all', role: 'all', min: '0', people: '0', mine: '0', sort: 'date', dir: 'desc', q: '', page: 0 };
 const isCongressRow = r => r.relationship === 'congress' || String(r.transaction_code || '').startsWith('CONGRESS');
 const dayGap = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 
@@ -659,11 +661,13 @@ function readTradeParams() {
   const p = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const pick = (k, ok) => (ok(p.get(k)) ? p.get(k) : TRADE_DEFAULTS[k]);
   return {
-    days: [7, 30, 90, 365].includes(Number(p.get('days'))) ? Number(p.get('days')) : TRADE_DEFAULTS.days,
+    days: [7, 30, 90, 365, 730, 1825].includes(Number(p.get('days'))) ? Number(p.get('days')) : TRADE_DEFAULTS.days,
     side: pick('side', v => ['buy', 'sell'].includes(v)),
     source: pick('source', v => ['corporate', 'political'].includes(v)),
     role: pick('role', v => ['exec', 'director', 'owner'].includes(v)),
     min: pick('min', v => ['100000', '1000000'].includes(v)),
+    people: pick('people', v => v === '1'),
+    mine: pick('mine', v => v === '1'),
     sort: pick('sort', v => v in TRADE_SORTS),
     dir: pick('dir', v => v === 'asc'),
     q: (p.get('q') || '').slice(0, 40),
@@ -671,8 +675,14 @@ function readTradeParams() {
   };
 }
 
-export function TradesPage() {
+// signedIn: the same page inside the app. It reads /api/explore instead (Pro
+// gets more history), adds "My watchlist", and drops the sign-up pitch.
+export function TradesPage({ watchlist: wlProp, signedIn = false }) {
   const clerk = useClerk();
+  const publicWl = usePublicWatchlist();
+  const watchlist = wlProp || publicWl;
+  const pro = signedIn && !!watchlist.pro;
+  const watchCount = (watchlist.tickers?.length || 0) + (watchlist.insiders?.length || 0);
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
   const narrow = useNarrow();
   const [f, setF] = useState(readTradeParams);
@@ -692,15 +702,31 @@ export function TradesPage() {
   }, [f]);
 
   const workerPage = Math.floor(f.page * TRADE_ROWS / WORKER_ROWS);
-  const params = new URLSearchParams({ days: String(f.days), sort: TRADE_SORTS[f.sort] });
+  const days = !pro && f.days > 365 ? 365 : f.days;
+  const params = new URLSearchParams({ days: String(days) });
+  if (signedIn) {
+    // /api/explore takes the raw options; the public route maps them itself.
+    params.set('om', '1');
+    params.set('sort', f.sort === 'value' ? 'signed_value' : TRADE_SORTS[f.sort]);
+    params.set('min', f.min !== '0' ? f.min : '1000');
+  } else {
+    params.set('sort', TRADE_SORTS[f.sort]);
+    if (f.min !== '0') params.set('min', f.min);
+  }
   if (f.dir === 'asc') params.set('dir', 'asc');
   if (f.side !== 'all') params.set('type', f.side);
   if (f.source !== 'all') params.set('source', f.source);
   if (f.role !== 'all') params.set('role', f.role);
-  if (f.min !== '0') params.set('min', f.min);
+  if (f.people === '1') params.set('people', '1');
   if (f.q) params.set('q', f.q);
+  if (signedIn && f.mine === '1') {
+    params.set('mine', '1');
+    params.set('mt', (watchlist.tickers || []).join(','));
+    params.set('mi', (watchlist.insiders || []).join('|'));
+  }
   if (workerPage) params.set('page', String(workerPage));
-  const { data: d, error, reload, loading } = useApi(`/public/trades?${params}`);
+  const waitForList = signedIn && f.mine === '1' && !watchlist.ready;
+  const { data: d, error, reload, loading } = useApi(waitForList ? null : `/${signedIn ? 'api/explore' : 'public/trades'}?${params}`);
   // The total only comes with the first Worker page; keep it while paging.
   const filterKey = JSON.stringify({ ...f, page: 0 });
   useEffect(() => { setTotal(null); }, [filterKey]);
@@ -746,7 +772,7 @@ export function TradesPage() {
 
       <div className="hx-filters">
         <div className="hx-filters__row">
-          <Segmented size="sm" value={f.days} onChange={v => set({ days: v })} options={TRADE_PERIODS} />
+          <Segmented size="sm" value={f.days} onChange={v => set({ days: v })} options={pro ? PRO_PERIODS : TRADE_PERIODS} />
           <Segmented size="sm" value={f.side} onChange={v => set({ side: v })} options={[{ value: 'all', label: 'All' }, { value: 'buy', label: 'Buys' }, { value: 'sell', label: 'Sales' }]} />
           <Segmented size="sm" value={f.source} onChange={v => set({ source: v, role: v === 'political' ? 'all' : f.role })} options={[{ value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'political', label: 'Congress' }]} />
           <select className="hx-select" value={f.role} onChange={e => set({ role: e.target.value })} aria-label="Role" disabled={f.source === 'political'}>
@@ -760,6 +786,10 @@ export function TradesPage() {
             <option value="100000">$100K+</option>
             <option value="1000000">$1M+</option>
           </select>
+          <button type="button" className={`hx-toggle${f.people === '1' ? ' hx-toggle--on' : ''}`} aria-pressed={f.people === '1'}
+            onClick={() => set({ people: f.people === '1' ? '0' : '1' })} title="Leave out funds and companies that file as big shareholders">
+            <span className="hx-toggle__box" aria-hidden="true">{f.people === '1' && <Icon name="check" size={11} />}</span>Hide funds
+          </button>
         </div>
         <div className="sx-search__field hx-filters__q">
           <span className="sx-search__icon"><Icon name="search" size={14} /></span>
@@ -773,7 +803,15 @@ export function TradesPage() {
             {total != null ? `${total.toLocaleString('en-US')} ${total === 1 ? 'trade' : 'trades'}` : loading ? 'Loading…' : ''}
             {d?.from ? ` · ${shortDate(d.from, { year: true })} to ${shortDate(d.to, { year: true })}` : ''}
           </span>
-          {narrow && (
+          <span className="hx-trades__tools">
+          {signedIn && (
+            <button type="button" className={`hx-toggle hx-toggle--sm hx-toggle--mine${f.mine === '1' ? ' hx-toggle--on' : ''}`} aria-pressed={f.mine === '1'}
+              disabled={!watchCount && f.mine !== '1'} title={watchCount ? 'Only trades in the stocks and by the people you watch' : 'Watch a stock or person first (tap the star on any row)'}
+              onClick={() => set({ mine: f.mine === '1' ? '0' : '1' })}>
+              <Icon name="star" size={12} fill={f.mine === '1' ? 'currentColor' : 'none'} />My watchlist{watchCount ? ` (${watchCount})` : ''}
+            </button>
+          )}
+            {narrow && (
             <select className="hx-select" value={`${f.sort}:${f.dir}`} aria-label="Sort"
               onChange={e => { const [sort, dir] = e.target.value.split(':'); set({ sort, dir }); }}>
               <option value="date:desc">Newest first</option>
@@ -784,15 +822,16 @@ export function TradesPage() {
               <option value="ticker:asc">Ticker A to Z</option>
             </select>
           )}
+          </span>
         </div>
         {error && !d && <div className="sx-card__body"><ErrorNote message={error} onRetry={reload} /></div>}
         {!d && !error && <div className="sx-card__body"><Skeleton lines={10} /></div>}
-        {d && !rows.length && <div className="sx-empty"><div className="sx-empty__body">No trades match these filters.</div></div>}
+        {d && !rows.length && <div className="sx-empty"><div className="sx-empty__body">{f.mine === '1' ? 'No trades in your watchlist match these filters.' : 'No trades match these filters.'}</div></div>}
         {d && rows.length > 0 && (narrow ? (
           <ul className={`sx-trows${loading ? ' sx-dim' : ''}`}>
             {rows.map((r, i) => { const p = who(r); const note = filedNote(r); const st = stake(r); const url = sec(r); return (
               <li key={`${f.page}:${i}`} className="sx-trow">
-                {r.ticker ? <StockLink ticker={r.ticker} /> : <span className="sx-trow__asset">Other</span>}
+                <span className="hx-trow__tk">{r.ticker ? <StockLink ticker={r.ticker} /> : <span className="sx-trow__asset">Other</span>}{r.ticker && <StarButton watchlist={watchlist} kind="stock" id={r.ticker} />}</span>
                 <div className="sx-trow__main">
                   <div className="sx-trow__title"><InsiderLink raw={p.raw}>{p.name}</InsiderLink></div>
                   <div className="sx-trow__sub">{shortDate(dateOf(r))}{note ? ` (${note})` : ''} · {p.congress ? 'Congress' : roleText(p.role)}</div>
@@ -828,7 +867,7 @@ export function TradesPage() {
                 {rows.map((r, i) => { const p = who(r); const note = filedNote(r); const st = stake(r); const url = sec(r); return (
                   <tr key={`${f.page}:${i}`}>
                     <td className="sx-nowrap">{shortDate(dateOf(r), { year: f.days > 90 })}{note && <span className="hx-filed">{note}</span>}</td>
-                    <td className="hx-trades__stock">{r.ticker ? <StockLink ticker={r.ticker} /> : null}<span className="hx-trades__co">{prettyCompany(r.company_name) || ''}</span></td>
+                    <td className="hx-trades__stock">{r.ticker && <StarButton watchlist={watchlist} kind="stock" id={r.ticker} />}{r.ticker ? <StockLink ticker={r.ticker} /> : null}<span className="hx-trades__co">{prettyCompany(r.company_name) || ''}</span></td>
                     <td className="sx-table__who"><InsiderLink raw={p.raw}>{p.name}</InsiderLink><span className="sx-table__role"><RoleTag role={p.role} congress={p.congress} title={r.insider_title} name={p.raw} /></span></td>
                     <td><TypeBadge type={r.transaction_type} /></td>
                     <td className="sx-r sx-mono">{p.congress || !r.shares ? '—' : shares(r.shares)}</td>
@@ -851,10 +890,14 @@ export function TradesPage() {
         )}
       </Card>
 
+      {signedIn ? (
+        <p className="sx-note sx-note--center">Want trades grouped by stock with conviction scores? <a href="/data" className="sx-link" onClick={navClick('/data')}>Open the data explorer</a></p>
+      ) : (
       <div className="sx-gate sx-gate--signup">
         <span className="sx-gate__text"><Icon name="lock" size={13} /> This is the raw feed. A free account adds Seli's reads on top: first buys in years, several insiders at once, planned sales and track records.</span>
         <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={signUp}>Create free account</button>
       </div>
+      )}
       <p className="sx-note sx-note--center"><a href="/insider-buying" className="sx-link" onClick={navClick('/insider-buying')}>Insider buying this week</a> · <a href="/congress" className="sx-link" onClick={navClick('/congress')}>Congress trades</a> · <a href="/stocks" className="sx-link" onClick={navClick('/stocks')}>Every stock A to Z</a></p>
     </div>
   );

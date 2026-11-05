@@ -1519,6 +1519,57 @@ function IconLock(p) { return <svg {...ICON_PROPS} {...p}><rect x="3" y="11" wid
 const NAV_ICONS = { home: IconHome, trades: IconInsights, insiders: IconUsers, news: IconNews };
 const NAV_LINKS = NAV_TABS.map(t => ({ ...t, short: t.label, Icon: NAV_ICONS[t.id] }));
 
+// Star in the top bar: what you watch, one click from anywhere.
+function WatchlistMenu({ watchlist }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onKey = e => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const tickers = watchlist.tickers || [];
+  const people = watchlist.insiders || [];
+  const count = tickers.length + people.length;
+  const pick = path => () => { setOpen(false); go(path); };
+  const SHOW = 8;
+  return (
+    <div className="sx-menu" ref={ref}>
+      <button className={`sx-nav__icon sx-wl-btn${count ? ' sx-wl-btn--on' : ''}`} onClick={() => setOpen(o => !o)} aria-haspopup="menu" aria-expanded={open}
+        aria-label={count ? `Watchlist, ${count} watched` : 'Watchlist'} title="Watchlist">
+        <Icon name="star" size={17} fill={count ? 'currentColor' : 'none'} />
+        {count > 0 && <span className="sx-wl-btn__n">{count > 99 ? '99+' : count}</span>}
+      </button>
+      {open && (
+        <div className="sx-menu__panel sx-wl-panel" role="menu">
+          {!count ? (
+            <div className="sx-wl-empty">Nothing watched yet. Tap the star next to any stock or person to follow their trades here.</div>
+          ) : (
+            <>
+              {tickers.length > 0 && <div className="sx-wl-head">Stocks</div>}
+              {tickers.slice(0, SHOW).map(t => (
+                <button key={t} role="menuitem" className="sx-menu__item" onClick={pick(stockPath(t))}><span className="sx-mono sx-strong">{t}</span></button>
+              ))}
+              {tickers.length > SHOW && <div className="sx-wl-more">+{tickers.length - SHOW} more</div>}
+              {people.length > 0 && <div className="sx-wl-head">People</div>}
+              {people.slice(0, SHOW).map(n => (
+                <button key={n} role="menuitem" className="sx-menu__item" onClick={pick(insiderPath(n))}><span className="sx-wl-name">{prettyPerson(n)}</span></button>
+              ))}
+              {people.length > SHOW && <div className="sx-wl-more">+{people.length - SHOW} more</div>}
+              <div className="sx-menu__sep" />
+              <button role="menuitem" className="sx-menu__item sx-menu__item--accent" onClick={pick('/trades?mine=1')}>See their trades</button>
+            </>
+          )}
+          <button role="menuitem" className="sx-menu__item" onClick={pick('/watchlist')}>Manage watchlist</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AccountMenu({ user, dark, setDark, lastFilingDate, isDataStale }) {
   const { pro } = useBilling();
   const { signOut } = useAuth();
@@ -1574,7 +1625,7 @@ function AccountMenu({ user, dark, setDark, lastFilingDate, isDataStale }) {
   );
 }
 
-function TopNav({ page, user, dark, setDark, lastFilingDate, isDataStale }) {
+function TopNav({ page, user, dark, setDark, lastFilingDate, isDataStale, watchlist }) {
   const isMobile = useIsMobile();
   const [searchOpen, setSearchOpen] = useState(false);
   const logo = (
@@ -1582,7 +1633,7 @@ function TopNav({ page, user, dark, setDark, lastFilingDate, isDataStale }) {
       <img src={logoSimple} alt="" /><span>Seli</span>
     </a>
   );
-  const menu = <AccountMenu user={user} dark={dark} setDark={setDark} lastFilingDate={lastFilingDate} isDataStale={isDataStale} />;
+  const menu = <>{watchlist && <WatchlistMenu watchlist={watchlist} />}<AccountMenu user={user} dark={dark} setDark={setDark} lastFilingDate={lastFilingDate} isDataStale={isDataStale} /></>;
   if (isMobile) {
     return (
       <>
@@ -3038,8 +3089,8 @@ function DashboardPage({ filings, loading, ensureFilingsWindow, onDrillSignal, o
     <div className="ws-page">
       <header className="sx-head sx-head--page ws-data-head">
         <div className="sx-head__main">
-          <h1 className="sx-head__title">Trades</h1>
-          <p className="sx-head__desc">Every open-market insider and Congress trade. Signals groups them by stock.{isMobile ? ' Tap a row for details.' : ''}</p>
+          <h1 className="sx-head__title">Data explorer</h1>
+          <p className="sx-head__desc">Every open-market insider and Congress trade, with Seli's scoring. Signals groups them by stock.{isMobile ? ' Tap a row for details.' : ''}</p>
         </div>
         <div className="sx-head__actions">
           <button className="sx-btn sx-btn--ghost sx-btn--sm" onClick={() => onUpgrade('data_export_direct')}><IconDownload style={{ width: 13, height: 13 }} /> Download dataset</button>
@@ -7003,7 +7054,7 @@ function routeFromLocation(loc = window.location) {
   return { page: 'home', canonical: '/' };
 }
 const PAGE_PATHS = { home: '/', trades: '/trades', dashboard: '/data', data: '/data', signals: '/leaderboard', leaderboard: '/leaderboard', watchlist: '/watchlist', settings: '/account', account: '/account' };
-const PAGE_TITLES = { home: 'Home', dashboard: 'Trades', trades: 'Trades', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
+const PAGE_TITLES = { home: 'Home', dashboard: 'Data explorer', trades: 'Trades', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
 const PUBLIC_PAGES = ['home', 'trades', 'stock', 'insider', 'congress', 'insiderBuying', 'leaderboard', 'stocks', 'blog', 'blogPost'];
 const STANDALONE_PATHS = ['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/about', '/onboard'];
 
@@ -7060,7 +7111,7 @@ function AppInner() {
     if (link) link.href = 'https://seli.app' + (window.location.pathname === '/' ? '' : window.location.pathname);
   }, [route, isSignedIn]);
   // Signed in, /trades is the Data page (signed out it's the public feed).
-  const page = route.page === 'trades' && isLoaded && isSignedIn ? 'dashboard' : route.page;
+  const page = route.page;
   const isAboutPath = window.location.pathname === '/about';
 
   const [filings, setFilings] = useState([]);
@@ -7305,7 +7356,7 @@ function AppInner() {
         {route.page === 'congress' && <CongressPage />}
         {route.page === 'insiderBuying' && <InsiderBuyingPage watchlist={publicWatchlist} />}
         {route.page === 'stocks' && <StocksPage />}
-        {route.page === 'leaderboard' && <LeaderboardPage pro={false} onUpgrade={publicWatchlist.upgrade} publicMode />}
+        {route.page === 'leaderboard' && <LeaderboardPage pro={false} onUpgrade={publicWatchlist.upgrade} publicMode watchlist={publicWatchlist} />}
         {route.page === 'home' && <PublicHome />}
         {route.page === 'trades' && <TradesPage />}
         {route.page === 'blog' && <BlogTimeline key={route.n} pageNo={route.n} />}
@@ -7359,14 +7410,15 @@ function AppInner() {
       )}
       {notice && <div className="sx-toast" role="status"><Icon name="check" size={14} />{notice}</div>}
       <div className="ws-shell">
-        <TopNav page={page} user={user} dark={dark} setDark={setDark} lastFilingDate={lastFilingDate} isDataStale={isDataStale} />
+        <TopNav page={page} user={user} dark={dark} setDark={setDark} lastFilingDate={lastFilingDate} isDataStale={isDataStale} watchlist={watchlist} />
         <main className="ws-main" ref={mainRef}>
           {page === 'home' && <HomeFeed watchlist={watchlist} portfolioTickers={portfolioTickers} user={user} />}
           {page === 'stock' && <StockPage key={route.ticker} ticker={route.ticker} watchlist={watchlist} onUpgrade={onUpgrade}
             renderProfile={(t, cik, company) => <CompanyProfileCard ticker={t} cik={cik} company={company} />} />}
           {page === 'insider' && <InsiderPage key={route.raw} raw={route.raw} watchlist={watchlist} onUpgrade={onUpgrade} />}
           {page === 'dashboard' && <DashboardPage filings={filings} loading={loading} ensureFilingsWindow={ensureFilingsWindow} onDrillSignal={openDetail} onOpenDetail={openDetail} watchlist={watchlist} user={user} onUpgrade={onUpgrade} />}
-          {page === 'leaderboard' && <LeaderboardPage pro={billingPro} onUpgrade={onUpgrade} />}
+          {page === 'leaderboard' && <LeaderboardPage pro={billingPro} onUpgrade={onUpgrade} watchlist={watchlist} />}
+          {page === 'trades' && <TradesPage watchlist={watchlist} signedIn />}
           {page === 'congress' && <CongressPage />}
           {page === 'insiderBuying' && <InsiderBuyingPage watchlist={watchlist} />}
           {page === 'stocks' && <StocksPage />}

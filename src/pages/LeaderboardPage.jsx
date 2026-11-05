@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { InsiderLink, StockLink } from '../lib/nav.jsx';
 import { useApi } from '../lib/api.js';
 import { money, pct, plural, PAGE_TITLES } from '../lib/text.js';
-import { Card, Segmented, Skeleton, ErrorNote, Gate, useNarrow, RoleTag, Icon } from '../components/ui.jsx';
+import { Card, Segmented, Skeleton, ErrorNote, Gate, useNarrow, RoleTag, Icon, StarButton } from '../components/ui.jsx';
 
 const LIST = { rank: 'ranked', hit: 'by_hit', ret: 'by_return', buys: 'by_buying' };
 const signed = (v, d = 1) => `${v >= 0 ? '+' : ''}${Number(v).toFixed(d)}`;
@@ -23,7 +23,7 @@ function headline(r, sort) {
 
 
 // Phone layout: one card-like row per person, ranked number on the right.
-function LeaderList({ rows, sort }) {
+function LeaderList({ rows, sort, watchlist }) {
   return (
     <ol className="sx-lb">
       {rows.map(r => {
@@ -39,7 +39,7 @@ function LeaderList({ rows, sort }) {
         return (
           <li key={r.raw} className="sx-lb__row">
             <div className="sx-lb__main">
-              <InsiderLink raw={r.raw} className="sx-lb__name">{r.name}</InsiderLink>
+              <span className="sx-lb__namerow"><InsiderLink raw={r.raw} className="sx-lb__name">{r.name}</InsiderLink><StarButton watchlist={watchlist} kind="person" id={r.raw} label={r.name} /></span>
               <div className="sx-lb__who">
                 <RoleTag role={r.role} congress={!!r.congress} title={r.title} />
                 {(r.tickers || []).slice(0, 2).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
@@ -60,7 +60,9 @@ function LeaderList({ rows, sort }) {
 
 const PHONE_PAGE = 25;
 
-export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) {
+export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, watchlist }) {
+  const [mine, setMine] = useState(false);
+  const watchedPeople = publicMode ? 0 : (watchlist?.insiders?.length || 0);
   const [years, setYears] = useState(pro ? 2 : 1);
   const [source, setSource] = useState('all');
   const [sort, setSort] = useState('rank');
@@ -71,9 +73,10 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
   // Phones show the list in pages of 25 (Pro gets up to 200 rows, which
   // made an endless scroll). Desktop shows the whole table as before.
   const [shown, setShown] = useState(PHONE_PAGE);
-  useEffect(() => { setShown(PHONE_PAGE); }, [sort, source, years]);
+  useEffect(() => { setShown(PHONE_PAGE); }, [sort, source, years, mine]);
   const { data, error, loading } = useApi(`/${publicMode ? 'public' : 'api'}/leaderboard?years=${years}&source=${source}`);
-  const visible = data ? data[LIST[sort]] || [] : null;
+  const ranked = data ? data[LIST[sort]] || [] : null;
+  const visible = ranked && mine && watchlist ? ranked.filter(r => watchlist.hasInsider(r.raw)) : ranked;
   const rules = data?.rules || { min_scored: 3, min_avg_buy: 25000 };
   const total = data?.total ?? 0;
 
@@ -95,18 +98,28 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
         {pro
           ? <Segmented size="sm" value={years} onChange={setYears} options={[{ value: 1, label: '1Y' }, { value: 2, label: '2Y' }, { value: 5, label: '5Y' }]} />
           : <span className="sx-muted sx-small">Last 12 months</span>}
+        {!publicMode && watchlist && (
+          <button type="button" className={`hx-toggle hx-toggle--mine${mine ? ' hx-toggle--on' : ''}`} aria-pressed={mine}
+            disabled={!watchedPeople && !mine} title={watchedPeople ? 'Only the people you watch' : 'Watch someone first (tap the star by their name)'}
+            onClick={() => setMine(m => !m)}>
+            <Icon name="star" size={12} fill={mine ? 'currentColor' : 'none'} />My watchlist{watchedPeople ? ` (${watchedPeople})` : ''}
+          </button>
+        )}
         {loading && data && <span className="sx-muted sx-small" role="status">Updating…</span>}
       </div>
 
       <Card pad={false}>
         {error && !data && <ErrorNote message={error} />}
         {!data && !error && <div className="sx-card__body"><Skeleton lines={8} /></div>}
-        {visible && !visible.length && !loading && (
+        {visible && !visible.length && !loading && mine && (
+          <div className="sx-empty"><div className="sx-empty__body">None of the people you watch are ranked in this view. Someone needs {rules.min_scored} or more scored buys to make the list{!pro ? ', and the free plan shows the top of it' : ''}.</div></div>
+        )}
+        {visible && !visible.length && !loading && !mine && (
           <div className="sx-empty"><div className="sx-empty__body">Nobody has {rules.min_scored} or more scored open-market buys in this window yet. Try a longer window or a different group.</div></div>
         )}
         {visible && visible.length > 0 && narrow && (
           <div className={loading ? 'sx-dim' : ''}>
-            <LeaderList rows={visible.slice(0, shown)} sort={sort} />
+            <LeaderList rows={visible.slice(0, shown)} sort={sort} watchlist={watchlist} />
             {visible.length > shown && (
               <button className="sx-more" onClick={() => setShown(n => n + PHONE_PAGE)}>
                 Show {Math.min(PHONE_PAGE, visible.length - shown)} more <span className="sx-muted">({shown} of {visible.length})</span>
@@ -133,7 +146,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
                   return (
                     <tr key={r.raw}>
                       <td className="sx-table__who">
-                        <InsiderLink raw={r.raw}>{r.name}</InsiderLink>
+                        <span className="sx-lb__namerow"><InsiderLink raw={r.raw}>{r.name}</InsiderLink><StarButton watchlist={watchlist} kind="person" id={r.raw} label={r.name} /></span>
                         <span className="sx-table__role">
                           <RoleTag role={r.role} congress={!!r.congress} title={r.title} />
                           {(r.tickers || []).slice(0, 3).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
@@ -153,7 +166,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false }) 
             </table>
           </div>
         )}
-        {!pro && data && total > visible.length && (
+        {!pro && data && !mine && total > visible.length && (
           <Gate onUpgrade={onUpgrade} feature="insider_detail">Showing the top {visible.length} of {total}. Every insider page stays open on the free plan; Pro unlocks the full ranking and longer windows.</Gate>
         )}
       </Card>

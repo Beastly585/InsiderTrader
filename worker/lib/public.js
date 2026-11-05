@@ -124,6 +124,7 @@ export async function handlePublic(request, env, origin, url, deps) {
       else if (SORTS.includes(p.get('sort'))) q.set('sort', p.get('sort'));
       if (p.get('dir') === 'asc') q.set('dir', 'asc');
       if (['exec', 'director', 'owner'].includes(p.get('role'))) q.set('role', p.get('role'));
+      if (p.get('people') === '1') q.set('people', '1');
       const page = Math.max(0, Math.min(Number(p.get('page')) || 0, 9));
       if (page) q.set('page', String(page));
       const text = (p.get('q') || '').trim().slice(0, 40);

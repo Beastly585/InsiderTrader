@@ -300,7 +300,7 @@ function Yours({ d, watchlist, since }) {
       <div className="hx-sechead">
         <h2>Your watchlist this week</h2>
         <span className="hx-sechead__links">
-          <Link to="/data?mine=1" className="sx-link">Their trades</Link>
+          <Link to="/trades?mine=1" className="sx-link">Their trades</Link>
           <Link to="/watchlist" className="sx-link">Edit watchlist ({y.watching})</Link>
         </span>
       </div>

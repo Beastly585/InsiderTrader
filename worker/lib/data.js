@@ -210,6 +210,9 @@ async function explore(ctx, url) {
     owner: `(insider_title ~* '(10%|ten percent)')`,
   };
   if (ROLE_SQL[p.get('role')]) c.push(ROLE_SQL[p.get('role')]);
+  // Leave out funds and companies filing as big shareholders (same word list
+  // as isEntityName in intel.js; \\y is Postgres's word boundary).
+  if (p.get('people') === '1') c.push(`insider_name !~* '\\y(INC|LLC|L\\.?P\\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|CAPITALES|PARTNERS|HOLDINGS|MANAGEMENT|ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER|LIMITED|COMPANY|GMBH|S\\.A|C\\.V|L\\.L\\.C)\\y'`);
   // Smallest trade to include, in dollars (whole number only, so it's safe in SQL).
   const min = Math.floor(Number(p.get('min')));
   if (min > 0) c.push(`value >= ${Math.min(min, 1e11)}`);
@@ -218,6 +221,14 @@ async function explore(ctx, url) {
   if (p.has('tickers')) {
     const ts = (p.get('tickers') || '').toUpperCase().split(',').map(s => s.trim()).filter(t => TICKER_RE.test(t)).slice(0, 200);
     c.push(ts.length ? `ticker IN (${ts.map(sqlVal).join(',')})` : '1=0');
+  }
+  // "My watchlist": the signed-in user's stocks (mt, comma-separated) and
+  // people (mi, '|'-separated raw names), either one matching.
+  if (p.get('mine') === '1') {
+    const ts = (p.get('mt') || '').toUpperCase().split(',').map(x => x.trim()).filter(t => TICKER_RE.test(t)).slice(0, 200);
+    const ns = (p.get('mi') || '').split('|').map(x => x.trim()).filter(Boolean).map(x => x.slice(0, 200)).slice(0, 100);
+    const any = [ts.length && `ticker IN (${ts.map(sqlVal).join(',')})`, ns.length && `insider_name IN (${ns.map(sqlVal).join(',')})`].filter(Boolean);
+    c.push(any.length ? `(${any.join(' OR ')})` : '1=0');
   }
   const q = (p.get('q') || '').trim().slice(0, 60);
   if (q) {
