@@ -173,7 +173,7 @@ async function samples(ctx) {
 }
 
 // ── /api/explore (Raw Data drawer) ───────────────────────────────────────────
-const SORTABLE = new Set(['transaction_date', 'ticker', 'company_name', 'insider_name', 'transaction_type',
+const SORTABLE = new Set(['transaction_date', 'signed_value', 'ticker', 'company_name', 'insider_name', 'transaction_type',
   'shares', 'price_per_share', 'value', 'pct_owned_change', 'relationship']);
 const PAGE = 200;
 
@@ -228,9 +228,13 @@ async function explore(ctx, url) {
 
   const sort = SORTABLE.has(p.get('sort')) ? p.get('sort') : 'transaction_date';
   const dir = p.get('dir') === 'asc' ? 'ASC' : 'DESC';
+  // signed_value: buys count up, sales count down, so "largest" means the
+  // biggest buys and the other end is the biggest sales.
   const orderBy = sort === 'transaction_date'
     ? `ORDER BY COALESCE(transaction_date, filing_date) ${dir} NULLS LAST`
-    : `ORDER BY ${sort} ${dir} NULLS LAST`;
+    : sort === 'signed_value'
+      ? `ORDER BY CASE WHEN transaction_type = 'sell' THEN -value ELSE value END ${dir} NULLS LAST`
+      : `ORDER BY ${sort} ${dir} NULLS LAST`;
   const page = Math.max(0, Math.min(Number(p.get('page')) || 0, 500));
 
   const [rows, count] = await Promise.all([

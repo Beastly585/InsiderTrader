@@ -148,7 +148,8 @@ export function cleanAssetName(name) {
 
 export function prettyCompany(name) {
   if (!name) return '';
-  const s = cleanAssetName(name).split(/\s+/).filter(Boolean).join(' ');
+  // SEC appends the state or country of incorporation: "Church & Dwight Co Inc /DE/".
+  const s = cleanAssetName(name).replace(/\s*\/[a-z]{2,3}\/?\s*$/i, '').split(/\s+/).filter(Boolean).join(' ');
   const allCaps = s === s.toUpperCase();
   return s.split(' ').map((w, i) => {
     const comma = w.endsWith(',') ? ',' : '';

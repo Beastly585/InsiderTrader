@@ -116,9 +116,12 @@ export async function handlePublic(request, env, origin, url, deps) {
       const q = new URLSearchParams({ om: '1', days: String(days) });
       if (['buy', 'sell'].includes(p.get('type'))) q.set('type', p.get('type'));
       if (['corporate', 'political'].includes(p.get('source'))) q.set('source', p.get('source'));
-      if (['100000', '1000000'].includes(p.get('min'))) q.set('min', p.get('min'));
-      const SORTS = ['transaction_date', 'ticker', 'insider_name', 'shares', 'price_per_share', 'value', 'pct_owned_change'];
-      if (SORTS.includes(p.get('sort'))) q.set('sort', p.get('sort'));
+      // "Any size" still skips trades under $1,000: they're almost all $0 or
+      // 1-share filings (rounding, gifts entered as buys) that clutter the list.
+      q.set('min', ['100000', '1000000'].includes(p.get('min')) ? p.get('min') : '1000');
+      const SORTS = ['transaction_date', 'ticker', 'insider_name', 'shares', 'price_per_share', 'pct_owned_change'];
+      if (p.get('sort') === 'value') q.set('sort', 'signed_value'); // biggest buys at one end, biggest sales at the other
+      else if (SORTS.includes(p.get('sort'))) q.set('sort', p.get('sort'));
       if (p.get('dir') === 'asc') q.set('dir', 'asc');
       if (['exec', 'director', 'owner'].includes(p.get('role'))) q.set('role', p.get('role'));
       const page = Math.max(0, Math.min(Number(p.get('page')) || 0, 9));

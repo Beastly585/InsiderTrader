@@ -373,7 +373,7 @@
 /* Raw trades page */
 .hx-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
 .hx-filters__row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.hx-select { height: 32px; padding: 0 26px 0 10px; border-radius: var(--radius-md); border: 0.5px solid var(--border-md); background: var(--surface-2); color: var(--text); font: 500 13px var(--font); cursor: pointer; }
+.hx-select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239295A6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 12px; height: 32px; padding: 0 32px 0 12px; border-radius: var(--radius-md); border: 0.5px solid var(--border-md); background-color: var(--surface-2); color: var(--text); font: 500 13px var(--font); cursor: pointer; }
 .hx-select:disabled { opacity: .45; cursor: default; }
 .hx-filters__q { flex: 0 1 300px; }
 .hx-trades__bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 22px; padding: 12px 16px; border-bottom: 0.5px solid var(--border); }

@@ -728,7 +728,10 @@ export function TradesPage() {
     const t = dateOf(r), fd = String(r.filing_date || '').slice(0, 10);
     return t && fd && dayGap(t, fd) > 3 ? `filed ${shortDate(fd)}` : null;
   };
-  const stake = r => (r.pct_owned_change == null || isCongressRow(r) ? null : Number(r.pct_owned_change));
+  // How much of their holding changed. Filings report the size, not the
+  // direction, so the sign comes from the trade: sales shrink a stake.
+  const stake = r => (r.pct_owned_change == null || isCongressRow(r) ? null : Math.abs(Number(r.pct_owned_change)) * (r.transaction_type === 'sell' ? -1 : 1));
+  const stakeText = v => (v == null ? '—' : Math.abs(v) < 0.5 ? '<1%' : `${v > 0 ? '+' : '−'}${Math.round(Math.abs(v))}%`);
   const sec = r => secFilingUrl(r.accession_number, r.cik_issuer);
 
   return (
@@ -775,8 +778,8 @@ export function TradesPage() {
               onChange={e => { const [sort, dir] = e.target.value.split(':'); set({ sort, dir }); }}>
               <option value="date:desc">Newest first</option>
               <option value="date:asc">Oldest first</option>
-              <option value="value:desc">Largest first</option>
-              <option value="value:asc">Smallest first</option>
+              <option value="value:desc">Biggest buys first</option>
+              <option value="value:asc">Biggest sales first</option>
               <option value="stake:desc">Biggest stake change</option>
               <option value="ticker:asc">Ticker A to Z</option>
             </select>
@@ -798,7 +801,7 @@ export function TradesPage() {
                   <span className={`sx-trow__amt ${r.transaction_type === 'buy' ? 'sx-up' : 'sx-down'}`}>{amount(r.value, p.congress)}</span>
                   <span className="sx-trow__meta">
                     <TypeBadge type={r.transaction_type} />
-                    {st != null && <span className="hx-stake">{pct(st)}</span>}
+                    {st != null && <span className="hx-stake">{stakeText(st)}</span>}
                     {url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" aria-label="Open the SEC filing"><Icon name="external" size={11} /></a>}
                   </span>
                 </div>
@@ -812,11 +815,11 @@ export function TradesPage() {
                 <tr>
                   <Th k="date">Date</Th>
                   <Th k="ticker">Stock</Th>
-                  <Th k="person">Person</Th>
+                  <Th k="person">Who</Th>
                   <th>Type</th>
                   <Th k="shares" right>Shares</Th>
                   <Th k="price" right>Price</Th>
-                  <Th k="value" right>Value</Th>
+                  <Th k="value" right><span title="Sorted with buys above zero and sales below it: one end is the biggest buys, the other the biggest sales">Value</span></Th>
                   <Th k="stake" right>Stake</Th>
                   <th aria-label="SEC filing" />
                 </tr>
@@ -831,7 +834,7 @@ export function TradesPage() {
                     <td className="sx-r sx-mono">{p.congress || !r.shares ? '—' : shares(r.shares)}</td>
                     <td className="sx-r sx-mono">{p.congress || !r.price_per_share ? '—' : price(r.price_per_share)}</td>
                     <td className={`sx-r sx-mono sx-strong ${r.transaction_type === 'buy' ? 'sx-up' : 'sx-down'}`}>{amount(r.value, p.congress)}</td>
-                    <td className="sx-r sx-mono" title="Change in how many shares they hold, from the filing">{st == null ? '—' : pct(st)}</td>
+                    <td className="sx-r sx-mono" title="How much of their holding this trade added or sold, from the filing">{stakeText(st)}</td>
                     <td className="sx-r hx-trades__sec">{url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" title="Open the SEC filing" aria-label="Open the SEC filing"><Icon name="external" size={12} /></a>}</td>
                   </tr>
                 ); })}
