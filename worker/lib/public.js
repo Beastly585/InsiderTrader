@@ -23,7 +23,7 @@
 
 import { stock, insider, marketFeed, search, leaderboard, tradeOut, TICKER_RE, FREE_DAYS } from './research.js';
 import { blogList, blogPost, blogSitemap, blogNewsSitemap } from './blog.js';
-import { explore } from './data.js';
+import { explore, signals } from './data.js';
 import { prettyPerson, prettyCompany, shortRole, asDate, isPlaceholderTicker, isEntityName } from './intel.js';
 
 const SITE = 'https://seli.app';
@@ -132,6 +132,24 @@ export async function handlePublic(request, env, origin, url, deps) {
       const key = `trades|${q.toString().toLowerCase()}`;
       const d = await cached(key, 10 * 60 * 1000, () => explore(ctx, new URL(`https://x/?${q}`)));
       return json({ ...d, days }, 200, 300);
+    }
+    if (parts[1] === 'signals' && !parts[2]) {
+      // The Signals view for signed-out visitors: which stocks, how many
+      // insiders, how much, and the trades themselves (all straight from the
+      // filings). Why each one is a signal, the strength score and the
+      // per-trade tags need an account. Top 10 only, last 12 months at most.
+      const p = url.searchParams;
+      const days = [7, 30, 90, 365].includes(Number(p.get('days'))) ? Number(p.get('days')) : 30;
+      const side = p.get('side') === 'sell' ? 'sell' : 'buy';
+      const d = await cached(`psignals|${days}|${side}`, 10 * 60 * 1000, async () => {
+        const full = await signals({ ...ctx, isPro: async () => false }, new URL(`https://x/?days=${days}&side=${side}`));
+        const strip = r => ({
+          id: r.id, ticker: r.ticker, company: r.company, side: r.side, start: r.start, end: r.end, n: r.n, total: r.total, max_pct: r.max_pct,
+          people: r.people, trades: r.trades.map(({ brk, rev, routine, ...x }) => x),
+        });
+        return { days, side, from: full.from, to: full.to, total: full.total, rows: full.rows.slice(0, 10).map(strip), locked: true };
+      });
+      return json(d, 200, 300);
     }
     if (parts[1] === 'stocks' && !parts[2]) return json(await cached('stocks', TTL.sitemap, () => stocksDirectory(ctx)), 200, 3600);
     if (parts[1] === 'freshness' && !parts[2]) return json(await cached('freshness', 60 * 1000, () => freshness(ctx)), 200, 60);

@@ -491,19 +491,64 @@
   .hx-trades__tools .hx-select { flex: 1 1 auto; min-width: 0; height: 34px; font-size: 13px; }
 }
 
-/* ── Trade signals: filter chips and tags ── */
-.hx-sigbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 12px 16px 0; }
-.hx-sigbar__label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); margin-right: 4px; }
-.hx-sf { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border-radius: 999px; border: 0.5px solid var(--border-md); background: transparent; color: var(--text-2); font: 500 12.5px var(--font); cursor: pointer; white-space: nowrap; }
-.hx-sf:hover { color: var(--text); background: var(--surface-2); }
-.hx-sf--on { color: var(--text); background: var(--surface-2); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
-.hx-sf--locked { color: var(--text-3); }
-.hx-sf--locked svg { opacity: .8; }
-.hx-sigbar + .hx-trades__bar { border-top: none; }
+/* ── Trade signals: tags on trades, the Signals view ── */
 .hx-sigs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
-.hx-sig { font-size: 10.5px; font-weight: 600; line-height: 1; padding: 3px 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; cursor: help; }
+.hx-sigs--row { margin-top: 0; }
+.hx-sig { font-size: 10.5px; font-weight: 600; line-height: 1; padding: 3px 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); white-space: nowrap; cursor: help; border: none; font-family: var(--font); }
 .hx-sig--accent { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-strong, var(--accent)); }
+.hx-sig--buy { background: color-mix(in srgb, var(--green-500, #22c55e) 13%, transparent); color: var(--green-600, #16a34a); }
+.hx-sig--sell { background: color-mix(in srgb, var(--red-500, #ef4444) 13%, transparent); color: var(--red-600, #dc2626); }
 .hx-sig--rev { background: var(--amber-50); color: var(--amber-600); }
+.hx-sig--lock { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; padding: 5px 8px; color: var(--text-3); }
+.hx-sig--lock:hover { color: var(--text); }
 .hx-trades__type { white-space: nowrap; }
 .sx-trow__main .hx-sigs { margin-top: 6px; }
-@media (max-width: 640px) { .hx-sigbar { padding: 10px 12px 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; } .hx-sf { height: 32px; font-size: 13px; } }
+
+.hx-viewtabs { display: flex; gap: 2px; margin: 4px 0 14px; border-bottom: 0.5px solid var(--border); }
+.hx-viewtab { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; margin-bottom: -1px; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--text-2); font: 600 14px var(--font); cursor: pointer; }
+.hx-viewtab:hover { color: var(--text); }
+.hx-viewtab--on { color: var(--text); border-bottom-color: var(--accent); }
+
+.hx-meter { display: inline-flex; align-items: center; gap: 2px; cursor: help; }
+.hx-meter__bar { width: 5px; height: 14px; border-radius: 2px; background: var(--surface-3, var(--border-md)); }
+.hx-meter__bar--on { background: var(--accent); }
+.hx-meter__n { margin-left: 6px; font: 600 12px var(--font-mono, monospace); color: var(--text-2); }
+
+.hx-sigtable td { vertical-align: middle; }
+.hx-sigrow { cursor: pointer; }
+.hx-sigrow--open > td { background: var(--surface-2); border-bottom-color: transparent; }
+.hx-sigppl { display: flex; flex-direction: column; gap: 3px; }
+.hx-sigppl__n { font-weight: 600; font-size: 13px; }
+.hx-sigppl__who { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; white-space: nowrap; }
+.hx-sigrow__more, .hx-sigcard__more { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: 2px; padding: 0; border: none; border-radius: 6px; background: transparent; color: var(--text-3); cursor: pointer; vertical-align: middle; transition: transform .15s; }
+.hx-sigrow__more:hover, .hx-sigcard__more:hover { color: var(--text); background: var(--surface-2); }
+.hx-sigrow__more--open, .hx-sigcard--open .hx-sigcard__more { transform: rotate(180deg); }
+.hx-sigrow__detail > td { background: var(--surface-2); padding: 0 16px 12px !important; }
+.hx-sigtrades { list-style: none; margin: 0; padding: 0; }
+.hx-sigtrade { display: grid; grid-template-columns: 64px minmax(180px, 1.4fr) minmax(0, 1.2fr) 140px 90px 28px; align-items: center; gap: 12px; padding: 8px 0; border-top: 0.5px solid var(--border); font-size: 13px; }
+.hx-sigtrade:first-child { border-top: none; }
+.hx-sigtrade__date { color: var(--text-2); }
+.hx-sigtrade__who { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.hx-sigtrade__tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.hx-sigtrade__detail { color: var(--text-2); text-align: right; font-size: 12px; }
+.hx-sigtrade__val { text-align: right; font-weight: 600; }
+.hx-sigtrade__sec { text-align: right; }
+.hx-siggate { margin: 0; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+
+.hx-sigcards { list-style: none; margin: 0; padding: 0; }
+.hx-sigcard { padding: 12px; border-top: 0.5px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.hx-sigcard:first-child { border-top: none; }
+.hx-sigcard__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; }
+.hx-sigcard__stock { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.hx-sigcard__stock .hx-trades__co { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hx-sigcard__facts { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+.hx-sigcard__end { margin-left: auto; display: inline-flex; align-items: center; }
+.hx-sigcard .hx-sigtrade { grid-template-columns: 52px 1fr auto 24px; gap: 8px; }
+.hx-sigcard .hx-sigtrade__tags { grid-column: 2 / 4; grid-row: 2; }
+.hx-sigcard .hx-sigtrade__detail { display: none; }
+@media (max-width: 640px) {
+  .hx-viewtab { flex: 1; justify-content: center; }
+  .hx-trades__tools { flex-wrap: wrap; }
+  .hx-trades__tools .hx-select { flex: 1 1 40%; }
+  .hx-trades__tools .hx-toggle--sm { order: 3; flex: 1 1 100%; justify-content: center; }
+}

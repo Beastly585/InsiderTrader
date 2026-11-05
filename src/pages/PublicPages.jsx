@@ -15,6 +15,7 @@ import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
 import WatchButton from '../components/WatchButton.jsx';
 import { TradeTable } from './StockPage.jsx';
+import SignalsView from './SignalsView.jsx';
 import { MarketSections } from './HomeFeed.jsx';
 
 // Same four tabs as the signed-in app (lib/nav.jsx).
@@ -654,15 +655,7 @@ const PRO_PERIODS = [...TRADE_PERIODS, { value: 730, label: '2Y' }, { value: 182
 const TRADE_ROWS = 50;    // rows per page on screen
 const WORKER_ROWS = 200;  // rows the Worker sends per request (4 screen pages)
 const TRADE_SORTS = { date: 'transaction_date', ticker: 'ticker', person: 'insider_name', shares: 'shares', price: 'price_per_share', value: 'value', stake: 'pct_owned_change' };
-const TRADE_DEFAULTS = { days: 30, side: 'all', source: 'all', role: 'all', min: '0', people: '0', mine: '0', sig: 'all', sort: 'date', dir: 'desc', q: '', page: 0 };
-// Signal filters. First buys and clusters are about buying, so they switch the
-// table to buys.
-const SIG_FILTERS = [
-  { value: 'all', label: 'All trades' },
-  { value: 'first', label: 'First buys', buys: true, tip: 'Insiders buying their own stock for the first time in 2+ years' },
-  { value: 'cluster', label: 'Several insiders', buys: true, tip: 'Two or more people at a company buying within 2 weeks of each other' },
-  { value: 'rev', label: 'Reversals', tip: 'Someone who had only been selling starts buying, or the other way around' },
-];
+const TRADE_DEFAULTS = { view: 'trades', days: 30, side: 'all', source: 'all', min: '0', people: '0', mine: '0', kind: 'all', ssort: 'strength', sort: 'date', dir: 'desc', q: '', page: 0 };
 const REV_TIP = {
   buy: 'Reversal: bought after 2+ sales and no buys of this stock in the previous 2 years',
   sell: 'Reversal: sold (not a planned sale) after 2+ buys and no sales of this stock in the previous 2 years',
@@ -673,7 +666,6 @@ function sigTags(r) {
   if (!s) return [];
   const out = [];
   if (s.brk) out.push({ k: 'brk', text: s.brk, tone: 'accent', tip: "This insider hadn't bought this stock on the open market in that long" });
-  if (s.cluster) out.push({ k: 'cl', text: `${s.cluster} insiders buying`, tone: 'accent', tip: `${s.cluster} people bought ${r.ticker} on the open market within 2 weeks of each other` });
   if (s.rev) out.push({ k: 'rev', text: 'Reversal', tone: 'rev', tip: REV_TIP[s.rev] });
   if (s.routine) out.push({ k: 'pl', text: 'Planned', tone: '', tip: 'Filed under a pre-scheduled 10b5-1 trading plan' });
   return out;
@@ -692,11 +684,12 @@ function readTradeParams() {
     days: [7, 30, 90, 365, 730, 1825].includes(Number(p.get('days'))) ? Number(p.get('days')) : TRADE_DEFAULTS.days,
     side: pick('side', v => ['buy', 'sell'].includes(v)),
     source: pick('source', v => ['corporate', 'political'].includes(v)),
-    role: pick('role', v => ['exec', 'director', 'owner'].includes(v)),
     min: pick('min', v => ['100000', '1000000'].includes(v)),
     people: pick('people', v => v === '1'),
     mine: pick('mine', v => v === '1'),
-    sig: pick('sig', v => ['first', 'cluster', 'rev'].includes(v)),
+    view: pick('view', v => v === 'signals'),
+    kind: pick('kind', v => ['cluster', 'first', 'rev'].includes(v)),
+    ssort: pick('ssort', v => ['date', 'total', 'people'].includes(v)),
     sort: pick('sort', v => v in TRADE_SORTS),
     dir: pick('dir', v => v === 'asc'),
     q: (p.get('q') || '').slice(0, 40),
@@ -745,13 +738,9 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
   if (f.dir === 'asc') params.set('dir', 'asc');
   if (f.side !== 'all') params.set('type', f.side);
   if (f.source !== 'all') params.set('source', f.source);
-  if (f.role !== 'all') params.set('role', f.role);
   if (f.people === '1') params.set('people', '1');
   if (f.q) params.set('q', f.q);
-  if (signedIn) {
-    params.set('sig', '1');
-    if (f.sig !== 'all') params.set('sigf', f.sig);
-  }
+  if (signedIn) params.set('sig', '1');
   if (signedIn && f.mine === '1') {
     params.set('mine', '1');
     params.set('mt', (watchlist.tickers || []).join(','));
@@ -759,7 +748,8 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
   }
   if (workerPage) params.set('page', String(workerPage));
   const waitForList = signedIn && f.mine === '1' && !watchlist.ready;
-  const { data: d, error, reload, loading } = useApi(waitForList ? null : `/${signedIn ? 'api/explore' : 'public/trades'}?${params}`);
+  const signalsView = f.view === 'signals';
+  const { data: d, error, reload, loading } = useApi(waitForList || signalsView ? null : `/${signedIn ? 'api/explore' : 'public/trades'}?${params}`);
   // The total only comes with the first Worker page; keep it while paging.
   const filterKey = JSON.stringify({ ...f, page: 0 });
   useEffect(() => { setTotal(null); }, [filterKey]);
@@ -798,31 +788,42 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
       <header className="sx-head sx-head--page">
         <div className="sx-head__main">
           <h1 className="sx-head__title">Trades</h1>
-          <p className="sx-head__desc">Every open-market insider and Congress stock trade from the last 12 months, straight from the filings. Grants, option exercises and tax withholding are left out.</p>
+          <p className="sx-head__desc">{signalsView
+            ? 'Stocks where insiders are doing something unusual: several of them buying at once, a first buy in years, or a switch from selling to buying (or back). Strongest first.'
+            : 'Every open-market insider and Congress stock trade from the last 12 months, straight from the filings. Grants, option exercises and tax withholding are left out.'}</p>
           <Freshness />
         </div>
       </header>
 
+      <div className="hx-viewtabs" role="tablist" aria-label="View">
+        {[['trades', 'All trades', 'list'], ['signals', 'Signals', 'trend']].map(([v, label, icon]) => (
+          <button key={v} type="button" role="tab" aria-selected={f.view === v} className={`hx-viewtab${f.view === v ? ' hx-viewtab--on' : ''}`}
+            onClick={() => set({ view: v, ...(v === 'signals' && f.side === 'all' ? { side: 'buy' } : {}) })}>
+            <Icon name={icon} size={14} />{label}
+          </button>
+        ))}
+      </div>
+
       <div className="hx-filters">
         <div className="hx-filters__row">
           <Segmented size="sm" value={f.days} onChange={v => set({ days: v })} options={pro ? PRO_PERIODS : TRADE_PERIODS} />
-          <Segmented size="sm" value={f.side} onChange={v => set({ side: v, sig: v === 'sell' && SIG_FILTERS.find(x => x.value === f.sig)?.buys ? 'all' : f.sig })} options={[{ value: 'all', label: 'All' }, { value: 'buy', label: 'Buys' }, { value: 'sell', label: 'Sales' }]} />
-          <Segmented size="sm" value={f.source} onChange={v => set({ source: v, role: v === 'political' ? 'all' : f.role })} options={[{ value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'political', label: 'Congress' }]} />
-          <select className="hx-select" value={f.role} onChange={e => set({ role: e.target.value })} aria-label="Role" disabled={f.source === 'political'}>
-            <option value="all">Any role</option>
-            <option value="exec">CEOs and execs</option>
-            <option value="director">Directors</option>
-            <option value="owner">10% owners</option>
-          </select>
-          <select className="hx-select" value={f.min} onChange={e => set({ min: e.target.value })} aria-label="Smallest trade">
+          {signalsView ? (
+            <Segmented size="sm" value={f.side === 'sell' ? 'sell' : 'buy'} onChange={v => set({ side: v, kind: v === 'sell' && !['all', 'cluster'].includes(f.kind) ? 'all' : f.kind })} options={[{ value: 'buy', label: 'Buying' }, { value: 'sell', label: 'Selling' }]} />
+          ) : (
+            <Segmented size="sm" value={f.side} onChange={v => set({ side: v })} options={[{ value: 'all', label: 'All' }, { value: 'buy', label: 'Buys' }, { value: 'sell', label: 'Sales' }]} />
+          )}
+          {!signalsView && <Segmented size="sm" value={f.source} onChange={v => set({ source: v })} options={[{ value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'political', label: 'Congress' }]} />}
+          <select className="hx-select" value={f.min} onChange={e => set({ min: e.target.value })} aria-label={signalsView ? 'Smallest total' : 'Smallest trade'}>
             <option value="0">Any size</option>
             <option value="100000">$100K+</option>
             <option value="1000000">$1M+</option>
           </select>
-          <button type="button" className={`hx-toggle${f.people === '1' ? ' hx-toggle--on' : ''}`} aria-pressed={f.people === '1'}
-            onClick={() => set({ people: f.people === '1' ? '0' : '1' })} title="Leave out funds and companies that file as big shareholders">
-            <span className="hx-toggle__box" aria-hidden="true">{f.people === '1' && <Icon name="check" size={11} />}</span>Hide funds
-          </button>
+          {!signalsView && (
+            <button type="button" className={`hx-toggle${f.people === '1' ? ' hx-toggle--on' : ''}`} aria-pressed={f.people === '1'}
+              onClick={() => set({ people: f.people === '1' ? '0' : '1' })} title="Leave out funds and companies that file as big shareholders">
+              <span className="hx-toggle__box" aria-hidden="true">{f.people === '1' && <Icon name="check" size={11} />}</span>Hide funds
+            </button>
+          )}
         </div>
         <div className="sx-search__field hx-filters__q">
           <span className="sx-search__icon"><Icon name="search" size={14} /></span>
@@ -830,21 +831,8 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
         </div>
       </div>
 
+      {signalsView ? <SignalsView f={f} set={set} signedIn={signedIn} watchlist={watchlist} narrow={narrow} signUp={signUp} /> : (
       <Card pad={false}>
-        <div className="hx-sigbar" role="group" aria-label="Signals">
-          <span className="hx-sigbar__label">Signals</span>
-          {SIG_FILTERS.map(o => {
-            const on = signedIn && f.sig === o.value;
-            const locked = !signedIn && o.value !== 'all';
-            return (
-              <button key={o.value} type="button" className={`hx-sf${on || (!signedIn && o.value === 'all') ? ' hx-sf--on' : ''}${locked ? ' hx-sf--locked' : ''}`}
-                aria-pressed={on || (!signedIn && o.value === 'all')} title={locked ? `${o.tip}. Free with an account.` : o.tip}
-                onClick={() => (locked ? signUp() : signedIn && set({ sig: o.value, ...(o.buys ? { side: 'buy' } : {}) }))}>
-                {locked && <Icon name="lock" size={11} />}{o.label}
-              </button>
-            );
-          })}
-        </div>
         <div className="hx-trades__bar">
           <span className="sx-muted sx-small" role="status">
             {total != null ? `${total.toLocaleString('en-US')} ${total === 1 ? 'trade' : 'trades'}` : loading ? 'Loading…' : ''}
@@ -873,7 +861,7 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
         </div>
         {error && !d && <div className="sx-card__body"><ErrorNote message={error} onRetry={reload} /></div>}
         {!d && !error && <div className="sx-card__body"><Skeleton lines={10} /></div>}
-        {d && !rows.length && <div className="sx-empty"><div className="sx-empty__body">{f.mine === '1' ? 'No trades in your watchlist match these filters.' : f.sig !== 'all' && signedIn ? `No ${SIG_FILTERS.find(x => x.value === f.sig).label.toLowerCase()} match these filters. Try a longer period.` : 'No trades match these filters.'}</div></div>}
+        {d && !rows.length && <div className="sx-empty"><div className="sx-empty__body">{f.mine === '1' ? 'No trades in your watchlist match these filters.' : 'No trades match these filters.'}</div></div>}
         {d && rows.length > 0 && (narrow ? (
           <ul className={`sx-trows${loading ? ' sx-dim' : ''}`}>
             {rows.map((r, i) => { const p = who(r); const note = filedNote(r); const st = stake(r); const url = sec(r); return (
@@ -938,12 +926,13 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
           </nav>
         )}
       </Card>
+      )}
 
-      {signedIn ? (
-        <p className="sx-note sx-note--center">Want trades grouped by stock with conviction scores? <a href="/data" className="sx-link" onClick={navClick('/data')}>Open the data explorer</a></p>
+      {signalsView ? null : signedIn ? (
+        <p className="sx-note sx-note--center">Want trades grouped by stock and ranked? <a href="/trades?view=signals" className="sx-link" onClick={e => { e.preventDefault(); set({ view: 'signals', side: 'buy' }); }}>See signals</a></p>
       ) : (
       <div className="sx-gate sx-gate--signup">
-        <span className="sx-gate__text"><Icon name="lock" size={13} /> This is the raw feed. A free account adds Seli's reads on top: first buys in years, several insiders at once, planned sales and track records.</span>
+        <span className="sx-gate__text"><Icon name="lock" size={13} /> This is the raw feed. A free account adds Seli's reads on top: first buys in years, reversals, planned sales and track records.</span>
         <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={signUp}>Create free account</button>
       </div>
       )}

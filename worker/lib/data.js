@@ -15,7 +15,7 @@
 //   GET /api/explore?...                       Raw Data drawer (paged, 200/pg)
 //   GET /api/samples                           onboarding example trades
 
-import { asDate, buyBreak, isEntityName } from './intel.js';
+import { asDate, buyBreak, isEntityName, buildClusters, isFundName, prettyPerson, prettyCompany, shortRole } from './intel.js';
 
 const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,9}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -41,8 +41,8 @@ async function cached(key, ttlMs, fn) {
   catch (e) { cache.delete(key); throw e; }
 }
 
-export const DATA_ROUTES = { filings, trades, price, leaders, sectors, explore, samples };
-export { explore };
+export const DATA_ROUTES = { filings, trades, price, leaders, sectors, explore, samples, signals };
+export { explore, signals };
 
 // Does public.filings have this column yet? Columns added by a migration can
 // ship in code before the migration is run; queries use a fallback until then.
@@ -237,23 +237,6 @@ async function explore(ctx, url) {
     const like = sqlVal('%' + likeEsc(q) + '%');
     c.push(`(ticker ILIKE ${like} OR insider_name ILIKE ${like} OR company_name ILIKE ${like})`);
   }
-  // Signal filters (signed-in Trades). Same rules as the tags added below and
-  // as the stock pages, written as EXISTS checks so they filter before paging.
-  const sigf = p.get('sigf');
-  const SIG_FILTER = {
-    first: `${OM_PERSON_BUY('f')}
-      AND NOT EXISTS (SELECT 1 FROM public.filings g WHERE g.ticker = f.ticker AND g.insider_name = f.insider_name
-            AND g.is_open_market AND g.transaction_type = 'buy' AND ${DT('g')} > ${DT('f')} - 731 AND ${DT('g')} <= ${DT('f')} - 31)
-      AND EXISTS (SELECT 1 FROM public.filings g WHERE g.ticker = f.ticker AND g.insider_name = f.insider_name
-            AND g.transaction_type IN ('buy','sell') AND ${DT('g')} >= DATE '2013-01-01' AND ${DT('g')} <= ${DT('f')} - 731)`,
-    cluster: `${OM_PERSON_BUY('f')} AND f.insider_name !~* ${ENTITY_SQL}
-      AND EXISTS (SELECT 1 FROM public.filings g WHERE g.ticker = f.ticker AND g.insider_name <> f.insider_name
-            AND ${DT('g')} BETWEEN DATE '${from}' - ${CLUSTER_DAYS} AND DATE '${to}' + ${CLUSTER_DAYS}
-            AND ${OM_PERSON_BUY('g')} AND g.insider_name !~* ${ENTITY_SQL}
-            AND ${DT('g')} BETWEEN ${DT('f')} - ${CLUSTER_DAYS} AND ${DT('f')} + ${CLUSTER_DAYS})`,
-  };
-  if (SIG_FILTER[sigf]) c.push(SIG_FILTER[sigf]);
-  if (sigf === 'rev') c.push((await hasColumn(ctx, 'reversal')) ? 'f.reversal IS NOT NULL' : '1=0');
   const where = 'WHERE ' + c.join(' AND ');
 
   const sort = SORTABLE.has(p.get('sort')) ? p.get('sort') : 'transaction_date';
@@ -293,14 +276,11 @@ async function explore(ctx, url) {
 const ENTITY_SQL = `'\\y(INC|LLC|L\\.?P\\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|CAPITALES|PARTNERS|HOLDINGS|MANAGEMENT|ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER|LIMITED|COMPANY|GMBH|SE|BV|LLP|SARL|SPA|KG|S\\.A|C\\.V|L\\.L\\.C)\\y'`;
 const DT = a => `COALESCE(${a}.transaction_date, ${a}.filing_date)`;
 const OM_PERSON_BUY = a => `(${a}.transaction_type = 'buy' AND ${a}.is_open_market AND (${a}.transaction_code IS NULL OR ${a}.transaction_code NOT LIKE 'CONGRESS%'))`;
-// Two or more people buying the same stock within this many days either side.
-const CLUSTER_DAYS = 14;
 
 // Tags for one page of rows, from one extra query over the page's stocks:
 //   brk      "First buy in 4 yrs" (buyBreak, the same rule as stock pages)
-//   cluster  how many people (not funds) bought this stock on the open market
-//            within CLUSTER_DAYS of this buy, counting this one (only when 2+)
-//   routine  planned under a 10b5-1 plan; reversal comes from filings.reversal
+//   routine  planned under a 10b5-1 plan; rev comes from filings.reversal
+// Groups of insiders buying together live in the Signals view (signals()).
 async function addSignals(ctx, rows) {
   const { sqlVal } = ctx.deps;
   const isBuy = r => r.transaction_type === 'buy' && r.is_open_market && !String(r.transaction_code || '').startsWith('CONGRESS') && r.ticker;
@@ -333,14 +313,6 @@ async function addSignals(ctx, rows) {
         const prior = me.buys.filter(b => t(b) <= t(d) - 31 * DAY).sort().pop() || null;
         const b = buyBreak(prior, me.first, d);
         if (b) out.brk = b[0];
-      }
-      if (!isEntityName(r.insider_name)) {
-        let n = 0;
-        for (const [name, v] of people) {
-          if (isEntityName(name)) continue;
-          if (v.buys.some(b => Math.abs(t(b) - t(d)) <= CLUSTER_DAYS * DAY)) n++;
-        }
-        if (n >= 2) out.cluster = n;
       }
     }
     delete r.is_routine; delete r.reversal;
@@ -425,4 +397,173 @@ function leadersSql({ years, source, min, limit, nameLike }) {
       FROM agg
      ORDER BY proxy_rank DESC NULLS LAST
      LIMIT ${Number(limit)}`;
+}
+
+// ── /api/signals and /public/signals ─────────────────────────────────────────
+// The Signals view of the Trades page: one row per signal, strongest first.
+//
+// A signal is a stock where company insiders made open-market trades close
+// together (each within GAP_DAYS of the one before), and at least one of:
+//   Buying
+//     - 2+ different people bought (a cluster)
+//     - someone bought for the first time in 2+ years (buyBreak, same rule
+//       as stock pages; not counted for 10% owners)
+//     - a reversal buy (filings.reversal = 'buy': 2+ sales and no buys of
+//       this stock in the 2 years before)
+//   Selling
+//     - a reversal sale (filings.reversal = 'sell': not a planned sale, after
+//       2+ buys and no sales in the 2 years before)
+// Counted: trades of $10K+ at $1+ a share by people. Left out: funds and
+// companies filing as big shareholders, closed-end funds, Congress (it
+// reports ranges weeks later), and planned 10b5-1 sales.
+// Strength is rankScore in intel.js, the score that picks the home page's
+// featured buys, so the order matches what Seli features elsewhere.
+const GAP_DAYS = 14;
+
+async function signals(ctx, url) {
+  const p = url.searchParams;
+  const pro = await ctx.isPro();
+  const allowed = pro ? [7, 30, 90, 365, 730, 1825] : [7, 30, 90, 365];
+  const days = allowed.includes(Number(p.get('days'))) ? Number(p.get('days')) : 30;
+  const side = p.get('side') === 'sell' ? 'sell' : 'buy';
+  const from = isoDaysAgo(days), to = new Date().toISOString().slice(0, 10);
+  const all = await cached(`signals|${days}|${side}`, 10 * 60 * 1000, () => signalRows(ctx, from, to, side));
+  // Filters and sort run on the cached list, so they cover every signal, then
+  // the first SIGNAL_LIMIT go to the browser.
+  let rows = all;
+  const min = Math.floor(Number(p.get('min')));
+  if (min > 0) rows = rows.filter(r => r.total >= min);
+  const q = (p.get('q') || '').trim().toLowerCase().slice(0, 60);
+  if (q.length >= 2) rows = rows.filter(r => r.ticker.toLowerCase().includes(q) || (r.company || '').toLowerCase().includes(q) || r.people.some(x => x.raw.toLowerCase().includes(q) || x.name.toLowerCase().includes(q)));
+  if (p.get('mine') === '1') {
+    const ts = new Set((p.get('mt') || '').toUpperCase().split(',').map(x => x.trim()).filter(Boolean));
+    const ns = new Set((p.get('mi') || '').split('|').map(x => x.trim()).filter(Boolean));
+    rows = rows.filter(r => ts.has(r.ticker) || r.people.some(x => ns.has(x.raw)));
+  }
+  const kind = p.get('kind');
+  if (['cluster', 'first', 'rev'].includes(kind)) rows = rows.filter(r => r.kinds[kind]);
+  const SORT = {
+    strength: (a, b) => ((b.score ?? -1) - (a.score ?? -1)) || (b.total - a.total),
+    total: (a, b) => b.total - a.total,
+    people: (a, b) => (b.n - a.n) || (b.total - a.total),
+    date: (a, b) => b.end.localeCompare(a.end) || (b.total - a.total),
+  };
+  const sort = SORT[p.get('sort')] ? p.get('sort') : 'strength';
+  rows = rows.slice().sort(SORT[sort]);
+  if (p.get('dir') === 'asc') rows.reverse();
+  return { pro, days, side, sort, from, to, total: rows.length, limit: SIGNAL_LIMIT, rows: rows.slice(0, SIGNAL_LIMIT) };
+}
+const SIGNAL_LIMIT = 300;
+
+async function signalRows(ctx, from, to, side) {
+  const [PLANNED, REV] = await Promise.all([
+    hasColumn(ctx, 'planned').then(h => (h ? 'COALESCE(f.planned, f.is_routine)' : 'f.is_routine')),
+    reversalSql(ctx),
+  ]);
+  if (side === 'sell' && REV === 'NULL::text') return [];
+  const where = `f.is_open_market = true AND f.transaction_type = '${side}' AND f.ticker IS NOT NULL
+      AND ${DT('f')} BETWEEN DATE '${from}' AND DATE '${to}'
+      AND COALESCE(f.value, 0) >= 10000 AND (f.price_per_share IS NULL OR f.price_per_share >= 1)
+      AND (f.transaction_code IS NULL OR f.transaction_code NOT LIKE 'CONGRESS%') AND f.relationship IS DISTINCT FROM 'congress'
+      AND f.insider_name !~* ${ENTITY_SQL}
+      ${side === 'sell' ? `AND NOT COALESCE(${PLANNED}, false)` : ''}`;
+  const trades = await ctx.db(`
+    SELECT f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship, f.transaction_code,
+           f.transaction_type, f.accession_number, f.cik_issuer, f.shares::float AS shares, f.price_per_share::float AS price,
+           f.value::float AS value, f.pct_owned_change::float AS pct, f.shares_owned_before::float AS owned_before,
+           ${PLANNED} AS is_routine, ${REV} AS reversal, f.filing_date, ${DT('f')} AS trade_date
+      FROM public.filings f WHERE ${where}`);
+  if (!trades.length) return [];
+
+  // Buy history per person and stock, for "First buy in N yrs".
+  const hist = new Map();
+  if (side === 'buy') {
+    const h = await ctx.db(`
+      WITH pairs AS (SELECT DISTINCT f.ticker, f.insider_name FROM public.filings f WHERE ${where})
+      SELECT g.ticker, g.insider_name, MIN(${DT('g')}) AS first_seen,
+             ARRAY_AGG(${DT('g')}::text) FILTER (WHERE g.is_open_market AND g.transaction_type = 'buy') AS buys
+        FROM pairs JOIN public.filings g ON g.ticker = pairs.ticker AND g.insider_name = pairs.insider_name
+       WHERE g.transaction_type IN ('buy','sell') AND ${DT('g')} >= DATE '2013-01-01'
+       GROUP BY g.ticker, g.insider_name`);
+    for (const x of h) hist.set(`${x.ticker}|${x.insider_name}`, { first: asDate(x.first_seen), buys: (x.buys || []).map(asDate).filter(Boolean) });
+  }
+  const t = d => Date.parse(d + 'T00:00:00Z');
+  for (const r of trades) {
+    r.trade_date = asDate(r.trade_date);
+    const hh = hist.get(`${r.ticker}|${r.insider_name}`);
+    if (hh) {
+      r.first_seen = hh.first;
+      r.prior_buy_date = hh.buys.filter(b => t(b) <= t(r.trade_date) - 31 * 86400000).sort().pop() || null;
+    }
+  }
+
+  // Split each stock's trades into bursts: a gap of more than GAP_DAYS starts a new one.
+  const byTicker = new Map();
+  for (const r of trades) {
+    if (!r.trade_date || isFundName(r.company_name)) continue;
+    if (!byTicker.has(r.ticker)) byTicker.set(r.ticker, []);
+    byTicker.get(r.ticker).push(r);
+  }
+  const out = [];
+  for (const [ticker, list] of byTicker) {
+    list.sort((a, b) => a.trade_date.localeCompare(b.trade_date));
+    let burst = [];
+    const flush = () => { if (burst.length) { const s = side === 'buy' ? buySignal(burst) : sellSignal(ticker, burst); if (s) out.push(s); } burst = []; };
+    for (const r of list) {
+      if (burst.length && t(r.trade_date) - t(burst[burst.length - 1].trade_date) > GAP_DAYS * 86400000) flush();
+      burst.push(r);
+    }
+    flush();
+  }
+  out.sort((a, b) => (b.score - a.score) || (b.total - a.total));
+  return out;
+}
+
+const tradeOutS = r => {
+  const b = r.transaction_type === 'buy' ? buyBreak(r.prior_buy_date || null, r.first_seen || null, r.trade_date) : null;
+  return {
+    date: r.trade_date, filed: asDate(r.filing_date), raw: r.insider_name, name: prettyPerson(r.insider_name),
+    role: shortRole(r.insider_title, r.relationship), shares: r.shares, price: r.price, value: r.value, pct: r.pct,
+    acc: r.accession_number, cik: r.cik_issuer,
+    ...(b ? { brk: b[0] } : {}), ...(r.reversal === 'buy' || r.reversal === 'sell' ? { rev: r.reversal } : {}), ...(r.is_routine ? { routine: true } : {}),
+  };
+};
+
+function buySignal(burst) {
+  const c = buildClusters(burst, { includeCongress: false })[0];
+  if (!c) return null;
+  const kinds = { cluster: c.n_insiders >= 2, first: c.first_buy.length > 0, rev: c.reversals.length > 0 };
+  if (!kinds.cluster && !kinds.first && !kinds.rev) return null;
+  return {
+    id: `${c.ticker}|${burst[0].trade_date}`, ticker: c.ticker, company: c.company, side: 'buy',
+    start: burst[0].trade_date, end: burst[burst.length - 1].trade_date,
+    n: c.n_insiders, total: c.total, max_pct: c.max_pct || null, score: Math.round(c.score), kinds,
+    people: c.buyers.map(b => ({ raw: b.raw, name: b.name, role: b.role, value: b.value })),
+    why: c.facts.map(([label, tone]) => ({ label, tone })),
+    trades: burst.slice().reverse().map(tradeOutS),
+  };
+}
+
+function sellSignal(ticker, burst) {
+  const revs = burst.filter(r => r.reversal === 'sell');
+  if (!revs.length) return null;
+  const per = new Map();
+  for (const r of burst) {
+    if (!per.has(r.insider_name)) per.set(r.insider_name, { raw: r.insider_name, name: prettyPerson(r.insider_name), role: shortRole(r.insider_title, r.relationship), value: 0 });
+    per.get(r.insider_name).value += Number(r.value) || 0;
+  }
+  const people = [...per.values()].sort((a, b) => b.value - a.value);
+  const total = people.reduce((s, x) => s + x.value, 0);
+  const why = [];
+  if (people.length >= 2) why.push({ label: `${people.length} insiders selling`, tone: 'sell' });
+  const revPeople = [...new Set(revs.map(r => r.insider_name))];
+  why.push({ label: revPeople.length > 1 ? `${revPeople.length} reversals` : `Reversal (${shortRole(revs[0].insider_title, revs[0].relationship)})`, tone: 'rev' });
+  // No buy-style score for sales: biggest first, more people ahead on ties.
+  return {
+    id: `${ticker}|${burst[0].trade_date}`, ticker, company: prettyCompany(burst[0].company_name) || ticker, side: 'sell',
+    start: burst[0].trade_date, end: burst[burst.length - 1].trade_date,
+    n: people.length, total, max_pct: Math.max(0, ...burst.map(r => Math.abs(r.pct || 0))) || null,
+    score: null, kinds: { cluster: people.length >= 2, first: false, rev: true },
+    people, why, trades: burst.slice().reverse().map(tradeOutS),
+  };
 }
