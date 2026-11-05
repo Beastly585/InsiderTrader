@@ -203,6 +203,13 @@ async function explore(ctx, url) {
   const sector = (p.get('sector') || '').slice(0, 60);
   if (sector) c.push(`sector = ${sqlVal(sector)}`);
   if (p.get('om') === '1') c.push('is_open_market = true');
+  // Who traded, by their filed title. Fixed SQL per option, nothing from the URL.
+  const ROLE_SQL = {
+    exec: `(insider_title ~* '(chief|\\mceo\\M|\\mcfo\\M|\\mcoo\\M|\\mcto\\M|president|chair)')`,
+    director: `(insider_title ~* 'director' AND insider_title !~* '(chief|\\mceo\\M|\\mcfo\\M|president)')`,
+    owner: `(insider_title ~* '(10%|ten percent)')`,
+  };
+  if (ROLE_SQL[p.get('role')]) c.push(ROLE_SQL[p.get('role')]);
   // Smallest trade to include, in dollars (whole number only, so it's safe in SQL).
   const min = Math.floor(Number(p.get('min')));
   if (min > 0) c.push(`value >= ${Math.min(min, 1e11)}`);
@@ -229,7 +236,7 @@ async function explore(ctx, url) {
   const [rows, count] = await Promise.all([
     ctx.db(`
       SELECT transaction_date, filing_date, ticker, company_name, insider_name, insider_title,
-             relationship, transaction_type, transaction_code, is_open_market,
+             relationship, transaction_type, transaction_code, is_open_market, accession_number, cik_issuer,
              shares::float, price_per_share::float, value::float, pct_owned_change::float, sector
         FROM public.filings ${where}
         ${orderBy}

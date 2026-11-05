@@ -9,7 +9,7 @@
 //   GET /public/search?q=nvda            search box for signed-out visitors
 //   GET /public/leaderboard?source=      top 10 insiders, last 12 months
 //   GET /public/stocks                   A to Z directory of stocks with recent Form 4s
-//   GET /public/trades?days=&type=&source=&min=&q=&sort=&page=   raw open-market trades, last 12 months
+//   GET /public/trades?days=&type=&source=&role=&min=&q=&sort=&dir=&page=   raw open-market trades, last 12 months
 //   GET /public/freshness                when the ingest last checked SEC (the "checked N min ago" line)
 //   GET /public/pricing                  { annual } whether yearly Pro is on sale
 //   GET /public/sitemap.xml              sitemap index
@@ -117,7 +117,10 @@ export async function handlePublic(request, env, origin, url, deps) {
       if (['buy', 'sell'].includes(p.get('type'))) q.set('type', p.get('type'));
       if (['corporate', 'political'].includes(p.get('source'))) q.set('source', p.get('source'));
       if (['100000', '1000000'].includes(p.get('min'))) q.set('min', p.get('min'));
-      if (p.get('sort') === 'value') q.set('sort', 'value');
+      const SORTS = ['transaction_date', 'ticker', 'insider_name', 'shares', 'price_per_share', 'value', 'pct_owned_change'];
+      if (SORTS.includes(p.get('sort'))) q.set('sort', p.get('sort'));
+      if (p.get('dir') === 'asc') q.set('dir', 'asc');
+      if (['exec', 'director', 'owner'].includes(p.get('role'))) q.set('role', p.get('role'));
       const page = Math.max(0, Math.min(Number(p.get('page')) || 0, 9));
       if (page) q.set('page', String(page));
       const text = (p.get('q') || '').trim().slice(0, 40);

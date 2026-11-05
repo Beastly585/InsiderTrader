@@ -7,7 +7,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SignInButton, useClerk } from '@clerk/clerk-react';
 import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink, NAV_TABS, tabOf, stockPath, insiderPath } from '../lib/nav.jsx';
-import { plural, shortDate, money, congressRange, PAGE_TITLES, roleText, amount, shares, price, prettyPerson, prettyCompany, roleFromTitle, isEntityName } from '../lib/text.js';
+import { plural, shortDate, money, congressRange, PAGE_TITLES, roleText, amount, shares, price, prettyPerson, prettyCompany, roleFromTitle, isEntityName, pct } from '../lib/text.js';
+import { secFilingUrl } from '../edgar.js';
 import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segmented, PublicViewContext, TypeBadge } from '../components/ui.jsx';
 import '../home.css';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
@@ -410,12 +411,12 @@ const WHY = [
 // Example filings for the "how it works" picture: what SEC sends, and what
 // happens to each one. Form 4 transaction codes are the real ones.
 const RAW_ROWS = [
-  { code: 'A', what: 'Stock award', out: 'Grant, not a decision', fate: 'drop' },
-  { code: 'M', what: 'Option exercise', out: 'Paperwork, not a trade', fate: 'drop' },
-  { code: 'F', what: 'Shares withheld for tax', out: 'Tax, not a trade', fate: 'drop' },
-  { code: 'S', what: 'Sale under 10b5-1 plan', out: 'Kept, marked planned', fate: 'flag' },
-  { code: 'P', what: 'Open-market purchase', out: 'Kept', fate: 'keep' },
-  { code: 'PTR', what: 'Congress disclosure', out: 'Kept', fate: 'keep' },
+  { code: 'A', what: 'Stock award', out: 'Removed: a grant', fate: 'drop' },
+  { code: 'M', what: 'Option exercise', out: 'Removed: paperwork', fate: 'drop' },
+  { code: 'F', what: 'Shares withheld for tax', out: 'Removed: tax', fate: 'drop' },
+  { code: 'S', what: 'Sale under a 10b5-1 plan', out: 'Kept, labeled planned', fate: 'flag' },
+  { code: 'P', what: 'Open-market purchase', out: 'Kept, highlighted', fate: 'keep' },
+  { code: 'PTR', what: 'Congress stock trade', out: 'Kept', fate: 'keep' },
 ];
 
 function HowItWorks({ c, signUp }) {
@@ -423,11 +424,12 @@ function HowItWorks({ c, signUp }) {
   return (
     <section className="hx-how" id="how">
       <h2 className="sx-section-title">How it works</h2>
-      <p className="hx-how__lead">Insiders and members of Congress have to report their trades. Most of what they file isn't a real decision to buy or sell. Seli sorts that out.</p>
+      <p className="hx-how__lead">Insiders and members of Congress have to report their trades, but most of what they file isn't a real decision to buy or sell. Seli sorts that out.</p>
       <div className="hx-how__flow">
         <div className="hx-how__col">
-          <div className="hx-how__step"><span>1</span>Filed</div>
-          <p className="hx-how__cap">SEC Form 4s and House and Senate disclosures, read as they're published.</p>
+          <div className="hx-how__step"><span>1</span>Insiders file</div>
+          <p className="hx-how__cap">Every SEC Form 4 and House and Senate disclosure, read as it's published.</p>
+          <div className="hx-how__colhead"><span>Code</span><span>What was filed</span></div>
           <ul className="hx-how__list">
             {RAW_ROWS.map(r => (
               <li key={r.code} className="hx-how__raw"><span className="hx-how__code">{r.code}</span>{r.what}</li>
@@ -436,8 +438,9 @@ function HowItWorks({ c, signUp }) {
         </div>
         <div className="hx-how__arrow" aria-hidden="true"><Icon name="arrow" size={18} /></div>
         <div className="hx-how__col">
-          <div className="hx-how__step"><span>2</span>Cleaned</div>
-          <p className="hx-how__cap">Grants, exercises and tax paperwork come out. Planned sales stay, labeled.</p>
+          <div className="hx-how__step"><span>2</span>Seli cleans it</div>
+          <p className="hx-how__cap">Grants, option exercises and tax paperwork come out. Planned sales stay, labeled as planned.</p>
+          <div className="hx-how__colhead"><span>Filing</span><span>Result</span></div>
           <ul className="hx-how__list">
             {RAW_ROWS.map(r => (
               <li key={r.code} className={`hx-how__row hx-how__row--${r.fate}`}>
@@ -450,8 +453,8 @@ function HowItWorks({ c, signUp }) {
         </div>
         <div className="hx-how__arrow" aria-hidden="true"><Icon name="arrow" size={18} /></div>
         <div className="hx-how__col">
-          <div className="hx-how__step"><span>3</span>Sent to you</div>
-          <p className="hx-how__cap">What's left, in plain English, on the stocks you watch.</p>
+          <div className="hx-how__step"><span>3</span>Published and sent</div>
+          <p className="hx-how__cap">What's worth knowing goes up in plain English on every stock and person page and <a href="/blog" className="sx-link" onClick={navClick('/blog')}>the newswire</a>. Watch a stock or person and it lands in your inbox.</p>
           <div className="hx-how__out-card">
             <div className="hx-notif">
               <span className="hx-notif__logo" aria-hidden="true">S</span>
@@ -461,10 +464,11 @@ function HowItWorks({ c, signUp }) {
                 {c?.n_insiders > 1 ? ` ${plural(c.n_insiders - 1, 'other insider')} bought too.` : ''}
               </span>
             </div>
+            <div className="hx-how__addslabel">Every alert flags what makes it stand out:</div>
             <ul className="hx-how__adds">
               <li><Icon name="check" size={12} />First buy in years</li>
-              <li><Icon name="check" size={12} />Several insiders at once</li>
-              <li><Icon name="check" size={12} />Their track record</li>
+              <li><Icon name="check" size={12} />Several insiders buying at once</li>
+              <li><Icon name="check" size={12} />How their past buys have done</li>
             </ul>
             <button className="sx-btn sx-btn--accent" onClick={signUp}>Get alerts free</button>
           </div>
@@ -642,45 +646,90 @@ export function PublicHome() {
 // The raw feed: every open-market insider and Congress trade from the last 12
 // months, with filters. Straight from the filings, no reads or flags on top
 // (those need an account). Signed in, /trades is the Data page instead.
+// Filters, sort and page live in the URL, so a view can be shared or reloaded.
 const TRADE_PERIODS = [{ value: 7, label: '7D' }, { value: 30, label: '30D' }, { value: 90, label: '90D' }, { value: 365, label: '1Y' }];
-const TRADE_PAGE = 50; // rows shown at a time (the Worker sends 200 per page)
+const TRADE_ROWS = 50;    // rows per page on screen
+const WORKER_ROWS = 200;  // rows the Worker sends per request (4 screen pages)
+const TRADE_SORTS = { date: 'transaction_date', ticker: 'ticker', person: 'insider_name', shares: 'shares', price: 'price_per_share', value: 'value', stake: 'pct_owned_change' };
+const TRADE_DEFAULTS = { days: 30, side: 'all', source: 'all', role: 'all', min: '0', sort: 'date', dir: 'desc', q: '', page: 0 };
 const isCongressRow = r => r.relationship === 'congress' || String(r.transaction_code || '').startsWith('CONGRESS');
+const dayGap = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+
+function readTradeParams() {
+  const p = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const pick = (k, ok) => (ok(p.get(k)) ? p.get(k) : TRADE_DEFAULTS[k]);
+  return {
+    days: [7, 30, 90, 365].includes(Number(p.get('days'))) ? Number(p.get('days')) : TRADE_DEFAULTS.days,
+    side: pick('side', v => ['buy', 'sell'].includes(v)),
+    source: pick('source', v => ['corporate', 'political'].includes(v)),
+    role: pick('role', v => ['exec', 'director', 'owner'].includes(v)),
+    min: pick('min', v => ['100000', '1000000'].includes(v)),
+    sort: pick('sort', v => v in TRADE_SORTS),
+    dir: pick('dir', v => v === 'asc'),
+    q: (p.get('q') || '').slice(0, 40),
+    page: Math.max(0, Math.min(39, Number(p.get('page')) || 0)),
+  };
+}
 
 export function TradesPage() {
   const clerk = useClerk();
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
   const narrow = useNarrow();
-  const [days, setDays] = useState(30);
-  const [side, setSide] = useState('all');
-  const [source, setSource] = useState('all');
-  const [min, setMin] = useState('0');
-  const [sort, setSort] = useState('date');
-  const [text, setText] = useState('');
-  const [q, setQ] = useState('');
-  const [page, setPage] = useState(0); // Worker page (200 rows)
-  const [shown, setShown] = useState(TRADE_PAGE);
+  const [f, setF] = useState(readTradeParams);
+  const [text, setText] = useState(f.q);
   const [total, setTotal] = useState(null);
   useEffect(() => { document.title = 'Insider and Congress Trades, Last 12 Months | Seli'; }, []);
-  // Wait for a pause in typing before searching.
-  useEffect(() => { const t = setTimeout(() => setQ(text.trim().length >= 2 ? text.trim() : ''), 350); return () => clearTimeout(t); }, [text]);
-  useEffect(() => { setPage(0); setShown(TRADE_PAGE); setTotal(null); }, [days, side, source, min, sort, q]);
+  // Any filter change goes back to page 1; the page number only changes itself.
+  const set = patch => setF(prev => ({ ...prev, ...patch, page: 'page' in patch ? patch.page : 0 }));
+  // Search waits for a pause in typing.
+  useEffect(() => { const t = setTimeout(() => { const q = text.trim().length >= 2 ? text.trim() : ''; if (q !== f.q) set({ q }); }, 350); return () => clearTimeout(t); }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Mirror the view in the URL (replaceState: filtering shouldn't flood the back button).
+  useEffect(() => {
+    const u = new URLSearchParams();
+    for (const [k, v] of Object.entries(f)) if (v !== TRADE_DEFAULTS[k] && v !== '') u.set(k, String(v));
+    const next = `/trades${u.toString() ? `?${u}` : ''}`;
+    if (window.location.pathname + window.location.search !== next) window.history.replaceState({}, '', next);
+  }, [f]);
 
-  const params = new URLSearchParams({ days: String(days) });
-  if (side !== 'all') params.set('type', side);
-  if (source !== 'all') params.set('source', source);
-  if (min !== '0') params.set('min', min);
-  if (sort === 'value') params.set('sort', 'value');
-  if (q) params.set('q', q);
-  if (page) params.set('page', String(page));
+  const workerPage = Math.floor(f.page * TRADE_ROWS / WORKER_ROWS);
+  const params = new URLSearchParams({ days: String(f.days), sort: TRADE_SORTS[f.sort] });
+  if (f.dir === 'asc') params.set('dir', 'asc');
+  if (f.side !== 'all') params.set('type', f.side);
+  if (f.source !== 'all') params.set('source', f.source);
+  if (f.role !== 'all') params.set('role', f.role);
+  if (f.min !== '0') params.set('min', f.min);
+  if (f.q) params.set('q', f.q);
+  if (workerPage) params.set('page', String(workerPage));
   const { data: d, error, reload, loading } = useApi(`/public/trades?${params}`);
-  useEffect(() => { if (d?.total != null && !page) setTotal(d.total); }, [d, page]);
-  const rows = d?.rows || [];
-  const visible = rows.slice(0, shown);
-  const pageSize = d?.page_size || 200;
-  const lastPage = total != null ? Math.min(9, Math.ceil(total / pageSize) - 1) : 0;
+  // The total only comes with the first Worker page; keep it while paging.
+  const filterKey = JSON.stringify({ ...f, page: 0 });
+  useEffect(() => { setTotal(null); }, [filterKey]);
+  useEffect(() => { if (d?.total != null) setTotal(d.total); }, [d]);
+  const start = (f.page * TRADE_ROWS) % WORKER_ROWS;
+  const rows = (d?.rows || []).slice(start, start + TRADE_ROWS);
+  const pages = total != null ? Math.max(1, Math.min(40, Math.ceil(total / TRADE_ROWS))) : null;
+  const goPage = n => { set({ page: n }); window.scrollTo?.({ top: 0, behavior: 'smooth' }); document.querySelector('.ws-main')?.scrollTo?.({ top: 0, behavior: 'smooth' }); };
 
+  const sortBy = key => set(f.sort === key ? { dir: f.dir === 'desc' ? 'asc' : 'desc' } : { sort: key, dir: key === 'ticker' || key === 'person' ? 'asc' : 'desc' });
+  const Th = ({ k, children, right, className = '' }) => {
+    const on = f.sort === k;
+    return (
+      <th className={`${right ? 'sx-r ' : ''}${className}`} aria-sort={on ? (f.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+        <button type="button" className={`hx-th${on ? ' hx-th--on' : ''}`} onClick={() => sortBy(k)}>
+          {children}<span className="hx-th__arrow" aria-hidden="true">{on ? (f.dir === 'asc' ? '↑' : '↓') : '↕'}</span>
+        </button>
+      </th>
+    );
+  };
   const who = r => ({ raw: r.insider_name, name: prettyPerson(r.insider_name, isCongressRow(r)), role: roleFromTitle(r.insider_title, isCongressRow(r) ? 'congress' : r.relationship), congress: isCongressRow(r) });
   const dateOf = r => String(r.transaction_date || r.filing_date || '').slice(0, 10);
+  // "Filed Nov 3" under the date when it was reported more than 3 days after the trade.
+  const filedNote = r => {
+    const t = dateOf(r), fd = String(r.filing_date || '').slice(0, 10);
+    return t && fd && dayGap(t, fd) > 3 ? `filed ${shortDate(fd)}` : null;
+  };
+  const stake = r => (r.pct_owned_change == null || isCongressRow(r) ? null : Number(r.pct_owned_change));
+  const sec = r => secFilingUrl(r.accession_number, r.cik_issuer);
 
   return (
     <div className="sx-page hx-trades">
@@ -693,16 +742,22 @@ export function TradesPage() {
       </header>
 
       <div className="hx-filters">
-        <Segmented size="sm" value={days} onChange={setDays} options={TRADE_PERIODS} />
-        <Segmented size="sm" value={side} onChange={setSide} options={[{ value: 'all', label: 'All' }, { value: 'buy', label: 'Buys' }, { value: 'sell', label: 'Sales' }]} />
-        <Segmented size="sm" value={source} onChange={setSource} options={[{ value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'political', label: 'Congress' }]} />
-        <label className="hx-filters__min">
-          <select value={min} onChange={e => setMin(e.target.value)} aria-label="Smallest trade">
+        <div className="hx-filters__row">
+          <Segmented size="sm" value={f.days} onChange={v => set({ days: v })} options={TRADE_PERIODS} />
+          <Segmented size="sm" value={f.side} onChange={v => set({ side: v })} options={[{ value: 'all', label: 'All' }, { value: 'buy', label: 'Buys' }, { value: 'sell', label: 'Sales' }]} />
+          <Segmented size="sm" value={f.source} onChange={v => set({ source: v, role: v === 'political' ? 'all' : f.role })} options={[{ value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'political', label: 'Congress' }]} />
+          <select className="hx-select" value={f.role} onChange={e => set({ role: e.target.value })} aria-label="Role" disabled={f.source === 'political'}>
+            <option value="all">Any role</option>
+            <option value="exec">CEOs and execs</option>
+            <option value="director">Directors</option>
+            <option value="owner">10% owners</option>
+          </select>
+          <select className="hx-select" value={f.min} onChange={e => set({ min: e.target.value })} aria-label="Smallest trade">
             <option value="0">Any size</option>
             <option value="100000">$100K+</option>
             <option value="1000000">$1M+</option>
           </select>
-        </label>
+        </div>
         <div className="sx-search__field hx-filters__q">
           <span className="sx-search__icon"><Icon name="search" size={14} /></span>
           <input className="sx-search__input" type="search" value={text} onChange={e => setText(e.target.value)} placeholder="Ticker, company or person" aria-label="Filter by ticker, company or person" />
@@ -715,23 +770,37 @@ export function TradesPage() {
             {total != null ? `${total.toLocaleString('en-US')} ${total === 1 ? 'trade' : 'trades'}` : loading ? 'Loading…' : ''}
             {d?.from ? ` · ${shortDate(d.from, { year: true })} to ${shortDate(d.to, { year: true })}` : ''}
           </span>
-          <Segmented size="sm" value={sort} onChange={setSort} options={[{ value: 'date', label: 'Newest' }, { value: 'value', label: 'Largest' }]} />
+          {narrow && (
+            <select className="hx-select" value={`${f.sort}:${f.dir}`} aria-label="Sort"
+              onChange={e => { const [sort, dir] = e.target.value.split(':'); set({ sort, dir }); }}>
+              <option value="date:desc">Newest first</option>
+              <option value="date:asc">Oldest first</option>
+              <option value="value:desc">Largest first</option>
+              <option value="value:asc">Smallest first</option>
+              <option value="stake:desc">Biggest stake change</option>
+              <option value="ticker:asc">Ticker A to Z</option>
+            </select>
+          )}
         </div>
         {error && !d && <div className="sx-card__body"><ErrorNote message={error} onRetry={reload} /></div>}
         {!d && !error && <div className="sx-card__body"><Skeleton lines={10} /></div>}
         {d && !rows.length && <div className="sx-empty"><div className="sx-empty__body">No trades match these filters.</div></div>}
         {d && rows.length > 0 && (narrow ? (
           <ul className={`sx-trows${loading ? ' sx-dim' : ''}`}>
-            {visible.map((r, i) => { const p = who(r); return (
-              <li key={`${page}:${i}`} className="sx-trow">
+            {rows.map((r, i) => { const p = who(r); const note = filedNote(r); const st = stake(r); const url = sec(r); return (
+              <li key={`${f.page}:${i}`} className="sx-trow">
                 {r.ticker ? <StockLink ticker={r.ticker} /> : <span className="sx-trow__asset">Other</span>}
                 <div className="sx-trow__main">
                   <div className="sx-trow__title"><InsiderLink raw={p.raw}>{p.name}</InsiderLink></div>
-                  <div className="sx-trow__sub">{shortDate(dateOf(r))} · {p.congress ? 'Congress' : roleText(p.role)}</div>
+                  <div className="sx-trow__sub">{shortDate(dateOf(r))}{note ? ` (${note})` : ''} · {p.congress ? 'Congress' : roleText(p.role)}</div>
                 </div>
                 <div className="sx-trow__end">
                   <span className={`sx-trow__amt ${r.transaction_type === 'buy' ? 'sx-up' : 'sx-down'}`}>{amount(r.value, p.congress)}</span>
-                  <span className="sx-trow__meta"><TypeBadge type={r.transaction_type} /></span>
+                  <span className="sx-trow__meta">
+                    <TypeBadge type={r.transaction_type} />
+                    {st != null && <span className="hx-stake">{pct(st)}</span>}
+                    {url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" aria-label="Open the SEC filing"><Icon name="external" size={11} /></a>}
+                  </span>
                 </div>
               </li>
             ); })}
@@ -741,35 +810,41 @@ export function TradesPage() {
             <table className="sx-table hx-trades__table">
               <thead>
                 <tr>
-                  <th>Date</th><th>Stock</th><th>Person</th><th>Type</th>
-                  <th className="sx-r">Shares</th><th className="sx-r">Price</th><th className="sx-r">Value</th>
+                  <Th k="date">Date</Th>
+                  <Th k="ticker">Stock</Th>
+                  <Th k="person">Person</Th>
+                  <th>Type</th>
+                  <Th k="shares" right>Shares</Th>
+                  <Th k="price" right>Price</Th>
+                  <Th k="value" right>Value</Th>
+                  <Th k="stake" right>Stake</Th>
+                  <th aria-label="SEC filing" />
                 </tr>
               </thead>
               <tbody>
-                {visible.map((r, i) => { const p = who(r); return (
-                  <tr key={`${page}:${i}`}>
-                    <td className="sx-nowrap">{shortDate(dateOf(r), { year: days > 90 })}</td>
+                {rows.map((r, i) => { const p = who(r); const note = filedNote(r); const st = stake(r); const url = sec(r); return (
+                  <tr key={`${f.page}:${i}`}>
+                    <td className="sx-nowrap">{shortDate(dateOf(r), { year: f.days > 90 })}{note && <span className="hx-filed">{note}</span>}</td>
                     <td className="hx-trades__stock">{r.ticker ? <StockLink ticker={r.ticker} /> : null}<span className="hx-trades__co">{prettyCompany(r.company_name) || ''}</span></td>
                     <td className="sx-table__who"><InsiderLink raw={p.raw}>{p.name}</InsiderLink><span className="sx-table__role"><RoleTag role={p.role} congress={p.congress} title={r.insider_title} name={p.raw} /></span></td>
                     <td><TypeBadge type={r.transaction_type} /></td>
                     <td className="sx-r sx-mono">{p.congress || !r.shares ? '—' : shares(r.shares)}</td>
                     <td className="sx-r sx-mono">{p.congress || !r.price_per_share ? '—' : price(r.price_per_share)}</td>
                     <td className={`sx-r sx-mono sx-strong ${r.transaction_type === 'buy' ? 'sx-up' : 'sx-down'}`}>{amount(r.value, p.congress)}</td>
+                    <td className="sx-r sx-mono" title="Change in how many shares they hold, from the filing">{st == null ? '—' : pct(st)}</td>
+                    <td className="sx-r hx-trades__sec">{url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" title="Open the SEC filing" aria-label="Open the SEC filing"><Icon name="external" size={12} /></a>}</td>
                   </tr>
                 ); })}
               </tbody>
             </table>
           </div>
         ))}
-        {rows.length > shown && (
-          <button className="sx-more" onClick={() => setShown(n => n + TRADE_PAGE)}>Show {Math.min(TRADE_PAGE, rows.length - shown)} more <Icon name="chevron" size={12} /></button>
-        )}
-        {rows.length <= shown && (page > 0 || page < lastPage) && (
-          <div className="hx-trades__pager">
-            <button className="sx-btn sx-btn--ghost sx-btn--sm" disabled={page === 0} onClick={() => { setPage(p => p - 1); setShown(TRADE_PAGE); }}>Newer</button>
-            <span className="sx-muted sx-small">Page {page + 1}{lastPage ? ` of ${lastPage + 1}` : ''}</span>
-            <button className="sx-btn sx-btn--ghost sx-btn--sm" disabled={page >= lastPage} onClick={() => { setPage(p => p + 1); setShown(TRADE_PAGE); }}>Older</button>
-          </div>
+        {pages != null && pages > 1 && (
+          <nav className="hx-pager" aria-label="Pages">
+            <button className="sx-btn sx-btn--ghost sx-btn--sm" disabled={f.page === 0} onClick={() => goPage(f.page - 1)} aria-label="Previous page"><Icon name="arrow" size={12} style={{ transform: 'rotate(180deg)' }} /></button>
+            <span className="sx-small">Page <b>{f.page + 1}</b> of {pages.toLocaleString('en-US')}{total > 40 * TRADE_ROWS ? '+' : ''}</span>
+            <button className="sx-btn sx-btn--ghost sx-btn--sm" disabled={f.page >= pages - 1} onClick={() => goPage(f.page + 1)} aria-label="Next page"><Icon name="arrow" size={12} /></button>
+          </nav>
         )}
       </Card>
 
