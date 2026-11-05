@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SignInButton, useClerk } from '@clerk/clerk-react';
 import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink, NAV_TABS, tabOf, stockPath, insiderPath } from '../lib/nav.jsx';
-import { plural, shortDate, money, congressRange, PAGE_TITLES, roleText, amount, shares, price, prettyPerson, prettyCompany, roleFromTitle } from '../lib/text.js';
+import { plural, shortDate, money, congressRange, PAGE_TITLES, roleText, amount, shares, price, prettyPerson, prettyCompany, roleFromTitle, isEntityName } from '../lib/text.js';
 import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segmented, PublicViewContext, TypeBadge } from '../components/ui.jsx';
 import '../home.css';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
@@ -377,12 +377,14 @@ function useMovers(buying, congress) {
   return useMemo(() => {
     const clusters = [buying?.featured, ...(buying?.more || [])].filter(Boolean);
     const who = (name, role, n) => `${name}${role ? `, ${roleText(role)}` : ''}${n > 1 ? ` + ${plural(n - 1, 'other')}` : ''}`;
-    const buys = clusters.map(c => ({
+    // Funds and companies filing as big shareholders aren't "insiders" to a new
+    // visitor, so a buy led by one is left out of the biggest moves.
+    const buys = clusters.filter(c => !isEntityName(c.buyers?.[0]?.raw)).map(c => ({
       ticker: c.ticker, company: c.company, side: 'up', amt: `+${money(c.total)}`, v: c.total,
       count: c.n_insiders > 1 ? `${c.n_insiders} insiders` : null, kind: c.n_insiders > 1 ? `${c.n_insiders} insiders buying` : 'Insider buy',
       detail: who(c.buyers[0].name, c.buyers[0].role, c.n_insiders), group: c.n_insiders > 1 ? 0 : 1,
     }));
-    const sells = (buying?.sells || []).filter(r => !r.planned).map(r => ({
+    const sells = (buying?.sells || []).filter(r => !r.planned && !isEntityName(r.raw)).map(r => ({
       ticker: r.ticker, company: r.company, side: 'down', amt: `−${money(r.value)}`, v: r.value,
       count: r.n > 1 ? plural(r.n, 'sale') : null, kind: 'Insider sale', detail: who(r.name, r.role, 1), group: 1,
     }));
@@ -526,11 +528,15 @@ export function PublicHome() {
         <section className="hx__main">
           <LatestPostPill post={news?.posts?.[0]} />
           <h1 className="hx-h1">Never miss a trade.</h1>
-          <p className="hx-sub">Seli watches your back. Clean, near-instant insider trading data. Instant alerts. <a href="#how" className="sx-link hx-sub__link" onClick={howLink}>See how it works <Icon name="arrow" size={13} /></a></p>
+          <p className="hx-sub">Know the moment a CEO or member of Congress trades a stock you own. Seli filters out the noise other trackers pass along and alerts you instantly on the trades that matter.</p>
           <div className="hx-search"><SearchBox variant="inline" placeholder={narrow ? 'Stock, CEO, or member of Congress' : 'Search a stock, CEO, or member of Congress...'} /></div>
-          <Freshness className="hx-fresh" />
+          <p className="hx-trust">
+            <span><Icon name="check" size={13} />Free account, no card</span>
+            <span><Icon name="check" size={13} />Straight from SEC and congressional filings</span>
+            <a href="#how" className="sx-link" onClick={howLink}>See how it works <Icon name="arrow" size={12} /></a>
+          </p>
 
-          <p className="hx-label">Biggest moves this week</p>
+          <p className="hx-label">Biggest moves this week <span className="hx-label__sub">Executives and members of Congress trading with their own money</span></p>
           {!buying && !congress ? (
             <div className="hx-chips"><span className="hx-mv hx-mv--ghost" /><span className="hx-mv hx-mv--ghost" /><span className="hx-mv hx-mv--ghost" /><span className="hx-mv hx-mv--ghost" /></div>
           ) : (
@@ -543,6 +549,7 @@ export function PublicHome() {
                       <b className="hx-mv__tk">{m.ticker}</b>
                       {m.cg && <Icon name="capitol" size={12} className="hx-mv__cg" />}
                     </span>
+                    <span className="hx-mv__name">{m.company}</span>
                     <span className={`hx-mv__amt ${m.side === 'up' ? 'sx-up' : 'sx-down'}`}>{m.amt}</span>
                     <span className="hx-mv__count">{m.count || m.kind}</span>
                   </span>
@@ -581,17 +588,19 @@ export function PublicHome() {
         </ul>
       </section>
 
+      <HowItWorks c={buying?.featured} signUp={signUp} />
+
       <section className="sx-plans hx-plans" id="pricing">
         <h2 className="sx-section-title">Pricing</h2>
         <div className="sx-plans__grid">
           <div className="sx-plan">
             <div className="sx-plan__name">Free</div>
             <div className="sx-plan__price">$0</div>
-            <p className="sx-plan__desc">Everything on this site, plus an account:</p>
+            <p className="sx-plan__desc">What an account adds to this site:</p>
             <ul className="sx-plan__list">
-              <li>Watch 3 stocks or people</li>
-              <li>A weekly email on what they did</li>
-              <li>Plain-English reads, cluster and first-buy flags, track records</li>
+              <li>Seli's plain-English read on every stock and person</li>
+              <li>Cluster, first-buy and reversal flags, and track records</li>
+              <li>Watch 3 stocks or people, with a weekly email on what they did</li>
               <li>12 months of trades on every page</li>
             </ul>
             <button className="sx-btn" onClick={signUp}>Get started free</button>
@@ -624,7 +633,6 @@ export function PublicHome() {
         </div>
       </section>
 
-      <HowItWorks c={buying?.featured} signUp={signUp} />
       <p className="sx-note sx-note--center hx-fine">Seli shows what was filed. It isn't investment advice. <a href="/about" className="sx-link">How the data and scores work</a></p>
     </div>
   );

@@ -391,3 +391,36 @@
   .hx-search .sx-search__input { height: 50px; }
   .hx--in .hx-search .sx-search__input { height: 46px; }
 }
+
+/* ── Round 6 (critique fixes) ─────────────────────────────────────────────── */
+/* Hero: still lots of air on top like Quiver, but anchored near the top of the
+   right column instead of floating in the middle of it. */
+@media (min-width: 981px) {
+  .hx--out .hx__main { justify-content: flex-start; padding-top: 128px; padding-bottom: 56px; }
+  .hx--out .hx-sub { max-width: 600px; font-size: 17px; line-height: 1.6; }
+  /* The search is the page's main action: bigger, brighter edge, soft glow. */
+  .hx--out .hx-search { margin-top: 32px; }
+  .hx--out .hx-search .sx-search__input { height: 60px; font-size: 18px; padding-left: 48px; border-color: color-mix(in srgb, var(--accent) 35%, var(--border-md)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 8%, transparent), 0 10px 30px rgba(0,0,0,.25); }
+  .hx--out .hx-search .sx-search__icon { left: 18px; }
+}
+.hx-trust { margin: 14px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; font-size: 13px; color: var(--text-2); }
+.hx-trust > span { display: inline-flex; align-items: center; gap: 6px; }
+.hx-trust svg { color: var(--green-600); }
+.hx-trust .sx-link { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+
+/* Moves: company name under the ticker, and a one-line explainer on the label */
+.hx-label__sub { margin-left: 8px; color: var(--text-3); font-weight: 400; }
+.hx-mv { height: 118px; }
+.hx-mv__main { width: 116px; }
+.hx-mv__name { margin-top: 2px; font-size: 11.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hx-mv__amt { margin-top: 8px; }
+.hx-scroll.can-r .hx-scroll__track { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 110px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 110px), transparent); }
+@media (max-width: 640px) { .hx-label__sub { display: block; margin: 2px 0 0; } .hx-mv { height: 122px; } .hx-mv__main { width: 104px; } }
+
+/* Right column stays quieter than the hero */
+.hx-topbuy .sx-watch { background: transparent; color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 55%, transparent); height: 30px; padding: 0 12px; }
+.hx-topbuy .sx-watch:hover { background: var(--accent-50); filter: none; }
+.hx-topbuy .sx-watch--on { color: var(--green-600); border-color: color-mix(in srgb, var(--green-600) 50%, transparent); }
+@media (min-width: 981px) {
+  .hx-post__title, .hx-post:first-child .hx-post__title { font-size: 16px; line-height: 1.4; }
+}
