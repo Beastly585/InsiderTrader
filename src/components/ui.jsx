@@ -203,17 +203,18 @@ export function SignupTeaser({ children, cta = 'Create free account' }) {
   );
 }
 
-// Small star to watch or unwatch a stock or person right where it's listed.
-// Signed out, the public watchlist opens sign-up and adds it afterwards.
-export function StarButton({ watchlist, kind, id, label }) {
+// Bell to follow or unfollow a stock or person right where it's listed.
+// Following = it's on your watchlist and you get its alerts. Signed out, the
+// public watchlist opens sign-up and follows it afterwards.
+export function FollowButton({ watchlist, kind, id, label }) {
   if (!watchlist || !id) return null;
   const on = kind === 'stock' ? watchlist.hasTicker(id) : watchlist.hasInsider(id);
   const what = label || id;
   return (
-    <button type="button" className={`sx-star${on ? ' sx-star--on' : ''}`} aria-pressed={on}
-      aria-label={on ? `Stop watching ${what}` : `Watch ${what}`} title={on ? `Watching ${what}. Click to stop.` : `Watch ${what}`}
+    <button type="button" className={`sx-follow${on ? ' sx-follow--on' : ''}`} aria-pressed={on}
+      aria-label={on ? `Following ${what}. Click to unfollow.` : `Follow ${what}`} title={on ? `Following ${what}. Click to unfollow.` : `Follow ${what}: alerts and watchlist`}
       onClick={e => { e.preventDefault(); e.stopPropagation(); kind === 'stock' ? watchlist.toggleTicker(id) : watchlist.toggleInsider(id); }}>
-      <Icon name="star" size={13} fill={on ? 'currentColor' : 'none'} />
+      <Icon name="bell" size={14} fill={on ? 'currentColor' : 'none'} />
     </button>
   );
 }

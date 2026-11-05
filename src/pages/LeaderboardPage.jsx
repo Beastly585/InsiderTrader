@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { InsiderLink, StockLink } from '../lib/nav.jsx';
 import { useApi } from '../lib/api.js';
 import { money, pct, plural, PAGE_TITLES } from '../lib/text.js';
-import { Card, Segmented, Skeleton, ErrorNote, Gate, useNarrow, RoleTag, Icon, StarButton } from '../components/ui.jsx';
+import { Card, Segmented, Skeleton, ErrorNote, Gate, useNarrow, RoleTag, Icon, FollowButton } from '../components/ui.jsx';
 
 const LIST = { rank: 'ranked', hit: 'by_hit', ret: 'by_return', buys: 'by_buying' };
 const signed = (v, d = 1) => `${v >= 0 ? '+' : ''}${Number(v).toFixed(d)}`;
@@ -39,7 +39,7 @@ function LeaderList({ rows, sort, watchlist }) {
         return (
           <li key={r.raw} className="sx-lb__row">
             <div className="sx-lb__main">
-              <span className="sx-lb__namerow"><InsiderLink raw={r.raw} className="sx-lb__name">{r.name}</InsiderLink><StarButton watchlist={watchlist} kind="person" id={r.raw} label={r.name} /></span>
+              <InsiderLink raw={r.raw} className="sx-lb__name">{r.name}</InsiderLink>
               <div className="sx-lb__who">
                 <RoleTag role={r.role} congress={!!r.congress} title={r.title} />
                 {(r.tickers || []).slice(0, 2).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
@@ -50,6 +50,7 @@ function LeaderList({ rows, sort, watchlist }) {
               <span className={`sx-lb__val ${h.tone}`}>{h.value}</span>
               <span className="sx-lb__lbl">{h.label}</span>
             </div>
+            {watchlist && <div className="sx-lb__follow"><FollowButton watchlist={watchlist} kind="person" id={r.raw} label={r.name} /></div>}
           </li>
         );
       })}
@@ -99,10 +100,10 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
           ? <Segmented size="sm" value={years} onChange={setYears} options={[{ value: 1, label: '1Y' }, { value: 2, label: '2Y' }, { value: 5, label: '5Y' }]} />
           : <span className="sx-muted sx-small">Last 12 months</span>}
         {!publicMode && watchlist && (
-          <button type="button" className={`hx-toggle hx-toggle--mine${mine ? ' hx-toggle--on' : ''}`} aria-pressed={mine}
-            disabled={!watchedPeople && !mine} title={watchedPeople ? 'Only the people you watch' : 'Watch someone first (tap the star by their name)'}
+          <button type="button" role="checkbox" aria-checked={mine} className={`hx-toggle hx-toggle--sm${mine ? ' hx-toggle--on' : ''}`}
+            disabled={!watchedPeople && !mine} title={watchedPeople ? 'Only the people you follow' : 'Follow someone first (the bell on their row)'}
             onClick={() => setMine(m => !m)}>
-            <Icon name="star" size={12} fill={mine ? 'currentColor' : 'none'} />My watchlist{watchedPeople ? ` (${watchedPeople})` : ''}
+            <span className="hx-toggle__box">{mine && <Icon name="check" size={10} />}</span>Only my watchlist{watchedPeople ? ` (${watchedPeople})` : ''}
           </button>
         )}
         {loading && data && <span className="sx-muted sx-small" role="status">Updating…</span>}
@@ -138,6 +139,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
                   <th className="sx-r sx-hide-sm">Avg since buy</th>
                   <th className="sx-r">vs S&amp;P 500</th>
                   <th className="sx-r sx-hide-sm">Bought</th>
+                  {watchlist && <th aria-label="Follow" />}
                 </tr>
               </thead>
               <tbody>
@@ -146,7 +148,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
                   return (
                     <tr key={r.raw}>
                       <td className="sx-table__who">
-                        <span className="sx-lb__namerow"><InsiderLink raw={r.raw}>{r.name}</InsiderLink><StarButton watchlist={watchlist} kind="person" id={r.raw} label={r.name} /></span>
+                        <InsiderLink raw={r.raw}>{r.name}</InsiderLink>
                         <span className="sx-table__role">
                           <RoleTag role={r.role} congress={!!r.congress} title={r.title} />
                           {(r.tickers || []).slice(0, 3).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
@@ -159,6 +161,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
                         <span className="sx-n">{r.avg_spy != null ? `S&P ${pct(r.avg_spy, 1)}` : ''}</span>
                       </td>
                       <td className="sx-r sx-mono sx-hide-sm">{money(r.bought)}<span className="sx-n">{plural(r.om_buys || 0, 'buy')}</span></td>
+                      {watchlist && <td className="sx-r sx-lb__followcell"><FollowButton watchlist={watchlist} kind="person" id={r.raw} label={r.name} /></td>}
                     </tr>
                   );
                 })}

@@ -9,7 +9,7 @@ import { useApi, useDataSinceYear } from '../lib/api.js';
 import { go, StockLink, InsiderLink, NAV_TABS, tabOf, stockPath, insiderPath } from '../lib/nav.jsx';
 import { plural, shortDate, money, congressRange, PAGE_TITLES, roleText, amount, shares, price, prettyPerson, prettyCompany, roleFromTitle, isEntityName, pct } from '../lib/text.js';
 import { secFilingUrl } from '../edgar.js';
-import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segmented, PublicViewContext, TypeBadge, StarButton } from '../components/ui.jsx';
+import { Card, Skeleton, ErrorNote, Icon, useNarrow, Freshness, RoleTag, Segmented, PublicViewContext, TypeBadge, FollowButton } from '../components/ui.jsx';
 import '../home.css';
 import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
@@ -642,10 +642,11 @@ export function PublicHome() {
   );
 }
 
-// ── /trades for signed-out visitors ─────────────────────────────────────────
-// The raw feed: every open-market insider and Congress trade from the last 12
-// months, with filters. Straight from the filings, no reads or flags on top
-// (those need an account). Signed in, /trades is the Data page instead.
+// ── /trades ─────────────────────────────────────────────────────────────────
+// Every open-market insider and Congress trade, with filters. Signed out it's
+// the raw feed. Signed in, the same table adds Seli's signals: tags on each
+// trade and filters for them (the Worker's explore() works them out, with the
+// same rules as the stock pages).
 // Filters, sort and page live in the URL, so a view can be shared or reloaded.
 const TRADE_PERIODS = [{ value: 7, label: '7D' }, { value: 30, label: '30D' }, { value: 90, label: '90D' }, { value: 365, label: '1Y' }];
 // Pro sees further back (the Worker caps everyone else at 12 months anyway).
@@ -653,7 +654,34 @@ const PRO_PERIODS = [...TRADE_PERIODS, { value: 730, label: '2Y' }, { value: 182
 const TRADE_ROWS = 50;    // rows per page on screen
 const WORKER_ROWS = 200;  // rows the Worker sends per request (4 screen pages)
 const TRADE_SORTS = { date: 'transaction_date', ticker: 'ticker', person: 'insider_name', shares: 'shares', price: 'price_per_share', value: 'value', stake: 'pct_owned_change' };
-const TRADE_DEFAULTS = { days: 30, side: 'all', source: 'all', role: 'all', min: '0', people: '0', mine: '0', sort: 'date', dir: 'desc', q: '', page: 0 };
+const TRADE_DEFAULTS = { days: 30, side: 'all', source: 'all', role: 'all', min: '0', people: '0', mine: '0', sig: 'all', sort: 'date', dir: 'desc', q: '', page: 0 };
+// Signal filters. First buys and clusters are about buying, so they switch the
+// table to buys.
+const SIG_FILTERS = [
+  { value: 'all', label: 'All trades' },
+  { value: 'first', label: 'First buys', buys: true, tip: 'Insiders buying their own stock for the first time in 2+ years' },
+  { value: 'cluster', label: 'Several insiders', buys: true, tip: 'Two or more people at a company buying within 2 weeks of each other' },
+  { value: 'rev', label: 'Reversals', tip: 'Someone who had only been selling starts buying, or the other way around' },
+];
+const REV_TIP = {
+  buy: 'Reversal: bought after 2+ sales and no buys of this stock in the previous 2 years',
+  sell: 'Reversal: sold (not a planned sale) after 2+ buys and no sales of this stock in the previous 2 years',
+};
+// The tags on one trade, strongest first.
+function sigTags(r) {
+  const s = r.sig;
+  if (!s) return [];
+  const out = [];
+  if (s.brk) out.push({ k: 'brk', text: s.brk, tone: 'accent', tip: "This insider hadn't bought this stock on the open market in that long" });
+  if (s.cluster) out.push({ k: 'cl', text: `${s.cluster} insiders buying`, tone: 'accent', tip: `${s.cluster} people bought ${r.ticker} on the open market within 2 weeks of each other` });
+  if (s.rev) out.push({ k: 'rev', text: 'Reversal', tone: 'rev', tip: REV_TIP[s.rev] });
+  if (s.routine) out.push({ k: 'pl', text: 'Planned', tone: '', tip: 'Filed under a pre-scheduled 10b5-1 trading plan' });
+  return out;
+}
+const SigTags = ({ r }) => {
+  const t = sigTags(r);
+  return t.length ? <span className="hx-sigs">{t.map(x => <span key={x.k} className={`hx-sig${x.tone ? ` hx-sig--${x.tone}` : ''}`} title={x.tip}>{x.text}</span>)}</span> : null;
+};
 const isCongressRow = r => r.relationship === 'congress' || String(r.transaction_code || '').startsWith('CONGRESS');
 const dayGap = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 
@@ -668,6 +696,7 @@ function readTradeParams() {
     min: pick('min', v => ['100000', '1000000'].includes(v)),
     people: pick('people', v => v === '1'),
     mine: pick('mine', v => v === '1'),
+    sig: pick('sig', v => ['first', 'cluster', 'rev'].includes(v)),
     sort: pick('sort', v => v in TRADE_SORTS),
     dir: pick('dir', v => v === 'asc'),
     q: (p.get('q') || '').slice(0, 40),
@@ -719,6 +748,10 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
   if (f.role !== 'all') params.set('role', f.role);
   if (f.people === '1') params.set('people', '1');
   if (f.q) params.set('q', f.q);
+  if (signedIn) {
+    params.set('sig', '1');
+    if (f.sig !== 'all') params.set('sigf', f.sig);
+  }
   if (signedIn && f.mine === '1') {
     params.set('mine', '1');
     params.set('mt', (watchlist.tickers || []).join(','));
@@ -773,7 +806,7 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
       <div className="hx-filters">
         <div className="hx-filters__row">
           <Segmented size="sm" value={f.days} onChange={v => set({ days: v })} options={pro ? PRO_PERIODS : TRADE_PERIODS} />
-          <Segmented size="sm" value={f.side} onChange={v => set({ side: v })} options={[{ value: 'all', label: 'All' }, { value: 'buy', label: 'Buys' }, { value: 'sell', label: 'Sales' }]} />
+          <Segmented size="sm" value={f.side} onChange={v => set({ side: v, sig: v === 'sell' && SIG_FILTERS.find(x => x.value === f.sig)?.buys ? 'all' : f.sig })} options={[{ value: 'all', label: 'All' }, { value: 'buy', label: 'Buys' }, { value: 'sell', label: 'Sales' }]} />
           <Segmented size="sm" value={f.source} onChange={v => set({ source: v, role: v === 'political' ? 'all' : f.role })} options={[{ value: 'all', label: 'Everyone' }, { value: 'corporate', label: 'Insiders' }, { value: 'political', label: 'Congress' }]} />
           <select className="hx-select" value={f.role} onChange={e => set({ role: e.target.value })} aria-label="Role" disabled={f.source === 'political'}>
             <option value="all">Any role</option>
@@ -793,11 +826,25 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
         </div>
         <div className="sx-search__field hx-filters__q">
           <span className="sx-search__icon"><Icon name="search" size={14} /></span>
-          <input className="sx-search__input" type="search" value={text} onChange={e => setText(e.target.value)} placeholder="Ticker, company or person" aria-label="Filter by ticker, company or person" />
+          <input className="sx-search__input" type="search" value={text} onChange={e => setText(e.target.value)} placeholder="Ticker, company, person" aria-label="Filter by ticker, company or person" />
         </div>
       </div>
 
       <Card pad={false}>
+        <div className="hx-sigbar" role="group" aria-label="Signals">
+          <span className="hx-sigbar__label">Signals</span>
+          {SIG_FILTERS.map(o => {
+            const on = signedIn && f.sig === o.value;
+            const locked = !signedIn && o.value !== 'all';
+            return (
+              <button key={o.value} type="button" className={`hx-sf${on || (!signedIn && o.value === 'all') ? ' hx-sf--on' : ''}${locked ? ' hx-sf--locked' : ''}`}
+                aria-pressed={on || (!signedIn && o.value === 'all')} title={locked ? `${o.tip}. Free with an account.` : o.tip}
+                onClick={() => (locked ? signUp() : signedIn && set({ sig: o.value, ...(o.buys ? { side: 'buy' } : {}) }))}>
+                {locked && <Icon name="lock" size={11} />}{o.label}
+              </button>
+            );
+          })}
+        </div>
         <div className="hx-trades__bar">
           <span className="sx-muted sx-small" role="status">
             {total != null ? `${total.toLocaleString('en-US')} ${total === 1 ? 'trade' : 'trades'}` : loading ? 'Loading…' : ''}
@@ -805,10 +852,10 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
           </span>
           <span className="hx-trades__tools">
           {signedIn && (
-            <button type="button" className={`hx-toggle hx-toggle--sm hx-toggle--mine${f.mine === '1' ? ' hx-toggle--on' : ''}`} aria-pressed={f.mine === '1'}
-              disabled={!watchCount && f.mine !== '1'} title={watchCount ? 'Only trades in the stocks and by the people you watch' : 'Watch a stock or person first (tap the star on any row)'}
+            <button type="button" role="checkbox" aria-checked={f.mine === '1'} className={`hx-toggle hx-toggle--sm${f.mine === '1' ? ' hx-toggle--on' : ''}`}
+              disabled={!watchCount && f.mine !== '1'} title={watchCount ? 'Only trades in the stocks and by the people you follow' : 'Follow a stock or person first (the bell on any row)'}
               onClick={() => set({ mine: f.mine === '1' ? '0' : '1' })}>
-              <Icon name="star" size={12} fill={f.mine === '1' ? 'currentColor' : 'none'} />My watchlist{watchCount ? ` (${watchCount})` : ''}
+              <span className="hx-toggle__box">{f.mine === '1' && <Icon name="check" size={10} />}</span>Only my watchlist{watchCount ? ` (${watchCount})` : ''}
             </button>
           )}
             {narrow && (
@@ -826,15 +873,16 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
         </div>
         {error && !d && <div className="sx-card__body"><ErrorNote message={error} onRetry={reload} /></div>}
         {!d && !error && <div className="sx-card__body"><Skeleton lines={10} /></div>}
-        {d && !rows.length && <div className="sx-empty"><div className="sx-empty__body">{f.mine === '1' ? 'No trades in your watchlist match these filters.' : 'No trades match these filters.'}</div></div>}
+        {d && !rows.length && <div className="sx-empty"><div className="sx-empty__body">{f.mine === '1' ? 'No trades in your watchlist match these filters.' : f.sig !== 'all' && signedIn ? `No ${SIG_FILTERS.find(x => x.value === f.sig).label.toLowerCase()} match these filters. Try a longer period.` : 'No trades match these filters.'}</div></div>}
         {d && rows.length > 0 && (narrow ? (
           <ul className={`sx-trows${loading ? ' sx-dim' : ''}`}>
             {rows.map((r, i) => { const p = who(r); const note = filedNote(r); const st = stake(r); const url = sec(r); return (
               <li key={`${f.page}:${i}`} className="sx-trow">
-                <span className="hx-trow__tk">{r.ticker ? <StockLink ticker={r.ticker} /> : <span className="sx-trow__asset">Other</span>}{r.ticker && <StarButton watchlist={watchlist} kind="stock" id={r.ticker} />}</span>
+                {r.ticker ? <StockLink ticker={r.ticker} /> : <span className="sx-trow__asset">Other</span>}
                 <div className="sx-trow__main">
                   <div className="sx-trow__title"><InsiderLink raw={p.raw}>{p.name}</InsiderLink></div>
                   <div className="sx-trow__sub">{shortDate(dateOf(r))}{note ? ` (${note})` : ''} · {p.congress ? 'Congress' : roleText(p.role)}</div>
+                  <SigTags r={r} />
                 </div>
                 <div className="sx-trow__end">
                   <span className={`sx-trow__amt ${r.transaction_type === 'buy' ? 'sx-up' : 'sx-down'}`}>{amount(r.value, p.congress)}</span>
@@ -842,6 +890,7 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
                     <TypeBadge type={r.transaction_type} />
                     {st != null && <span className="hx-stake">{stakeText(st)}</span>}
                     {url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" aria-label="Open the SEC filing"><Icon name="external" size={11} /></a>}
+                    {r.ticker && <FollowButton watchlist={watchlist} kind="stock" id={r.ticker} />}
                   </span>
                 </div>
               </li>
@@ -860,21 +909,21 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
                   <Th k="price" right>Price</Th>
                   <Th k="value" right><span title="Sorted with buys above zero and sales below it: one end is the biggest buys, the other the biggest sales">Value</span></Th>
                   <Th k="stake" right>Stake</Th>
-                  <th aria-label="SEC filing" />
+                  <th aria-label="Filing and follow" />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r, i) => { const p = who(r); const note = filedNote(r); const st = stake(r); const url = sec(r); return (
                   <tr key={`${f.page}:${i}`}>
                     <td className="sx-nowrap">{shortDate(dateOf(r), { year: f.days > 90 })}{note && <span className="hx-filed">{note}</span>}</td>
-                    <td className="hx-trades__stock">{r.ticker && <StarButton watchlist={watchlist} kind="stock" id={r.ticker} />}{r.ticker ? <StockLink ticker={r.ticker} /> : null}<span className="hx-trades__co">{prettyCompany(r.company_name) || ''}</span></td>
+                    <td className="hx-trades__stock">{r.ticker ? <StockLink ticker={r.ticker} /> : null}<span className="hx-trades__co">{prettyCompany(r.company_name) || ''}</span></td>
                     <td className="sx-table__who"><InsiderLink raw={p.raw}>{p.name}</InsiderLink><span className="sx-table__role"><RoleTag role={p.role} congress={p.congress} title={r.insider_title} name={p.raw} /></span></td>
-                    <td><TypeBadge type={r.transaction_type} /></td>
+                    <td className="hx-trades__type"><TypeBadge type={r.transaction_type} /><SigTags r={r} /></td>
                     <td className="sx-r sx-mono">{p.congress || !r.shares ? '—' : shares(r.shares)}</td>
                     <td className="sx-r sx-mono">{p.congress || !r.price_per_share ? '—' : price(r.price_per_share)}</td>
                     <td className={`sx-r sx-mono sx-strong ${r.transaction_type === 'buy' ? 'sx-up' : 'sx-down'}`}>{amount(r.value, p.congress)}</td>
                     <td className="sx-r sx-mono" title="How much of their holding this trade added or sold, from the filing">{stakeText(st)}</td>
-                    <td className="sx-r hx-trades__sec">{url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" title="Open the SEC filing" aria-label="Open the SEC filing"><Icon name="external" size={12} /></a>}</td>
+                    <td className="sx-r hx-trades__sec">{url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" title="Open the SEC filing" aria-label="Open the SEC filing"><Icon name="external" size={12} /></a>}{r.ticker && <FollowButton watchlist={watchlist} kind="stock" id={r.ticker} />}</td>
                   </tr>
                 ); })}
               </tbody>

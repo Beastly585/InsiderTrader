@@ -1519,54 +1519,19 @@ function IconLock(p) { return <svg {...ICON_PROPS} {...p}><rect x="3" y="11" wid
 const NAV_ICONS = { home: IconHome, trades: IconInsights, insiders: IconUsers, news: IconNews };
 const NAV_LINKS = NAV_TABS.map(t => ({ ...t, short: t.label, Icon: NAV_ICONS[t.id] }));
 
-// Star in the top bar: what you watch, one click from anywhere.
-function WatchlistMenu({ watchlist }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const onKey = e => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
-  }, [open]);
-  const tickers = watchlist.tickers || [];
-  const people = watchlist.insiders || [];
-  const count = tickers.length + people.length;
-  const pick = path => () => { setOpen(false); go(path); };
-  const SHOW = 8;
+// Top-bar link to the watchlist page. Same bell as the follow buttons on rows.
+function WatchlistLink({ watchlist, active, compact }) {
+  const count = (watchlist.tickers?.length || 0) + (watchlist.insiders?.length || 0);
+  const onClick = e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go('/watchlist'); };
+  if (compact) return (
+    <a href="/watchlist" className={`sx-nav__icon sx-wl-btn${active ? ' sx-wl-btn--active' : ''}`} onClick={onClick} aria-label={`Watchlist${count ? `, following ${count}` : ''}`} aria-current={active ? 'page' : undefined}>
+      <Icon name="bell" size={18} />{count > 0 && <span className="sx-wl-btn__n">{count > 99 ? '99+' : count}</span>}
+    </a>
+  );
   return (
-    <div className="sx-menu" ref={ref}>
-      <button className={`sx-nav__icon sx-wl-btn${count ? ' sx-wl-btn--on' : ''}`} onClick={() => setOpen(o => !o)} aria-haspopup="menu" aria-expanded={open}
-        aria-label={count ? `Watchlist, ${count} watched` : 'Watchlist'} title="Watchlist">
-        <Icon name="star" size={17} fill={count ? 'currentColor' : 'none'} />
-        {count > 0 && <span className="sx-wl-btn__n">{count > 99 ? '99+' : count}</span>}
-      </button>
-      {open && (
-        <div className="sx-menu__panel sx-wl-panel" role="menu">
-          {!count ? (
-            <div className="sx-wl-empty">Nothing watched yet. Tap the star next to any stock or person to follow their trades here.</div>
-          ) : (
-            <>
-              {tickers.length > 0 && <div className="sx-wl-head">Stocks</div>}
-              {tickers.slice(0, SHOW).map(t => (
-                <button key={t} role="menuitem" className="sx-menu__item" onClick={pick(stockPath(t))}><span className="sx-mono sx-strong">{t}</span></button>
-              ))}
-              {tickers.length > SHOW && <div className="sx-wl-more">+{tickers.length - SHOW} more</div>}
-              {people.length > 0 && <div className="sx-wl-head">People</div>}
-              {people.slice(0, SHOW).map(n => (
-                <button key={n} role="menuitem" className="sx-menu__item" onClick={pick(insiderPath(n))}><span className="sx-wl-name">{prettyPerson(n)}</span></button>
-              ))}
-              {people.length > SHOW && <div className="sx-wl-more">+{people.length - SHOW} more</div>}
-              <div className="sx-menu__sep" />
-              <button role="menuitem" className="sx-menu__item sx-menu__item--accent" onClick={pick('/trades?mine=1')}>See their trades</button>
-            </>
-          )}
-          <button role="menuitem" className="sx-menu__item" onClick={pick('/watchlist')}>Manage watchlist</button>
-        </div>
-      )}
-    </div>
+    <a href="/watchlist" className={`sx-wl-link${active ? ' sx-wl-link--active' : ''}`} onClick={onClick} aria-current={active ? 'page' : undefined}>
+      <Icon name="bell" size={14} />Watchlist{count > 0 && <span className="sx-wl-link__n">{count}</span>}
+    </a>
   );
 }
 
@@ -1633,7 +1598,7 @@ function TopNav({ page, user, dark, setDark, lastFilingDate, isDataStale, watchl
       <img src={logoSimple} alt="" /><span>Seli</span>
     </a>
   );
-  const menu = <>{watchlist && <WatchlistMenu watchlist={watchlist} />}<AccountMenu user={user} dark={dark} setDark={setDark} lastFilingDate={lastFilingDate} isDataStale={isDataStale} /></>;
+  const menu = <>{watchlist && <WatchlistLink watchlist={watchlist} active={page === 'watchlist'} compact={isMobile} />}<AccountMenu user={user} dark={dark} setDark={setDark} lastFilingDate={lastFilingDate} isDataStale={isDataStale} /></>;
   if (isMobile) {
     return (
       <>
@@ -1668,9 +1633,12 @@ function TopNav({ page, user, dark, setDark, lastFilingDate, isDataStale, watchl
               onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(n.path); }}>{n.label}</a>
           ))}
         </nav>
-        <div className="sx-nav__search"><SearchBox hotkey /></div>
+        <div className="sx-nav__end">
+          <div className="sx-nav__search"><SearchBox hotkey /></div>
+          {watchlist && <WatchlistLink watchlist={watchlist} active={page === 'watchlist'} />}
+        </div>
       </div>
-      <div className="sx-nav__right">{menu}</div>
+      <div className="sx-nav__right"><AccountMenu user={user} dark={dark} setDark={setDark} lastFilingDate={lastFilingDate} isDataStale={isDataStale} /></div>
     </header>
   );
 }

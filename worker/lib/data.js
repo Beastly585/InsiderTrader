@@ -15,6 +15,8 @@
 //   GET /api/explore?...                       Raw Data drawer (paged, 200/pg)
 //   GET /api/samples                           onboarding example trades
 
+import { asDate, buyBreak, isEntityName } from './intel.js';
+
 const TICKER_RE = /^[A-Z0-9][A-Z0-9.\-]{0,9}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const FREE_DAYS = 365;
@@ -212,7 +214,7 @@ async function explore(ctx, url) {
   if (ROLE_SQL[p.get('role')]) c.push(ROLE_SQL[p.get('role')]);
   // Leave out funds and companies filing as big shareholders (same word list
   // as isEntityName in intel.js; \\y is Postgres's word boundary).
-  if (p.get('people') === '1') c.push(`insider_name !~* '\\y(INC|LLC|L\\.?P\\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|CAPITALES|PARTNERS|HOLDINGS|MANAGEMENT|ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER|LIMITED|COMPANY|GMBH|S\\.A|C\\.V|L\\.L\\.C)\\y'`);
+  if (p.get('people') === '1') c.push(`f.insider_name !~* ${ENTITY_SQL}`);
   // Smallest trade to include, in dollars (whole number only, so it's safe in SQL).
   const min = Math.floor(Number(p.get('min')));
   if (min > 0) c.push(`value >= ${Math.min(min, 1e11)}`);
@@ -235,6 +237,23 @@ async function explore(ctx, url) {
     const like = sqlVal('%' + likeEsc(q) + '%');
     c.push(`(ticker ILIKE ${like} OR insider_name ILIKE ${like} OR company_name ILIKE ${like})`);
   }
+  // Signal filters (signed-in Trades). Same rules as the tags added below and
+  // as the stock pages, written as EXISTS checks so they filter before paging.
+  const sigf = p.get('sigf');
+  const SIG_FILTER = {
+    first: `${OM_PERSON_BUY('f')}
+      AND NOT EXISTS (SELECT 1 FROM public.filings g WHERE g.ticker = f.ticker AND g.insider_name = f.insider_name
+            AND g.is_open_market AND g.transaction_type = 'buy' AND ${DT('g')} > ${DT('f')} - 731 AND ${DT('g')} <= ${DT('f')} - 31)
+      AND EXISTS (SELECT 1 FROM public.filings g WHERE g.ticker = f.ticker AND g.insider_name = f.insider_name
+            AND g.transaction_type IN ('buy','sell') AND ${DT('g')} >= DATE '2013-01-01' AND ${DT('g')} <= ${DT('f')} - 731)`,
+    cluster: `${OM_PERSON_BUY('f')} AND f.insider_name !~* ${ENTITY_SQL}
+      AND EXISTS (SELECT 1 FROM public.filings g WHERE g.ticker = f.ticker AND g.insider_name <> f.insider_name
+            AND ${DT('g')} BETWEEN DATE '${from}' - ${CLUSTER_DAYS} AND DATE '${to}' + ${CLUSTER_DAYS}
+            AND ${OM_PERSON_BUY('g')} AND g.insider_name !~* ${ENTITY_SQL}
+            AND ${DT('g')} BETWEEN ${DT('f')} - ${CLUSTER_DAYS} AND ${DT('f')} + ${CLUSTER_DAYS})`,
+  };
+  if (SIG_FILTER[sigf]) c.push(SIG_FILTER[sigf]);
+  if (sigf === 'rev') c.push((await hasColumn(ctx, 'reversal')) ? 'f.reversal IS NOT NULL' : '1=0');
   const where = 'WHERE ' + c.join(' AND ');
 
   const sort = SORTABLE.has(p.get('sort')) ? p.get('sort') : 'transaction_date';
@@ -248,17 +267,85 @@ async function explore(ctx, url) {
       : `ORDER BY ${sort} ${dir} NULLS LAST`;
   const page = Math.max(0, Math.min(Number(p.get('page')) || 0, 500));
 
+  const sig = p.get('sig') === '1';
+  const [PLANNED, REV] = sig
+    ? await Promise.all([hasColumn(ctx, 'planned').then(h => (h ? 'COALESCE(f.planned, f.is_routine)' : 'f.is_routine')), reversalSql(ctx)])
+    : ['NULL::boolean', 'NULL::text'];
   const [rows, count] = await Promise.all([
     ctx.db(`
       SELECT transaction_date, filing_date, ticker, company_name, insider_name, insider_title,
              relationship, transaction_type, transaction_code, is_open_market, accession_number, cik_issuer,
-             shares::float, price_per_share::float, value::float, pct_owned_change::float, sector
-        FROM public.filings ${where}
+             shares::float, price_per_share::float, value::float, pct_owned_change::float, sector,
+             ${PLANNED} AS is_routine, ${REV} AS reversal
+        FROM public.filings f ${where}
         ${orderBy}
         LIMIT ${PAGE} OFFSET ${page * PAGE}`),
-    page === 0 ? ctx.db(`SELECT COUNT(*)::int AS n FROM public.filings ${where}`) : null,
+    page === 0 ? ctx.db(`SELECT COUNT(*)::int AS n FROM public.filings f ${where}`) : null,
   ]);
+  if (sig) await addSignals(ctx, rows);
+  else for (const r of rows) { delete r.is_routine; delete r.reversal; }
   return { pro, page, page_size: PAGE, from, to, rows, total: count ? count[0]?.n ?? 0 : undefined };
+}
+
+// ── Trade signals ────────────────────────────────────────────────────────────
+// Funds and companies filing as big shareholders (same word list as
+// isEntityName in intel.js; \\y is Postgres's word boundary).
+const ENTITY_SQL = `'\\y(INC|LLC|L\\.?P\\.?|LTD|CORP|CO|FUND|TRUST|CAPITAL|CAPITALES|PARTNERS|HOLDINGS|MANAGEMENT|ADVISORS|ADVISERS|GROUP|INVESTMENTS?|VENTURES|FOUNDATION|BANK|PLC|SA|AG|NV|GP|MASTER|LIMITED|COMPANY|GMBH|SE|BV|LLP|SARL|SPA|KG|S\\.A|C\\.V|L\\.L\\.C)\\y'`;
+const DT = a => `COALESCE(${a}.transaction_date, ${a}.filing_date)`;
+const OM_PERSON_BUY = a => `(${a}.transaction_type = 'buy' AND ${a}.is_open_market AND (${a}.transaction_code IS NULL OR ${a}.transaction_code NOT LIKE 'CONGRESS%'))`;
+// Two or more people buying the same stock within this many days either side.
+const CLUSTER_DAYS = 14;
+
+// Tags for one page of rows, from one extra query over the page's stocks:
+//   brk      "First buy in 4 yrs" (buyBreak, the same rule as stock pages)
+//   cluster  how many people (not funds) bought this stock on the open market
+//            within CLUSTER_DAYS of this buy, counting this one (only when 2+)
+//   routine  planned under a 10b5-1 plan; reversal comes from filings.reversal
+async function addSignals(ctx, rows) {
+  const { sqlVal } = ctx.deps;
+  const isBuy = r => r.transaction_type === 'buy' && r.is_open_market && !String(r.transaction_code || '').startsWith('CONGRESS') && r.ticker;
+  const tickers = [...new Set(rows.filter(isBuy).map(r => r.ticker))];
+  const hist = new Map(); // ticker -> Map(name -> { first, buys: [iso dates] })
+  if (tickers.length) {
+    const h = await ctx.db(`
+      SELECT g.ticker, g.insider_name, MIN(${DT('g')}) AS first_seen,
+             ARRAY_AGG(${DT('g')}::text) FILTER (WHERE ${OM_PERSON_BUY('g')}) AS buys
+        FROM public.filings g
+       WHERE g.ticker IN (${tickers.map(sqlVal).join(',')}) AND g.transaction_type IN ('buy','sell')
+         AND ${DT('g')} >= DATE '2013-01-01'
+       GROUP BY g.ticker, g.insider_name`);
+    for (const x of h) {
+      if (!hist.has(x.ticker)) hist.set(x.ticker, new Map());
+      hist.get(x.ticker).set(x.insider_name, { first: asDate(x.first_seen), buys: (x.buys || []).map(asDate).filter(Boolean) });
+    }
+  }
+  const DAY = 86400000;
+  const t = d => Date.parse(d + 'T00:00:00Z');
+  for (const r of rows) {
+    const out = {};
+    if (r.is_routine === true) out.routine = true;
+    if (r.reversal === 'buy' || r.reversal === 'sell') out.rev = r.reversal;
+    const d = asDate(r.transaction_date || r.filing_date);
+    const people = isBuy(r) && d ? hist.get(r.ticker) : null;
+    if (people) {
+      const me = people.get(r.insider_name);
+      if (me) {
+        const prior = me.buys.filter(b => t(b) <= t(d) - 31 * DAY).sort().pop() || null;
+        const b = buyBreak(prior, me.first, d);
+        if (b) out.brk = b[0];
+      }
+      if (!isEntityName(r.insider_name)) {
+        let n = 0;
+        for (const [name, v] of people) {
+          if (isEntityName(name)) continue;
+          if (v.buys.some(b => Math.abs(t(b) - t(d)) <= CLUSTER_DAYS * DAY)) n++;
+        }
+        if (n >= 2) out.cluster = n;
+      }
+    }
+    delete r.is_routine; delete r.reversal;
+    if (Object.keys(out).length) r.sig = out;
+  }
 }
 
 // ── /api/leaders (Insights drawer) ───────────────────────────────────────────
