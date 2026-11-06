@@ -2,7 +2,7 @@
 // One row per signal: a stock where company insiders traded close together
 // and at least one of these happened (worker/lib/data.js signals() has the
 // exact rules):
-//   Buying:  2+ people bought, someone's first buy in 2+ years, or a reversal
+//   Buying:  2+ people bought, someone's first buy in 3+ years, or a reversal
 //   Selling: a reversal sale (not a planned sale)
 // Strongest first, using the same score that picks the home page's featured
 // buys. Rows stay short (two reasons at most) and lead to the stock page,
@@ -13,12 +13,12 @@
 // signal or how strong it is.
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../lib/api.js';
-import { StockLink, InsiderLink, go, stockPath } from '../lib/nav.jsx';
+import { StockLink, go, stockPath } from '../lib/nav.jsx';
 import { shortDate, money, plural } from '../lib/text.js';
 import { Card, Skeleton, ErrorNote, Icon, FollowButton } from '../components/ui.jsx';
 
 const ROWS = 50;
-const KINDS = [
+export const SIGNAL_KINDS = [
   { value: 'all', label: 'All signals' },
   { value: 'cluster', label: 'Several insiders' },
   { value: 'first', label: 'First buys' },
@@ -29,11 +29,17 @@ const STRENGTH_TIP = 'How the signal ranks against others, out of 100: how many 
 const dateRange = r => (r.start === r.end ? shortDate(r.end) : `${shortDate(r.start)} to ${shortDate(r.end)}`);
 const stakeText = v => (v == null || v < 1 ? '—' : v >= 100 ? `${(1 + v / 100).toFixed(1).replace(/\.0$/, '')}x` : `+${Math.round(v)}%`);
 
+// Color tells the story at a glance: green strong, amber moderate, gray weak.
+// Cut-offs are on the score itself (not this list's spread), so a quiet week
+// honestly shows fewer greens.
+const TIERS = [[75, 'strong', 'Strong'], [50, 'mid', 'Moderate'], [0, 'weak', 'Weak']];
+const tierOf = score => TIERS.find(([min]) => score >= min);
 function Strength({ score }) {
-  if (score == null) return <span className="sx-muted">—</span>;
+  if (score == null) return <span className="sx-muted" title="Selling signals aren't scored. They're ordered by size.">—</span>;
   const on = Math.max(1, Math.ceil(score / 20));
+  const [, tone, label] = tierOf(score);
   return (
-    <span className="hx-meter" title={`Strength ${score} of 100. ${STRENGTH_TIP}`} aria-label={`Strength ${score} of 100`}>
+    <span className={`hx-meter hx-meter--${tone}`} title={`${label}: ${score} of 100. ${STRENGTH_TIP}`} aria-label={`${label} signal, ${score} of 100`}>
       {[1, 2, 3, 4, 5].map(i => <span key={i} className={`hx-meter__bar${i <= on ? ' hx-meter__bar--on' : ''}`} />)}
       <span className="hx-meter__n">{score}</span>
     </span>
@@ -61,18 +67,8 @@ function Why({ r, locked, signUp }) {
   );
 }
 
-function People({ r }) {
-  const top = r.people[0];
-  return (
-    <span className="hx-sigppl">
-      <span className="hx-sigppl__n">{plural(r.n, r.side === 'buy' ? 'insider' : 'seller')}</span>
-      <span className="hx-sigppl__who">
-        <InsiderLink raw={top.raw} title={top.role}>{top.name}</InsiderLink>
-        {r.people.length > 1 && <span className="sx-muted" title={r.people.slice(1).map(x => `${x.name} (${x.role})`).join(', ')}>+{r.people.length - 1}</span>}
-      </span>
-    </span>
-  );
-}
+// Everyone in the signal, for the Insiders cell's hover.
+const peopleTip = r => r.people.map(x => `${x.name} (${x.role})`).join(', ');
 
 export default function SignalsView({ f, set, signedIn, watchlist, narrow, signUp }) {
   const [screen, setScreen] = useState(0);
@@ -92,6 +88,7 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
     }
   }
   const waitForList = signedIn && f.mine === '1' && !watchlist.ready;
+  const watchCount = (watchlist.tickers?.length || 0) + (watchlist.insiders?.length || 0);
   const { data: d, error, reload, loading } = useApi(waitForList ? null : `/${signedIn ? 'api' : 'public'}/signals?${params}`);
   const locked = !signedIn;
   const all = d?.rows || [];
@@ -123,15 +120,10 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
         </span>
         <span className="hx-trades__tools">
           {signedIn && (
-            <select className="hx-select" value={f.kind} onChange={e => set({ kind: e.target.value })} aria-label="Kind of signal">
-              {KINDS.filter(k => side === 'buy' || ['all', 'cluster'].includes(k.value)).map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
-            </select>
-          )}
-          {signedIn && (
             <button type="button" role="checkbox" aria-checked={f.mine === '1'} className={`hx-toggle hx-toggle--sm${f.mine === '1' ? ' hx-toggle--on' : ''}`}
-              disabled={!((watchlist.tickers?.length || 0) + (watchlist.insiders?.length || 0)) && f.mine !== '1'}
+              disabled={!watchCount && f.mine !== '1'}
               onClick={() => set({ mine: f.mine === '1' ? '0' : '1' })}>
-              <span className="hx-toggle__box">{f.mine === '1' && <Icon name="check" size={10} />}</span>Only my watchlist
+              <span className="hx-toggle__box">{f.mine === '1' && <Icon name="check" size={10} />}</span>Only my watchlist{watchCount ? ` (${watchCount})` : ''}
             </button>
           )}
           {signedIn && narrow && (
@@ -140,6 +132,7 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
               <option value="date">Newest first</option>
               <option value="total">Biggest first</option>
               <option value="people">Most insiders</option>
+              <option value="trades">Most trades</option>
             </select>
           )}
         </span>
@@ -163,7 +156,7 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
               </div>
               <Why r={r} locked={locked} signUp={signUp} />
               <div className="hx-sigcard__facts">
-                <span>{plural(r.n, side === 'buy' ? 'insider' : 'seller')}</span>
+                <span title={peopleTip(r)}>{plural(r.n, side === 'buy' ? 'insider' : 'seller')} · {plural(r.nt, 'trade')}</span>
                 <span className={`sx-mono sx-strong ${side === 'buy' ? 'sx-up' : 'sx-down'}`}>{money(r.total)}</span>
                 <span className="sx-muted" title={dateRange(r)}>{shortDate(r.end)}</span>
                 <span className="hx-sigcard__end"><FollowButton watchlist={watchlist} kind="stock" id={r.ticker} /><span className="hx-sigrow__go" aria-hidden="true"><Icon name="chevron" size={14} /></span></span>
@@ -177,7 +170,8 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
             <thead>
               <tr>
                 <th>Stock</th>
-                <Th k="people">Insiders</Th>
+                <Th k="people" right>Insiders</Th>
+                <Th k="trades" right>Trades</Th>
                 <th>Why it's a signal</th>
                 <Th k="total" right>{side === 'buy' ? 'Bought' : 'Sold'}</Th>
                 <th className="sx-r">Stake</th>
@@ -190,7 +184,8 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
               {rows.map(r => (
                 <tr key={r.id} className="hx-sigrow" onClick={e => open(e, r)} title={`Open ${r.ticker}`}>
                   <td className="hx-trades__stock"><StockLink ticker={r.ticker} /><span className="hx-trades__co">{r.company}</span></td>
-                  <td><People r={r} /></td>
+                  <td className="sx-r sx-mono" title={peopleTip(r)}>{r.n}</td>
+                  <td className="sx-r sx-mono">{r.nt}</td>
                   <td><Why r={r} locked={locked} signUp={signUp} /></td>
                   <td className={`sx-r sx-mono sx-strong ${side === 'buy' ? 'sx-up' : 'sx-down'}`}>{money(r.total)}</td>
                   <td className="sx-r sx-mono">{side === 'buy' ? stakeText(r.max_pct) : '—'}</td>

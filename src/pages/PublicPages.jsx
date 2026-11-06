@@ -15,7 +15,7 @@ import { SearchBox, SearchOverlay } from '../components/Search.jsx';
 import { openSignUp } from '../lib/intent.js';
 import WatchButton from '../components/WatchButton.jsx';
 import { TradeTable } from './StockPage.jsx';
-import SignalsView from './SignalsView.jsx';
+import SignalsView, { SIGNAL_KINDS } from './SignalsView.jsx';
 import { MarketSections } from './HomeFeed.jsx';
 
 // Same four tabs as the signed-in app (lib/nav.jsx).
@@ -656,6 +656,7 @@ const TRADE_ROWS = 50;    // rows per page on screen
 const WORKER_ROWS = 200;  // rows the Worker sends per request (4 screen pages)
 const TRADE_SORTS = { date: 'transaction_date', ticker: 'ticker', person: 'insider_name', shares: 'shares', price: 'price_per_share', value: 'value', stake: 'pct_owned_change' };
 const TRADE_DEFAULTS = { view: 'trades', days: 30, side: 'all', source: 'all', min: '0', people: '0', mine: '0', kind: 'all', ssort: 'strength', sort: 'date', dir: 'desc', q: '', page: 0 };
+const SIGNED_IN_DEFAULTS = { ...TRADE_DEFAULTS, view: 'signals' };
 const REV_TIP = {
   buy: 'Reversal: bought after 2+ sales and no buys of this stock in the previous 2 years',
   sell: 'Reversal: sold (not a planned sale) after 2+ buys and no sales of this stock in the previous 2 years',
@@ -677,9 +678,10 @@ const SigTags = ({ r }) => {
 const isCongressRow = r => r.relationship === 'congress' || String(r.transaction_code || '').startsWith('CONGRESS');
 const dayGap = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 
-function readTradeParams() {
+// defs: TRADE_DEFAULTS, or SIGNED_IN_DEFAULTS (signed-in users start on Signals).
+function readTradeParams(defs = TRADE_DEFAULTS) {
   const p = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-  const pick = (k, ok) => (ok(p.get(k)) ? p.get(k) : TRADE_DEFAULTS[k]);
+  const pick = (k, ok) => (ok(p.get(k)) ? p.get(k) : defs[k]);
   return {
     days: [7, 30, 90, 365, 730, 1825].includes(Number(p.get('days'))) ? Number(p.get('days')) : TRADE_DEFAULTS.days,
     side: pick('side', v => ['buy', 'sell'].includes(v)),
@@ -687,9 +689,9 @@ function readTradeParams() {
     min: pick('min', v => ['100000', '1000000'].includes(v)),
     people: pick('people', v => v === '1'),
     mine: pick('mine', v => v === '1'),
-    view: pick('view', v => v === 'signals'),
+    view: pick('view', v => v === 'signals' || v === 'trades'),
     kind: pick('kind', v => ['cluster', 'first', 'rev'].includes(v)),
-    ssort: pick('ssort', v => ['date', 'total', 'people'].includes(v)),
+    ssort: pick('ssort', v => ['date', 'total', 'people', 'trades'].includes(v)),
     sort: pick('sort', v => v in TRADE_SORTS),
     dir: pick('dir', v => v === 'asc'),
     q: (p.get('q') || '').slice(0, 40),
@@ -707,7 +709,8 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
   const watchCount = (watchlist.tickers?.length || 0) + (watchlist.insiders?.length || 0);
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
   const narrow = useNarrow();
-  const [f, setF] = useState(readTradeParams);
+  const defs = signedIn ? SIGNED_IN_DEFAULTS : TRADE_DEFAULTS;
+  const [f, setF] = useState(() => readTradeParams(defs));
   const [text, setText] = useState(f.q);
   const [total, setTotal] = useState(null);
   useEffect(() => { document.title = 'Insider and Congress Trades, Last 12 Months | Seli'; }, []);
@@ -718,7 +721,7 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
   // Mirror the view in the URL (replaceState: filtering shouldn't flood the back button).
   useEffect(() => {
     const u = new URLSearchParams();
-    for (const [k, v] of Object.entries(f)) if (v !== TRADE_DEFAULTS[k] && v !== '') u.set(k, String(v));
+    for (const [k, v] of Object.entries(f)) if (v !== defs[k] && v !== '') u.set(k, String(v));
     const next = `/trades${u.toString() ? `?${u}` : ''}`;
     if (window.location.pathname + window.location.search !== next) window.history.replaceState({}, '', next);
   }, [f]);
@@ -808,7 +811,14 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
         <div className="hx-filters__row">
           <Segmented size="sm" value={f.days} onChange={v => set({ days: v })} options={pro ? PRO_PERIODS : TRADE_PERIODS} />
           {signalsView ? (
-            <Segmented size="sm" value={f.side === 'sell' ? 'sell' : 'buy'} onChange={v => set({ side: v, kind: v === 'sell' && !['all', 'cluster'].includes(f.kind) ? 'all' : f.kind })} options={[{ value: 'buy', label: 'Buying' }, { value: 'sell', label: 'Selling' }]} />
+            <>
+              <Segmented size="sm" value={f.side === 'sell' ? 'sell' : 'buy'} onChange={v => set({ side: v, kind: v === 'sell' && !['all', 'cluster'].includes(f.kind) ? 'all' : f.kind })} options={[{ value: 'buy', label: 'Buying' }, { value: 'sell', label: 'Selling' }]} />
+              {signedIn && (
+                <select className="hx-select" value={f.kind} onChange={e => set({ kind: e.target.value })} aria-label="Kind of signal">
+                  {SIGNAL_KINDS.filter(k => f.side !== 'sell' || ['all', 'cluster'].includes(k.value)).map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+                </select>
+              )}
+            </>
           ) : (
             <Segmented size="sm" value={f.side} onChange={v => set({ side: v })} options={[{ value: 'all', label: 'All' }, { value: 'buy', label: 'Buys' }, { value: 'sell', label: 'Sales' }]} />
           )}

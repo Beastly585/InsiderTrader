@@ -192,23 +192,21 @@ function roleBit(role) {
 }
 
 // ── Clusters (insider_intel.build_clusters) ──────────────────────────────────
-// [chip, phrase] when a buy breaks a long gap, else null. "First buy in 4
-// yrs": their last open-market buy of this stock was 4 years earlier. "First
-// buy in 6+ yrs": no earlier buy at all, but they've filed on this stock for
-// 6 years. No earlier buy and little history claims nothing: records start in
-// 2013, and a new insider has no pattern to break. Same rule as buy_break()
-// in db/insider_intel.py.
+// A buy that breaks a long gap: no open-market buy of this stock by this
+// person for at least BREAK_YEARS, counted from their last buy or, with none on
+// record, from when they started filing on it. One wording either way ("First
+// buy in 4+ yrs"), since both mean "nothing for at least that long". Three
+// years, not two: two-year gaps are common, and at a newer company everyone
+// passes two years of filings shortly after the IPO. Records start in 2013.
+// Same rule as buy_break() in db/insider_intel.py.
+export const BREAK_YEARS = 3;
 export function buyBreak(priorBuy, firstSeen, trade) {
-  if (!trade) return null;
-  if (priorBuy) {
-    const g = daysBetween(priorBuy, trade) / 365.25;
-    return g >= 2 ? [`First buy in ${Math.round(g)} yrs`, `in ${Math.round(g)} years`] : null;
-  }
-  if (firstSeen) {
-    const h = daysBetween(firstSeen, trade) / 365.25;
-    if (h >= 2) return [`First buy in ${Math.floor(h)}+ yrs`, `in ${Math.floor(h)}+ years of filings`];
-  }
-  return null;
+  const from = priorBuy || firstSeen;
+  if (!trade || !from) return null;
+  const g = daysBetween(from, trade) / 365.25;
+  if (g < BREAK_YEARS) return null;
+  const n = Math.floor(g);
+  return [`First buy in ${n}+ yrs`, priorBuy ? `in ${n}+ years` : `in ${n}+ years of filings`];
 }
 
 function stakeLabel(pct, ownedBefore) {

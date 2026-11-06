@@ -512,6 +512,12 @@
 .hx-meter { display: inline-flex; align-items: center; gap: 2px; cursor: help; }
 .hx-meter__bar { width: 5px; height: 14px; border-radius: 2px; background: var(--surface-3, var(--border-md)); }
 .hx-meter__bar--on { background: var(--accent); }
+.hx-meter--strong .hx-meter__bar--on { background: var(--green-500, #22c55e); }
+.hx-meter--strong .hx-meter__n { color: var(--green-600, #16a34a); }
+.hx-meter--mid .hx-meter__bar--on { background: var(--amber-500, #f59e0b); }
+.hx-meter--mid .hx-meter__n { color: var(--amber-600, #d97706); }
+.hx-meter--weak .hx-meter__bar--on { background: var(--text-3); }
+.hx-meter--weak .hx-meter__n { color: var(--text-3); }
 .hx-meter__n { margin-left: 6px; font: 600 12px var(--font-mono, monospace); color: var(--text-2); }
 
 .hx-sigtable td { vertical-align: middle; }

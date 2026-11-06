@@ -111,7 +111,7 @@ function WeekFeed({ d }) {
         ))}
         {!rows.length && <li className="hx-feed__row sx-muted sx-small">Nothing filed yet this week.</li>}
       </ul>
-      <Link to={tab === 'congress' ? '/congress' : `/trades${tab === 'sells' ? '?tab=trades&side=sell&sort=value' : '?tab=trades'}`} className="sx-link hx-feed__more">
+      <Link to={tab === 'congress' ? '/congress' : `/trades?view=trades${tab === 'sells' ? '&side=sell&sort=value&dir=asc' : '&side=buy'}`} className="sx-link hx-feed__more">
         {tab === 'congress' ? 'All Congress trades' : 'Every trade'} <Icon name="arrow" size={12} /></Link>
     </div>
   );
@@ -300,7 +300,7 @@ function Yours({ d, watchlist, since }) {
       <div className="hx-sechead">
         <h2>Your watchlist this week</h2>
         <span className="hx-sechead__links">
-          <Link to="/trades?mine=1" className="sx-link">Their trades</Link>
+          <Link to="/trades?view=trades&mine=1" className="sx-link">Their trades</Link>
           <Link to="/watchlist" className="sx-link">Edit watchlist ({y.watching})</Link>
         </span>
       </div>

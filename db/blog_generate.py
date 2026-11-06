@@ -12,7 +12,7 @@ A post only goes up when a trade clears the quality bar (RULES below):
                duplicate, not a fund, price $1+, filed within 5 days of the
                trade, company insiders only (no Congress).
   Buys         at least one of: CEO, CFO, President or Chair buying $250K+;
-               3+ insiders buying within 2 weeks; a first buy in 2+ years or
+               3+ insiders buying within 2 weeks; a first buy in 3+ years or
                a reversal, $100K+; one person buying $1M+.
   Sells        a higher bar: 3+ executives or directors selling $10M+ within
                2 weeks with the stock in the top 20% of its 52-week range; or

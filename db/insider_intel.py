@@ -144,21 +144,23 @@ def _gap_years(prior, trade) -> float | None:
     return (trade - prior).days / 365.25
 
 
+BREAK_YEARS = 3
+
+
 def buy_break(prior_buy, first_seen, trade) -> tuple[str, str] | None:
-    """(chip, phrase) when this buy breaks a long gap, else None.
-    "First buy in 4 yrs" / "in 4 years": their last open-market buy of this
-    stock was 4 years earlier. "First buy in 6+ yrs" / "in 6+ years of
-    filings": no earlier buy at all, but they've filed on this stock for 6
-    years. With no earlier buy and little history, nothing is claimed: Seli's
-    records start in 2013 and a new insider has no pattern to break.
+    """(chip, phrase) when this buy breaks a long gap, else None: no
+    open-market buy of this stock by this person for at least BREAK_YEARS,
+    counted from their last buy or, with none on record, from when they
+    started filing on it. One wording either way ("First buy in 4+ yrs" /
+    "in 4+ years"), since both mean "nothing for at least that long". Three
+    years, not two: two-year gaps are common, and at a newer company everyone
+    passes two years of filings shortly after the IPO. Records start in 2013.
     Same rule as buyBreak() in worker/lib/intel.js."""
-    gap = _gap_years(prior_buy, trade)
-    if gap is not None:
-        return (f"First buy in {round(gap)} yrs", f"in {round(gap)} years") if gap >= 2 else None
-    hist = _gap_years(first_seen, trade)
-    if hist is not None and hist >= 2:
-        return f"First buy in {int(hist)}+ yrs", f"in {int(hist)}+ years of filings"
-    return None
+    gap = _gap_years(prior_buy or first_seen, trade)
+    if gap is None or gap < BREAK_YEARS:
+        return None
+    n = int(gap)
+    return f"First buy in {n}+ yrs", (f"in {n}+ years" if prior_buy else f"in {n}+ years of filings")
 
 
 def _stake_label(pct, owned_before) -> str | None:

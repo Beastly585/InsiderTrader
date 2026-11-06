@@ -406,7 +406,7 @@ function leadersSql({ years, source, min, limit, nameLike }) {
 // together (each within GAP_DAYS of the one before), and at least one of:
 //   Buying
 //     - 2+ different people bought (a cluster)
-//     - someone bought for the first time in 2+ years (buyBreak, same rule
+//     - someone bought for the first time in 3+ years (buyBreak, same rule
 //       as stock pages; not counted for 10% owners)
 //     - a reversal buy (filings.reversal = 'buy': 2+ sales and no buys of
 //       this stock in the 2 years before)
@@ -446,6 +446,7 @@ async function signals(ctx, url) {
     strength: (a, b) => ((b.score ?? -1) - (a.score ?? -1)) || (b.total - a.total),
     total: (a, b) => b.total - a.total,
     people: (a, b) => (b.n - a.n) || (b.total - a.total),
+    trades: (a, b) => (b.nt - a.nt) || (b.total - a.total),
     date: (a, b) => b.end.localeCompare(a.end) || (b.total - a.total),
   };
   const sort = SORT[p.get('sort')] ? p.get('sort') : 'strength';
@@ -519,16 +520,6 @@ async function signalRows(ctx, from, to, side) {
   return out;
 }
 
-const tradeOutS = r => {
-  const b = r.transaction_type === 'buy' ? buyBreak(r.prior_buy_date || null, r.first_seen || null, r.trade_date) : null;
-  return {
-    date: r.trade_date, filed: asDate(r.filing_date), raw: r.insider_name, name: prettyPerson(r.insider_name),
-    role: shortRole(r.insider_title, r.relationship), shares: r.shares, price: r.price, value: r.value, pct: r.pct,
-    acc: r.accession_number, cik: r.cik_issuer,
-    ...(b ? { brk: b[0] } : {}), ...(r.reversal === 'buy' || r.reversal === 'sell' ? { rev: r.reversal } : {}), ...(r.is_routine ? { routine: true } : {}),
-  };
-};
-
 function buySignal(burst) {
   const c = buildClusters(burst, { includeCongress: false })[0];
   if (!c) return null;
@@ -539,8 +530,7 @@ function buySignal(burst) {
     start: burst[0].trade_date, end: burst[burst.length - 1].trade_date,
     n: c.n_insiders, total: c.total, max_pct: c.max_pct || null, score: Math.round(c.score), kinds,
     people: c.buyers.map(b => ({ raw: b.raw, name: b.name, role: b.role, value: b.value })),
-    why: c.facts.map(([label, tone]) => ({ label, tone })),
-    trades: burst.slice().reverse().map(tradeOutS),
+    why: c.facts.map(([label, tone]) => ({ label, tone })), nt: burst.length,
   };
 }
 
@@ -564,6 +554,6 @@ function sellSignal(ticker, burst) {
     start: burst[0].trade_date, end: burst[burst.length - 1].trade_date,
     n: people.length, total, max_pct: Math.max(0, ...burst.map(r => Math.abs(r.pct || 0))) || null,
     score: null, kinds: { cluster: people.length >= 2, first: false, rev: true },
-    people, why, trades: burst.slice().reverse().map(tradeOutS),
+    people, why, nt: burst.length,
   };
 }

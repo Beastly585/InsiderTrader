@@ -135,9 +135,9 @@ export async function handlePublic(request, env, origin, url, deps) {
     }
     if (parts[1] === 'signals' && !parts[2]) {
       // The Signals view for signed-out visitors: which stocks, how many
-      // insiders, how much, and the trades themselves (all straight from the
-      // filings). Why each one is a signal, the strength score and the
-      // per-trade tags need an account. Top 10 only, last 12 months at most.
+      // insiders, how much and how many trades (all straight from the
+      // filings). Why each one is a signal and the strength score need an
+      // account. Top 10 only, last 12 months at most.
       const p = url.searchParams;
       const days = [7, 30, 90, 365].includes(Number(p.get('days'))) ? Number(p.get('days')) : 30;
       const side = p.get('side') === 'sell' ? 'sell' : 'buy';
@@ -145,7 +145,7 @@ export async function handlePublic(request, env, origin, url, deps) {
         const full = await signals({ ...ctx, isPro: async () => false }, new URL(`https://x/?days=${days}&side=${side}`));
         const strip = r => ({
           id: r.id, ticker: r.ticker, company: r.company, side: r.side, start: r.start, end: r.end, n: r.n, total: r.total, max_pct: r.max_pct,
-          people: r.people, trades: r.trades.map(({ brk, rev, routine, ...x }) => x),
+          people: r.people, nt: r.nt,
         });
         return { days, side, from: full.from, to: full.to, total: full.total, rows: full.rows.slice(0, 10).map(strip), locked: true };
       });
