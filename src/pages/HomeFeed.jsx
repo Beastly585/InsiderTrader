@@ -26,7 +26,7 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
   const h = (portfolioTickers || []).slice(0, 60).join(',');
   // Fixed for this page load: when your last visit ended (null until we know who you are).
   const since = useMemo(() => visitSince(user?.id), [user?.id]);
-  const { data: d, error, reload } = useApi(user?.id ? `/api/feed?days=${HOME_DAYS}${h ? `&h=${encodeURIComponent(h)}` : ''}` : null);
+  const { data: d, error, reload } = useApi(user?.id ? `/api/feed?lite=1&days=${HOME_DAYS}${h ? `&h=${encodeURIComponent(h)}` : ''}` : null);
   const { data: news } = useApi('/public/blog?page=1&limit=4');
   // This week's market (featured buy, the Buys/Sells/Congress list) is the
   // same for everyone, so it comes from the public, edge-cached copy: the
@@ -193,6 +193,7 @@ export function MarketSections({ d, watchlist, signedIn = false, onHome = false 
 
 
 function Yours({ d, watchlist, since }) {
+  // Yours only renders once the feed is in, so these never compete with it.
   const sig = useWatchSignals(watchlist); // before any early return (hooks)
   const y = visibleYours(d.yours, watchlist);
   const raw = y;

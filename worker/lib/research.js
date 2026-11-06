@@ -41,7 +41,7 @@ export async function handleResearch(request, env, origin, url, deps) {
     if (parts[1] === 'search') body = await search(ctx, url.searchParams.get('q') || '');
     else if (parts[1] === 'stock' && parts[2]) body = await stock(ctx, decodeURIComponent(parts[2]).toUpperCase());
     else if (parts[1] === 'insider' && parts[2]) body = await insider(ctx, decodeURIComponent(parts.slice(2).join('/')));
-    else if (parts[1] === 'feed') body = await feed(ctx, holdingsParam(url), url.searchParams.get('days'));
+    else if (parts[1] === 'feed') body = await feed(ctx, holdingsParam(url), url.searchParams.get('days'), url.searchParams.get('lite') === '1');
     else if (parts[1] === 'watchlist' && parts[2] === 'summary') body = await watchlistSummary(ctx, holdingsParam(url));
     else if (parts[1] === 'leaderboard') body = await leaderboard(ctx, url);
     else if (parts[1] === 'latest') body = await latest(ctx);
@@ -647,9 +647,13 @@ async function leaderTeaser(ctx) {
 
 // Home's top section covers "since your last visit": the app sends how many
 // days that is (1 to 30). Older apps that don't send it get 30.
-async function feed(ctx, holdings, daysParam) {
+// lite: just your part (watchlist and leader). Home gets this week's market
+// from the edge-cached /public/insider-buying, so building it here again (the
+// heaviest query on the site) only made the page slower and, with a cold
+// cache, could push it past the browser's 20s limit.
+async function feed(ctx, holdings, daysParam, lite = false) {
   const days = Math.min(30, Math.max(1, Math.round(Number(daysParam)) || YOURS_DAYS));
-  const [market, items, leader] = await Promise.all([marketFeed(ctx), loadWatchlist(ctx), leaderTeaser(ctx)]);
+  const [market, items, leader] = await Promise.all([lite ? {} : marketFeed(ctx), loadWatchlist(ctx), leaderTeaser(ctx)]);
   const tickers = items.filter(i => i.item_type === 'ticker').map(i => String(i.item_value).toUpperCase());
   const names = items.filter(i => i.item_type === 'insider').map(i => i.item_value);
   const [status, people] = await Promise.all([
