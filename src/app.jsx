@@ -1519,18 +1519,18 @@ function IconLock(p) { return <svg {...ICON_PROPS} {...p}><rect x="3" y="11" wid
 const NAV_ICONS = { home: IconHome, trades: IconInsights, insiders: IconUsers, news: IconNews };
 const NAV_LINKS = NAV_TABS.map(t => ({ ...t, short: t.label, Icon: NAV_ICONS[t.id] }));
 
-// Top-bar link to the watchlist page. Same bell as the follow buttons on rows.
+// Top-bar link to the watchlist page. Same eye as the follow buttons on rows.
 function WatchlistLink({ watchlist, active, compact }) {
   const count = (watchlist.tickers?.length || 0) + (watchlist.insiders?.length || 0);
   const onClick = e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go('/watchlist'); };
   if (compact) return (
     <a href="/watchlist" className={`sx-nav__icon sx-wl-btn${active ? ' sx-wl-btn--active' : ''}`} onClick={onClick} aria-label={`Watchlist${count ? `, following ${count}` : ''}`} aria-current={active ? 'page' : undefined}>
-      <Icon name="bell" size={18} />{count > 0 && <span className="sx-wl-btn__n">{count > 99 ? '99+' : count}</span>}
+      <Icon name="eye" size={18} />{count > 0 && <span className="sx-wl-btn__n">{count > 99 ? '99+' : count}</span>}
     </a>
   );
   return (
     <a href="/watchlist" className={`sx-wl-link${active ? ' sx-wl-link--active' : ''}`} onClick={onClick} aria-current={active ? 'page' : undefined}>
-      <Icon name="bell" size={14} />Watchlist{count > 0 && <span className="sx-wl-link__n">{count}</span>}
+      <Icon name="eye" size={15} />Watchlist{count > 0 && <span className="sx-wl-link__n">{count}</span>}
     </a>
   );
 }

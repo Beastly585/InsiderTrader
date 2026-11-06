@@ -851,7 +851,7 @@ export function TradesPage({ watchlist: wlProp, signedIn = false }) {
           <span className="hx-trades__tools">
           {signedIn && (
             <button type="button" role="checkbox" aria-checked={f.mine === '1'} className={`hx-toggle hx-toggle--sm${f.mine === '1' ? ' hx-toggle--on' : ''}`}
-              disabled={!watchCount && f.mine !== '1'} title={watchCount ? 'Only trades in the stocks and by the people you follow' : 'Follow a stock or person first (the bell on any row)'}
+              disabled={!watchCount && f.mine !== '1'} title={watchCount ? 'Only trades in the stocks and by the people you follow' : 'Follow a stock or person first (the eye on any row)'}
               onClick={() => set({ mine: f.mine === '1' ? '0' : '1' })}>
               <span className="hx-toggle__box">{f.mine === '1' && <Icon name="check" size={10} />}</span>Only my watchlist{watchCount ? ` (${watchCount})` : ''}
             </button>

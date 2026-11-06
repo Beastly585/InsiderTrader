@@ -101,7 +101,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
           : <span className="sx-muted sx-small">Last 12 months</span>}
         {!publicMode && watchlist && (
           <button type="button" role="checkbox" aria-checked={mine} className={`hx-toggle hx-toggle--sm${mine ? ' hx-toggle--on' : ''}`}
-            disabled={!watchedPeople && !mine} title={watchedPeople ? 'Only the people you follow' : 'Follow someone first (the bell on their row)'}
+            disabled={!watchedPeople && !mine} title={watchedPeople ? 'Only the people you follow' : 'Follow someone first (the eye on their row)'}
             onClick={() => setMine(m => !m)}>
             <span className="hx-toggle__box">{mine && <Icon name="check" size={10} />}</span>Only my watchlist{watchedPeople ? ` (${watchedPeople})` : ''}
           </button>

@@ -127,6 +127,9 @@ export function Icon({ name, size = 16, ...rest }) {
   const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, ...rest };
   switch (name) {
     case 'search': return <svg {...p}><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>;
+    case 'eye': return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>;
+    // Following: same eye, solid pupil.
+    case 'eye-on': return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3.5" fill="currentColor" /></svg>;
     case 'bell': return <svg {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>;
     case 'bell-off': return <svg {...p}><path d="M13.73 21a2 2 0 0 1-3.46 0" /><path d="M18.63 13A17.9 17.9 0 0 1 18 8" /><path d="M6.26 6.26A5.9 5.9 0 0 0 6 8c0 7-3 9-3 9h14" /><path d="M18 8a6 6 0 0 0-9.33-5" /><line x1="1" y1="1" x2="23" y2="23" /></svg>;
     case 'plus': return <svg {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
@@ -204,7 +207,8 @@ export function SignupTeaser({ children, cta = 'Create free account' }) {
   );
 }
 
-// Bell to follow or unfollow a stock or person right where it's listed.
+// Eye to follow or unfollow a stock or person right where it's listed (the
+// bell is for email alerts, on the watchlist page).
 // Following = it's on your watchlist and you get its alerts. Signed out, the
 // public watchlist opens sign-up and follows it afterwards.
 export function FollowButton({ watchlist, kind, id, label }) {
@@ -215,7 +219,7 @@ export function FollowButton({ watchlist, kind, id, label }) {
     <button type="button" className={`sx-follow${on ? ' sx-follow--on' : ''}`} aria-pressed={on}
       aria-label={on ? `Following ${what}. Click to unfollow.` : `Follow ${what}`} title={on ? `Following ${what}. Click to unfollow.` : `Follow ${what}: alerts and watchlist`}
       onClick={e => { e.preventDefault(); e.stopPropagation(); kind === 'stock' ? watchlist.toggleTicker(id) : watchlist.toggleInsider(id); }}>
-      <Icon name="bell" size={14} fill={on ? 'currentColor' : 'none'} />
+      <Icon name={on ? 'eye-on' : 'eye'} size={15} />
     </button>
   );
 }
