@@ -9,8 +9,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link, stockPath, insiderPath, go } from '../lib/nav.jsx';
 import { money, congressRange, ago, plural, roleText, isEntityName } from '../lib/text.js';
-import { Card, Chip, Skeleton, ErrorNote, Icon, Freshness, RoleTag, Segmented, usePublicView } from '../components/ui.jsx';
-import { LatestPostPill, NewsRail, TopBuyTile, ScrollRow } from './PublicPages.jsx';
+import { Card, Chip, Skeleton, ErrorNote, Icon, Freshness, RoleTag, Segmented, usePublicView, useNarrow } from '../components/ui.jsx';
+import { LatestPostPill, NewsRail, TopBuyTile } from './PublicPages.jsx';
 import '../home.css';
 import WatchButton from '../components/WatchButton.jsx';
 import { visitSince, etDate } from '../lib/visit.js';
@@ -250,7 +250,7 @@ function Yours({ d, watchlist, since }) {
   );
 }
 
-// ── The watchlist: a row of cards, or a list ─────────────────────────────────
+// ── The watchlist: a grid of cards, or a list ─────────────────────────────────
 // Every stock and person you watch, in the order you'd want to check them:
 // signals first, then this week's activity, then the most recent. Each says
 // which way insiders went (color), how much, and when.
@@ -330,12 +330,14 @@ function useWatchSignals(watchlist) {
   }, [buys, sells, watchlist.insiders]);
 }
 
-// Row of cards or the full list, remembered in this browser.
-const VIEW_KEY = 'seli_watch_view2';
+// Grid of cards or the full list, remembered in this browser. Phones always
+// get the list.
+const VIEW_KEY = 'seli_watch_view3';
 function useWatchView() {
-  const [view, setView] = useState(() => { try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'row'; } catch { return 'row'; } });
+  const narrow = useNarrow();
+  const [view, setView] = useState(() => { try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch { return 'grid'; } });
   const set = v => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ } };
-  return [view, set];
+  return [narrow ? 'list' : view, set, narrow];
 }
 
 const sigText = s => `${s.why.join(' · ')}${s.score != null ? ` · strength ${s.score}` : ''}`;
@@ -345,7 +347,7 @@ const scanOrder = (a, b) => (!!b.signal - !!a.signal) || (b.tier - a.tier) || St
 const sideClass = it => (it.side === 'buy' ? 'sx-up' : it.side === 'sell' ? 'sx-down' : it.side === 'cg' ? 'hx-cg' : 'sx-muted');
 
 function WatchStrip({ items }) {
-  const [view, setView] = useWatchView();
+  const [view, setView, narrow] = useWatchView();
   if (!items.length) return null;
   const list = items.slice().sort(scanOrder);
   const nSig = list.filter(it => it.signal).length;
@@ -358,29 +360,34 @@ function WatchStrip({ items }) {
           {nSig > 0 && <> · <span className="hx-wl__sigcount"><Icon name="trend" size={11} /> {plural(nSig, 'signal')}</span></>}
           {' · '}{list.length} watched
         </span>
-        <button type="button" className="sx-link hx-wl__toggle" onClick={() => setView(view === 'list' ? 'row' : 'list')} aria-expanded={view === 'list'}>
-          {view === 'list' ? 'Collapse' : `Show all as a list`} <Icon name="chevron" size={12} />
-        </button>
+        {!narrow && <Segmented size="sm" value={view} onChange={setView} options={[{ value: 'grid', label: 'Grid' }, { value: 'list', label: 'List' }]} />}
       </div>
-      {view === 'row' ? (
-        // Keyed by the order, so the row starts at the left again when signals
-        // arrive and move cards to the front (the browser would keep its
-        // scroll position and hide them).
-        <ScrollRow key={list.map(it => it.key).join('|')} label="Your watchlist" className="hx-wlrow">
+      {view === 'grid' ? (
+        // Each cell keeps its size; the card inside grows over its neighbours
+        // on hover or focus, so the grid never shifts.
+        <div className="hx-wgrid" role="list" aria-label="Your watchlist">
           {list.map(it => (
-            <Link key={it.key} to={it.path} role="listitem" className={`hx-wc hx-wc--${it.side}${it.tier === 0 ? ' hx-wc--quiet' : ''}`} title={it.detail}>
-              <span className="hx-wc__top">
-                <span className={`hx-wc__name${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
-                {it.signal ? <span className="hx-wc__sig" title={sigText(it.signal)}><Icon name="trend" size={10} />Signal</span>
-                  : it.tags.includes('New') ? <span className="hx-wc__new">New</span> : null}
-              </span>
-              <span className="hx-wc__co">{it.kind === 'stock' ? it.title : it.title.split(' · ')[1] || 'Person'}</span>
-              <span className={`hx-wc__amt sx-mono ${sideClass(it)}`}>{it.amt || '—'}</span>
-              <span className="hx-wc__what">{it.what}</span>
-              <span className="hx-wc__when">{it.date && it.tier > 0 ? ago(it.date) : 'No trades in a year'}</span>
-            </Link>
+            <div key={it.key} role="listitem" className="hx-wgrid__cell">
+              <Link to={it.path} className={`hx-wc hx-wc--${it.side}${it.tier === 0 ? ' hx-wc--quiet' : ''}`}>
+                <span className="hx-wc__top">
+                  <span className={`hx-wc__name${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
+                  {it.signal ? <span className="hx-wc__sig"><Icon name="trend" size={10} />Signal</span>
+                    : it.tags.includes('New') ? <span className="hx-wc__new">New</span> : null}
+                </span>
+                <span className="hx-wc__co">{it.kind === 'stock' ? it.title : it.title.split(' · ')[1] || 'Person'}</span>
+                <span className={`hx-wc__amt sx-mono ${sideClass(it)}`}>{it.amt || '—'}</span>
+                <span className="hx-wc__what">{it.what}</span>
+                <span className="hx-wc__when">{it.date && it.tier > 0 ? ago(it.date) : 'No trades in a year'}</span>
+                <span className="hx-wc__more">
+                  {it.tags.filter(t => t !== 'New').length > 0 && <span className="hx-wc__tags">{it.tags.filter(t => t !== 'New').map(t => <span key={t} className="hx-wtable__tag">{t}</span>)}</span>}
+                  <span className="hx-wc__detail">{it.detail}</span>
+                  {it.signal && <span className="hx-wc__sigline"><Icon name="trend" size={10} /> {it.signal.why.slice(0, 2).join(' · ')}</span>}
+                  <span className="hx-wc__go">Open <Icon name="arrow" size={11} /></span>
+                </span>
+              </Link>
+            </div>
           ))}
-        </ScrollRow>
+        </div>
       ) : (
         <div className="hx-wtable" role="table" aria-label="Your watchlist">
           <div className="hx-wtable__head" role="row">
