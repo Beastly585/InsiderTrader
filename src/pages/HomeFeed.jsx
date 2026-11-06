@@ -14,6 +14,7 @@ import { LatestPostPill, NewsRail, TopBuyTile } from './PublicPages.jsx';
 import '../home.css';
 import WatchButton from '../components/WatchButton.jsx';
 import { visitSince, etDate } from '../lib/visit.js';
+import BubbleSphere from '../components/BubbleSphere.jsx';
 
 const HOME_DAYS = 7; // matches "This week across the market"
 const range = ([lo, hi]) => `${money(lo)}–${money(hi).replace('$', '')}`;
@@ -270,6 +271,8 @@ const initialLast = name => {
   const parts = String(name || '').split(/\s+/).filter(Boolean);
   return parts.length > 1 ? `${parts[0][0]}. ${parts[parts.length - 1]}` : name;
 };
+// "CEO" stays as is; "Director" becomes "director".
+const roleLower = r => (/^[A-Z0-9+ ]+$/.test(r) || /^[A-Z]{2,}\b/.test(r) ? r : r.toLowerCase());
 // 3 this week, 2 within 30 days, 1 within a year, 0 nothing in a year.
 const tierOfAge = (active, date) => (active ? 3 : ageDays(date) <= 30 ? 2 : ageDays(date) <= 365 ? 1 : 0);
 
@@ -280,14 +283,15 @@ function stockItem(s, isNew) {
   const tier = tierOfAge(s.active, lt?.date);
   const side = s.active ? (congressOnly ? 'cg' : b.n && b.v >= (sl.v || 0) ? 'buy' : 'sell') : tier ? (lt.type === 'buy' ? 'buy' : 'sell') : 'none';
   const cg = s.congress;
-  const amt = !s.active ? null
+  const amt = !s.active ? (tier ? `${lt.type === 'buy' ? '+' : '−'}${money(lt.value)}` : null)
     : congressOnly ? (cg?.buys ? `+${range(cg.buy_range)}` : `−${range(cg.sell_range)}`)
       : side === 'buy' ? `+${money(b.v)}` : `−${money(sl.v)}`;
   const detail = s.active ? (s.lines?.[0] || '')
-    : tier ? `${lt.type === 'buy' ? 'Bought' : 'Sold'} ${money(lt.value)}${lt.role ? ` by the ${roleText(lt.role).toLowerCase()}` : ''}, ${ago(lt.date)}.`
+    : tier ? `${lt.type === 'buy' ? 'Bought' : 'Sold'} ${money(lt.value)}${lt.role ? ` by the ${roleLower(roleText(lt.role))}` : ''}, ${ago(lt.date)}.`
       : 'No company insider trades in the last year.';
   const tags = [isNew && 'New', s.reversal && 'Reversal', s.held && 'You hold this', congressOnly && 'Congress'].filter(Boolean);
   return { key: `s:${s.ticker}`, kind: 'stock', group: tier ? (side === 'cg' ? (s.congress?.buys ? 'buy' : 'sell') : side) : 'quiet', label: s.ticker, mono: true, title: s.company || s.ticker, path: stockPath(s.ticker), tier, side, amt, detail, tags,
+    date: s.active ? s.last_activity : lt?.date || null,
     weight: (b.v || 0) + (sl.v || 0) + (lt?.value || 0) / 1e3 };
 }
 
@@ -297,29 +301,14 @@ function personItem(p, isNew) {
   const tier = tierOfAge(!!t, last?.date);
   const side = tier ? (last.type === 'buy' ? 'buy' : 'sell') : 'none';
   const val = v => (last?.congress ? congressRange(v) : money(v));
-  const amt = t ? `${side === 'buy' ? '+' : '−'}${val(t.value)}` : null;
+  const amt = tier ? `${side === 'buy' ? '+' : '−'}${val(last.value)}` : null;
   const detail = tier ? `${last.type === 'buy' ? 'Bought' : 'Sold'} ${val(last.value)} of ${last.ticker}, ${ago(last.date)}.${p.recent.length > 1 ? ` ${plural(p.recent.length, 'trade')} this week.` : ''}`
     : 'No open-market trades in the last year.';
-  return { key: `p:${p.raw}`, kind: 'person', raw: p.raw, group: 'people', label: initialLast(p.name), title: `${p.name}${p.role ? ` · ${roleText(p.role)}` : ''}`, path: insiderPath(p.raw), tier, side, amt, detail,
+  return { key: `p:${p.raw}`, kind: 'person', raw: p.raw, group: 'people', label: initialLast(p.name), title: `${p.name}${p.role ? ` · ${roleText(p.role)}` : ''}`, path: insiderPath(p.raw), tier, side, amt, detail, date: last?.date || null,
     tags: [isNew && 'New'].filter(Boolean), weight: (t?.value || 0) + (p.last?.value || 0) / 1e3 };
 }
 
-// Biggest first, laid out from the middle outwards: 1st in the center, 2nd
-// just before it, 3rd just after, and so on.
 const byWeight = (a, b) => (b.tier - a.tier) || (b.weight - a.weight) || a.label.localeCompare(b.label);
-function centerOut(list) {
-  const out = [];
-  list.slice().sort(byWeight).forEach((it, i) => (i % 2 ? out.unshift(it) : out.push(it)));
-  return out;
-}
-// Three bands so the shape holds at any size: this month's activity across
-// the middle, the quieter rest split above and below it.
-function bands(items) {
-  const mid = items.filter(it => it.tier >= 2);
-  const rest = items.filter(it => it.tier < 2).sort(byWeight);
-  const top = rest.filter((_, i) => i % 2), bottom = rest.filter((_, i) => !(i % 2));
-  return [top, mid, bottom].filter(b => b.length).map(centerOut);
-}
 
 // Which watched stocks and people are in Signals right now (last 30 days),
 // for the marker on their tile. Reads the shared, saved signal lists with the
@@ -342,16 +331,14 @@ function useWatchSignals(watchlist) {
   }, [buys, sells, watchlist.insiders]);
 }
 
-const GROUPS = [
-  { id: 'buy', label: 'Buying' },
-  { id: 'sell', label: 'Selling' },
-  { id: 'people', label: 'People' },
-  { id: 'quiet', label: 'Quiet for a year' },
-];
-// Cloud or a plain list, remembered in this browser.
+// Cloud or a plain list, remembered in this browser (phones default to the list).
 const VIEW_KEY = 'seli_watch_view';
 function useWatchView() {
-  const [view, setView] = useState(() => { try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'cloud'; } catch { return 'cloud'; } });
+  // Phones start on the list (the cloud is a tap away); a choice is remembered.
+  const [view, setView] = useState(() => {
+    const phone = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 640px)').matches;
+    try { const v = localStorage.getItem(VIEW_KEY); return v === 'list' || v === 'cloud' ? v : phone ? 'list' : 'cloud'; } catch { return phone ? 'list' : 'cloud'; }
+  });
   const set = v => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ } };
   return [view, set];
 }
@@ -359,74 +346,32 @@ function useWatchView() {
 const sigText = s => `${s.why.join(' · ')}${s.score != null ? ` · strength ${s.score}` : ''}`;
 const sigPath = s => `/trades?view=signals${s.side === 'sell' ? '&side=sell' : ''}&q=${encodeURIComponent(s.ticker)}`;
 
+// Cloud (BubbleSphere) or a plain list, with the switch between them.
+const GROUP_ORDER = { buy: 0, sell: 1, people: 2, quiet: 3 };
 function WatchSphere({ items }) {
   const [view, setView] = useWatchView();
   if (!items.length) return null;
   const open = (e, path) => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(path); };
-  const groups = GROUPS.map(g => ({ ...g, items: items.filter(it => it.group === g.id) })).filter(g => g.items.length);
   const nSig = items.filter(it => it.signal).length;
   return (
-    <div className={`hx-sphere hx-sphere--${view}`}>
+    <div className="hx-sphere">
       <div className="hx-sphere__bar">
         <span className="hx-sphere__note">
           {nSig > 0 && <><span className="hx-sigdot" aria-hidden="true"><Icon name="trend" size={10} /></span>{plural(nSig, 'is a signal', 'are signals')} right now</>}
         </span>
         <Segmented size="sm" value={view} onChange={setView} options={[{ value: 'cloud', label: 'Cloud' }, { value: 'list', label: 'List' }]} />
       </div>
-      <div className="hx-sphere__groups">
-        {groups.map(g => (
-          <section key={g.id} className={`hx-grp hx-grp--${g.id}`} aria-label={g.label}>
-            <h3 className="hx-grp__title">{g.label} <span>{g.items.length}</span></h3>
-            {view === 'cloud' ? (
-              <div className="hx-sphere__cloud" role="list">
-                {bands(g.items).map((band, bi) => (
-                  <div key={bi} className="hx-sphere__band" role="presentation">
-                    {band.map(it => (
-                      <div key={it.key} role="listitem" className={`hx-wt hx-wt--t${it.tier} hx-wt--${it.side}${it.signal ? ' hx-wt--sig' : ''}`}>
-                        <a href={it.path} className="hx-wt__tile" onClick={e => open(e, it.path)} aria-label={`${it.title}. ${it.detail}${it.signal ? ` Signal: ${sigText(it.signal)}.` : ''}`}>
-                          <span className={`hx-wt__label${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
-                          {it.amt && it.tier === 3 && <span className="hx-wt__amt sx-mono">{it.amt}</span>}
-                          {it.signal && <span className="hx-wt__sig" aria-hidden="true"><Icon name="trend" size={9} /></span>}
-                          {it.tags.includes('New') && <span className="hx-wt__new" aria-hidden="true" />}
-                        </a>
-                        <span className="hx-wt__card">
-                          <span className="hx-wt__card-title">{it.title}</span>
-                          {it.tags.length > 0 && <span className="hx-wt__tags">{it.tags.map(t => <span key={t} className="hx-wt__tag">{t}</span>)}</span>}
-                          <span className="hx-wt__detail">{it.detail}</span>
-                          {it.signal && <span className="hx-wt__sigline"><Icon name="trend" size={11} /> {sigText(it.signal)}</span>}
-                          <span className="hx-wt__links">
-                            <a href={it.path} onClick={e => open(e, it.path)}>Open <Icon name="arrow" size={11} /></a>
-                            {it.signal && <a href={sigPath(it.signal)} onClick={e => open(e, sigPath(it.signal))}>See signal <Icon name="arrow" size={11} /></a>}
-                          </span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <ul className="hx-wlist">
-                {g.items.slice().sort(byWeight).map(it => (
-                  <li key={it.key} className={`hx-wlist__row hx-wlist__row--${it.side}`}>
-                    <a href={it.path} className={`hx-wlist__name${it.mono ? ' sx-mono' : ''}`} onClick={e => open(e, it.path)}>{it.label}</a>
-                    <span className="hx-wlist__detail">{it.detail}</span>
-                    {it.signal ? <a href={sigPath(it.signal)} className="hx-wlist__sig" onClick={e => open(e, sigPath(it.signal))} title={sigText(it.signal)}><Icon name="trend" size={11} />Signal</a> : <span />}
-                    <span className={`hx-wlist__amt sx-mono${it.side === 'buy' ? ' sx-up' : it.side === 'sell' ? ' sx-down' : ''}`}>{it.tier === 3 ? it.amt : ''}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ))}
-      </div>
-      {view === 'cloud' && (
-        <div className="hx-sphere__key" aria-hidden="true">
-          <span><i className="hx-dot hx-dot--buy" />bought</span>
-          <span><i className="hx-dot hx-dot--sell" />sold</span>
-          <span><i className="hx-dot hx-dot--cg" />Congress</span>
-          <span><i className="hx-sigdot"><Icon name="trend" size={9} /></i>in Signals</span>
-          <span className="hx-sphere__size">Bigger = more recent</span>
-        </div>
+      {view === 'cloud' ? <BubbleSphere items={items} sigText={sigText} sigPath={sigPath} /> : (
+        <ul className="hx-wlist">
+          {items.slice().sort((a, b) => (GROUP_ORDER[a.group] - GROUP_ORDER[b.group]) || byWeight(a, b)).map(it => (
+            <li key={it.key} className={`hx-wlist__row hx-wlist__row--${it.side}`}>
+              <a href={it.path} className={`hx-wlist__name${it.mono ? ' sx-mono' : ''}`} onClick={e => open(e, it.path)}>{it.label}</a>
+              <span className="hx-wlist__detail">{it.detail}</span>
+              {it.signal ? <a href={sigPath(it.signal)} className="hx-wlist__sig" onClick={e => open(e, sigPath(it.signal))} title={sigText(it.signal)}><Icon name="trend" size={11} />Signal</a> : <span />}
+              <span className={`hx-wlist__amt sx-mono${it.side === 'buy' ? ' sx-up' : it.side === 'sell' ? ' sx-down' : ''}`}>{it.amt || ''}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
