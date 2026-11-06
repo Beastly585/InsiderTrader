@@ -8,23 +8,24 @@
 export function money(v) {
   if (v == null || Number.isNaN(Number(v))) return 'n/a';
   let n = Number(v);
-  const sign = n < 0 ? '-' : '';
+  const sign = n < 0 ? '\u2212' : ''; // a real minus sign, never a hyphen
   n = Math.abs(n);
+  // K, M and B always carry one decimal ($1.0M, $57.6K), whole dollars below $1K.
   for (const [div, suf] of [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']]) {
-    if (n >= div * 0.9995) {
-      const x = n / div;
-      const s = x >= 99.95 ? Math.round(x).toLocaleString('en-US') : x.toFixed(1).replace(/\.0$/, '');
-      return `${sign}$${s}${suf}`;
-    }
+    if (n >= div * 0.99995) return `${sign}$${(n / div).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${suf}`;
   }
   return `${sign}$${Math.round(n).toLocaleString('en-US')}`;
 }
 
 const CONGRESS_RANGES = [[1e3, 15e3], [15e3, 50e3], [50e3, 100e3], [100e3, 250e3], [250e3, 500e3],
   [500e3, 1e6], [1e6, 5e6], [5e6, 25e6], [25e6, 50e6]];
+// STOCK Act bucket edges in their own wording ($1K, $15K, $1M), not money()'s
+// one-decimal style: they're official ranges, not amounts.
+// Edges are stored as $15,001 and so on; round them back to the bucket label.
+const bucket = n => (n >= 999e3 ? `$${Math.round(n / 1e6)}M` : `$${Math.round(n / 1e3)}K`);
 export function congressRange(v) {
   if (v == null) return 'an undisclosed amount';
-  for (const [lo, hi] of CONGRESS_RANGES) if (Number(v) <= hi) return `${money(lo)} to ${money(hi)}`;
+  for (const [lo, hi] of CONGRESS_RANGES) if (Number(v) <= hi) return `${bucket(lo)} to ${bucket(hi)}`;
   return 'over $50M';
 }
 
@@ -163,8 +164,8 @@ export const CSUITE_ROLES = new Set(['CEO', 'CFO', 'COO', 'CTO', 'President', 'C
 // Role codes above drive scoring; these are the words people read. Same
 // list as src/lib/text.js roleText. CEO, CFO, COO and CTO stay as they are.
 const ROLE_WORDS = {
-  'C-suite exec': 'Executive', Chair: 'Board chair',
-  VP: 'Vice president', 'General Counsel': 'General counsel', '10% owner': '10%+ shareholder', Director: 'Board member',
+  'C-suite exec': 'Executive', Officer: 'Executive', Chair: 'Board chair',
+  VP: 'Vice president', 'General Counsel': 'General counsel', '10% owner': 'Major shareholder', Director: 'Board member',
 };
 export const roleWord = role => ROLE_WORDS[role] || role || 'Insider';
 

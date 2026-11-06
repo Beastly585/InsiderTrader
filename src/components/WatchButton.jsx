@@ -15,16 +15,16 @@ export default function WatchButton({ watchlist, kind, id, compact = false }) {
   const on = isWatching(watchlist, kind, id);
   const full = !on && !watchlist.pro && watchlist.freeSlotsLeft === 0;
   const what = kind === 'stock' ? 'this stock' : 'this person';
-  const title = on ? `Watching ${what}. Click to stop.`
+  const title = on ? `Following ${what}. Click to unfollow.`
     : full ? `Your free watchlist is full (${watchlist.freeLimit}). Pro makes it unlimited.`
-      : `Watch ${what}: it goes on your Home page and into your ${watchlist.pro ? 'digests and alerts' : 'weekly email'}.`;
+      : `Follow ${what}: it goes on your Home page and into your ${watchlist.pro ? 'digests and alerts' : 'weekly email'}.`;
   const toggle = e => {
     e.stopPropagation();
     kind === 'stock' ? watchlist.toggleTicker(id) : watchlist.toggleInsider(id);
   };
   if (compact) {
     return (
-      <button className={`sx-watch sx-watch--icon${on ? ' sx-watch--on' : ''}`} onClick={toggle} title={title} aria-pressed={on} aria-label={on ? 'Stop watching' : 'Watch'}>
+      <button className={`sx-watch sx-watch--icon${on ? ' sx-watch--on' : ''}`} onClick={toggle} title={title} aria-pressed={on} aria-label={on ? 'Unfollow' : 'Follow'}>
         <Icon name={on ? 'eye-on' : 'eye'} size={15} />
       </button>
     );
@@ -32,7 +32,7 @@ export default function WatchButton({ watchlist, kind, id, compact = false }) {
   return (
     <button className={`sx-watch${on ? ' sx-watch--on' : ''}`} onClick={toggle} title={title} aria-pressed={on}>
       <Icon name={on ? 'eye-on' : 'eye'} size={15} />
-      {on ? 'Watching' : 'Watch'}
+      {on ? 'Following' : 'Follow'}
     </button>
   );
 }

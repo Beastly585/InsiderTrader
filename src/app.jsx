@@ -199,7 +199,7 @@ const PRO_ANNUAL_DISPLAY = '$69';
 const PRO_ANNUAL_LABEL = '$69/year';
 const PRO_ANNUAL_SAVE = 'save 18%'; // vs 12 × $6.99 = $83.88
 // What Pro adds, three lines, same everywhere it's pitched.
-const proGets = since => ['Same-day email alerts on what you watch', 'Watch as many stocks and people as you like', `Every trade${since ? ` back to ${since}` : ''}, not just the last 12 months`];
+const proGets = since => ['Same-day email alerts on what you follow', 'Follow as many stocks and people as you like', `Every trade${since ? ` back to ${since}` : ''}, not just the last 12 months`];
 
 // Shown when a free user tries to use a Pro feature.
 // Comparison-table style, matching the reference layout's structure:
@@ -245,8 +245,8 @@ function UpgradeModal({ feature, pro, onClose }) {
   const sinceText = since ? `back to ${since}` : 'all the way back';
   const FEATURE_MESSAGES = {
     // Just why this opened; the checklist below says what Pro adds.
-    watchlist_ticker: "You're watching 3 things, the free limit.",
-    watchlist_insider: "You're watching 3 things, the free limit.",
+    watchlist_ticker: "You're following 3 things, the free limit.",
+    watchlist_insider: "You're following 3 things, the free limit.",
     notifications: 'Same-day alerts and the daily brief are part of Pro.',
     portfolio: 'Link your brokerage and Seli watches every stock you own.',
     data_export: 'The full historical dataset as CSV. One payment, no subscription.',
@@ -464,7 +464,7 @@ function productCopy(product, since, interval = 'month') {
   return product === 'pro' ? {
     title: 'Seli Pro', price: yearly ? PRO_ANNUAL_LABEL : `${PRO_PRICE_DISPLAY}/month`, endpoint: '/billing/create-subscription',
     subtitle: 'Know the same day insiders trade the stocks you care about.',
-    features: ['Watch as many stocks and people as you like', 'Same-day email alerts and a daily brief', `Full history${since ? `, back to ${since}` : ''}`],
+    features: ['Follow as many stocks and people as you like', 'Same-day email alerts and a daily brief', `Full history${since ? `, back to ${since}` : ''}`],
     button: yearly ? `Subscribe for ${PRO_ANNUAL_LABEL}` : `Subscribe for ${PRO_PRICE_DISPLAY}/month`,
     note: yearly ? 'Billed once a year. Cancel anytime in Settings, under Billing.' : 'Billed monthly. Cancel anytime in Settings, under Billing.',
     mode: 'subscription', amount: yearly ? PRO_ANNUAL_CENTS : PRO_PRICE_CENTS,
@@ -581,7 +581,7 @@ function ProWelcomeModal({ onClose }) {
       <p className="sx-dialog__text">Thanks for backing Seli. Here's what just turned on:</p>
       <ul className="sx-dialog__list">
         <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Unlimited watching.</b> As many stocks and people as you like.</span></li>
-        <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Same-day alerts.</b> An email when someone you watch files a trade.</span></li>
+        <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Same-day alerts.</b> An email when someone you follow files a trade.</span></li>
         <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Full history.</b> Every trade{since ? ` back to ${since}` : ''}, on every page.</span></li>
         <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>The full leaderboard.</b> 2 and 5 year views, plus brokerage linking.</span></li>
       </ul>
@@ -4960,9 +4960,9 @@ const HELP_SECTIONS = [
         <h3>Insider pages</h3>
         <p>Where the person sits, how their past open-market buys have done since (with the number of buys behind every figure), what they still hold, and every trade.</p>
         <h3>Home</h3>
-        <p>Activity on what you watch first. Then the week's most notable insider buying, the same story the Sunday email leads with, then other buying, Congress, and the largest sales.</p>
+        <p>Activity on what you follow first. Then the week's most notable insider buying, the same story the Sunday email leads with, then other buying, Congress, and the largest sales.</p>
         <h3>Watchlist</h3>
-        <p>The stocks and people you watch, plus your brokerage holdings if you've linked one. Each row says what insiders did. Pro accounts get a bell on each row for same-day email alerts.</p>
+        <p>The stocks and people you follow, plus your brokerage holdings if you've linked one. Each row says what insiders did. Pro accounts get a bell on each row for same-day email alerts.</p>
         <h3>Data and Leaderboard</h3>
         <p><strong>Trades</strong> is the full feed: scored signals grouped by stock, or every raw filing, with filters. <strong>Insiders</strong> ranks insiders by how their buys have done.</p>
         <h3>Account</h3>
@@ -5019,7 +5019,7 @@ const HELP_SECTIONS = [
     render: () => (
       <>
         <h3>What's free?</h3>
-        <p>Every stock page and every insider page, with the last 12 months of trades (track records and summaries use full history). Watch up to 3 stocks or people, and get the Sunday digest about them.</p>
+        <p>Every stock page and every insider page, with the last 12 months of trades (track records and summaries use full history). Follow up to 3 stocks or people, and get the Sunday digest about them.</p>
         <h3>What does Pro add?</h3>
         <p>Full trade history, unlimited watching, a daily digest, same-day email alerts, linking your brokerage, the full leaderboard, for {PRO_PRICE_DISPLAY} per month.</p>
         <h3>What's the Full Data Export?</h3>
@@ -5036,13 +5036,13 @@ const HELP_SECTIONS = [
     label: 'Emails and alerts',
     render: () => (
       <>
-        <p>What you watch decides what's in your emails. Which emails you get is set in Account, Emails.</p>
+        <p>What you follow decides what's in your emails. Which emails you get is set in Account, Emails.</p>
         <h3>Weekly digest (everyone)</h3>
-        <p>Sunday evening: what insiders did with every stock and person you watch (quiet weeks included), plus the week's most notable insider buying.</p>
+        <p>Sunday evening: what insiders did with every stock and person you follow (quiet weeks included), plus the week's most notable insider buying.</p>
         <h3>Daily digest (Pro)</h3>
-        <p>Weekday mornings, only when something you watch had a filing.</p>
+        <p>Weekday mornings, only when something you follow had a filing.</p>
         <h3>Same-day alerts (Pro)</h3>
-        <p>An email the day a new filing lands for something you watch. Turn them on in Account, then mute individual stocks or people with the bell on your Watchlist. Two optional extras: big C-suite buys on any stock, and an insider switching from selling to buying on a stock you watch.</p>
+        <p>An email the day a new filing lands for something you follow. Turn them on in Account, then mute individual stocks or people with the bell on your Watchlist. Two optional extras: big C-suite buys on any stock, and an insider switching from selling to buying on a stock you follow.</p>
         <h3>Not getting an email you expect?</h3>
         <p>Check Account, Emails, and use Send test email there. Still missing? Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </>
@@ -6098,19 +6098,19 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
         {snaptrade.error && <p className="sx-err">{snaptrade.error}</p>}
       </Card>
 
-      <Card id="emails" className="sx-card--section" title="Emails" sub="What Seli sends you. The stocks and people you watch decide what's in them.">
+      <Card id="emails" className="sx-card--section" title="Emails" sub="What Seli sends you. The stocks and people you follow decide what's in them.">
         {!L ? <Spinner /> : (<>
-          <SxSetting label="Weekly digest" sub="Sunday evening: what insiders did with everything you watch, plus the week's most notable insider buying.">
+          <SxSetting label="Weekly digest" sub="Sunday evening: what insiders did with everything you follow, plus the week's most notable insider buying.">
             <SxToggle label="Weekly digest" checked={L.weekly_digest} onChange={v => update({ weekly_digest: v })} />
           </SxSetting>
           {/* Free accounts see only what they can change, plus one line on what
               Pro adds. Showing five greyed-out Pro switches (two of them looking
               "on") read as broken and buried the one setting they have. */}
           {!lock && (<>
-          <SxSetting label="Daily digest" sub="Weekday mornings, only when something you watch had a filing." pro locked={lock}>
+          <SxSetting label="Daily digest" sub="Weekday mornings, only when something you follow had a filing." pro locked={lock}>
             <SxToggle label="Daily digest" checked={pro && L.daily_digest} disabled={lock} onChange={v => update({ daily_digest: v })} />
           </SxSetting>
-          <SxSetting label="Same-day alerts" sub="An email the day a new filing lands for a stock or person you watch. Mute individual ones with the bell on your Watchlist." pro locked={lock}>
+          <SxSetting label="Same-day alerts" sub="An email the day a new filing lands for a stock or person you follow. Mute individual ones with the bell on your Watchlist." pro locked={lock}>
             <SxToggle label="Same-day alerts" checked={pro && alertsOn} disabled={lock} onChange={v => update({ instant_watchlist_ticker: v, instant_followed_insider: v })} />
           </SxSetting>
           {pro && alertsOn && (
@@ -6128,7 +6128,7 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
             )}
             <SxToggle label="Big executive buys" checked={pro && L.instant_high_conviction} disabled={lock} onChange={v => update({ instant_high_conviction: v })} />
           </SxSetting>
-          <SxSetting label="Reversals" sub="A company insider at a stock you watch buys after 2+ sales and no buys in 2 years, or sells (unplanned) after 2+ buys." pro locked={lock}>
+          <SxSetting label="Reversals" sub="A company insider at a stock you follow buys after 2+ sales and no buys in 2 years, or sells (unplanned) after 2+ buys." pro locked={lock}>
             <SxToggle label="Reversals" checked={pro && L.instant_reversal} disabled={lock} onChange={v => update({ instant_reversal: v })} />
           </SxSetting>
           <SxSetting label="Market-wide buying in digests" sub={anyDigest ? 'Include the most notable insider buying across the market, not just your list.' : 'Turn on a digest first.'} pro locked={lock}>
@@ -6140,7 +6140,7 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
           </>)}
           {lock ? (
             <div className="sx-gate sx-gate--block" style={{ marginTop: 10 }}>
-              <span className="sx-gate__text">Pro adds an email the same day someone you watch trades, a weekday morning brief, and alerts for big executive buys anywhere.</span>
+              <span className="sx-gate__text">Pro adds an email the same day someone you follow trades, a weekday morning brief, and alerts for big executive buys anywhere.</span>
               <button className="sx-btn sx-btn--accent sx-btn--sm" onClick={() => onUpgrade('notifications')}>See Pro</button>
             </div>
           ) : (
@@ -6838,7 +6838,7 @@ function LandingPage({ onEnter, dark, setDark }) {
               <div className="lp-price-card__price">$0<span>/mo</span></div>
               <div className="lp-price-card__desc">Explore insider activity and see what's moving. No card required.</div>
               <ul className="lp-price-card__features">
-                {['Every stock and insider page', '12 months of trades on each', 'Watch 3 stocks or people', 'Sunday digest about what you watch', 'Corporate + congressional trades'].map(f => (
+                {['Every stock and insider page', '12 months of trades on each', 'Follow 3 stocks or people', 'Sunday digest about what you watch', 'Corporate + congressional trades'].map(f => (
                   <li key={f}><span className="lp-check"><IconCheck style={{ width: 12, height: 12 }} /></span>{f}</li>
                 ))}
               </ul>
@@ -7392,7 +7392,7 @@ function AppInner() {
       {isDataStale && !error && (
         <button className="stale-banner" onClick={() => setShowStaleDataModal(true)}>
           <IconWarning style={{ width: 14, height: 14 }} />
-          Live data isn't updating right now — tap for details
+          Live data isn't updating right now. Tap for details
         </button>
       )}
       {error && page === 'dashboard' && (

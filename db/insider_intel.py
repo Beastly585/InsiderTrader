@@ -32,8 +32,8 @@ from datetime import date, timedelta
 from email_kit import as_date, congress_range, money, plural, pretty_company, pretty_person, short_role
 
 # Plain-word roles for chips (same words as the site's role tags).
-_ROLE_WORDS = {"C-suite exec": "Executive", "Chair": "Board chair", "VP": "Vice president",
-               "General Counsel": "General counsel", "10% owner": "10%+ shareholder", "Director": "Board member"}
+_ROLE_WORDS = {"C-suite exec": "Executive", "Officer": "Executive", "Chair": "Board chair", "VP": "Vice president",
+               "General Counsel": "General counsel", "10% owner": "Major shareholder", "Director": "Board member"}
 
 
 def ek_role_word(role: str) -> str:

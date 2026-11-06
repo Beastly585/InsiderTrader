@@ -1006,7 +1006,7 @@ body.drawer-open .sx-nav { z-index: 94; }
 
 /* ── Watchlist page: Email switch and Following / Unfollow ── */
 .sx-wl__ctl { gap: 8px; }
-.sx-wl__pronote { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; font-size: 13px; color: var(--text-2); }
+.sx-wl__pronote { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin: 0 0 12px; font-size: 13px; color: var(--text-2); }
 .sx-wl__pronote .sx-link { background: none; border: none; padding: 0; font: inherit; cursor: pointer; }
 .sx-wl__row--gone { opacity: .55; }
 .sx-wl__row--gone:hover { opacity: .85; }

@@ -34,13 +34,17 @@ export function Card({ title, sub, action, children, className = '', id, pad = t
   );
 }
 
+// The one tag. Tones: neutral, buy, sell, signal (Seli's reads: first buy,
+// reversal, cluster), congress, corp, accent. Every tag on the site shares
+// its look (src/system.css), whatever class an older component still uses.
 export function Chip({ tone = 'neutral', children, title }) {
   return <span className={`sx-chip sx-chip--${tone}`} title={title}>{children}</span>;
 }
+export const Tag = Chip;
 
 // Who someone is, the same way everywhere, color-coded: members of Congress
 // get a blue tag with a Capitol icon reading House, Senate or Congress;
-// company insiders get a violet tag with their role in plain words. (So a
+// company insiders get an amber tag with their role in plain words. (So a
 // company's "President" can't be mistaken for anyone in government.) So the two never blur together in a mixed list, and
 // nobody has to decode "Dir" or "C-suite exec".
 // Pass congress (bool) when known; otherwise it's read from the role.
@@ -52,7 +56,7 @@ export function RoleTag({ role, congress, title, name, className = '' }) {
   }
   // A fund or company filing as an insider (usually a big shareholder) has no
   // job title; "Insider" says nothing, so name what it is.
-  const label = (!role || role === 'Insider') && isEntityName(name) ? 'Fund or company' : roleText(role);
+  const label = isEntityName(name) ? 'Fund' : roleText(role);
   return <span className={`sx-role sx-role--corp ${className}`} title="Company insider">{label}</span>;
 }
 

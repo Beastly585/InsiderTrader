@@ -83,16 +83,16 @@ def esc(s) -> str:
 
 
 def money(v) -> str:
+    """$1.0M, $57.6K, $450; a real minus sign for negatives. Same rule as
+    money() in worker/lib/intel.js and src/lib/text.js."""
     if v is None:
         return "n/a"
     v = float(v)
-    sign = "-" if v < 0 else ""
+    sign = "\u2212" if v < 0 else ""
     v = abs(v)
     for div, suf in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
-        if v >= div * 0.9995:
-            n = v / div
-            s = f"{n:,.0f}" if n >= 99.95 else f"{n:,.1f}".rstrip("0").rstrip(".")
-            return f"{sign}${s}{suf}"
+        if v >= div * 0.99995:
+            return f"{sign}${v / div:,.1f}{suf}"
     return f"{sign}${v:,.0f}"
 
 

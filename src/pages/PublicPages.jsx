@@ -100,7 +100,7 @@ export function PublicShell({ page, logoSrc, isMobile, watchTarget, children }) 
         {watchTarget && (
           <p className="sx-pub__watchbar">
             <Icon name="bell" size={14} />
-            <span><b>New to Seli?</b> It tracks insider and Congress trades. Tap <b>Watch</b> to get a free email when {watchTarget.kind === 'stock'
+            <span><b>New to Seli?</b> It tracks insider and Congress trades. Tap <b>Follow</b> to get a free email when {watchTarget.kind === 'stock'
               ? <>insiders trade <b>{watchTarget.id}</b>.</> : <>this person trades.</>}</span>
           </p>
         )}
@@ -121,7 +121,7 @@ function SignupBand({ onSignUp }) {
     <section className="sx-pub__band">
       <div>
         <h2>Get an email when insiders trade your stocks</h2>
-        <p>Watch up to 3 stocks or people free. Seli emails you a plain-English summary every week, and Pro sends it the same day.</p>
+        <p>Follow up to 3 stocks or people free. Seli emails you a plain-English summary every week, and Pro sends it the same day.</p>
       </div>
       <button className="sx-btn sx-btn--accent" onClick={onSignUp}>Get started free</button>
     </section>
@@ -404,8 +404,8 @@ function useMovers(buying, congress) {
 const WHY = [
   { icon: 'clock', title: 'Research clean history', body: 'Every open-market insider and Congress trade, cleaned up and searchable.', tier: 'Pro' },
   { icon: 'user', title: 'Cluster detection', body: 'See when several insiders buy the same stock at once.', tier: 'Free' },
-  { icon: 'search', title: 'Follow what you own, or want to', body: 'Watch stocks and people. 3 free, unlimited on Pro.', tier: 'Free' },
-  { icon: 'bell', title: 'Instant alerts', body: 'An email the same day someone trades a stock you watch.', tier: 'Pro' },
+  { icon: 'search', title: 'Follow what you own, or want to', body: 'Follow stocks and people. 3 free, unlimited on Pro.', tier: 'Free' },
+  { icon: 'bell', title: 'Instant alerts', body: 'An email the same day someone trades a stock you follow.', tier: 'Pro' },
   { icon: 'check', title: 'Weekly recaps', body: 'What your stocks and people did, in a two-minute read.', tier: 'Free' },
   { icon: 'building', title: 'Link your portfolio', body: 'Connect your brokerage and Seli watches what you hold automatically.', tier: 'Pro' },
 ];
@@ -618,7 +618,7 @@ export function PublicHome() {
             <ul className="sx-plan__list">
               <li>Seli's plain-English read on every stock and person</li>
               <li>Cluster, first-buy and reversal flags, and track records</li>
-              <li>Watch 3 stocks or people, with a weekly email on what they did</li>
+              <li>Follow 3 stocks or people, with a weekly email on what they did</li>
               <li>12 months of trades on every page</li>
             </ul>
             <button className="sx-btn" onClick={signUp}>Get started free</button>
@@ -629,7 +629,7 @@ export function PublicHome() {
             {pricing?.annual && <p className="sx-plan__alt">or $69 a year, save 18%</p>}
             <p className="sx-plan__desc">For people who want to know the same day:</p>
             <ul className="sx-plan__list">
-              <li>Watch as many stocks and people as you like</li>
+              <li>Follow as many stocks and people as you like</li>
               <li>Same-day email alerts and a daily digest</li>
               <li>Full history{since ? `, back to ${since}` : ''}</li>
               <li>The full leaderboard, 2 and 5 year views</li>

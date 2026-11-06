@@ -393,12 +393,12 @@
 .hx-pager { display: flex; justify-content: center; align-items: center; gap: 14px; padding: 12px; border-top: 0.5px solid var(--border); color: var(--text-2); }
 .hx-pager b { color: var(--text); }
 @media (max-width: 640px) {
-  /* Filters sit on one swipeable row; search gets its own full-width line. */
+  /* Filters wrap onto as many lines as they need (a swipeable row hid the
+  last ones with no sign there was more); search gets a full-width line. */
   .hx-filters { display: block; }
-  .hx-filters__row { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; }
-  .hx-filters__row::-webkit-scrollbar { display: none; }
+  .hx-filters__row { flex-wrap: wrap; gap: 8px; }
   .hx-filters__row > * { flex: none; }
-  .hx-filters__q { margin-top: 10px; }
+  .hx-filters__q { margin-top: 10px; max-width: none; }
   .hx-filters__q .sx-search__input { height: 44px; font-size: 16px; }
   .hx-select { height: 36px; font-size: 14px; }
   .hx-trades__bar { padding: 10px 12px; }

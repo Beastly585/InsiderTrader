@@ -5,14 +5,11 @@
 export function money(v) {
   if (v == null || Number.isNaN(Number(v))) return '—';
   let n = Number(v);
-  const sign = n < 0 ? '-' : '';
+  const sign = n < 0 ? '\u2212' : ''; // a real minus sign, never a hyphen
   n = Math.abs(n);
+  // K, M and B always carry one decimal ($1.0M, $57.6K), whole dollars below $1K.
   for (const [div, suf] of [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']]) {
-    if (n >= div * 0.9995) {
-      const x = n / div;
-      const s = x >= 99.95 ? Math.round(x).toLocaleString('en-US') : x.toFixed(1).replace(/\.0$/, '');
-      return `${sign}$${s}${suf}`;
-    }
+    if (n >= div * 0.99995) return `${sign}$${(n / div).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${suf}`;
   }
   return `${sign}$${Math.round(n).toLocaleString('en-US')}`;
 }
@@ -20,9 +17,15 @@ export function money(v) {
 const CONGRESS_RANGES = [[1e3, 15e3], [15e3, 50e3], [50e3, 100e3], [100e3, 250e3], [250e3, 500e3],
   [500e3, 1e6], [1e6, 5e6], [5e6, 25e6], [25e6, 50e6]];
 // STOCK Act amounts are ranges; the DB stores the midpoint. Show the range.
+// STOCK Act bucket edges in their own wording ($1K, $15K, $1M), not money()'s
+// one-decimal style: they're official ranges, not amounts.
+// Edges are stored as $15,001 and so on; round them back to the bucket label.
+const bucket = n => (n >= 999e3 ? `$${Math.round(n / 1e6)}M` : `$${Math.round(n / 1e3)}K`);
+// A span of Congress trades (lowest edge to highest), in the same wording.
+export const congressSpan = ([lo, hi]) => `${bucket(lo)}–${bucket(hi).replace('$', '')}`;
 export function congressRange(v) {
   if (v == null) return 'undisclosed';
-  for (const [lo, hi] of CONGRESS_RANGES) if (Number(v) <= hi) return `${money(lo)}–${money(hi).replace('$', '')}`;
+  for (const [lo, hi] of CONGRESS_RANGES) if (Number(v) <= hi) return `${bucket(lo)}–${bucket(hi).replace('$', '')}`;
   return 'over $50M';
 }
 export const amount = (v, congress) => (congress ? congressRange(v) : money(v));
@@ -213,10 +216,13 @@ export function memberRole(x) {
 // which the scoring and the email sentences rely on. These turn them into
 // words a first-time visitor reads without a glossary. CEO, CFO, COO and
 // CTO stay: they're well known.
+// One set everywhere: CEO, CFO, COO, CTO, President, Board chair,
+// Vice president, General counsel, Executive (any other officer), Board
+// member, Major shareholder, Fund (see RoleTag), or Insider when unknown.
 const ROLE_WORDS = {
-  'C-suite exec': 'Executive', 'C-Suite': 'Executive', 'Exec': 'Executive',
+  'C-suite exec': 'Executive', 'C-Suite': 'Executive', 'Exec': 'Executive', Officer: 'Executive',
   Chair: 'Board chair', VP: 'Vice president',
-  'General Counsel': 'General counsel', '10% owner': '10%+ shareholder',
+  'General Counsel': 'General counsel', '10% owner': 'Major shareholder',
   Director: 'Board member', Dir: 'Board member',
 };
 export const roleText = role => ROLE_WORDS[role] || role || 'Insider';

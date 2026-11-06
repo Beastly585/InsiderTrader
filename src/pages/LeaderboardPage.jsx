@@ -113,7 +113,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
         {error && !data && <ErrorNote message={error} />}
         {!data && !error && <div className="sx-card__body"><Skeleton lines={8} /></div>}
         {visible && !visible.length && !loading && mine && (
-          <div className="sx-empty"><div className="sx-empty__body">None of the people you watch are ranked in this view. Someone needs {rules.min_scored} or more scored buys to make the list{!pro ? ', and the free plan shows the top of it' : ''}.</div></div>
+          <div className="sx-empty"><div className="sx-empty__body">None of the people you follow are ranked in this view. Someone needs {rules.min_scored} or more scored buys to make the list{!pro ? ', and the free plan shows the top of it' : ''}.</div></div>
         )}
         {visible && !visible.length && !loading && !mine && (
           <div className="sx-empty"><div className="sx-empty__body">Nobody has {rules.min_scored} or more scored open-market buys in this window yet. Try a longer window or a different group.</div></div>

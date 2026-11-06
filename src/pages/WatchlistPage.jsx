@@ -1,5 +1,5 @@
 // src/pages/WatchlistPage.jsx — /watchlist
-// One list: the stocks and people you watch, plus what you hold. Each row
+// One list: the stocks and people you follow, plus what you hold. Each row
 // says in plain English what insiders did, with two labeled controls: the
 // same-day email switch (Pro) and Following / Unfollow. Unfollowing keeps the
 // row on the page, faded, with "Follow again", until you leave.
@@ -113,7 +113,7 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
       )}
 
       {used === 0 && !gone.length && !(d?.holdings?.length) ? (
-        <Card><Empty title="Nothing watched yet">Search above for a stock you own or a person you want to keep tabs on. Watch anything from its page too.</Empty></Card>
+        <Card><Empty title="Not following anything yet">Search above for a stock you own or a person you want to keep tabs on. Follow anything from its page too.</Empty></Card>
       ) : (
         <>
           {tickers.length > 0 && (

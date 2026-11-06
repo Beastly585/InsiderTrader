@@ -11,13 +11,14 @@
 export const fmt = {
   number:    n => n == null ? '—' : Number(n).toLocaleString(),
 
+  // Same rule as money() in lib/text.js: one decimal on K/M/B, real minus sign.
   money:     n => {
     if (n == null) return '—';
-    const a = Math.abs(n), s = n < 0 ? '-' : '';
-    if (a >= 1e9) return `${s}$${(a/1e9).toFixed(1)}B`;
-    if (a >= 1e6) return `${s}$${(a/1e6).toFixed(1)}M`;
-    if (a >= 1e3) return `${s}$${(a/1e3).toFixed(0)}K`;
-    return `${s}$${a.toFixed(0)}`;
+    const a = Math.abs(n), s = n < 0 ? '\u2212' : '';
+    for (const [div, suf] of [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']]) {
+      if (a >= div * 0.99995) return `${s}$${(a / div).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${suf}`;
+    }
+    return `${s}$${Math.round(a).toLocaleString('en-US')}`;
   },
 
   price:     n => n == null ? '—' : `$${parseFloat(n).toFixed(2)}`,

@@ -417,7 +417,7 @@ function StepWatchlist({ watchlist, onNext }) {
       {count > 0 && (
         <div className="ob-watchlist__current">
           <div className="ob-watchlist__current-header">
-            <span className="ob-watchlist__current-label"><IconBell size={14} /> Watching {count}{limit ? ` of ${limit}` : ''}</span>
+            <span className="ob-watchlist__current-label"><IconBell size={14} /> Following {count}{limit ? ` of ${limit}` : ''}</span>
           </div>
           <div className="ob-watchlist__current-tickers">
             {tickers.map(t => (
@@ -482,7 +482,7 @@ function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, o
   }
 
   const proAlerts = [
-    { id: 'watchlist', label: 'Anything you watch', description: 'An email the day a new filing lands for a stock or person you watch.' },
+    { id: 'watchlist', label: 'Anything you follow', description: 'An email the day a new filing lands for a stock or person you follow.' },
     { id: 'conviction', label: 'Big executive buys', description: 'A CEO, CFO or other C-suite executive buys a lot of any stock.' },
     { id: 'reversal', label: 'Reversals', description: 'A company insider who has been selling starts buying, or the reverse.' },
   ];
@@ -502,7 +502,7 @@ function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, o
             <span className="ob-notif__tier-badge">Free</span>
             <span className="ob-notif__tier-title">Weekly Digest</span>
           </div>
-          <p className="ob-notif__tier-desc">One email every Sunday evening: what insiders did with everything you watch (even in quiet weeks), plus the week's most notable insider buying and why it stands out.</p>
+          <p className="ob-notif__tier-desc">One email every Sunday evening: what insiders did with everything you follow (even in quiet weeks), plus the week's most notable insider buying and why it stands out.</p>
           <label className="ob-notif__toggle">
             <input type="checkbox" checked={digestOn} onChange={e => toggleDigest(e.target.checked)} disabled={saving} />
             <span className="ob-notif__toggle-track" />
@@ -531,7 +531,7 @@ function StepNotifications({ user, pro, onNext, digestOn: digestOnProp = true, o
             ))}
           </div>
           <div className="ob-notif__portfolio-note">
-            Link your brokerage in Account and your holdings get the same treatment as what you watch.
+            Link your brokerage in Account and your holdings get the same treatment as what you follow.
           </div>
           {!pro && (
             <div className="ob-notif__pro-cta">
@@ -556,7 +556,7 @@ function StepReady({ watchlist, onComplete }) {
       <div className="ob-step__header">
         <h2 className="ob-step__title ob-ready__title">You're all set</h2>
         <p className="ob-step__subtitle">
-          {n > 0 ? `You're watching ${n} ${n === 1 ? 'thing' : 'things'}. Home shows what insiders did with them first.` : 'Watch anything from its page, or from your Watchlist.'}
+          {n > 0 ? `You're following ${n} ${n === 1 ? 'thing' : 'things'}. Home shows what insiders did with them first.` : 'Watch anything from its page, or from your Watchlist.'}
         </p>
       </div>
       {watchlist.tickers.length > 0 && (

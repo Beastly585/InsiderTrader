@@ -72,13 +72,15 @@ describe('fmt.money', () => {
   it('formats billions, millions, and thousands with the right suffix', () => {
     expect(fmt.money(2_500_000_000)).toBe('$2.5B');
     expect(fmt.money(3_400_000)).toBe('$3.4M');
-    expect(fmt.money(15_000)).toBe('$15K');
+    expect(fmt.money(15_000)).toBe('$15.0K');
+    expect(fmt.money(1_000_000)).toBe('$1.0M');
+    expect(fmt.money(999_999)).toBe('$1.0M');
   });
   it('formats small amounts as plain dollars', () => {
     expect(fmt.money(450)).toBe('$450');
   });
-  it('handles negative values with the sign before the dollar sign', () => {
-    expect(fmt.money(-3_400_000)).toBe('-$3.4M');
+  it('handles negative values with a real minus sign before the dollar sign', () => {
+    expect(fmt.money(-3_400_000)).toBe('\u2212$3.4M');
   });
   it('returns — for null', () => {
     expect(fmt.money(null)).toBe('—');

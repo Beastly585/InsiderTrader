@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link, stockPath, insiderPath, go } from '../lib/nav.jsx';
-import { money, congressRange, ago, plural, roleText, isEntityName } from '../lib/text.js';
+import { money, congressRange, congressSpan, ago, plural, roleText, isEntityName } from '../lib/text.js';
 import { Card, Chip, Skeleton, ErrorNote, Icon, Freshness, RoleTag, Segmented, usePublicView, useNarrow } from '../components/ui.jsx';
 import { LatestPostPill, NewsRail, TopBuyTile } from './PublicPages.jsx';
 import '../home.css';
@@ -16,7 +16,7 @@ import WatchButton from '../components/WatchButton.jsx';
 import { visitSince, etDate } from '../lib/visit.js';
 
 const HOME_DAYS = 7; // matches "This week across the market"
-const range = ([lo, hi]) => `${money(lo)}–${money(hi).replace('$', '')}`;
+const range = congressSpan;
 import { SearchBox } from '../components/Search.jsx';
 
 const STARTERS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'JPM'];
@@ -303,7 +303,7 @@ function personItem(p, isNew) {
   const detail = tier ? `${last.type === 'buy' ? 'Bought' : 'Sold'} ${val(last.value)} of ${last.ticker}, ${ago(last.date)}.${p.recent.length > 1 ? ` ${plural(p.recent.length, 'trade')} this week.` : ''}`
     : 'No open-market trades in the last year.';
   const what = tier ? `${last.type === 'buy' ? 'Bought' : 'Sold'} ${last.ticker}${p.recent.length > 1 ? `, ${plural(p.recent.length, 'trade')}` : ''}` : 'Quiet';
-  return { key: `p:${p.raw}`, what, kind: 'person', raw: p.raw, group: 'people', label: initialLast(p.name), title: `${p.name}${p.role ? ` · ${roleText(p.role)}` : ''}`, path: insiderPath(p.raw), tier, side, amt, detail, date: last?.date || null,
+  return { key: `p:${p.raw}`, what, kind: 'person', raw: p.raw, group: 'people', label: initialLast(p.name), title: `${p.name} · ${isEntityName(p.raw) ? 'Fund' : roleText(p.role)}`, path: insiderPath(p.raw), tier, side, amt, detail, date: last?.date || null,
     tags: [isNew && 'New'].filter(Boolean), weight: (t?.value || 0) + (p.last?.value || 0) / 1e3 };
 }
 
@@ -525,7 +525,7 @@ function LeaderTile({ l }) {
         <RoleTag role={l.role} congress={l.congress} />
       </div>
       <div className="hx-mini__big sx-up">+{pts} pts</div>
-      <div className="hx-mini__sub">vs the S&amp;P 500, across {plural(l.scored, 'scored buy')}</div>
+      <div className="hx-mini__sub">Their buys beat the S&amp;P 500 by {pts} points on average, across {plural(l.scored, 'scored buy')}.</div>
       <Link to="/leaderboard" className="sx-link hx-mini__link">Insiders leaderboard <Icon name="arrow" size={12} /></Link>
     </section>
   );

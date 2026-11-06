@@ -157,7 +157,7 @@ export function SearchBox({ mode = 'navigate', onPick, placeholder, autoFocus = 
                   </span>
                   {mode === 'pick' ? (
                     <span className={`sx-search__pick${isWatched(it) ? ' sx-search__pick--on' : ''}`}>
-                      <Icon name={isWatched(it) ? 'check' : 'plus'} size={13} />{isWatched(it) ? 'Watching' : 'Watch'}
+                      <Icon name={isWatched(it) ? 'eye-on' : 'eye'} size={13} />{isWatched(it) ? 'Following' : 'Follow'}
                     </span>
                   ) : <Icon name="arrow" size={13} className="sx-search__go" />}
                 </button>

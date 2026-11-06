@@ -5,6 +5,8 @@ import { ClerkProvider } from '@clerk/clerk-react'
 import { PostHogProvider } from '@posthog/react'
 import './style.css'
 import App from './app.jsx'
+// After everything else, so the shared color roles, tags and buttons win.
+import './system.css'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
