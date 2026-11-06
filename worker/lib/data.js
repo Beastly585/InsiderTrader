@@ -427,7 +427,7 @@ async function signals(ctx, url) {
   const days = allowed.includes(Number(p.get('days'))) ? Number(p.get('days')) : 30;
   const side = p.get('side') === 'sell' ? 'sell' : 'buy';
   const from = isoDaysAgo(days), to = new Date().toISOString().slice(0, 10);
-  const all = await cached(`signals|${days}|${side}`, 10 * 60 * 1000, () => signalRows(ctx, from, to, side));
+  const all = await cached(`signals|${days}|${side}`, 10 * 60 * 1000, () => sharedSignals(ctx, days, side, from, to));
   // Filters and sort run on the cached list, so they cover every signal, then
   // the first SIGNAL_LIMIT go to the browser.
   let rows = all;
@@ -455,6 +455,39 @@ async function signals(ctx, url) {
   return { pro, days, side, sort, from, to, total: rows.length, limit: SIGNAL_LIMIT, rows: rows.slice(0, SIGNAL_LIMIT) };
 }
 const SIGNAL_LIMIT = 300;
+
+// Each signal list is a heavy build (several seconds for 90 days or more), and
+// every Worker isolate has its own memory. Built separately by each isolate,
+// a few visitors after a quiet spell meant several heavy builds at once,
+// which slowed everything else on the database (the signed-in home feed timed
+// out). So the built list is saved to R2 (the same bucket the leaderboards
+// use) and shared: an isolate without it in memory reads the saved copy and
+// only rebuilds when that copy is over SIGNALS_FRESH_MS old. If a rebuild
+// fails, a copy up to SIGNALS_STALE_MS old is better than an error.
+const SIGNALS_FRESH_MS = 15 * 60 * 1000;
+const SIGNALS_STALE_MS = 6 * 3600 * 1000;
+const signalsPath = (days, side) => `_internal/signals/${days}-${side}.json`;
+async function sharedSignals(ctx, days, side, from, to) {
+  const bucket = ctx.env?.EXPORT_SNAPSHOTS;
+  let saved = null;
+  if (bucket) {
+    try { const obj = await bucket.get(signalsPath(days, side)); if (obj) saved = await obj.json(); } catch { saved = null; }
+    const age = saved?.generated_at ? Date.now() - Date.parse(saved.generated_at) : Infinity;
+    if (age < SIGNALS_FRESH_MS && Array.isArray(saved.rows)) return saved.rows;
+  }
+  try {
+    const rows = await signalRows(ctx, from, to, side);
+    if (bucket) {
+      await bucket.put(signalsPath(days, side), JSON.stringify({ generated_at: new Date().toISOString(), rows }), { httpMetadata: { contentType: 'application/json' } })
+        .catch(e => console.error('[signals] save failed', days, side, e.message));
+    }
+    return rows;
+  } catch (e) {
+    const age = saved?.generated_at ? Date.now() - Date.parse(saved.generated_at) : Infinity;
+    if (age < SIGNALS_STALE_MS && Array.isArray(saved.rows)) { console.error('[signals] rebuild failed, serving saved copy', days, side, e.message); return saved.rows; }
+    throw e;
+  }
+}
 
 async function signalRows(ctx, from, to, side) {
   const [PLANNED, REV] = await Promise.all([

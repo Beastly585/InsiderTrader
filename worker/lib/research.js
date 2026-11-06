@@ -131,7 +131,7 @@ async function statusFor(ctx, tickers, windowDays) {
   // watchlist of 100+ large caps used to pull every trade from the last year.
   const congressSql = `(f.relationship = 'congress' OR f.transaction_code LIKE 'CONGRESS%')`;
   const REV = await reversalSql(ctx);
-  const [rows, lastBuys, names, totals] = await Promise.all([
+  const [rows, lastBuys, names, totals, lastTrades] = await Promise.all([
     ctx.db(`
       SELECT f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship, f.transaction_code, ${REV} AS reversal,
              f.transaction_type, f.value::float AS value, f.pct_owned_change::float AS pct,
@@ -158,12 +158,26 @@ async function statusFor(ctx, tickers, windowDays) {
          AND f.filing_date <= CURRENT_DATE AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - 365
          AND COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%'
        GROUP BY f.ticker, f.transaction_type`),
+    // Newest company-insider trade of any kind, so Home can color quiet
+    // watchlist items by what happened last and when.
+    ctx.db(`
+      SELECT DISTINCT ON (f.ticker) f.ticker, f.insider_name, f.insider_title, f.relationship, f.transaction_type,
+             f.value::float AS value, COALESCE(f.transaction_date, f.filing_date) AS trade_date
+        FROM public.filings f
+       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND f.transaction_type IN ('buy','sell')
+         AND COALESCE(f.transaction_date, f.filing_date) <= CURRENT_DATE
+         AND COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT ILIKE 'CONGRESS%'
+       ORDER BY f.ticker, COALESCE(f.transaction_date, f.filing_date) DESC, f.value DESC NULLS LAST`),
   ]);
   const lb = Object.fromEntries(lastBuys.map(r => [r.ticker, r]));
   const nm = Object.fromEntries(names.map(r => [r.ticker, r.company_name]));
   const yt = {};
   for (const r of totals) (yt[r.ticker] = yt[r.ticker] || {})[r.transaction_type] = { n: r.n, v: r.v };
-  return tickerStatus(tickers, rows, lb, nm, windowDays, undefined, yt);
+  const out = tickerStatus(tickers, rows, lb, nm, windowDays, undefined, yt);
+  for (const r of lastTrades) {
+    if (out[r.ticker]) out[r.ticker].last_trade = { type: r.transaction_type, value: num(r.value), date: asDate(r.trade_date), name: prettyPerson(r.insider_name, false), role: shortRole(r.insider_title, r.relationship) };
+  }
+  return out;
 }
 
 function statusOut(s) {
@@ -174,6 +188,7 @@ function statusOut(s) {
     recent_congress: s.recent_congress.n, last_buy: s.last_buy, reversal: s.reversal || null,
     congress: s.recent_congress.n ? { members: s.recent_congress.members, buys: s.recent_congress.buys, sells: s.recent_congress.sells,
       buy_range: s.recent_congress.buy_range, sell_range: s.recent_congress.sell_range } : null, last_activity: s.last_activity || null, last_filed: s.last_filed || null,
+    last_trade: s.last_trade || null,
   };
 }
 

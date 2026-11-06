@@ -525,6 +525,7 @@
 .hx-sigrow:hover > td { background: var(--surface-2); }
 .hx-sigrow__go { display: inline-flex; vertical-align: middle; margin-left: 4px; color: var(--text-3); transform: rotate(-90deg); }
 .hx-sigrow:hover .hx-sigrow__go { color: var(--text); }
+.hx-sig--cluster { font-weight: 700; letter-spacing: .02em; }
 .hx-sig--more { background: transparent; color: var(--text-3); padding-left: 2px; padding-right: 2px; }
 .hx-sigtable .hx-sigs--row { flex-wrap: nowrap; }
 .hx-sigcard { cursor: pointer; }
@@ -563,3 +564,56 @@
   .hx-trades__tools .hx-select { flex: 1 1 40%; }
   .hx-trades__tools .hx-toggle--sm { order: 3; flex: 1 1 100%; justify-content: center; }
 }
+
+/* ── Home rail: every block is the same card (tiles, this week, newswire) ── */
+.hx__rail .hx-topbuy { margin-bottom: 14px; }
+.hx-newscard { display: flex; flex-direction: column; padding: 16px 18px 6px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--surface); }
+.hx-newscard__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.hx-newscard__label { font-size: 12px; color: var(--text-2); font-weight: 500; }
+.hx-newscard__all { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 500; color: var(--accent-strong, var(--accent)); text-decoration: none; }
+.hx-newscard__all:hover { text-decoration: underline; }
+.hx-newscard .hx-posts { margin-top: 4px; }
+.hx-newscard .hx-post { padding: 12px 0; }
+.hx-newscard .hx-post:last-child { border-bottom: none; }
+.hx-newscard .hx-post__title, .hx-newscard .hx-post:first-child .hx-post__title { font-size: 15px; line-height: 1.38; }
+.hx-post__meta { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.hx-post__tk { margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); color: var(--accent-strong, var(--accent)); font-size: 11px; font-weight: 600; text-decoration: none; }
+.hx-post__tk:hover { text-decoration: none; background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.hx--in .hx__rail .hx-feed, .hx--in .hx__rail .hx-mini { margin-bottom: 14px; padding: 16px 18px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--surface); }
+.hx--in .hx__rail .hx-feed__title { font-size: 12px; font-weight: 500; color: var(--text-2); }
+
+/* ── Signed-out: "more below" hint under the first screen ── */
+.hx-below { display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; margin: 8px auto 0; padding: 14px 0; font-size: 13px; color: var(--text-3); }
+.hx-below__label { font-weight: 600; text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
+.hx-below a { color: var(--text-2); text-decoration: none; font-weight: 500; }
+.hx-below a:hover { color: var(--text); }
+.hx-below__chev { color: var(--text-3); animation: hx-nudge 1.8s ease-in-out infinite; }
+@keyframes hx-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+@media (prefers-reduced-motion: reduce) { .hx-below__chev { animation: none; } }
+
+/* ── Signed-in watchlist: active tiles in a grid, the rest as a cloud ── */
+.hx-tiles--grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.hx-tiles--grid .hx-tile { width: auto; }
+.hx-tile__line { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hx-tile__foot { margin-top: auto; padding-top: 10px; }
+.hx-cloud { margin-top: 22px; }
+.hx-cloud__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.hx-cloud__title { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.hx-cloud__key { display: inline-flex; gap: 12px; font-size: 11.5px; color: var(--text-3); }
+.hx-cloud__key span { display: inline-flex; align-items: center; gap: 5px; }
+.hx-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.hx-dot--buy { background: var(--green-500, #22c55e); }
+.hx-dot--sell { background: var(--red-500, #ef4444); }
+.hx-dot--none { background: var(--text-3); opacity: .6; }
+.hx-cloud__list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.hx-chip2 { display: inline-flex; align-items: center; gap: 0; height: 28px; padding: 0 10px; border-radius: 6px; border: 0.5px solid var(--border-md); background: var(--surface); color: var(--text); font-size: 12.5px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: transform .12s, background .12s, border-color .12s; }
+.hx-chip2__more { max-width: 0; overflow: hidden; opacity: 0; font-weight: 500; font-size: 11.5px; color: var(--text-2); transition: max-width .2s ease, opacity .15s, margin .2s; }
+.hx-chip2:hover, .hx-chip2:focus-visible { transform: translateY(-1px); text-decoration: none; }
+.hx-chip2:hover .hx-chip2__more, .hx-chip2:focus-visible .hx-chip2__more { max-width: 320px; opacity: 1; margin-left: 8px; }
+.hx-chip2--buy { border-color: color-mix(in srgb, var(--green-500, #22c55e) 60%, transparent); background: color-mix(in srgb, var(--green-500, #22c55e) 14%, var(--surface)); color: var(--green-600, #16a34a); }
+.hx-chip2--buy-old { border-color: color-mix(in srgb, var(--green-500, #22c55e) 30%, transparent); background: color-mix(in srgb, var(--green-500, #22c55e) 5%, var(--surface)); }
+.hx-chip2--sell { border-color: color-mix(in srgb, var(--red-500, #ef4444) 60%, transparent); background: color-mix(in srgb, var(--red-500, #ef4444) 14%, var(--surface)); color: var(--red-600, #dc2626); }
+.hx-chip2--sell-old { border-color: color-mix(in srgb, var(--red-500, #ef4444) 30%, transparent); background: color-mix(in srgb, var(--red-500, #ef4444) 5%, var(--surface)); }
+.hx-chip2--none { color: var(--text-3); }
+@media (hover: none) { .hx-chip2 { height: 32px; } }
+@media (max-width: 640px) { .hx-tiles--grid { grid-template-columns: 1fr 1fr; gap: 8px; } .hx-tiles--grid .hx-tile { width: auto; } }

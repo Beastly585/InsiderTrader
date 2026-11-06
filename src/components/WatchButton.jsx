@@ -25,13 +25,13 @@ export default function WatchButton({ watchlist, kind, id, compact = false }) {
   if (compact) {
     return (
       <button className={`sx-watch sx-watch--icon${on ? ' sx-watch--on' : ''}`} onClick={toggle} title={title} aria-pressed={on} aria-label={on ? 'Stop watching' : 'Watch'}>
-        <Icon name={on ? 'check' : 'plus'} size={14} />
+        <Icon name={on ? 'eye-on' : 'eye'} size={15} />
       </button>
     );
   }
   return (
     <button className={`sx-watch${on ? ' sx-watch--on' : ''}`} onClick={toggle} title={title} aria-pressed={on}>
-      <Icon name={on ? 'check' : 'bell'} size={14} />
+      <Icon name={on ? 'eye-on' : 'eye'} size={15} />
       {on ? 'Watching' : 'Watch'}
     </button>
   );

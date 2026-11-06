@@ -342,13 +342,17 @@ export function LatestPostPill({ post }) {
   );
 }
 
-// The newswire in a column: kind and date, the headline, and a button into
-// the stock it's about.
-export function NewsRail({ posts, limit = 5, title = 'Latest from the newswire', compact = false }) {
-  const list = (posts || []).slice(0, limit);
+// The newswire in a column, in the same card as the tiles above it: kind,
+// date and stock on one line, the headline under it. skipSlug leaves out the
+// post the "New:" pill at the top of the page already shows.
+export function NewsRail({ posts, limit = 3, title = 'Latest from the newswire', skipSlug = null }) {
+  const list = (posts || []).filter(p => p.slug !== skipSlug).slice(0, limit);
   return (
-    <div className={`hx-rail__news${compact ? ' hx-rail__news--compact' : ''}`}>
-      <a className="hx-rail__title" href="/blog" onClick={navClick('/blog')}>{title} <Icon name="arrow" size={13} /></a>
+    <div className="hx-newscard">
+      <div className="hx-newscard__head">
+        <span className="hx-newscard__label">{title}</span>
+        <a className="hx-newscard__all" href="/blog" onClick={navClick('/blog')}>All news <Icon name="arrow" size={11} /></a>
+      </div>
       {!posts && <Skeleton lines={4} />}
       {posts && !list.length && <p className="sx-muted sx-small">No posts yet this week.</p>}
       <ul className="hx-posts">
@@ -357,15 +361,12 @@ export function NewsRail({ posts, limit = 5, title = 'Latest from the newswire',
             <div className="hx-post__meta">
               <span className={p.kind === 'sell' ? 'sx-down' : p.kind === 'buy' ? 'sx-up' : ''}>{NEWS_KIND[p.kind] || 'News'}</span>
               {p.published_at ? ` · ${shortDate(p.published_at.slice(0, 10))}` : ''}
+              {p.ticker && <a className="hx-post__tk sx-mono" href={stockPath(p.ticker)} onClick={navClick(stockPath(p.ticker))}>{p.ticker}</a>}
             </div>
             <a className="hx-post__title" href={postPath(p)} onClick={navClick(postPath(p))}>{p.title}</a>
-            {!compact && (p.ticker
-              ? <a className="hx-go" href={stockPath(p.ticker)} onClick={navClick(stockPath(p.ticker))}>See {p.ticker} <Icon name="arrow" size={11} /></a>
-              : <a className="hx-go" href={postPath(p)} onClick={navClick(postPath(p))}>Read it <Icon name="arrow" size={11} /></a>)}
           </li>
         ))}
       </ul>
-      {posts && list.length > 0 && <a className="hx-allnews" href="/blog" onClick={navClick('/blog')}>All news</a>}
     </div>
   );
 }
@@ -481,8 +482,11 @@ function HowItWorks({ c, signUp }) {
 
 // The week's biggest open-market insider buy, raw facts only, pointing at the
 // full insider buying page. Sits above the newswire on the signed-out home.
-function TopBuyTile({ c }) {
-  const watchlist = usePublicWatchlist(); // Watch opens sign-up, then adds the stock
+// Signed in, Home passes the real watchlist; signed out, Watch opens sign-up
+// and adds the stock afterwards.
+export function TopBuyTile({ c, watchlist: wl }) {
+  const publicWl = usePublicWatchlist();
+  const watchlist = wl || publicWl;
   return (
     <div className="hx-topbuy">
       <span className="hx-topbuy__label">Biggest insider buying this week</span>
@@ -519,7 +523,7 @@ export function PublicHome() {
   const { data: buying } = useApi('/public/insider-buying');
   const { data: congress } = useApi('/public/congress');
   const { data: pricing } = useApi('/public/pricing');
-  const { data: news } = useApi('/public/blog?page=1&limit=3');
+  const { data: news } = useApi('/public/blog?page=1&limit=4');
   useEffect(() => { document.title = PAGE_TITLES.home; }, []);
   const narrow = useNarrow();
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
@@ -574,11 +578,20 @@ export function PublicHome() {
         <aside className="hx__rail" aria-label="Latest news">
           {buying?.pulse && <WeekPulse p={buying.pulse} />}
           {buying?.featured && <TopBuyTile c={buying.featured} />}
-          <NewsRail posts={news ? news.posts || [] : null} limit={3} />
+          <NewsRail posts={news ? news.posts || [] : null} limit={3} skipSlug={news?.posts?.[0]?.slug} />
         </aside>
       </div>
 
-      <section className="hx-why">
+      {/* The hero fills the first screen; this says there's more below. */}
+      <nav className="hx-below" aria-label="More on this page">
+        <span className="hx-below__label">More below</span>
+        {[['why', 'Why use Seli'], ['how', 'How it works'], ['pricing', 'Pricing']].map(([id, label]) => (
+          <a key={id} href={`#${id}`} onClick={e => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{label}</a>
+        ))}
+        <Icon name="chevron" size={14} className="hx-below__chev" />
+      </nav>
+
+      <section className="hx-why" id="why">
         <h2 className="sx-section-title">Why use Seli</h2>
         <ul className="hx-why__grid">
           {WHY.map(w => (

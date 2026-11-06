@@ -7,10 +7,10 @@
 //      more buying, Congress, the largest sales, and the leaderboard's top name.
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
-import { StockLink, InsiderLink, Link, stockPath } from '../lib/nav.jsx';
+import { StockLink, InsiderLink, Link, stockPath, insiderPath, go } from '../lib/nav.jsx';
 import { money, congressRange, ago, plural, roleText } from '../lib/text.js';
 import { Card, Chip, Skeleton, ErrorNote, Icon, Freshness, RoleTag, Segmented, usePublicView } from '../components/ui.jsx';
-import { LatestPostPill, NewsRail, ScrollRow } from './PublicPages.jsx';
+import { LatestPostPill, NewsRail, TopBuyTile } from './PublicPages.jsx';
 import '../home.css';
 import WatchButton from '../components/WatchButton.jsx';
 import { visitSince, etDate } from '../lib/visit.js';
@@ -27,6 +27,10 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
   const since = useMemo(() => visitSince(user?.id), [user?.id]);
   const { data: d, error, reload } = useApi(user?.id ? `/api/feed?days=${HOME_DAYS}${h ? `&h=${encodeURIComponent(h)}` : ''}` : null);
   const { data: news } = useApi('/public/blog?page=1&limit=4');
+  // This week's market (featured buy, the Buys/Sells/Congress list) is the
+  // same for everyone, so it comes from the public, edge-cached copy: the
+  // right column shows up fast even when your own feed is slow.
+  const { data: market } = useApi('/public/insider-buying');
   useEffect(() => { document.title = 'Home · Seli'; }, []);
   const watchKey = `${watchlist.tickers.join(',')}|${watchlist.insiders.join(',')}`;
   // Re-pull "yours" when the watchlist changes (e.g. after a Watch click).
@@ -53,18 +57,12 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
           {error && !d && <div style={{ marginTop: 24 }}><ErrorNote message={error} onRetry={reload} /></div>}
           {!d && !error && <div style={{ marginTop: 28 }}><Card><Skeleton lines={5} /></Card></div>}
           {d && <Yours d={d} watchlist={watchlist} since={since} />}
-          {d && (d.featured || d.leader) && (
-            <div className="hx-duo">
-              {d.featured && <FeaturedTile c={d.featured} watchlist={watchlist} />}
-              {d.leader && <LeaderTile l={d.leader} />}
-            </div>
-          )}
         </section>
         <aside className="hx__rail" aria-label="This week on Seli">
-          {d ? <WeekFeed d={d} /> : <Skeleton lines={8} />}
-          <div className="hx-rail__sep">
-            <NewsRail posts={news ? news.posts || [] : null} limit={3} title="From the newswire" compact />
-          </div>
+          {market?.featured ? <TopBuyTile c={market.featured} watchlist={watchlist} /> : !market && <Skeleton lines={6} />}
+          {market && <WeekFeed d={market} skip={market.featured?.ticker} />}
+          {d?.leader && <LeaderTile l={d.leader} />}
+          <NewsRail posts={news ? news.posts || [] : null} limit={3} title="From the newswire" skipSlug={news?.posts?.[0]?.slug} />
         </aside>
       </div>
     </div>
@@ -89,9 +87,10 @@ function visibleYours(raw, watchlist) {
 }
 
 // Right rail: this week across the market, one list at a time.
-function WeekFeed({ d }) {
+// skip: a ticker already shown above it (the featured buy), left out of Buys.
+function WeekFeed({ d, skip = null }) {
   const [tab, setTab] = useState('buys');
-  const buys = [d.featured, ...(d.more || [])].filter(Boolean);
+  const buys = [d.featured, ...(d.more || [])].filter(c => c && c.ticker !== skip);
   const rows = tab === 'buys'
     ? buys.slice(0, 7).map(c => ({ key: c.ticker, ticker: c.ticker, who: <><InsiderLink raw={c.buyers[0].raw}>{c.buyers[0].name}</InsiderLink>{c.n_insiders > 1 ? ` + ${c.n_insiders - 1}` : ''}</>, sub: c.facts?.[0]?.label || c.company, amt: money(c.total), tone: 'sx-up' }))
     : tab === 'sells'
@@ -191,11 +190,8 @@ export function MarketSections({ d, watchlist, signedIn = false, onHome = false 
   );
 }
 
-const YOURS_PREVIEW = 8;
-const QUIET_PREVIEW = 16;
 
 function Yours({ d, watchlist, since }) {
-  const [expanded, setExpanded] = useState(false);
   const y = visibleYours(d.yours, watchlist);
   const raw = y;
   if (!y.watching && !y.holdings) {
@@ -232,13 +228,6 @@ function Yours({ d, watchlist, since }) {
   const quietStocks = y.stocks.filter(s => !s.active);
   const quietPeople = y.people.filter(p => !p.recent.length);
   const activeTotal = activeAll.length + activePeopleAll.length;
-  let budget = expanded ? Infinity : YOURS_PREVIEW;
-  const take = arr => { const out = arr.slice(0, Math.max(0, budget)); budget -= out.length; return out; };
-  const active = take(activeAll);
-  const activePeople = take(activePeopleAll);
-  const hidden = activeTotal - active.length - activePeople.length;
-  const quietCount = quietStocks.length + quietPeople.length;
-  const quietShown = [...quietStocks.map(s => ({ kind: 'stock', s })), ...quietPeople.map(p => ({ kind: 'person', p }))].slice(0, QUIET_PREVIEW);
 
   const StockTile = ({ s }) => {
     const b = s.recent_buys || {}, sl = s.recent_sells || {};
@@ -260,6 +249,7 @@ function Yours({ d, watchlist, since }) {
           </span>
         </div>
         <div className="hx-tile__co">{s.company}</div>
+        {lines[0] && <p className="hx-tile__line">{lines[0]}</p>}
         <div className="hx-tile__foot">
           {congressOnly ? (<>
             {cg.buys > 0 && <span className="hx-tile__amt sx-up">+{range(cg.buy_range)}</span>}
@@ -288,6 +278,7 @@ function Yours({ d, watchlist, since }) {
           </span>
         </div>
         <div className="hx-tile__co">{t ? `${t.ticker} · ${ago(t.date)}` : (p.role ? roleText(p.role) : 'Person you follow')}</div>
+        {p.role && <p className="hx-tile__line">{roleText(p.role)}{p.recent.length > 1 ? `, ${plural(p.recent.length, 'trade')} this week` : ''}</p>}
         <div className="hx-tile__foot">
           {t && <span className={`hx-tile__amt ${side === 'buy' ? 'sx-up' : 'sx-down'}`}>{side === 'buy' ? '+' : '−'}{t.congress ? congressRange(t.value) : money(t.value)}</span>}
           <span className="hx-tile__meta">{plural(p.recent.length, 'trade')}</span>
@@ -305,21 +296,66 @@ function Yours({ d, watchlist, since }) {
         </span>
       </div>
       {activeTotal > 0 ? (
-        <ScrollRow label="Your watchlist this week" className="hx-tiles">
+        <div role="list" className="hx-tiles hx-tiles--grid" aria-label="Active this week">
           {activeAll.map(s => <StockTile key={s.ticker} s={s} />)}
           {activePeopleAll.map(p => <PersonTile key={p.raw} p={p} />)}
-        </ScrollRow>
+        </div>
       ) : <p className="sx-muted">Nothing new in the last {days} days. Quiet is normal: most stocks see a few insider trades a year.</p>}
-      {quietCount > 0 && (
-        <p className="hx-quiet">
-          {activeTotal ? 'Quiet this week:' : 'Watching:'}
-          {quietShown.map(q => q.kind === 'stock'
-            ? <StockLink key={'s' + q.s.ticker} ticker={q.s.ticker} />
-            : <InsiderLink key={'p' + q.p.raw} raw={q.p.raw}>{q.p.name}</InsiderLink>)}
-          {quietCount > quietShown.length && <> <Link to="/watchlist" className="sx-link">+{quietCount - quietShown.length} more</Link></>}
-        </p>
+      {(quietStocks.length + quietPeople.length) > 0 && (
+        <WatchCloud stocks={quietStocks} people={quietPeople} title={activeTotal ? 'Quiet this week' : 'Watching'} />
       )}
     </>
+  );
+}
+
+// The rest of the watchlist as small tiles, one per stock or person, colored
+// by the last company-insider trade: green bought, red sold, brighter the
+// more recent (30 days, a year), gray if nothing in a year. Hover (or focus)
+// widens a tile to say what happened; a click opens its page.
+const DAY_MS = 864e5;
+function lastTone(last) {
+  if (!last?.date) return 'none';
+  const age = (Date.now() - Date.parse(last.date + 'T12:00:00Z')) / DAY_MS;
+  if (age > 365) return 'none';
+  return `${last.type === 'buy' ? 'buy' : 'sell'}${age <= 30 ? '' : '-old'}`;
+}
+const initialLast = name => {
+  const parts = String(name || '').split(/\s+/).filter(Boolean);
+  return parts.length > 1 ? `${parts[0][0]}. ${parts[parts.length - 1]}` : name;
+};
+function WatchCloud({ stocks, people, title }) {
+  const items = [
+    ...stocks.map(s => ({ key: `s:${s.ticker}`, label: s.ticker, mono: true, path: stockPath(s.ticker), last: s.last_trade,
+      who: s.last_trade ? `${roleText(s.last_trade.role) || s.last_trade.name}` : '', full: s.company })),
+    ...people.map(p => ({ key: `p:${p.raw}`, label: initialLast(p.name), path: insiderPath(p.raw), last: p.last ? { ...p.last } : null,
+      who: p.last?.ticker || '', full: p.name })),
+  ];
+  return (
+    <div className="hx-cloud">
+      <div className="hx-cloud__head">
+        <span className="hx-cloud__title">{title}</span>
+        <span className="hx-cloud__key" aria-hidden="true">
+          <span><i className="hx-dot hx-dot--buy" />bought</span><span><i className="hx-dot hx-dot--sell" />sold</span><span><i className="hx-dot hx-dot--none" />nothing in a year</span>
+        </span>
+      </div>
+      <ul className="hx-cloud__list">
+        {items.map(it => {
+          const tone = lastTone(it.last);
+          const what = it.last && tone !== 'none'
+            ? `${it.last.type === 'buy' ? 'Bought' : 'Sold'} ${money(it.last.value)}${it.who ? ` · ${it.who}` : ''} · ${ago(it.last.date)}`
+            : 'No insider trades in a year';
+          return (
+            <li key={it.key}>
+              <a href={it.path} className={`hx-chip2 hx-chip2--${tone}`} title={`${it.full}: ${what}`}
+                onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(it.path); }}>
+                <span className={`hx-chip2__label${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
+                <span className="hx-chip2__more">{what}</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -422,29 +458,6 @@ function ClusterRow({ c }) {
   );
 }
 
-
-// Home's short version of the featured filing: who, how much, a couple of
-// tags, and a link. The full write-up lives on the stock page.
-function FeaturedTile({ c, watchlist }) {
-  const top = c.buyers[0];
-  return (
-    <section className="hx-mini">
-      <div className="hx-mini__label">Featured filing</div>
-      <div className="hx-mini__head">
-        <StockLink ticker={c.ticker} />
-        <span className="hx-mini__co">{c.company}</span>
-        <WatchButton watchlist={watchlist} kind="stock" id={c.ticker} compact />
-      </div>
-      <div className="hx-mini__big sx-up">{money(c.total)}</div>
-      <div className="hx-mini__sub">
-        {c.n_insiders > 1 ? `${c.n_insiders} insiders bought, led by ` : 'Bought by '}
-        <InsiderLink raw={top.raw}>{top.name}</InsiderLink>
-      </div>
-      {c.facts.length > 0 && <div className="hx-mini__tags">{c.facts.slice(0, 2).map(f => <Chip key={f.label} tone={f.tone}>{f.label}</Chip>)}</div>}
-      <Link to={stockPath(c.ticker)} className="sx-link hx-mini__link">See the filing <Icon name="arrow" size={12} /></Link>
-    </section>
-  );
-}
 
 function LeaderTile({ l }) {
   const pts = Math.round(l.excess);

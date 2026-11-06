@@ -50,9 +50,14 @@ function Strength({ score }) {
 // own columns, so they're left out here; rarer reads (first buy, reversal)
 // come before who was buying. The rest are on the stock page.
 const SHOW_WHY = 2;
+// 3+ people trading together reads as "Cluster", the same bar the blog uses
+// (BUY_CLUSTER_N in db/blog_generate.py). It leads, since it's the strongest
+// read; two people are left to the Insiders column.
+const CLUSTER_N = 3;
 function topWhy(r) {
   const why = r.why.filter(w => !/^\d+ insiders (buying|selling)$/.test(w.label) && w.tone !== 'neutral');
-  const rank = w => (w.tone === 'accent' || w.tone === 'rev' ? 0 : 1);
+  const rank = w => (w.cluster ? -1 : w.tone === 'accent' || w.tone === 'rev' ? 0 : 1);
+  if (r.n >= CLUSTER_N) why.push({ label: 'Cluster', tone: r.side === 'sell' ? 'sell' : 'buy', cluster: true, tip: `${r.n} insiders ${r.side === 'sell' ? 'sold' : 'bought'} within 2 weeks of each other` });
   return why.slice().sort((a, b) => rank(a) - rank(b));
 }
 function Why({ r, locked, signUp }) {
@@ -61,7 +66,7 @@ function Why({ r, locked, signUp }) {
   const rest = why.slice(SHOW_WHY).map(w => w.label).join(', ');
   return (
     <span className="hx-sigs hx-sigs--row">
-      {why.slice(0, SHOW_WHY).map(w => <span key={w.label} className={`hx-sig hx-sig--${w.tone === 'rev' ? 'rev' : w.tone === 'accent' ? 'accent' : w.tone === 'sell' ? 'sell' : 'buy'}`}>{w.label}</span>)}
+      {why.slice(0, SHOW_WHY).map(w => <span key={w.label} title={w.tip} className={`hx-sig hx-sig--${w.tone === 'rev' ? 'rev' : w.tone === 'accent' ? 'accent' : w.tone === 'sell' ? 'sell' : 'buy'}${w.cluster ? ' hx-sig--cluster' : ''}`}>{w.label}</span>)}
       {rest && <span className="hx-sig hx-sig--more" title={rest}>+{why.length - SHOW_WHY}</span>}
     </span>
   );
