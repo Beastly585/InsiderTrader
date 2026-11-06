@@ -225,67 +225,13 @@ function Yours({ d, watchlist, since }) {
   // server sorts). Everything quiet shares one line under the tiles.
   const activeAll = y.stocks.filter(s => s.active);
   const activePeopleAll = y.people.filter(p => p.recent.length);
-  const quietStocks = y.stocks.filter(s => !s.active);
-  const quietPeople = y.people.filter(p => !p.recent.length);
   const activeTotal = activeAll.length + activePeopleAll.length;
 
-  const StockTile = ({ s }) => {
-    const b = s.recent_buys || {}, sl = s.recent_sells || {};
-    const cg = s.congress || { buys: 0, sells: 0, buy_range: [0, 0], sell_range: [0, 0] };
-    const congressOnly = !b.n && !sl.n && s.recent_congress > 0;
-    // Active only because a member of Congress traded it: lead with that line.
-    const lines = congressOnly ? [...s.lines.filter(l => l.startsWith('Congress:')), ...s.lines.filter(l => !l.startsWith('Congress:'))] : s.lines;
-    const side = congressOnly ? 'cg' : b.n && b.v >= (sl.v || 0) ? 'buy' : sl.n ? 'sell' : 'buy';
-    const tag = congressOnly ? 'Congress' : side === 'buy' ? 'Buying' : 'Selling';
-    return (
-      <div role="listitem" className={`hx-tile hx-tile--${side}`} title={lines[0] || undefined}>
-        <div className="hx-tile__top">
-          <Link to={stockPath(s.ticker)} className="hx-tile__tk">{s.ticker}</Link>
-          <span className="hx-tile__tags">
-            <span className={`hx-tag hx-tag--${side}`}>{tag}</span>
-            {isNewStock(s) && <span className="hx-tag hx-tag--new">New</span>}
-            {s.reversal && <span className="hx-tag hx-tag--rev" title="Someone at the company bought after 2+ sales and no buys of this stock in the previous 2 years">Reversal</span>}
-            {s.held && <span className="hx-tag" title="You hold this">Held</span>}
-          </span>
-        </div>
-        <div className="hx-tile__co">{s.company}</div>
-        {lines[0] && <p className="hx-tile__line">{lines[0]}</p>}
-        <div className="hx-tile__foot">
-          {congressOnly ? (<>
-            {cg.buys > 0 && <span className="hx-tile__amt sx-up">+{range(cg.buy_range)}</span>}
-            {cg.sells > 0 && <span className="hx-tile__amt sx-down">−{range(cg.sell_range)}</span>}
-          </>) : (<>
-            {b.n > 0 && <span className="hx-tile__amt sx-up">+{money(b.v)}</span>}
-            {sl.n > 0 && <span className="hx-tile__amt sx-down">−{money(sl.v)}</span>}
-          </>)}
-          <span className="hx-tile__meta">{congressOnly
-            ? [cg.buys && plural(cg.buys, 'buy'), cg.sells && plural(cg.sells, 'sale')].filter(Boolean).join(' · ')
-            : [b.n && plural(b.n, 'buy'), sl.n && plural(sl.n, 'sale')].filter(Boolean).join(' · ')}</span>
-        </div>
-      </div>
-    );
-  };
-  const PersonTile = ({ p }) => {
-    const t = p.recent[0];
-    const side = t?.type === 'buy' ? 'buy' : 'sell';
-    return (
-      <div role="listitem" className={`hx-tile hx-tile--${side}`} title={p.role ? roleText(p.role) : undefined}>
-        <div className="hx-tile__top">
-          <InsiderLink raw={p.raw} className="hx-tile__name">{p.name}</InsiderLink>
-          <span className="hx-tile__tags">
-            <span className={`hx-tag hx-tag--${side}`}>{side === 'buy' ? 'Bought' : 'Sold'}</span>
-            {isNewPerson(p) && <span className="hx-tag hx-tag--new">New</span>}
-          </span>
-        </div>
-        <div className="hx-tile__co">{t ? `${t.ticker} · ${ago(t.date)}` : (p.role ? roleText(p.role) : 'Person you follow')}</div>
-        {p.role && <p className="hx-tile__line">{roleText(p.role)}{p.recent.length > 1 ? `, ${plural(p.recent.length, 'trade')} this week` : ''}</p>}
-        <div className="hx-tile__foot">
-          {t && <span className={`hx-tile__amt ${side === 'buy' ? 'sx-up' : 'sx-down'}`}>{side === 'buy' ? '+' : '−'}{t.congress ? congressRange(t.value) : money(t.value)}</span>}
-          <span className="hx-tile__meta">{plural(p.recent.length, 'trade')}</span>
-        </div>
-      </div>
-    );
-  };
+  // One cloud for the whole watchlist (see WatchSphere below).
+  const items = [
+    ...y.stocks.map(s => stockItem(s, isNewStock(s))),
+    ...y.people.map(p => personItem(p, isNewPerson(p))),
+  ];
   return (
     <>
       <div className="hx-sechead">
@@ -295,66 +241,110 @@ function Yours({ d, watchlist, since }) {
           <Link to="/watchlist" className="sx-link">Edit watchlist ({y.watching})</Link>
         </span>
       </div>
-      {activeTotal > 0 ? (
-        <div role="list" className="hx-tiles hx-tiles--grid" aria-label="Active this week">
-          {activeAll.map(s => <StockTile key={s.ticker} s={s} />)}
-          {activePeopleAll.map(p => <PersonTile key={p.raw} p={p} />)}
-        </div>
-      ) : <p className="sx-muted">Nothing new in the last {days} days. Quiet is normal: most stocks see a few insider trades a year.</p>}
-      {(quietStocks.length + quietPeople.length) > 0 && (
-        <WatchCloud stocks={quietStocks} people={quietPeople} title={activeTotal ? 'Quiet this week' : 'Watching'} />
-      )}
+      {activeTotal === 0 && <p className="sx-muted hx-sphere__quiet">Nothing new in the last {days} days. Quiet is normal: most stocks see a few insider trades a year.</p>}
+      <WatchSphere items={items} />
     </>
   );
 }
 
-// The rest of the watchlist as small tiles, one per stock or person, colored
-// by the last company-insider trade: green bought, red sold, brighter the
-// more recent (30 days, a year), gray if nothing in a year. Hover (or focus)
-// widens a tile to say what happened; a click opens its page.
+// ── The watchlist as a word cloud ────────────────────────────────────────────
+// Every stock and person you watch is one tile. Size says how recent the last
+// insider trade was (this week, 30 days, a year, nothing in a year), color
+// says which way (green bought, red sold, blue Congress, gray nothing in a
+// year). The biggest sit in the middle and smaller ones fan out to the edges:
+// the list is ordered center-out and wrapped centered, which gives the round
+// word-cloud shape with plain CSS. Hover or focus lifts a tile and shows a
+// card with what happened; a click opens its page.
 const DAY_MS = 864e5;
-function lastTone(last) {
-  if (!last?.date) return 'none';
-  const age = (Date.now() - Date.parse(last.date + 'T12:00:00Z')) / DAY_MS;
-  if (age > 365) return 'none';
-  return `${last.type === 'buy' ? 'buy' : 'sell'}${age <= 30 ? '' : '-old'}`;
-}
+const ageDays = d => (d ? (Date.now() - Date.parse(d + 'T12:00:00Z')) / DAY_MS : Infinity);
 const initialLast = name => {
   const parts = String(name || '').split(/\s+/).filter(Boolean);
   return parts.length > 1 ? `${parts[0][0]}. ${parts[parts.length - 1]}` : name;
 };
-function WatchCloud({ stocks, people, title }) {
-  const items = [
-    ...stocks.map(s => ({ key: `s:${s.ticker}`, label: s.ticker, mono: true, path: stockPath(s.ticker), last: s.last_trade,
-      who: s.last_trade ? `${roleText(s.last_trade.role) || s.last_trade.name}` : '', full: s.company })),
-    ...people.map(p => ({ key: `p:${p.raw}`, label: initialLast(p.name), path: insiderPath(p.raw), last: p.last ? { ...p.last } : null,
-      who: p.last?.ticker || '', full: p.name })),
-  ];
+// 3 this week, 2 within 30 days, 1 within a year, 0 nothing in a year.
+const tierOfAge = (active, date) => (active ? 3 : ageDays(date) <= 30 ? 2 : ageDays(date) <= 365 ? 1 : 0);
+
+function stockItem(s, isNew) {
+  const b = s.recent_buys || {}, sl = s.recent_sells || {};
+  const congressOnly = s.active && !b.n && !sl.n && s.recent_congress > 0;
+  const lt = s.last_trade;
+  const tier = tierOfAge(s.active, lt?.date);
+  const side = s.active ? (congressOnly ? 'cg' : b.n && b.v >= (sl.v || 0) ? 'buy' : 'sell') : tier ? (lt.type === 'buy' ? 'buy' : 'sell') : 'none';
+  const cg = s.congress;
+  const amt = !s.active ? null
+    : congressOnly ? (cg?.buys ? `+${range(cg.buy_range)}` : `−${range(cg.sell_range)}`)
+      : side === 'buy' ? `+${money(b.v)}` : `−${money(sl.v)}`;
+  const detail = s.active ? (s.lines?.[0] || '')
+    : tier ? `${lt.type === 'buy' ? 'Bought' : 'Sold'} ${money(lt.value)}${lt.role ? ` by the ${roleText(lt.role).toLowerCase()}` : ''}, ${ago(lt.date)}.`
+      : 'No company insider trades in the last year.';
+  const tags = [isNew && 'New', s.reversal && 'Reversal', s.held && 'You hold this', congressOnly && 'Congress'].filter(Boolean);
+  return { key: `s:${s.ticker}`, label: s.ticker, mono: true, title: s.company || s.ticker, path: stockPath(s.ticker), tier, side, amt, detail, tags,
+    weight: (b.v || 0) + (sl.v || 0) + (lt?.value || 0) / 1e3 };
+}
+
+function personItem(p, isNew) {
+  const t = p.recent[0];
+  const last = t ? { type: t.type, date: t.date, value: t.value, ticker: t.ticker, congress: t.congress } : p.last;
+  const tier = tierOfAge(!!t, last?.date);
+  const side = tier ? (last.type === 'buy' ? 'buy' : 'sell') : 'none';
+  const val = v => (last?.congress ? congressRange(v) : money(v));
+  const amt = t ? `${side === 'buy' ? '+' : '−'}${val(t.value)}` : null;
+  const detail = tier ? `${last.type === 'buy' ? 'Bought' : 'Sold'} ${val(last.value)} of ${last.ticker}, ${ago(last.date)}.${p.recent.length > 1 ? ` ${plural(p.recent.length, 'trade')} this week.` : ''}`
+    : 'No open-market trades in the last year.';
+  return { key: `p:${p.raw}`, label: initialLast(p.name), title: `${p.name}${p.role ? ` · ${roleText(p.role)}` : ''}`, path: insiderPath(p.raw), tier, side, amt, detail,
+    tags: [isNew && 'New'].filter(Boolean), weight: (t?.value || 0) + (p.last?.value || 0) / 1e3 };
+}
+
+// Biggest first, laid out from the middle outwards: 1st in the center, 2nd
+// just before it, 3rd just after, and so on.
+const byWeight = (a, b) => (b.tier - a.tier) || (b.weight - a.weight) || a.label.localeCompare(b.label);
+function centerOut(list) {
+  const out = [];
+  list.slice().sort(byWeight).forEach((it, i) => (i % 2 ? out.unshift(it) : out.push(it)));
+  return out;
+}
+// Three bands so the shape holds at any size: this month's activity across
+// the middle, the quieter rest split above and below it.
+function bands(items) {
+  const mid = items.filter(it => it.tier >= 2);
+  const rest = items.filter(it => it.tier < 2).sort(byWeight);
+  const top = rest.filter((_, i) => i % 2), bottom = rest.filter((_, i) => !(i % 2));
+  return [top, mid, bottom].filter(b => b.length).map(centerOut);
+}
+
+function WatchSphere({ items }) {
+  if (!items.length) return null;
+  const open = (e, path) => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(path); };
   return (
-    <div className="hx-cloud">
-      <div className="hx-cloud__head">
-        <span className="hx-cloud__title">{title}</span>
-        <span className="hx-cloud__key" aria-hidden="true">
-          <span><i className="hx-dot hx-dot--buy" />bought</span><span><i className="hx-dot hx-dot--sell" />sold</span><span><i className="hx-dot hx-dot--none" />nothing in a year</span>
-        </span>
+    <div className="hx-sphere">
+      <div className="hx-sphere__cloud" role="list" aria-label="Everything you watch, most recent activity in the middle">
+        {bands(items).map((band, bi) => (
+          <div key={bi} className="hx-sphere__band" role="presentation">
+            {band.map(it => (
+              <div key={it.key} role="listitem" className={`hx-wt hx-wt--t${it.tier} hx-wt--${it.side}`}>
+                <a href={it.path} className="hx-wt__tile" onClick={e => open(e, it.path)} aria-label={`${it.title}. ${it.detail}`}>
+                  <span className={`hx-wt__label${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
+                  {it.amt && it.tier === 3 && <span className="hx-wt__amt sx-mono">{it.amt}</span>}
+                  {it.tags.includes('New') && <span className="hx-wt__new" aria-hidden="true" />}
+                </a>
+                <span className="hx-wt__card" role="presentation">
+                  <span className="hx-wt__card-title">{it.title}</span>
+                  {it.tags.length > 0 && <span className="hx-wt__tags">{it.tags.map(t => <span key={t} className="hx-wt__tag">{t}</span>)}</span>}
+                  <span className="hx-wt__detail">{it.detail}</span>
+                  <span className="hx-wt__go">Open <Icon name="arrow" size={11} /></span>
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
       </div>
-      <ul className="hx-cloud__list">
-        {items.map(it => {
-          const tone = lastTone(it.last);
-          const what = it.last && tone !== 'none'
-            ? `${it.last.type === 'buy' ? 'Bought' : 'Sold'} ${money(it.last.value)}${it.who ? ` · ${it.who}` : ''} · ${ago(it.last.date)}`
-            : 'No insider trades in a year';
-          return (
-            <li key={it.key}>
-              <a href={it.path} className={`hx-chip2 hx-chip2--${tone}`} title={`${it.full}: ${what}`}
-                onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(it.path); }}>
-                <span className={`hx-chip2__label${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
-                <span className="hx-chip2__more">{what}</span>
-              </a>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="hx-sphere__key" aria-hidden="true">
+        <span><i className="hx-dot hx-dot--buy" />bought</span>
+        <span><i className="hx-dot hx-dot--sell" />sold</span>
+        <span><i className="hx-dot hx-dot--cg" />Congress</span>
+        <span><i className="hx-dot hx-dot--none" />nothing in a year</span>
+        <span className="hx-sphere__size">Bigger = more recent</span>
+      </div>
     </div>
   );
 }
