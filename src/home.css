@@ -516,7 +516,12 @@
 
 .hx-sigtable td { vertical-align: middle; }
 .hx-sigrow { cursor: pointer; }
-.hx-sigrow--open > td { background: var(--surface-2); border-bottom-color: transparent; }
+.hx-sigrow:hover > td { background: var(--surface-2); }
+.hx-sigrow__go { display: inline-flex; vertical-align: middle; margin-left: 4px; color: var(--text-3); transform: rotate(-90deg); }
+.hx-sigrow:hover .hx-sigrow__go { color: var(--text); }
+.hx-sig--more { background: transparent; color: var(--text-3); padding-left: 2px; padding-right: 2px; }
+.hx-sigtable .hx-sigs--row { flex-wrap: nowrap; }
+.hx-sigcard { cursor: pointer; }
 .hx-sigppl { display: flex; flex-direction: column; gap: 3px; }
 .hx-sigppl__n { font-weight: 600; font-size: 13px; }
 .hx-sigppl__who { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; white-space: nowrap; }

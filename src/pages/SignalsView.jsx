@@ -5,17 +5,17 @@
 //   Buying:  2+ people bought, someone's first buy in 2+ years, or a reversal
 //   Selling: a reversal sale (not a planned sale)
 // Strongest first, using the same score that picks the home page's featured
-// buys. Click a row to see the trades behind it.
+// buys. Rows stay short (two reasons at most) and lead to the stock page,
+// where the full story is.
 //
 // Signed out it reads /public/signals: the top 10, with what's straight from
 // the filings (stock, people, amounts, trades) but not why each one is a
 // signal or how strong it is.
 import React, { useEffect, useState } from 'react';
 import { useApi } from '../lib/api.js';
-import { StockLink, InsiderLink } from '../lib/nav.jsx';
-import { shortDate, money, plural, shares as fmtShares, price as fmtPrice } from '../lib/text.js';
-import { secFilingUrl } from '../edgar.js';
-import { Card, Skeleton, ErrorNote, Icon, RoleTag, FollowButton } from '../components/ui.jsx';
+import { StockLink, InsiderLink, go, stockPath } from '../lib/nav.jsx';
+import { shortDate, money, plural } from '../lib/text.js';
+import { Card, Skeleton, ErrorNote, Icon, FollowButton } from '../components/ui.jsx';
 
 const ROWS = 50;
 const KINDS = [
@@ -24,10 +24,6 @@ const KINDS = [
   { value: 'first', label: 'First buys' },
   { value: 'rev', label: 'Reversals' },
 ];
-const REV_TIP = {
-  buy: 'Reversal: bought after 2+ sales and no buys of this stock in the previous 2 years',
-  sell: 'Reversal: sold (not a planned sale) after 2+ buys and no sales of this stock in the previous 2 years',
-};
 const STRENGTH_TIP = 'How the signal ranks against others, out of 100: how many insiders, their roles, how much they bought, how much their stake grew, and first-time buying.';
 
 const dateRange = r => (r.start === r.end ? shortDate(r.end) : `${shortDate(r.start)} to ${shortDate(r.end)}`);
@@ -44,9 +40,25 @@ function Strength({ score }) {
   );
 }
 
+// The two reasons that matter most. Head counts and stake changes have their
+// own columns, so they're left out here; rarer reads (first buy, reversal)
+// come before who was buying. The rest are on the stock page.
+const SHOW_WHY = 2;
+function topWhy(r) {
+  const why = r.why.filter(w => !/^\d+ insiders (buying|selling)$/.test(w.label) && w.tone !== 'neutral');
+  const rank = w => (w.tone === 'accent' || w.tone === 'rev' ? 0 : 1);
+  return why.slice().sort((a, b) => rank(a) - rank(b));
+}
 function Why({ r, locked, signUp }) {
   if (locked) return <button type="button" className="hx-sig hx-sig--lock" onClick={signUp} title="Why it's a signal, and how strong. Free with an account."><Icon name="lock" size={10} /> Why it's a signal</button>;
-  return <span className="hx-sigs hx-sigs--row">{r.why.map(w => <span key={w.label} className={`hx-sig hx-sig--${w.tone === 'rev' ? 'rev' : w.tone === 'accent' ? 'accent' : w.tone === 'sell' ? 'sell' : 'buy'}`}>{w.label}</span>)}</span>;
+  const why = topWhy(r);
+  const rest = why.slice(SHOW_WHY).map(w => w.label).join(', ');
+  return (
+    <span className="hx-sigs hx-sigs--row">
+      {why.slice(0, SHOW_WHY).map(w => <span key={w.label} className={`hx-sig hx-sig--${w.tone === 'rev' ? 'rev' : w.tone === 'accent' ? 'accent' : w.tone === 'sell' ? 'sell' : 'buy'}`}>{w.label}</span>)}
+      {rest && <span className="hx-sig hx-sig--more" title={rest}>+{why.length - SHOW_WHY}</span>}
+    </span>
+  );
 }
 
 function People({ r }) {
@@ -55,40 +67,17 @@ function People({ r }) {
     <span className="hx-sigppl">
       <span className="hx-sigppl__n">{plural(r.n, r.side === 'buy' ? 'insider' : 'seller')}</span>
       <span className="hx-sigppl__who">
-        <InsiderLink raw={top.raw}>{top.name}</InsiderLink><RoleTag role={top.role} />
-        {r.people.length > 1 && <span className="sx-muted"> +{r.people.length - 1}</span>}
+        <InsiderLink raw={top.raw} title={top.role}>{top.name}</InsiderLink>
+        {r.people.length > 1 && <span className="sx-muted" title={r.people.slice(1).map(x => `${x.name} (${x.role})`).join(', ')}>+{r.people.length - 1}</span>}
       </span>
     </span>
   );
 }
 
-// The trades behind one signal.
-function Trades({ r, locked }) {
-  return (
-    <ul className="hx-sigtrades">
-      {r.trades.map((t, i) => {
-        const url = secFilingUrl(t.acc, t.cik);
-        const tags = locked ? [] : [t.brk && ['accent', t.brk, "This insider hadn't bought this stock on the open market in that long"], t.rev && ['rev', 'Reversal', REV_TIP[t.rev]], t.routine && ['', 'Planned', 'Filed under a pre-scheduled 10b5-1 trading plan']].filter(Boolean);
-        return (
-          <li key={i} className="hx-sigtrade">
-            <span className="hx-sigtrade__date">{shortDate(t.date)}</span>
-            <span className="hx-sigtrade__who"><InsiderLink raw={t.raw}>{t.name}</InsiderLink><RoleTag role={t.role} /></span>
-            <span className="hx-sigtrade__tags">{tags.map(([tone, text, tip]) => <span key={text} className={`hx-sig${tone ? ` hx-sig--${tone}` : ''}`} title={tip}>{text}</span>)}</span>
-            <span className="hx-sigtrade__detail sx-mono">{t.shares ? `${fmtShares(t.shares)} @ ${fmtPrice(t.price)}` : ''}</span>
-            <span className={`hx-sigtrade__val sx-mono ${r.side === 'buy' ? 'sx-up' : 'sx-down'}`}>{money(t.value)}</span>
-            <span className="hx-sigtrade__sec">{url && <a href={url} target="_blank" rel="noreferrer" className="sx-sec" title="Open the SEC filing" aria-label="Open the SEC filing"><Icon name="external" size={12} /></a>}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 export default function SignalsView({ f, set, signedIn, watchlist, narrow, signUp }) {
-  const [open, setOpen] = useState(null);
   const [screen, setScreen] = useState(0);
   const filterKey = JSON.stringify({ ...f, page: 0 });
-  useEffect(() => { setScreen(0); setOpen(null); }, [filterKey]);
+  useEffect(() => { setScreen(0); }, [filterKey]);
 
   const params = new URLSearchParams({ days: String(f.days), side: f.side === 'sell' ? 'sell' : 'buy' });
   if (signedIn) {
@@ -121,7 +110,8 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
       </th>
     );
   };
-  const toggle = id => setOpen(o => (o === id ? null : id));
+  // A row opens its stock page, unless the click was on a link or button in it.
+  const open = (e, r) => { if (e.target.closest('a,button')) return; if (e.metaKey || e.ctrlKey) { window.open(stockPath(r.ticker), '_blank'); return; } go(stockPath(r.ticker)); };
 
   return (
     <Card pad={false}>
@@ -166,8 +156,8 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
       {d && rows.length > 0 && (narrow ? (
         <ul className={`hx-sigcards${loading ? ' sx-dim' : ''}`}>
           {rows.map(r => (
-            <li key={r.id} className={`hx-sigcard${open === r.id ? ' hx-sigcard--open' : ''}`}>
-              <div className="hx-sigcard__top" role="button" tabIndex={0} aria-expanded={open === r.id} onClick={() => toggle(r.id)} onKeyDown={e => { if (e.key === 'Enter') toggle(r.id); }}>
+            <li key={r.id} className="hx-sigcard" onClick={e => open(e, r)}>
+              <div className="hx-sigcard__top">
                 <span className="hx-sigcard__stock"><StockLink ticker={r.ticker} /><span className="hx-trades__co">{r.company}</span></span>
                 {!locked && <Strength score={r.score} />}
               </div>
@@ -175,13 +165,9 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
               <div className="hx-sigcard__facts">
                 <span>{plural(r.n, side === 'buy' ? 'insider' : 'seller')}</span>
                 <span className={`sx-mono sx-strong ${side === 'buy' ? 'sx-up' : 'sx-down'}`}>{money(r.total)}</span>
-                <span className="sx-muted">{dateRange(r)}</span>
-                <span className="hx-sigcard__end">
-                  <FollowButton watchlist={watchlist} kind="stock" id={r.ticker} />
-                  <button type="button" className="hx-sigcard__more" onClick={() => toggle(r.id)} aria-label={open === r.id ? 'Hide trades' : 'Show trades'}><Icon name="chevron" size={14} /></button>
-                </span>
+                <span className="sx-muted" title={dateRange(r)}>{shortDate(r.end)}</span>
+                <span className="hx-sigcard__end"><FollowButton watchlist={watchlist} kind="stock" id={r.ticker} /><span className="hx-sigrow__go" aria-hidden="true"><Icon name="chevron" size={14} /></span></span>
               </div>
-              {open === r.id && <Trades r={r} locked={locked} />}
             </li>
           ))}
         </ul>
@@ -195,31 +181,26 @@ export default function SignalsView({ f, set, signedIn, watchlist, narrow, signU
                 <th>Why it's a signal</th>
                 <Th k="total" right>{side === 'buy' ? 'Bought' : 'Sold'}</Th>
                 <th className="sx-r">Stake</th>
-                <Th k="date">Dates</Th>
+                <Th k="date">Latest</Th>
                 {!locked && <Th k="strength">Strength</Th>}
-                <th aria-label="Follow and details" />
+                <th aria-label="Follow" />
               </tr>
             </thead>
             <tbody>
               {rows.map(r => (
-                <React.Fragment key={r.id}>
-                  <tr className={`hx-sigrow${open === r.id ? ' hx-sigrow--open' : ''}`} onClick={e => { if (!e.target.closest('a,button')) toggle(r.id); }}>
-                    <td className="hx-trades__stock"><StockLink ticker={r.ticker} /><span className="hx-trades__co">{r.company}</span></td>
-                    <td><People r={r} /></td>
-                    <td><Why r={r} locked={locked} signUp={signUp} /></td>
-                    <td className={`sx-r sx-mono sx-strong ${side === 'buy' ? 'sx-up' : 'sx-down'}`}>{money(r.total)}</td>
-                    <td className="sx-r sx-mono">{side === 'buy' ? stakeText(r.max_pct) : '—'}</td>
-                    <td className="sx-nowrap">{dateRange(r)}</td>
-                    {!locked && <td><Strength score={r.score} /></td>}
-                    <td className="sx-r sx-nowrap">
-                      <FollowButton watchlist={watchlist} kind="stock" id={r.ticker} />
-                      <button type="button" className={`hx-sigrow__more${open === r.id ? ' hx-sigrow__more--open' : ''}`} onClick={() => toggle(r.id)} aria-expanded={open === r.id} aria-label={open === r.id ? 'Hide trades' : 'Show trades'}><Icon name="chevron" size={14} /></button>
-                    </td>
-                  </tr>
-                  {open === r.id && (
-                    <tr className="hx-sigrow__detail"><td colSpan={locked ? 7 : 8}><Trades r={r} locked={locked} /></td></tr>
-                  )}
-                </React.Fragment>
+                <tr key={r.id} className="hx-sigrow" onClick={e => open(e, r)} title={`Open ${r.ticker}`}>
+                  <td className="hx-trades__stock"><StockLink ticker={r.ticker} /><span className="hx-trades__co">{r.company}</span></td>
+                  <td><People r={r} /></td>
+                  <td><Why r={r} locked={locked} signUp={signUp} /></td>
+                  <td className={`sx-r sx-mono sx-strong ${side === 'buy' ? 'sx-up' : 'sx-down'}`}>{money(r.total)}</td>
+                  <td className="sx-r sx-mono">{side === 'buy' ? stakeText(r.max_pct) : '—'}</td>
+                  <td className="sx-nowrap" title={dateRange(r)}>{shortDate(r.end)}</td>
+                  {!locked && <td><Strength score={r.score} /></td>}
+                  <td className="sx-r sx-nowrap">
+                    <FollowButton watchlist={watchlist} kind="stock" id={r.ticker} />
+                    <span className="hx-sigrow__go" aria-hidden="true"><Icon name="chevron" size={14} /></span>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
