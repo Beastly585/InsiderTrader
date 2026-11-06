@@ -60,7 +60,6 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
         </section>
         <aside className="hx__rail" aria-label="This week on Seli">
           {market?.featured ? <TopBuyTile c={market.featured} watchlist={watchlist} /> : !market && <Skeleton lines={6} />}
-          {d?.leader && <LeaderTile l={d.leader} />}
           <NewsRail posts={news ? news.posts || [] : null} limit={3} title="From the newswire" skipSlug={news?.posts?.[0]?.slug} />
         </aside>
       </div>

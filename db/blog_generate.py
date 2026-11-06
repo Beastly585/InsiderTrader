@@ -103,6 +103,19 @@ def money_title(v: float) -> str:
     return ek.money(v)
 
 
+def money_slug(v: float) -> str:
+    """The amount as it appears in a post's URL. Kept in the old short style
+    ($1M, $793K) on purpose: ek.money() now always shows one decimal, and
+    changing it here would give posts new URLs and break links to them."""
+    v = abs(float(v or 0))
+    for div, suf in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if v >= div * 0.9995:
+            n = v / div
+            s = f"{n:,.0f}" if n >= 99.95 else f"{n:,.1f}".rstrip("0").rstrip(".")
+            return f"${s}{suf}"
+    return f"${v:,.0f}"
+
+
 def slugify(*parts) -> str:
     s = "-".join(str(p) for p in parts if p)
     s = s.lower().replace("$", "").replace("&", "and")
@@ -522,9 +535,9 @@ def build_post(cur, ticker: str, company_raw: str, direction: str, people: list[
     } for p in people]
 
     if subject:
-        slug = slugify(ticker, subject["name"], role_word(subject["role"]), verb_s, ek.money(subject["value"]), "stock", str(as_of))
+        slug = slugify(ticker, subject["name"], role_word(subject["role"]), verb_s, money_slug(subject["value"]), "stock", str(as_of))
     else:
-        slug = slugify(ticker, f"{n}-insiders", verb, amt, "stock", str(as_of))
+        slug = slugify(ticker, f"{n}-insiders", verb, money_slug(total), "stock", str(as_of))
     insiders = [{"raw": p["raw"], "name": p["name"], "role": p["role"]} for p in people]
     return {
         "slug": slug, "kind": direction, "ticker": ticker, "company": company, "insiders": insiders, "tags": tags,

@@ -121,6 +121,11 @@ async function search(ctx, qRaw) {
 }
 
 // ── Shared: ticker status for a list of tickers ──────────────────────────────
+// Same floor as the Trades page (explore's min of $1,000): sub-$1K trades are
+// mostly odd lots, dividend reinvestment and rounding leftovers, and one
+// shouldn't lead someone's watchlist. Values left blank are kept.
+const MIN_TRADE_SQL = 'NOT (f.value IS NOT NULL AND f.value < 1000)';
+
 async function statusFor(ctx, tickers, windowDays) {
   const { sqlVal } = ctx.deps;
   tickers = [...new Set(tickers)].filter(t => TICKER_RE.test(t));
@@ -137,14 +142,14 @@ async function statusFor(ctx, tickers, windowDays) {
              f.transaction_type, f.value::float AS value, f.pct_owned_change::float AS pct,
              f.accession_number, f.filing_date, COALESCE(f.transaction_date, f.filing_date) AS trade_date
         FROM public.filings f
-       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND f.transaction_type IN ('buy','sell')
+       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND ${MIN_TRADE_SQL} AND f.transaction_type IN ('buy','sell')
          AND f.filing_date <= CURRENT_DATE AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - 380
          AND (f.filing_date > CURRENT_DATE - ${Number(windowDays) + 1} OR ${congressSql})`),
     ctx.db(`
       SELECT DISTINCT ON (f.ticker) f.ticker, f.company_name, f.insider_name, f.insider_title, f.relationship,
              f.value::float AS value, COALESCE(f.transaction_date, f.filing_date) AS trade_date
         FROM public.filings f
-       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND f.transaction_type = 'buy'
+       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND ${MIN_TRADE_SQL} AND f.transaction_type = 'buy'
          AND COALESCE(f.transaction_date, f.filing_date) <= CURRENT_DATE
          AND COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT ILIKE 'CONGRESS%'
        ORDER BY f.ticker, COALESCE(f.transaction_date, f.filing_date) DESC, f.value DESC NULLS LAST`),
@@ -154,7 +159,7 @@ async function statusFor(ctx, tickers, windowDays) {
     ctx.db(`
       SELECT f.ticker, f.transaction_type, COUNT(DISTINCT f.accession_number)::int AS n, COALESCE(SUM(f.value), 0)::float AS v
         FROM public.filings f
-       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND f.transaction_type IN ('buy','sell')
+       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND ${MIN_TRADE_SQL} AND f.transaction_type IN ('buy','sell')
          AND f.filing_date <= CURRENT_DATE AND COALESCE(f.transaction_date, f.filing_date) >= CURRENT_DATE - 365
          AND COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%'
        GROUP BY f.ticker, f.transaction_type`),
@@ -164,7 +169,7 @@ async function statusFor(ctx, tickers, windowDays) {
       SELECT DISTINCT ON (f.ticker) f.ticker, f.insider_name, f.insider_title, f.relationship, f.transaction_type,
              f.value::float AS value, COALESCE(f.transaction_date, f.filing_date) AS trade_date
         FROM public.filings f
-       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND f.transaction_type IN ('buy','sell')
+       WHERE f.ticker = ANY(${arr}) AND f.is_open_market = true AND ${MIN_TRADE_SQL} AND f.transaction_type IN ('buy','sell')
          AND COALESCE(f.transaction_date, f.filing_date) <= CURRENT_DATE
          AND COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT ILIKE 'CONGRESS%'
        ORDER BY f.ticker, COALESCE(f.transaction_date, f.filing_date) DESC, f.value DESC NULLS LAST`),
@@ -469,14 +474,14 @@ async function peopleActivity(ctx, names, days) {
            f.price_per_share::float AS price, f.value::float AS value, f.pct_owned_change::float AS pct,
            f.shares_owned_after::float AS owned_after, f.filing_date, COALESCE(f.transaction_date, f.filing_date) AS trade_date
       FROM public.filings f
-     WHERE f.insider_name = ANY(${sqlList(names, sqlVal)}) AND f.is_open_market = true
+     WHERE f.insider_name = ANY(${sqlList(names, sqlVal)}) AND f.is_open_market = true AND ${MIN_TRADE_SQL}
        AND f.transaction_type IN ('buy','sell') AND f.filing_date > CURRENT_DATE - ${days}
      ORDER BY f.insider_name, f.accession_number, f.ticker, f.transaction_type`),
   ctx.db(`
     SELECT DISTINCT ON (f.insider_name) f.insider_name, f.insider_title, f.relationship, f.transaction_code, f.ticker,
            f.transaction_type, f.value::float AS value, COALESCE(f.transaction_date, f.filing_date) AS trade_date
       FROM public.filings f
-     WHERE f.insider_name = ANY(${sqlList(names, sqlVal)}) AND f.transaction_type IN ('buy','sell') AND f.is_open_market = true
+     WHERE f.insider_name = ANY(${sqlList(names, sqlVal)}) AND f.transaction_type IN ('buy','sell') AND f.is_open_market = true AND ${MIN_TRADE_SQL}
      ORDER BY f.insider_name, COALESCE(f.transaction_date, f.filing_date) DESC`)]);
   const lastBy = Object.fromEntries(last.map(r => [r.insider_name, r]));
   return names.map(n => {
