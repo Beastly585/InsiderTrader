@@ -73,6 +73,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="canonical" href="https://seli.app" />
     <meta name="robots" content="index, follow" />
+    <!-- Signed-in visitors: keep the server-rendered signed-out page (it's
+         for search engines and first visits) hidden, so a reload doesn't
+         flash it before the app knows who you are. Clerk's __client_uat
+         cookie is "0" when signed out and a timestamp when signed in; the
+         app also keeps its own flag (seli_was_signed_in). -->
+    <script>
+      try {
+        var seliIn = document.cookie.split('; ').some(function (c) { return /^__client_uat(_[^=]*)?=/.test(c) && !/=0?$/.test(c); });
+        if (seliIn || localStorage.getItem('seli_was_signed_in') === '1') document.documentElement.classList.add('seli-in');
+      } catch (e) {}
+    </script>
+    <style>html.seli-in .seo-shell { visibility: hidden; }</style>
   </head>
   <body>
     <div id="root"></div>

@@ -988,3 +988,18 @@ body.drawer-open .sx-nav { z-index: 94; }
   .sx-wire__item--lead .sx-wire__sum { font-size: 14px; }
   .sx-wire__read { display: none; }
 }
+
+/* ── Boot frame: shown to returning signed-in visitors while Clerk loads ── */
+.sx-boot { min-height: 100vh; background: var(--bg); }
+.sx-boot__bar { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 24px; border-bottom: 0.5px solid var(--border); }
+.sx-boot__logo { width: 22px; height: 22px; object-fit: contain; }
+.sx-boot__name { font-weight: 700; font-size: 17px; color: var(--text); margin-right: 32px; }
+.sx-boot__tabs { display: flex; gap: 26px; font-size: 14.5px; color: var(--text-3); }
+.sx-boot__page { max-width: var(--sx-content, 1200px); margin: 0 auto; padding: 88px 24px; display: flex; flex-direction: column; gap: 14px; }
+.sx-boot__line, .sx-boot__block { display: block; height: 14px; width: 46%; border-radius: 6px; background: var(--surface-2, #1b1d27); animation: sx-boot-pulse 1.4s ease-in-out infinite; }
+.sx-boot__line--h { height: 40px; width: 38%; }
+.sx-boot__line--short { width: 30%; }
+.sx-boot__block { height: 160px; width: 64%; margin-top: 24px; border-radius: 12px; }
+@keyframes sx-boot-pulse { 50% { opacity: .55; } }
+@media (max-width: 640px) { .sx-boot__tabs { display: none; } .sx-boot__page { padding: 40px 16px; } .sx-boot__line, .sx-boot__block { width: 90%; } }
+@media (prefers-reduced-motion: reduce) { .sx-boot__line, .sx-boot__block { animation: none; } }

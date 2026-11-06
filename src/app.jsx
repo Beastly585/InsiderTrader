@@ -7023,6 +7023,35 @@ function routeFromLocation(loc = window.location) {
 }
 const PAGE_PATHS = { home: '/', trades: '/trades', dashboard: '/data', data: '/data', signals: '/leaderboard', leaderboard: '/leaderboard', watchlist: '/watchlist', settings: '/account', account: '/account' };
 const PAGE_TITLES = { home: 'Home', dashboard: 'Data explorer', trades: 'Trades', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
+// Signed in last time? Clerk's __client_uat cookie is "0" when signed out and
+// a timestamp when signed in; our own flag covers browsers where the cookie
+// isn't readable. Only used to pick what to show for the moment before Clerk
+// has loaded, so a wrong guess costs a skeleton, never access.
+function likelySignedIn() {
+  try {
+    if (document.cookie.split('; ').some(c => /^__client_uat(_[^=]*)?=/.test(c) && !/=0?$/.test(c))) return true;
+    return localStorage.getItem('seli_was_signed_in') === '1';
+  } catch { return false; }
+}
+
+// The app's frame with placeholders, for the moment before Clerk loads.
+function BootShell() {
+  return (
+    <div className="sx-boot" aria-busy="true" aria-label="Loading">
+      <div className="sx-boot__bar">
+        <img src={logoSimple} alt="" className="sx-boot__logo" /><span className="sx-boot__name">Seli</span>
+        <span className="sx-boot__tabs">{NAV_TABS.map(t => <span key={t.id}>{t.label}</span>)}</span>
+      </div>
+      <div className="sx-boot__page">
+        <span className="sx-boot__line sx-boot__line--h" />
+        <span className="sx-boot__line" />
+        <span className="sx-boot__line sx-boot__line--short" />
+        <span className="sx-boot__block" />
+      </div>
+    </div>
+  );
+}
+
 const PUBLIC_PAGES = ['home', 'trades', 'stock', 'insider', 'congress', 'insiderBuying', 'leaderboard', 'stocks', 'blog', 'blogPost'];
 const STANDALONE_PATHS = ['/terms', '/privacy', '/cookies', '/help', '/data-download', '/purchase-complete', '/redownload', '/about', '/onboard'];
 
@@ -7051,6 +7080,14 @@ function AppInner() {
   }, [isSignedIn, getToken, signOut]);
 
   const showLanding = !isLoaded || !isSignedIn;
+  // Were you signed in last time? Read once on load (see BootShell); kept in
+  // step once Clerk knows.
+  const [wasSignedIn] = useState(likelySignedIn);
+  useEffect(() => {
+    if (!isLoaded) return;
+    try { isSignedIn ? localStorage.setItem('seli_was_signed_in', '1') : localStorage.removeItem('seli_was_signed_in'); } catch { /* private mode */ }
+    document.documentElement.classList.toggle('seli-in', !!isSignedIn);
+  }, [isLoaded, isSignedIn]);
 
   // ── Route state (read from the URL, updated on push/back/forward) ────────
   const [route, setRoute] = useState(() => routeFromLocation());
@@ -7315,6 +7352,11 @@ function AppInner() {
   // visitors (and Google) get the read-only version straight away, including
   // while Clerk is still loading, so the server-rendered content isn't swapped
   // for a spinner or the landing page.
+  // Someone who was signed in last time sees a plain app frame while Clerk
+  // loads, not a flash of the signed-out page (index.html hides the server-
+  // rendered copy for them the same way).
+  if (!isLoaded && wasSignedIn && !isAboutPath) return <BootShell />;
+
   if (PUBLIC_PAGES.includes(route.page) && (!isLoaded || !isSignedIn) && !isAboutPath) {
     return (
       <PublicShell page={route.page} logoSrc={logoSimple} isMobile={isMobileShell}

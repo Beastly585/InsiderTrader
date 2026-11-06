@@ -8,7 +8,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link, stockPath, insiderPath, go } from '../lib/nav.jsx';
-import { money, congressRange, ago, plural, roleText } from '../lib/text.js';
+import { money, congressRange, ago, plural, roleText, isEntityName } from '../lib/text.js';
 import { Card, Chip, Skeleton, ErrorNote, Icon, Freshness, RoleTag, Segmented, usePublicView } from '../components/ui.jsx';
 import { LatestPostPill, NewsRail, TopBuyTile } from './PublicPages.jsx';
 import '../home.css';
@@ -192,6 +192,7 @@ export function MarketSections({ d, watchlist, signedIn = false, onHome = false 
 
 
 function Yours({ d, watchlist, since }) {
+  const sig = useWatchSignals(watchlist); // before any early return (hooks)
   const y = visibleYours(d.yours, watchlist);
   const raw = y;
   if (!y.watching && !y.holdings) {
@@ -227,11 +228,12 @@ function Yours({ d, watchlist, since }) {
   const activePeopleAll = y.people.filter(p => p.recent.length);
   const activeTotal = activeAll.length + activePeopleAll.length;
 
-  // One cloud for the whole watchlist (see WatchSphere below).
+  // One view of the whole watchlist (see WatchSphere below).
   const items = [
     ...y.stocks.map(s => stockItem(s, isNewStock(s))),
     ...y.people.map(p => personItem(p, isNewPerson(p))),
   ];
+  for (const it of items) it.signal = it.kind === 'stock' ? sig.tickers[it.label] : sig.people[it.raw];
   return (
     <>
       <div className="hx-sechead">
@@ -257,7 +259,14 @@ function Yours({ d, watchlist, since }) {
 // card with what happened; a click opens its page.
 const DAY_MS = 864e5;
 const ageDays = d => (d ? (Date.now() - Date.parse(d + 'T12:00:00Z')) / DAY_MS : Infinity);
+// People as "J. Sweet". Funds and companies keep their own name, minus the
+// LLC/LP part, cut to fit.
+const ENTITY_TAIL = /[,\s]+(inc|llc|l\.?l\.?c|l\.?p|lp|ltd|corp|co|plc|sa|ag|nv|se|gp|limited|company)\.?$/i;
 const initialLast = name => {
+  if (isEntityName(name)) {
+    const short = String(name).replace(ENTITY_TAIL, '').replace(ENTITY_TAIL, '').trim();
+    return short.length > 16 ? `${short.slice(0, 15).trim()}…` : short;
+  }
   const parts = String(name || '').split(/\s+/).filter(Boolean);
   return parts.length > 1 ? `${parts[0][0]}. ${parts[parts.length - 1]}` : name;
 };
@@ -278,7 +287,7 @@ function stockItem(s, isNew) {
     : tier ? `${lt.type === 'buy' ? 'Bought' : 'Sold'} ${money(lt.value)}${lt.role ? ` by the ${roleText(lt.role).toLowerCase()}` : ''}, ${ago(lt.date)}.`
       : 'No company insider trades in the last year.';
   const tags = [isNew && 'New', s.reversal && 'Reversal', s.held && 'You hold this', congressOnly && 'Congress'].filter(Boolean);
-  return { key: `s:${s.ticker}`, label: s.ticker, mono: true, title: s.company || s.ticker, path: stockPath(s.ticker), tier, side, amt, detail, tags,
+  return { key: `s:${s.ticker}`, kind: 'stock', group: tier ? (side === 'cg' ? (s.congress?.buys ? 'buy' : 'sell') : side) : 'quiet', label: s.ticker, mono: true, title: s.company || s.ticker, path: stockPath(s.ticker), tier, side, amt, detail, tags,
     weight: (b.v || 0) + (sl.v || 0) + (lt?.value || 0) / 1e3 };
 }
 
@@ -291,7 +300,7 @@ function personItem(p, isNew) {
   const amt = t ? `${side === 'buy' ? '+' : '−'}${val(t.value)}` : null;
   const detail = tier ? `${last.type === 'buy' ? 'Bought' : 'Sold'} ${val(last.value)} of ${last.ticker}, ${ago(last.date)}.${p.recent.length > 1 ? ` ${plural(p.recent.length, 'trade')} this week.` : ''}`
     : 'No open-market trades in the last year.';
-  return { key: `p:${p.raw}`, label: initialLast(p.name), title: `${p.name}${p.role ? ` · ${roleText(p.role)}` : ''}`, path: insiderPath(p.raw), tier, side, amt, detail,
+  return { key: `p:${p.raw}`, kind: 'person', raw: p.raw, group: 'people', label: initialLast(p.name), title: `${p.name}${p.role ? ` · ${roleText(p.role)}` : ''}`, path: insiderPath(p.raw), tier, side, amt, detail,
     tags: [isNew && 'New'].filter(Boolean), weight: (t?.value || 0) + (p.last?.value || 0) / 1e3 };
 }
 
@@ -312,39 +321,113 @@ function bands(items) {
   return [top, mid, bottom].filter(b => b.length).map(centerOut);
 }
 
+// Which watched stocks and people are in Signals right now (last 30 days),
+// for the marker on their tile. Reads the shared, saved signal lists with the
+// watchlist filter, so it's two small requests.
+function useWatchSignals(watchlist) {
+  const ready = watchlist.ready && (watchlist.tickers.length + watchlist.insiders.length) > 0;
+  const q = ready ? `days=30&mine=1&mt=${encodeURIComponent(watchlist.tickers.join(','))}&mi=${encodeURIComponent(watchlist.insiders.join('|'))}` : null;
+  const { data: buys } = useApi(q ? `/api/signals?side=buy&${q}` : null);
+  const { data: sells } = useApi(q ? `/api/signals?side=sell&${q}` : null);
+  return useMemo(() => {
+    const tickers = {}, people = {};
+    const watchedPeople = new Set(watchlist.insiders);
+    for (const r of [...(buys?.rows || []), ...(sells?.rows || [])]) {
+      const why = r.n >= 3 ? ['Cluster', ...r.why.map(w => w.label).filter(l => !/insiders (buying|selling)$/.test(l))] : r.why.map(w => w.label);
+      const sig = { side: r.side, score: r.score, why: why.slice(0, 3), ticker: r.ticker };
+      if (!tickers[r.ticker] || (sig.score ?? -1) > (tickers[r.ticker].score ?? -1)) tickers[r.ticker] = sig;
+      for (const p of r.people || []) if (watchedPeople.has(p.raw) && !people[p.raw]) people[p.raw] = sig;
+    }
+    return { tickers, people };
+  }, [buys, sells, watchlist.insiders]);
+}
+
+const GROUPS = [
+  { id: 'buy', label: 'Buying' },
+  { id: 'sell', label: 'Selling' },
+  { id: 'people', label: 'People' },
+  { id: 'quiet', label: 'Quiet for a year' },
+];
+// Cloud or a plain list, remembered in this browser.
+const VIEW_KEY = 'seli_watch_view';
+function useWatchView() {
+  const [view, setView] = useState(() => { try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'cloud'; } catch { return 'cloud'; } });
+  const set = v => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ } };
+  return [view, set];
+}
+
+const sigText = s => `${s.why.join(' · ')}${s.score != null ? ` · strength ${s.score}` : ''}`;
+const sigPath = s => `/trades?view=signals${s.side === 'sell' ? '&side=sell' : ''}&q=${encodeURIComponent(s.ticker)}`;
+
 function WatchSphere({ items }) {
+  const [view, setView] = useWatchView();
   if (!items.length) return null;
   const open = (e, path) => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); go(path); };
+  const groups = GROUPS.map(g => ({ ...g, items: items.filter(it => it.group === g.id) })).filter(g => g.items.length);
+  const nSig = items.filter(it => it.signal).length;
   return (
-    <div className="hx-sphere">
-      <div className="hx-sphere__cloud" role="list" aria-label="Everything you watch, most recent activity in the middle">
-        {bands(items).map((band, bi) => (
-          <div key={bi} className="hx-sphere__band" role="presentation">
-            {band.map(it => (
-              <div key={it.key} role="listitem" className={`hx-wt hx-wt--t${it.tier} hx-wt--${it.side}`}>
-                <a href={it.path} className="hx-wt__tile" onClick={e => open(e, it.path)} aria-label={`${it.title}. ${it.detail}`}>
-                  <span className={`hx-wt__label${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
-                  {it.amt && it.tier === 3 && <span className="hx-wt__amt sx-mono">{it.amt}</span>}
-                  {it.tags.includes('New') && <span className="hx-wt__new" aria-hidden="true" />}
-                </a>
-                <span className="hx-wt__card" role="presentation">
-                  <span className="hx-wt__card-title">{it.title}</span>
-                  {it.tags.length > 0 && <span className="hx-wt__tags">{it.tags.map(t => <span key={t} className="hx-wt__tag">{t}</span>)}</span>}
-                  <span className="hx-wt__detail">{it.detail}</span>
-                  <span className="hx-wt__go">Open <Icon name="arrow" size={11} /></span>
-                </span>
+    <div className={`hx-sphere hx-sphere--${view}`}>
+      <div className="hx-sphere__bar">
+        <span className="hx-sphere__note">
+          {nSig > 0 && <><span className="hx-sigdot" aria-hidden="true"><Icon name="trend" size={10} /></span>{plural(nSig, 'is a signal', 'are signals')} right now</>}
+        </span>
+        <Segmented size="sm" value={view} onChange={setView} options={[{ value: 'cloud', label: 'Cloud' }, { value: 'list', label: 'List' }]} />
+      </div>
+      <div className="hx-sphere__groups">
+        {groups.map(g => (
+          <section key={g.id} className={`hx-grp hx-grp--${g.id}`} aria-label={g.label}>
+            <h3 className="hx-grp__title">{g.label} <span>{g.items.length}</span></h3>
+            {view === 'cloud' ? (
+              <div className="hx-sphere__cloud" role="list">
+                {bands(g.items).map((band, bi) => (
+                  <div key={bi} className="hx-sphere__band" role="presentation">
+                    {band.map(it => (
+                      <div key={it.key} role="listitem" className={`hx-wt hx-wt--t${it.tier} hx-wt--${it.side}${it.signal ? ' hx-wt--sig' : ''}`}>
+                        <a href={it.path} className="hx-wt__tile" onClick={e => open(e, it.path)} aria-label={`${it.title}. ${it.detail}${it.signal ? ` Signal: ${sigText(it.signal)}.` : ''}`}>
+                          <span className={`hx-wt__label${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
+                          {it.amt && it.tier === 3 && <span className="hx-wt__amt sx-mono">{it.amt}</span>}
+                          {it.signal && <span className="hx-wt__sig" aria-hidden="true"><Icon name="trend" size={9} /></span>}
+                          {it.tags.includes('New') && <span className="hx-wt__new" aria-hidden="true" />}
+                        </a>
+                        <span className="hx-wt__card">
+                          <span className="hx-wt__card-title">{it.title}</span>
+                          {it.tags.length > 0 && <span className="hx-wt__tags">{it.tags.map(t => <span key={t} className="hx-wt__tag">{t}</span>)}</span>}
+                          <span className="hx-wt__detail">{it.detail}</span>
+                          {it.signal && <span className="hx-wt__sigline"><Icon name="trend" size={11} /> {sigText(it.signal)}</span>}
+                          <span className="hx-wt__links">
+                            <a href={it.path} onClick={e => open(e, it.path)}>Open <Icon name="arrow" size={11} /></a>
+                            {it.signal && <a href={sigPath(it.signal)} onClick={e => open(e, sigPath(it.signal))}>See signal <Icon name="arrow" size={11} /></a>}
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            ) : (
+              <ul className="hx-wlist">
+                {g.items.slice().sort(byWeight).map(it => (
+                  <li key={it.key} className={`hx-wlist__row hx-wlist__row--${it.side}`}>
+                    <a href={it.path} className={`hx-wlist__name${it.mono ? ' sx-mono' : ''}`} onClick={e => open(e, it.path)}>{it.label}</a>
+                    <span className="hx-wlist__detail">{it.detail}</span>
+                    {it.signal ? <a href={sigPath(it.signal)} className="hx-wlist__sig" onClick={e => open(e, sigPath(it.signal))} title={sigText(it.signal)}><Icon name="trend" size={11} />Signal</a> : <span />}
+                    <span className={`hx-wlist__amt sx-mono${it.side === 'buy' ? ' sx-up' : it.side === 'sell' ? ' sx-down' : ''}`}>{it.tier === 3 ? it.amt : ''}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         ))}
       </div>
-      <div className="hx-sphere__key" aria-hidden="true">
-        <span><i className="hx-dot hx-dot--buy" />bought</span>
-        <span><i className="hx-dot hx-dot--sell" />sold</span>
-        <span><i className="hx-dot hx-dot--cg" />Congress</span>
-        <span><i className="hx-dot hx-dot--none" />nothing in a year</span>
-        <span className="hx-sphere__size">Bigger = more recent</span>
-      </div>
+      {view === 'cloud' && (
+        <div className="hx-sphere__key" aria-hidden="true">
+          <span><i className="hx-dot hx-dot--buy" />bought</span>
+          <span><i className="hx-dot hx-dot--sell" />sold</span>
+          <span><i className="hx-dot hx-dot--cg" />Congress</span>
+          <span><i className="hx-sigdot"><Icon name="trend" size={9} /></i>in Signals</span>
+          <span className="hx-sphere__size">Bigger = more recent</span>
+        </div>
+      )}
     </div>
   );
 }
