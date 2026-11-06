@@ -1,0 +1,159 @@
+/* src/system.css — Seli's shared color roles, tag and button styles.
+   Loaded last (src/main.jsx), so these win over the older per-page rules.
+
+   Color roles (each has a dark and a light value):
+     purple  brand: buttons, links, focus, Seli's own reads (signal, first
+             buy, reversal, cluster)
+     aqua    tickers
+     amber   company insiders (role tags)
+     blue    Congress (role tags, Congress amounts)
+     green   bought      red  sold      gray  neutral / quiet
+*/
+
+:root,
+[data-theme="dark"] {
+  --green-500: #3ECF8E;
+  --red-500:   #F06060;
+  --blue-500:  #5AABF0;
+  --amber-500: #E8A130;
+
+  --tk:        #4FD1B1;               /* ticker text  */
+  --tk-bg:     rgba(63, 191, 160, .13);
+  --tk-hover:  rgba(63, 191, 160, .26);
+  --corp:      #E8A130;               /* company insider */
+  --corp-bg:   rgba(232, 161, 48, .13);
+  --cong:      #6CB4F2;               /* Congress */
+  --cong-bg:   rgba(90, 171, 240, .14);
+  --sig:       #A99FFF;               /* Seli's reads (brand purple, lighter for text) */
+  --sig-bg:    rgba(124, 111, 255, .16);
+  --buy:       #3ECF8E;
+  --buy-bg:    rgba(62, 207, 142, .13);
+  --sell:      #F06060;
+  --sell-bg:   rgba(240, 96, 96, .13);
+  --tag-bg:    rgba(255, 255, 255, .06);
+  --press:     rgba(255, 255, 255, .04);
+}
+
+[data-theme="light"] {
+  --green-500: #16A34A;
+  --red-500:   #DC2626;
+  --blue-500:  #2563EB;
+  --amber-500: #D97706;
+
+  --tk:        #0F766E;
+  --tk-bg:     #DDF4EE;
+  --tk-hover:  #C3EBE1;
+  --corp:      #8A4D00;
+  --corp-bg:   #FEF0C7;
+  --cong:      #1A65C8;
+  --cong-bg:   #DBEAFE;
+  --sig:       #4338C9;
+  --sig-bg:    #EAE8FC;
+  --buy:       #15803D;
+  --buy-bg:    #DCFCE7;
+  --sell:      #C0392B;
+  --sell-bg:   #FEE2E2;
+  --tag-bg:    #EEF0F4;
+  --press:     rgba(15, 15, 30, .04);
+}
+
+/* ── Tickers: aqua, everywhere ───────────────────────────────────────────── */
+.sx-tk, .hx-post__tk {
+  color: var(--tk); background: var(--tk-bg);
+  transition: background-color .15s ease, color .15s ease;
+}
+.sx-tk:hover, .hx-post__tk:hover { color: var(--tk); background: var(--tk-hover); text-decoration: none; }
+
+/* ── One tag ─────────────────────────────────────────────────────────────── */
+/* Every small label on the site: same height, type and corners. Only the
+   tone changes. (Older components keep their class names; they all land
+   here.) */
+.sx-chip, .sx-role, .sx-type, .hx-tag, .hx-sig, .hx-wtable__tag, .hx-wc__sig, .hx-wc__new, .hx-wt__tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 20px; padding: 0 7px; box-sizing: border-box;
+  border: none; border-radius: 5px;
+  font: 600 11px/1 var(--font); letter-spacing: 0; text-transform: none;
+  white-space: nowrap; flex: none;
+  background: var(--tag-bg); color: var(--text-2);
+}
+.sx-chip svg, .sx-role svg, .hx-sig svg, .hx-wc__sig svg { flex: none; }
+/* Tones */
+.sx-chip--buy, .sx-type--buy, .hx-tag--buy, .hx-sig--buy { background: var(--buy-bg); color: var(--buy); }
+.sx-chip--sell, .sx-type--sell, .hx-tag--sell, .hx-sig--sell { background: var(--sell-bg); color: var(--sell); }
+.sx-role--congress, .hx-tag--cg { background: var(--cong-bg); color: var(--cong); }
+.sx-role--corp { background: var(--corp-bg); color: var(--corp); }
+/* Seli's reads: signal, first buy, reversal, cluster, new */
+.sx-chip--accent, .sx-chip--rev, .sx-chip--signal, .hx-tag--new, .hx-tag--rev, .hx-sig--accent, .hx-sig--rev, .hx-wc__sig {
+  background: var(--sig-bg); color: var(--sig);
+}
+.sx-chip--new { background: var(--accent); color: #fff; }
+.sx-type--muted { background: var(--tag-bg); color: var(--text-3); }
+.hx-sig--more { background: transparent; color: var(--text-3); padding: 0 2px; }
+.hx-sig--lock { height: 24px; cursor: pointer; color: var(--text-3); }
+.hx-sig--lock:hover { color: var(--text); }
+.hx-sig--cluster { font-weight: 700; }
+/* Plain amount colors follow the same roles. */
+.hx-cg { color: var(--cong); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+/* Three kinds, one feel:
+     primary   .sx-btn--accent (solid purple: the one main action)
+     secondary .sx-btn, .hx-toggle, .hx-allnews, .sx-wl-link, .hx-select
+     pills     .sx-watch, .sx-follow2, .sx-mail (follow and email toggles)
+     quiet     .sx-btn--ghost, .sx-nav__icon, .hx-scroll__btn, .sx-seg__btn, .sx-follow
+   All share the same hover (color/background ease), press (a small sink)
+   and keyboard focus ring. */
+.sx-btn, .sx-watch, .sx-follow, .sx-follow2, .sx-mail, .hx-toggle, .hx-allnews, .sx-wl-link, .hx-select,
+.sx-nav__icon, .hx-scroll__btn, .sx-seg__btn, .hx-viewtab, .hx-th, .sx-more, .hx-sigrow__more, .hx-wl__toggle,
+.sx-starter, .hx-go, .sx-x, .sx-bell {
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .12s ease, filter .16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.sx-btn:active, .sx-watch:active, .sx-follow:active, .sx-follow2:active, .sx-mail:active, .hx-toggle:active,
+.hx-allnews:active, .sx-wl-link:active, .sx-nav__icon:active, .hx-scroll__btn:active, .sx-seg__btn:active,
+.hx-viewtab:active, .sx-starter:active, .sx-x:active, .sx-bell:active {
+  transform: translateY(1px) scale(.98);
+}
+.hx-scroll__btn:active { transform: translateY(-50%) scale(.94); }
+.sx-btn:focus-visible, .sx-watch:focus-visible, .sx-follow:focus-visible, .sx-follow2:focus-visible, .sx-mail:focus-visible,
+.hx-toggle:focus-visible, .hx-allnews:focus-visible, .sx-wl-link:focus-visible, .hx-select:focus-visible,
+.sx-nav__icon:focus-visible, .hx-scroll__btn:focus-visible, .sx-seg__btn:focus-visible, .hx-viewtab:focus-visible,
+.hx-th:focus-visible, .sx-starter:focus-visible, .sx-x:focus-visible, .sx-bell:focus-visible {
+  outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+/* Primary */
+.sx-btn--accent { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.sx-btn--accent:hover { background: var(--accent-strong); border-color: var(--accent-strong); filter: none; }
+[data-theme="dark"] .sx-btn--accent:hover { background: color-mix(in srgb, var(--accent) 88%, #fff); border-color: transparent; }
+/* Secondary */
+.sx-btn, .hx-toggle, .hx-allnews, .sx-wl-link, .hx-select { border-color: var(--border-md); }
+.sx-btn:not(.sx-btn--accent):not(.sx-btn--ghost):hover, .hx-toggle:not(:disabled):hover, .hx-allnews:hover, .sx-wl-link:hover, .hx-select:hover {
+  background: var(--surface-2); border-color: color-mix(in srgb, var(--accent) 40%, var(--border-md)); color: var(--text);
+}
+/* Pills: Watch / Following / Email */
+.sx-watch { border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); background: transparent; color: var(--accent-strong); }
+.sx-watch:hover { background: var(--sig-bg); filter: none; }
+.sx-watch--on { background: var(--sig-bg); color: var(--sig); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+/* Quiet */
+.sx-btn--ghost:hover, .sx-nav__icon:hover, .sx-seg__btn:hover:not(.sx-seg__btn--on) { background: var(--press); color: var(--text); }
+.sx-seg__btn--on:hover { color: var(--text); }
+.hx-scroll__btn:hover { border-color: color-mix(in srgb, var(--accent) 60%, var(--border-md)); background: var(--surface); }
+.sx-follow:hover { background: var(--press); }
+.sx-follow--on, .sx-follow--on:hover { color: var(--accent-strong); }
+
+/* ── Labels ──────────────────────────────────────────────────────────────── */
+/* One small-caps label style for card and section labels, one size for
+   card titles. */
+.hx-topbuy__label, .hx-mini__label, .hx-newscard__label, .hx-feed__title, .hx-label {
+  font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────────────────── */
+@media (max-width: 400px) {
+  .sx-seg--sm .sx-seg__btn { padding: 4px 7px; }
+  .hx-filters { gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sx-btn, .sx-watch, .sx-follow, .sx-follow2, .sx-mail, .hx-toggle, .hx-allnews, .sx-wl-link, .hx-select,
+  .sx-nav__icon, .hx-scroll__btn, .sx-seg__btn, .hx-viewtab { transition: none; }
+}
