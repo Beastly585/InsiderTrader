@@ -5,7 +5,7 @@
 //      quiet ones share one line.
 //   2. This week across the market: the week's totals, the featured filing,
 //      more buying, Congress, the largest sales, and the leaderboard's top name.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '../lib/api.js';
 import { StockLink, InsiderLink, Link, stockPath, insiderPath, go } from '../lib/nav.jsx';
 import { money, congressRange, congressSpan, ago, plural, roleText, isEntityName } from '../lib/text.js';
@@ -348,6 +348,16 @@ function WatchStrip({ items }) {
   const [view, setView, narrow] = useWatchView();
   if (!items.length) return null;
   const list = items.slice().sort(scanOrder);
+  // How many columns fit (same 158px minimum as the old CSS grid).
+  const gridRef = useRef(null);
+  const [cols, setCols] = useState(4);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(([e]) => setCols(Math.max(1, Math.floor((e.contentRect.width + 10) / 168))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view]);
   const nSig = list.filter(it => it.signal).length;
   const nActive = list.filter(it => it.tier === 3).length;
   return (
@@ -361,28 +371,33 @@ function WatchStrip({ items }) {
         {!narrow && <Segmented size="sm" value={view} onChange={setView} options={[{ value: 'grid', label: 'Grid' }, { value: 'list', label: 'List' }]} />}
       </div>
       {view === 'grid' ? (
-        // Each cell keeps its size; the card inside grows over its neighbours
-        // on hover or focus, so the grid never shifts.
-        <div className="hx-wgrid" role="list" aria-label="Your watchlist">
-          {list.map(it => (
-            <div key={it.key} role="listitem" className="hx-wgrid__cell">
-              <Link to={it.path} className={`hx-wc hx-wc--${it.side}${it.tier === 0 ? ' hx-wc--quiet' : ''}`}>
-                <span className="hx-wc__top">
-                  <span className={`hx-wc__name${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
-                  {it.signal ? <span className="hx-wc__sig"><Icon name="trend" size={10} />Signal</span>
-                    : it.tags.includes('New') ? <span className="hx-wc__new">New</span> : null}
-                </span>
-                <span className="hx-wc__co">{it.kind === 'stock' ? it.title : it.title.split(' · ')[1] || 'Person'}</span>
-                <span className={`hx-wc__amt sx-mono ${sideClass(it)}`}>{it.amt || '—'}</span>
-                <span className="hx-wc__what">{it.what}</span>
-                <span className="hx-wc__when">{it.date && it.tier > 0 ? ago(it.date) : 'No trades in a year'}</span>
-                <span className="hx-wc__more">
-                  {it.tags.filter(t => t !== 'New').length > 0 && <span className="hx-wc__tags">{it.tags.filter(t => t !== 'New').map(t => <span key={t} className="hx-wtable__tag">{t}</span>)}</span>}
-                  <span className="hx-wc__detail">{it.detail}</span>
-                  {it.signal && <span className="hx-wc__sigline"><Icon name="trend" size={10} /> {it.signal.why.slice(0, 2).join(' · ')}</span>}
-                  <span className="hx-wc__go">Open <Icon name="arrow" size={11} /></span>
-                </span>
-              </Link>
+        // Tiles are dealt into columns left to right (so the order still reads
+        // across), and each column is its own stack: a hovered tile grows in
+        // place and only the tiles under it slide down.
+        <div className="hx-wgrid" role="list" aria-label="Your watchlist" ref={gridRef}>
+          {Array.from({ length: cols }, (_, c) => (
+            <div key={c} className="hx-wgrid__col">
+              {list.filter((_, i) => i % cols === c).map(it => (
+                <div key={it.key} role="listitem" className="hx-wgrid__cell">
+                  <Link to={it.path} className={`hx-wc hx-wc--${it.side}${it.tier === 0 ? ' hx-wc--quiet' : ''}`}>
+                    <span className="hx-wc__top">
+                      <span className={`hx-wc__name${it.mono ? ' sx-mono' : ''}`}>{it.label}</span>
+                      {it.signal ? <span className="hx-wc__sig"><Icon name="trend" size={10} />Signal</span>
+                        : it.tags.includes('New') ? <span className="hx-wc__new">New</span> : null}
+                    </span>
+                    <span className="hx-wc__co">{it.kind === 'stock' ? it.title : it.title.split(' · ')[1] || 'Person'}</span>
+                    <span className={`hx-wc__amt sx-mono ${sideClass(it)}`}>{it.amt || '—'}</span>
+                    <span className="hx-wc__what">{it.what}</span>
+                    <span className="hx-wc__when">{it.date && it.tier > 0 ? ago(it.date) : 'No trades in a year'}</span>
+                    <span className="hx-wc__more"><span className="hx-wc__morein">
+                      {it.tags.filter(t => t !== 'New').length > 0 && <span className="hx-wc__tags">{it.tags.filter(t => t !== 'New').map(t => <span key={t} className="hx-wtable__tag">{t}</span>)}</span>}
+                      <span className="hx-wc__detail">{it.detail}</span>
+                      {it.signal && <span className="hx-wc__sigline"><Icon name="trend" size={10} /> {it.signal.why.slice(0, 2).join(' · ')}</span>}
+                      <span className="hx-wc__go">Open <Icon name="arrow" size={11} /></span>
+                    </span></span>
+                  </Link>
+                </div>
+              ))}
             </div>
           ))}
         </div>

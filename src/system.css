@@ -5,7 +5,8 @@
      purple  brand: buttons, links, focus, Seli's own reads (signal, first
              buy, reversal, cluster)
      aqua    tickers
-     amber   company insiders (role tags)
+     slate   company insiders (role tags: neutral on purpose, so they
+             don't compete with tickers, buys and sells)
      blue    Congress (role tags, Congress amounts)
      green   bought      red  sold      gray  neutral / quiet
 */
@@ -20,8 +21,8 @@
   --tk:        #4FD1B1;               /* ticker text  */
   --tk-bg:     rgba(63, 191, 160, .13);
   --tk-hover:  rgba(63, 191, 160, .26);
-  --corp:      #E8A130;               /* company insider */
-  --corp-bg:   rgba(232, 161, 48, .13);
+  --corp:      #C5CCD8;               /* company insider */
+  --corp-bg:   rgba(197, 204, 216, .11);
   --cong:      #6CB4F2;               /* Congress */
   --cong-bg:   rgba(90, 171, 240, .14);
   --sig:       #A99FFF;               /* Seli's reads (brand purple, lighter for text) */
@@ -43,8 +44,8 @@
   --tk:        #0F766E;
   --tk-bg:     #DDF4EE;
   --tk-hover:  #C3EBE1;
-  --corp:      #8A4D00;
-  --corp-bg:   #FEF0C7;
+  --corp:      #3A4354;
+  --corp-bg:   #E9ECF1;
   --cong:      #1A65C8;
   --cong-bg:   #DBEAFE;
   --sig:       #4338C9;
@@ -157,3 +158,19 @@
   .sx-btn, .sx-watch, .sx-follow, .sx-follow2, .sx-mail, .hx-toggle, .hx-allnews, .sx-wl-link, .hx-select,
   .sx-nav__icon, .hx-scroll__btn, .sx-seg__btn, .hx-viewtab { transition: none; }
 }
+
+/* ── Role guide (Insiders page) ──────────────────────────────────────────── */
+.sx-roles { margin: 20px 0 8px; padding: 16px 18px; border: 0.5px solid var(--border); border-radius: var(--radius-lg, 12px); background: var(--surface); }
+.sx-roles h2 { margin: 0; padding: 0; border: 0; }
+.sx-roles__intro { margin: 6px 0 12px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.sx-roles__list { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; }
+.sx-roles__item { display: grid; grid-template-columns: 132px minmax(0, 1fr); align-items: baseline; gap: 10px; }
+.sx-roles__item dt { margin: 0; }
+.sx-roles__item dd { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+@media (max-width: 720px) {
+  .sx-roles { padding: 14px; }
+  .sx-roles__list { grid-template-columns: minmax(0, 1fr); }
+  .sx-roles__item { grid-template-columns: 120px minmax(0, 1fr); }
+}
+/* Tickers on the Insiders table follow the ticker color too. */
+.sx-lb__tk { color: var(--tk); }

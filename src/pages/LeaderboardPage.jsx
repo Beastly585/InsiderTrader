@@ -178,6 +178,44 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
         Hit rate is the share of scored buys now 5%+ higher. A buy is scored when there's a price to check it against, and buys that moved less than 5% either way are left out, so it's often based on fewer buys than the Bought column counts.
         To be ranked: at least {rules.min_scored} scored buys averaging {money(rules.min_avg_buy)}+, and a person rather than a company or fund.
       </p>
+      <RoleGuide />
     </div>
+  );
+}
+
+// What each role tag means. Same tags (and colors) as the table above.
+const ROLE_GUIDE = [
+  ['CEO', 'Chief executive. Runs the company day to day.'],
+  ['CFO', 'Chief financial officer. Runs the money side: reporting, cash, guidance.'],
+  ['COO', 'Chief operating officer. Runs operations.'],
+  ['CTO', 'Chief technology officer.'],
+  ['President', 'Often the CEO or number two. Senior officer either way.'],
+  ['Executive', 'Any other officer the company names: chief legal, chief marketing and the like.'],
+  ['Vice president', 'VP, SVP or EVP. Senior manager who has to report trades.'],
+  ['General counsel', 'Top lawyer at the company.'],
+  ['Board chair', 'Leads the board of directors.'],
+  ['Board member', 'Sits on the board. Usually not an employee, but sees the same inside picture.'],
+  ['Major shareholder', 'Owns 10% or more of the stock, so has to report trades like an insider.'],
+  ['Fund', 'A firm or fund (not a person) that owns 10%+. Not ranked here.'],
+  ['Insider', 'Filed a Form 4 without a clear title.'],
+];
+function RoleGuide() {
+  return (
+    <section className="sx-roles" aria-labelledby="sx-roles-h">
+      <h2 id="sx-roles-h" className="hx-label">What the role tags mean</h2>
+      <p className="sx-roles__intro">Company insiders have to report their own trades to the SEC within 2 business days on a Form 4. The tag is their job at the company that filed.</p>
+      <dl className="sx-roles__list">
+        {ROLE_GUIDE.map(([label, text]) => (
+          <div key={label} className="sx-roles__item">
+            <dt><span className="sx-role sx-role--corp">{label}</span></dt>
+            <dd>{text}</dd>
+          </div>
+        ))}
+        <div className="sx-roles__item">
+          <dt><RoleTag role="Senator" congress /></dt>
+          <dd>Members of Congress. They report under the STOCK Act, in dollar ranges, up to 45 days after the trade.</dd>
+        </div>
+      </dl>
+    </section>
   );
 }

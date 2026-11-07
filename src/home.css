@@ -602,12 +602,18 @@
 .hx-cg { color: var(--blue-500, #3b82f6); }
 
 /* Card: color edge = which way, then name, amount, what and when. */
-.hx-wgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 10px; }
-.hx-wgrid__cell { position: relative; height: 142px; }
-.hx-wgrid .hx-wc { position: absolute; top: 0; left: 0; right: 0; height: 100%; overflow: hidden; width: auto; transition: box-shadow .15s, transform .15s; }
-.hx-wc__more { display: none; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 0.5px solid var(--border); }
-.hx-wgrid .hx-wc:hover, .hx-wgrid .hx-wc:focus-visible { z-index: 5; left: -8px; right: -8px; transform: translateY(-4px); background: var(--surface-2, var(--surface)); box-shadow: 0 14px 30px rgba(0, 0, 0, .45); height: auto; min-height: 100%; overflow: visible; }
-.hx-wgrid .hx-wc:hover .hx-wc__more, .hx-wgrid .hx-wc:focus-visible .hx-wc__more { display: flex; }
+.hx-wgrid { display: flex; gap: 10px; align-items: flex-start; }
+.hx-wgrid__col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.hx-wgrid__cell { position: relative; }
+.hx-wgrid .hx-wc { width: auto; min-height: 142px; transition: background-color .16s ease, box-shadow .16s ease, border-color .16s ease; }
+/* The extra detail opens by easing its row from 0 to full height, so the
+   tiles below slide down instead of jumping. */
+.hx-wc__more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease; }
+.hx-wc__morein { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 6px; }
+.hx-wc__morein::before { content: ''; display: block; margin-top: 8px; border-top: 0.5px solid var(--border); }
+.hx-wgrid .hx-wc:hover, .hx-wgrid .hx-wc:focus-visible { background: var(--surface-2, var(--surface)); box-shadow: 0 8px 22px rgba(0, 0, 0, .28); }
+.hx-wgrid .hx-wc:hover .hx-wc__more, .hx-wgrid .hx-wc:focus-visible .hx-wc__more { grid-template-rows: 1fr; }
+@media (prefers-reduced-motion: reduce) { .hx-wc__more { transition: none; } }
 .hx-wc__tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .hx-wc__detail { font-size: 12px; line-height: 1.4; color: var(--text-2); }
 .hx-wc__sigline { display: flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; color: var(--accent-strong, var(--accent)); }
