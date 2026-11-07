@@ -5,8 +5,9 @@
      purple  brand: buttons, links, focus, Seli's own reads (signal, first
              buy, reversal, cluster)
      aqua    tickers
-     rose    company insiders (role tags; kept soft so they don't compete
-             with tickers, buys and sells)
+     petrol  company insiders (role tags: a solid deep blue-green, so they
+             read apart from tickers, Congress, buys and sells by weight
+             as well as hue)
      blue    Congress (role tags, Congress amounts)
      green   bought      red  sold      gray  neutral / quiet
 */
@@ -21,8 +22,8 @@
   --tk:        #4FD1B1;               /* ticker text  */
   --tk-bg:     rgba(63, 191, 160, .13);
   --tk-hover:  rgba(63, 191, 160, .26);
-  --corp:      #E7A6C0;               /* company insider */
-  --corp-bg:   rgba(231, 166, 192, .12);
+  --corp:      #DDF2F7;               /* company insider */
+  --corp-bg:   #1F5566;
   --cong:      #6CB4F2;               /* Congress */
   --cong-bg:   rgba(90, 171, 240, .14);
   --sig:       #A99FFF;               /* Seli's reads (brand purple, lighter for text) */
@@ -44,8 +45,8 @@
   --tk:        #0F766E;
   --tk-bg:     #DDF4EE;
   --tk-hover:  #C3EBE1;
-  --corp:      #9A2F5E;
-  --corp-bg:   #FBE9F0;
+  --corp:      #FFFFFF;
+  --corp-bg:   #1D5E72;
   --cong:      #1A65C8;
   --cong-bg:   #DBEAFE;
   --sig:       #4338C9;
@@ -178,3 +179,20 @@
 /* Insiders table: shorter, scrolls inside, header stays put. */
 .sx-lb__scroll { max-height: min(640px, 68vh); overflow: auto; overscroll-behavior: contain; }
 .sx-lb__scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: inset 0 -0.5px 0 var(--border); }
+
+/* ── Help, legal and export pages inside the site frame ─────────────────── */
+.legal-page--framed { min-height: 0; background: transparent; overflow-x: visible; }
+.legal-page--framed .legal-content { padding-top: 36px; }
+.help-center__content ul { margin: 8px 0 12px; padding-left: 20px; }
+.help-center__content li { margin: 4px 0; }
+@media (max-width: 640px) { .legal-page--framed .legal-content { padding-top: 20px; } }
+
+/* ── 404 ─────────────────────────────────────────────────────────────────── */
+.sx-404 { max-width: 640px; margin: 0 auto; padding: 56px 0 40px; text-align: left; }
+.sx-404__code { margin: 0 0 6px; font: 700 13px/1 var(--font-mono, monospace); color: var(--sig); letter-spacing: .04em; }
+.sx-404__search { margin: 20px 0 16px; }
+.sx-404__links { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; font-weight: 600; }
+/* A pill-button written as a link on these pages: keep it a button (the
+   page's link color and underline made it inline, and its shine layers
+   spilled out as gray boxes). */
+.legal-content a.lp-btn-primary { display: inline-block; color: #fff; text-decoration: none; }

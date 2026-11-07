@@ -46,7 +46,7 @@ export function usePublicWatchlist() {
 // watchTarget: on a stock or person page, a slim bar under the nav offers
 // alerts for that exact page. Most visitors from X or a shared link land here,
 // not on the home page.
-export function PublicShell({ page, logoSrc, isMobile, watchTarget, children }) {
+export function PublicShell({ page, logoSrc, isMobile, watchTarget, plain = false, children }) {
   const clerk = useClerk();
   const [searchOpen, setSearchOpen] = useState(false);
   const signUp = () => openSignUp(clerk, { kind: 'signup' });
@@ -108,8 +108,9 @@ export function PublicShell({ page, logoSrc, isMobile, watchTarget, children }) 
           <div className="sx-pub__content">{children}</div>
         </PublicViewContext.Provider>
         {/* Home has its own sign-up and ticker chips. */}
-        {page !== 'home' && <SignupBand onSignUp={signUp} />}
-        {page !== 'home' && <PopularStocks />}
+        {/* Help, legal and export pages (plain) skip the sign-up pitch. */}
+        {page !== 'home' && !plain && <SignupBand onSignUp={signUp} />}
+        {page !== 'home' && !plain && <PopularStocks />}
         <PublicFooter logoSrc={logoSrc} />
       </main>
     </div>
@@ -642,9 +643,9 @@ export function PublicHome() {
             <div className="sx-plan__price">$39.99<span> one time</span></div>
             <p className="sx-plan__desc">For your own analysis, no subscription:</p>
             <ul className="sx-plan__list">
-              <li>Every open-market insider and Congress trade{since ? ` since ${since}` : ''}</li>
-              <li>CSV, one file per year, 18 fields</li>
-              <li>Linked to the original SEC filing</li>
+              <li>Every corporate insider (Form 4) trade{since ? ` since ${since}` : ''}</li>
+              <li>CSV, one file per year</li>
+              <li>Open-market trades marked, so you can filter to them</li>
             </ul>
             <a className="sx-btn" href="/data-download">See the dataset</a>
           </div>

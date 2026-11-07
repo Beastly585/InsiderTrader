@@ -11,7 +11,7 @@ import cfg from './config.js';
 import { loadFilings, getSector, REL_LABELS, secFilingUrl } from './edgar.js';
 import OnboardingFlow from './onboard.jsx';
 import './research.css';
-import { go, stockPath, insiderPath, NAV_TABS, tabOf } from './lib/nav.jsx';
+import { go, stockPath, insiderPath, NAV_TABS, tabOf, Link } from './lib/nav.jsx';
 import { clearApiCache, refreshApi, api, useDataSinceYear } from './lib/api.js';
 import { prettyPerson, prettyCompany, shortDate, plural, memberRole, memberChamber, roleFromTitle, roleText } from './lib/text.js';
 import { peekIntent, clearIntent } from './lib/intent.js';
@@ -1006,7 +1006,7 @@ function BillingSection({ user }) {
             <div className="settings-row__label">
               {status.hasDataExport ? 'Purchased' : 'Not purchased'}
             </div>
-            <div className="settings-row__sub">Every insider and Congress trade as CSV, one-time $39.99</div>
+            <div className="settings-row__sub">Every corporate insider (Form 4) trade as CSV, one-time $39.99</div>
           </div>
           <button className="btn btn--primary" onClick={() => setCheckoutProduct('data_export')}>
             {status.hasDataExport ? 'Buy again' : 'Buy →'}
@@ -4633,22 +4633,10 @@ const SUPPORT_EMAIL = 'admin@seli.app';
 function TermsPage() {
   const [dark, setDark] = useTheme();
   return (
-    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
-      <nav className="lp-nav">
-        <div className="lp-nav__frame">
-          <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </a>
-          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{ marginLeft: 'auto' }} onClick={() => setDark(d => !d)} title="Toggle theme">
-            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
-          </button>
-        </div>
-      </nav>
+    <div className="legal-page legal-page--framed">
       <div className="legal-content">
         <h1>Terms of Service</h1>
-        <p className="legal-date">Last updated: August 2, 2026</p>
+        <p className="legal-date">Last updated: November 6, 2026</p>
 
         <h2>1. Acceptance of Terms</h2>
         <p>By accessing or using Seli ("the Service"), operated by SELI LLC, a New Mexico limited liability company ("SELI," "we," "us," or "our"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use Seli.</p>
@@ -4659,7 +4647,7 @@ function TermsPage() {
         <p>Seli applies a uniform, non-personalized scoring methodology to this data and presents it alongside the original filing data. The scoring is applied identically to every trade and every user.</p>
 
         <h2>3. Not Financial Advice</h2>
-        <p><strong>Seli does not provide financial, investment, legal, or tax advice.</strong> No content on Seli, including conviction scores, insider rankings, alert notifications, portfolio overlays, data exports, or any other feature, constitutes a recommendation to buy, sell, or hold any security. Seli is not a registered investment advisor, broker-dealer, or financial planner under federal or state law.</p>
+        <p><strong>Seli does not provide financial, investment, legal, or tax advice.</strong> No content on Seli, including signals and signal strength scores, insider rankings, alert notifications, portfolio overlays, data exports, or any other feature, constitutes a recommendation to buy, sell, or hold any security. Seli is not a registered investment advisor, broker-dealer, or financial planner under federal or state law.</p>
         <p>The scoring methodology is based on published academic research describing historical statistical tendencies across large samples of insider trades. Historical patterns do not predict future results. Individual trades, insiders, and market conditions vary. You are solely responsible for your own investment decisions.</p>
         <p>Consult a qualified financial professional before making investment decisions based on any information you find on Seli or elsewhere.</p>
 
@@ -4729,22 +4717,6 @@ function TermsPage() {
         <h2>16. Contact</h2>
         <p>SELI LLC<br />Albuquerque, New Mexico<br /><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
-      <footer className="lp-footer">
-        <div className="lp-footer__frame">
-          <div className="lp-footer__logo">
-            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </div>
-          <div className="lp-footer__links">
-            <a href="/">Home</a>
-            <span>·</span>
-            <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
-            <span>·</span>
-            <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
@@ -4753,22 +4725,10 @@ function TermsPage() {
 function PrivacyPage() {
   const [dark, setDark] = useTheme();
   return (
-    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
-      <nav className="lp-nav">
-        <div className="lp-nav__frame">
-          <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </a>
-          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{ marginLeft: 'auto' }} onClick={() => setDark(d => !d)} title="Toggle theme">
-            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
-          </button>
-        </div>
-      </nav>
+    <div className="legal-page legal-page--framed">
       <div className="legal-content">
         <h1>Privacy Policy</h1>
-        <p className="legal-date">Last updated: August 2, 2026</p>
+        <p className="legal-date">Last updated: November 6, 2026</p>
 
         <h2>1. Overview</h2>
         <p>This Privacy Policy describes how SELI LLC ("SELI," "we," "us," or "our") collects, uses, shares, and protects your personal information when you use Seli. By using the Service, you consent to the practices described in this policy.</p>
@@ -4788,7 +4748,8 @@ function PrivacyPage() {
         <p>If you connect a brokerage account through SnapTrade, Seli stores an encrypted connection token and retrieves your portfolio positions (holdings, balances, account metadata) on a read-only basis. Seli never receives or stores your brokerage login credentials and cannot execute trades or transfer funds.</p>
 
         <h3>Usage Data</h3>
-        <p>We collect standard server logs (IP addresses, browser type, pages visited, timestamps) for security monitoring, performance optimization, and debugging. If analytics tooling is added in the future, this policy will be updated before any new data collection begins.</p>
+        <p>We collect standard server logs (IP addresses, browser type, pages visited, timestamps) for security monitoring, performance optimization, and debugging.</p>
+        <p>We also use PostHog for product analytics: which pages are viewed, what's clicked, and basic device and browser details. PostHog stores a random ID in a first-party cookie and your browser's local storage so visits can be counted, and it isn't linked to your name or email. We use Sentry to collect error reports when something breaks: the error, the page it happened on, and browser details. Neither is used for advertising.</p>
 
         <h2>3. How We Use Your Information</h2>
         <p>We use the information we collect to:</p>
@@ -4813,6 +4774,8 @@ function PrivacyPage() {
             <tr><td><a href="https://cloudflare.com/privacypolicy" target="_blank" rel="noopener noreferrer">Cloudflare</a></td><td>Hosting, CDN, security</td><td>Request metadata (IP, headers)</td></tr>
             <tr><td><a href="https://snaptrade.com/privacy" target="_blank" rel="noopener noreferrer">SnapTrade</a></td><td>Brokerage connection</td><td>Connection token, portfolio data</td></tr>
             <tr><td><a href="https://resend.com/privacy" target="_blank" rel="noopener noreferrer">Resend</a></td><td>Email delivery</td><td>Email address, email content</td></tr>
+            <tr><td><a href="https://posthog.com/privacy" target="_blank" rel="noopener noreferrer">PostHog</a></td><td>Product analytics</td><td>Pages viewed, clicks, device and browser details, a random visitor ID</td></tr>
+            <tr><td><a href="https://sentry.io/privacy/" target="_blank" rel="noopener noreferrer">Sentry</a></td><td>Error reporting</td><td>Error details, page URL, browser details</td></tr>
           </tbody>
         </table>
         <p>We may also disclose your information if required by law, subpoena, court order, or other legal process, or if we believe disclosure is necessary to protect the rights, property, or safety of SELI LLC, our users, or the public.</p>
@@ -4844,7 +4807,7 @@ function PrivacyPage() {
         <p>Residents of Colorado, Connecticut, Virginia, Utah, and other states with consumer privacy laws have similar rights to access, correct, delete, and opt out of certain processing of personal data. Contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> to exercise these rights.</p>
 
         <h2>9. Cookies</h2>
-        <p>Seli uses only essential cookies required for authentication. We do not use advertising, analytics, or tracking cookies. Full details are in our <a href="/cookies">Cookie Policy</a>.</p>
+        <p>Seli uses an essential cookie for sign-in and a first-party analytics cookie (PostHog) to count visits. We do not use advertising cookies or cross-site tracking. Full details are in our <a href="/cookies">Cookie Policy</a>.</p>
 
         <h2>10. Children's Privacy</h2>
         <p>Seli is not directed at anyone under the age of 18. We do not knowingly collect personal information from anyone under 18. If we learn that we have collected personal information from someone under 18, we will delete it promptly.</p>
@@ -4858,22 +4821,6 @@ function PrivacyPage() {
         <h2>13. Contact</h2>
         <p>SELI LLC<br />Albuquerque, New Mexico<br /><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
-      <footer className="lp-footer">
-        <div className="lp-footer__frame">
-          <div className="lp-footer__logo">
-            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </div>
-          <div className="lp-footer__links">
-            <a href="/">Home</a>
-            <span>·</span>
-            <a href="/terms" className="lp-footer__link-muted">Terms</a>
-            <span>·</span>
-            <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
@@ -4882,61 +4829,38 @@ function PrivacyPage() {
 function CookiePage() {
   const [dark, setDark] = useTheme();
   return (
-    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
-      <nav className="lp-nav">
-        <div className="lp-nav__frame">
-          <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </a>
-          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{ marginLeft: 'auto' }} onClick={() => setDark(d => !d)} title="Toggle theme">
-            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
-          </button>
-        </div>
-      </nav>
+    <div className="legal-page legal-page--framed">
       <div className="legal-content">
         <h1>Cookie Policy</h1>
-        <p className="legal-date">Last updated: July 22, 2026</p>
+        <p className="legal-date">Last updated: November 6, 2026</p>
 
         <h2>1. What This Covers</h2>
-        <p>The cookies and similar browser-storage technologies (like localStorage) Seli actually uses. Kept short on purpose, since Seli doesn't use advertising or tracking cookies, and never sells data to anyone.</p>
+        <p>The cookies and similar browser-storage technologies (like localStorage) Seli actually uses. Kept short on purpose: Seli doesn't use advertising cookies and never sells data to anyone.</p>
 
         <h2>2. Essential Cookies</h2>
         <p>Signing in and staying signed in requires a session cookie, set by Seli's authentication provider, Clerk (clerk.com). It's strictly necessary. Without it, Seli can't tell you're signed in, so there's no opt-out for it while still using an account.</p>
 
-        <h2>3. Local Storage (Not a Cookie, But Similar)</h2>
-        <p>Seli also uses your browser's localStorage (data that stays on your device, never sent to our servers) for a couple of small preferences: whether you've already seen the welcome guide, and your light/dark theme choice. Clearing your browser's site data resets these to their defaults, and your account itself is untouched.</p>
+        <h2>3. Analytics</h2>
+        <p>Seli uses PostHog to see which pages get used and where people get stuck. PostHog sets a first-party cookie (its name starts with <code>ph_</code>) and keeps a matching entry in localStorage, holding a random visitor ID. It isn't tied to your name or email, it isn't shared with advertisers, and it's only set on seli.app. Error reports go to Sentry when something breaks; Sentry doesn't set cookies here.</p>
 
-        <h2>4. What Seli Doesn't Use</h2>
-        <p>No advertising cookies. No third-party tracking or analytics cookies. No cross-site tracking. No cookie-based fingerprinting.</p>
+        <h2>4. Local Storage (Not a Cookie, But Similar)</h2>
+        <p>Seli also uses your browser's localStorage for small preferences that stay on your device: your light/dark theme, whether you've seen the welcome guide, and view choices like grid or list. Clearing your browser's site data resets these to their defaults, and your account itself is untouched.</p>
 
-        <h2>5. Third-Party Services</h2>
+        <h2>5. What Seli Doesn't Use</h2>
+        <p>No advertising cookies. No cross-site tracking. No cookie-based fingerprinting.</p>
+
+        <h2>6. Third-Party Services</h2>
         <p>A few features route through services with their own cookie practices while you're actively using them, such as Stripe during checkout and your brokerage's own site during the SnapTrade connection flow. Seli doesn't control those cookies, and their own policies apply while you're on their pages.</p>
 
-        <h2>6. Your Choices</h2>
-        <p>Most browsers let you block or delete cookies in settings. Blocking Clerk's session cookie prevents sign-in entirely, since it's required for authentication, and there's no way around this while still using a Seli account.</p>
+        <h2>7. Your Choices</h2>
+        <p>Most browsers let you block or delete cookies in settings. Blocking the PostHog cookie, or using a content blocker that stops analytics, doesn't affect anything in Seli. Blocking Clerk's session cookie prevents sign-in entirely, since it's required for authentication, and there's no way around this while still using a Seli account.</p>
 
-        <h2>7. Changes to This Policy</h2>
+        <h2>8. Changes to This Policy</h2>
         <p>We may update this policy if what Seli uses changes. Material changes show up here with an updated date.</p>
 
-        <h2>8. Contact</h2>
+        <h2>9. Contact</h2>
         <p>Questions about this Cookie Policy? Contact us at <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </div>
-      <footer className="lp-footer">
-        <div className="lp-footer__frame">
-          <div className="lp-footer__logo">
-            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </div>
-          <div className="lp-footer__links">
-            <a href="/">Home</a>
-            <span>·</span>
-            <a href="/privacy" className="lp-footer__link-muted">Privacy Policy</a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
@@ -4952,21 +4876,23 @@ const HELP_SECTIONS = [
     label: 'Using Seli',
     render: () => (
       <>
-        <p>Seli is built around two things: <strong>stocks</strong> and the <strong>people who trade them</strong>. Each has its own page, and every ticker or name anywhere in the app links to it.</p>
+        <p>Seli is built around two things: <strong>stocks</strong> and the <strong>people who trade them</strong>. Each has its own page, and every ticker or name anywhere on the site links to it.</p>
         <h3>Search</h3>
         <p>The search box at the top takes a ticker (NVDA), a company (Costco) or a person (Jensen Huang). Press <kbd>/</kbd> or <kbd>Cmd</kbd>+<kbd>K</kbd> from anywhere to jump to it.</p>
+        <h3>Home</h3>
+        <p>Your watchlist this week: every stock and person you follow as a tile (or a list), with their latest buy or sale, when it happened, and a Signal tag when it's on the Signals list. Hover a tile for the details. Next to it: the week's biggest insider buy and the latest posts from the newswire.</p>
+        <h3>Trades</h3>
+        <p>Two views. <strong>Signals</strong> is the short list of trades worth a look (what counts is under What the numbers mean), ranked by strength. <strong>All trades</strong> is every open-market insider and Congress trade, with filters for dates, buys or sales, who's trading and size.</p>
+        <h3>Insiders</h3>
+        <p>Ranks people by how their open-market buys have done against the S&amp;P 500. Every figure shows how many buys it's based on. The guide under the table explains each role tag.</p>
         <h3>Stock pages</h3>
         <p>A plain-English summary of what insiders have done lately, a price chart with every insider buy and sale marked on it, who's trading, and the filings themselves with links to the SEC originals.</p>
         <h3>Insider pages</h3>
         <p>Where the person sits, how their past open-market buys have done since (with the number of buys behind every figure), what they still hold, and every trade.</p>
-        <h3>Home</h3>
-        <p>Activity on what you follow first. Then the week's most notable insider buying, the same story the Sunday email leads with, then other buying, Congress, and the largest sales.</p>
-        <h3>Watchlist</h3>
-        <p>The stocks and people you follow, plus your brokerage holdings if you've linked one. Each row says what insiders did. Pro accounts get a bell on each row for same-day email alerts.</p>
-        <h3>Data and Leaderboard</h3>
-        <p><strong>Trades</strong> is the full feed: scored signals grouped by stock, or every raw filing, with filters. <strong>Insiders</strong> ranks insiders by how their buys have done.</p>
+        <h3>Following and your Watchlist</h3>
+        <p>Tap <strong>Follow</strong> (the eye) on any stock or person. The eye button at the top of every page opens your Watchlist, where each row says what insiders did. Unfollow from there; a row you unfollow stays until you leave the page, in case it was a slip. Pro accounts also get an <strong>Email</strong> switch on each row for same-day emails.</p>
         <h3>Account</h3>
-        <p>Your plan, which emails you get, and your linked brokerage.</p>
+        <p>Your plan, which emails you get, your linked brokerage, and light or dark mode.</p>
       </>
     ),
   },
@@ -4976,20 +4902,27 @@ const HELP_SECTIONS = [
     render: () => (
       <>
         <h3>Open-market trade</h3>
-        <p>An insider buying or selling shares at the market price with their own money (SEC codes P and S). Grants, option exercises and shares withheld for taxes aren't decisions to buy or sell, so Seli shows them but leaves them out of summaries and scores.</p>
+        <p>An insider buying or selling shares at the market price with their own money (SEC codes P and S). Grants, option exercises and shares withheld for taxes aren't decisions to buy or sell, so Seli shows them on stock pages but leaves them out of summaries, signals and scores.</p>
         <h3>Form 4 and the STOCK Act</h3>
-        <p>Company officers, directors and 10% owners file a Form 4 within two business days of a trade, with exact share counts and prices. Members of Congress disclose under the STOCK Act, often weeks later, and only as a dollar range. Seli shows congressional amounts as the range, never a made-up exact figure.</p>
+        <p>Company officers, directors and 10% owners file a Form 4 within two business days of a trade, with exact share counts and prices. Members of Congress disclose under the STOCK Act, up to 45 days after the trade, and only as a dollar range. Seli shows congressional amounts as the range, never a made-up exact figure.</p>
+        <h3>Signals</h3>
+        <p>Seli groups each stock's trades into bursts (trades no more than 14 days apart) and flags a burst when it's unusual:</p>
+        <ul>
+          <li><strong>Cluster:</strong> two or more insiders buying the same stock in one burst.</li>
+          <li><strong>First buy in 3+ yrs:</strong> someone buying a stock they haven't bought in at least three years.</li>
+          <li><strong>Reversal:</strong> someone buying after 2+ sales and no buys of that stock in the previous 2 years. On the selling side, the opposite: selling (not under a pre-set plan) after 2+ buys and no sales in 2 years.</li>
+        </ul>
+        <p>Only company insiders count (not Congress or funds), and only trades of $10,000 or more in stocks priced $1 or higher.</p>
+        <h3>Strength (0 to 100)</h3>
+        <p>How a buying signal ranks against others: how many insiders, how senior they are, how much they bought, how much their stake grew, and whether it's a first buy in years. <strong>75 and up: Strong</strong> (green). <strong>50 to 74: Moderate</strong> (yellow). <strong>Under 50: Weak</strong> (gray). Selling signals aren't scored; they're ordered by size, because insiders sell for too many unrelated reasons.</p>
         <h3>Pre-scheduled plan (10b5-1)</h3>
         <p>A trade set up months in advance under a written plan. Marked "Planned" in filings tables. These say less about what the insider thinks today.</p>
-        <h3>Cluster</h3>
-        <p>Several insiders at one company buying within a few weeks. Rarer than a single buy, which is why Seli points them out.</p>
         <h3>Stake change</h3>
         <p>Shares bought compared with what the insider already held. A $200K buy that doubles someone's stake reads differently from one that adds 1%.</p>
-        <h3>Conviction score (0 to 100)</h3>
-        <p>Seli's one score, on buys only. It adds up how many markers of a meaningful insider buy a stock has: senior insiders, open-market, not pre-scheduled, size, stake change, and several insiders at once.</p>
-        <p><strong>60 and up: High.</strong> Several strong markers at once. <strong>35 to 59: Medium.</strong> Clears a few markers. <strong>Under 35: Low.</strong> Small, routine-looking, or from further down the org chart. Sales aren't scored: insiders sell for too many unrelated reasons.</p>
+        <h3>Role tags</h3>
+        <p>Blue-green tags are a company insider's job (CEO, Board member, Major shareholder and so on). Blue tags with the Capitol icon are members of Congress (House or Senate). The full list is under the table on the Insiders page.</p>
         <h3>Hit rate</h3>
-        <p>On insider pages and the leaderboard: the share of someone's open-market buys where the stock is now at least 5% higher than their buy price. Buys within 5% either way count as flat and are left out. The number of buys it's based on is always shown next to it.</p>
+        <p>On insider pages and the Insiders ranking: the share of someone's open-market buys where the stock is now at least 5% higher than their buy price. Buys within 5% either way count as flat and are left out. The number of buys it's based on is always shown next to it.</p>
         <h3>Avg since buy vs. S&amp;P 500</h3>
         <p>The average move from each buy price to the latest close, next to what the S&amp;P 500 did over the same periods. It's context, not a prediction.</p>
       </>
@@ -5005,7 +4938,7 @@ const HELP_SECTIONS = [
         <h3>How current is it?</h3>
         <p>Seli checks for new filings throughout the trading day. New filings usually show up the same day they're published. The newest filing date Seli has is in the account menu (your avatar, top right).</p>
         <h3>Is this financial advice?</h3>
-        <p>No. Seli is informational and educational only. Every summary, score and alert is generated the same way for every user. Nothing is personalized to your holdings, goals or risk tolerance, even when you choose which stocks to watch. Nothing here is a recommendation to buy, sell or hold anything. See the <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
+        <p>No. Seli is informational and educational only. Every summary, score and alert is generated the same way for every user. Nothing is personalized to your holdings, goals or risk tolerance, even when you choose which stocks to follow. Nothing here is a recommendation to buy, sell or hold anything. See the <a href="/terms">Terms of Service</a> for the full disclaimer.</p>
         <h3>Can Seli place trades for me?</h3>
         <p>No. Brokerage connections are read-only.</p>
         <h3>Still have a question?</h3>
@@ -5021,9 +4954,9 @@ const HELP_SECTIONS = [
         <h3>What's free?</h3>
         <p>Every stock page and every insider page, with the last 12 months of trades (track records and summaries use full history). Follow up to 3 stocks or people, and get the Sunday digest about them.</p>
         <h3>What does Pro add?</h3>
-        <p>Full trade history, unlimited watching, a daily digest, same-day email alerts, linking your brokerage, the full leaderboard, for {PRO_PRICE_DISPLAY} per month.</p>
+        <p>Full trade history, unlimited following, a daily digest, same-day email alerts, linking your brokerage, and the full Insiders ranking, for {PRO_PRICE_DISPLAY} per month.</p>
         <h3>What's the Full Data Export?</h3>
-        <p>A separate, one-time $39.99 purchase: the complete database as a spreadsheet, independent of Pro. If you need it again later, use <a href="/redownload">seli.app/redownload</a> at no extra charge.</p>
+        <p>A separate, one-time $39.99 purchase, independent of Pro: every corporate insider (Form 4) trade Seli has on file, as one spreadsheet per year. Congress trades aren't included. Details are on the <a href="/data-download">data export page</a>. If you need it again later, use <a href="/redownload">seli.app/redownload</a> at no extra charge.</p>
         <h3>How do I cancel Pro?</h3>
         <p>Account, Plan and billing, Cancel subscription. You keep access through the end of the period you paid for, and can reactivate anytime.</p>
         <h3>Billing questions we didn't cover?</h3>
@@ -5042,7 +4975,7 @@ const HELP_SECTIONS = [
         <h3>Daily digest (Pro)</h3>
         <p>Weekday mornings, only when something you follow had a filing.</p>
         <h3>Same-day alerts (Pro)</h3>
-        <p>An email the day a new filing lands for something you follow. Turn them on in Account, then mute individual stocks or people with the bell on your Watchlist. Two optional extras: big C-suite buys on any stock, and an insider switching from selling to buying on a stock you follow.</p>
+        <p>An email the day a new filing lands for something you follow. Turn them on in Account, then switch individual stocks or people on or off with the Email switch on each Watchlist row. Two optional extras: big C-suite buys on any stock, and reversals on stocks you follow.</p>
         <h3>Not getting an email you expect?</h3>
         <p>Check Account, Emails, and use Send test email there. Still missing? Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
       </>
@@ -5072,33 +5005,31 @@ const HELP_SECTIONS = [
 function DataDownloadPage() {
   const [dark, setDark] = useTheme();
 
+  // Made-up names and companies: this shows the format, not real trades.
   const SAMPLE_ROWS = [
-    { date: '2026-07-28', ticker: 'AAPL', company: 'Apple Inc.', insider: 'WILLIAMS JEFFREY E', title: 'General Counsel', type: 'Buy', shares: '10,500', price: '$198.42', value: '$2.1M', pct: '+12.3%', role: 'Executive', routine: 'No' },
-    { date: '2026-07-25', ticker: 'NVDA', company: 'NVIDIA Corp', insider: 'HUANG JEN HSUN', title: 'CEO', type: 'Buy', shares: '50,000', price: '$112.80', value: '$5.6M', pct: '+3.1%', role: 'Executive', routine: 'No' },
-    { date: '2026-07-24', ticker: 'JPM', company: 'JPMorgan Chase', insider: 'DIMON JAMES', title: 'CEO', type: 'Buy', shares: '25,000', price: '$221.35', value: '$5.5M', pct: '+1.8%', role: 'Executive', routine: 'Yes' },
-    { date: '2026-07-22', ticker: 'MSFT', company: 'Microsoft Corp', insider: 'NADELLA SATYA', title: 'CEO', type: 'Sell', shares: '8,000', price: '$438.90', value: '$3.5M', pct: '-0.4%', role: 'Executive', routine: 'Yes' },
-    { date: '2026-07-20', ticker: 'TSLA', company: 'Tesla, Inc.', insider: 'TANEJA VAIBHAV', title: 'CFO', type: 'Buy', shares: '5,000', price: '$248.15', value: '$1.2M', pct: '+8.7%', role: 'Executive', routine: 'No' },
+    { date: '2026-07-28', ticker: 'EXMP', insider: 'DOE JANE A', title: 'CEO', type: 'Buy', value: '$2.1M' },
+    { date: '2026-07-25', ticker: 'SMPL', insider: 'ROE RICHARD', title: 'Director', type: 'Buy', value: '$480,000' },
+    { date: '2026-07-24', ticker: 'DEMO', insider: 'LEE ALEX', title: 'CFO', type: 'Sell', value: '$1.3M' },
+    { date: '2026-07-22', ticker: 'TEST', insider: 'PARK SAM', title: '10% Owner', type: 'Buy', value: '$5.5M' },
+    { date: '2026-07-20', ticker: 'EXMP', insider: 'KIM JORDAN', title: 'EVP, Operations', type: 'Sell', value: '$212,000' },
   ];
 
   const COLUMNS = [
-    { name: 'transaction_date', desc: 'Date the trade occurred' },
-    { name: 'filing_date', desc: 'Date the SEC filing was published' },
-    { name: 'ticker', desc: 'Stock ticker symbol' },
-    { name: 'company_name', desc: 'Full company name' },
-    { name: 'insider_name', desc: 'Reporting insider' },
-    { name: 'insider_title', desc: 'Title or role at the company' },
-    { name: 'transaction_type', desc: 'Buy or Sell' },
-    { name: 'transaction_code', desc: 'SEC code (P = purchase, S = sale)' },
-    { name: 'is_open_market', desc: 'Voluntary open-market trade' },
-    { name: 'shares', desc: 'Shares traded' },
-    { name: 'price_per_share', desc: 'Price at time of trade' },
-    { name: 'value', desc: 'Total dollar value' },
-    { name: 'shares_owned_after', desc: 'Holdings after the trade' },
-    { name: 'pct_owned_change', desc: 'Position change (%)' },
-    { name: 'relationship', desc: 'Executive, Officer, or Director' },
-    { name: 'is_routine', desc: 'Routine pattern flag (Cohen et al. 2012)' },
-    { name: 'sector', desc: 'Sector classification' },
-    { name: 'accession_number', desc: 'SEC EDGAR accession number for source verification' },
+    { name: 'Transaction date', desc: 'Date the trade occurred' },
+    { name: 'Filing date', desc: 'Date the Form 4 was filed with the SEC' },
+    { name: 'Ticker', desc: 'Stock ticker symbol' },
+    { name: 'Company', desc: 'Company name' },
+    { name: 'Insider name', desc: 'Person or entity that filed, as written on the filing' },
+    { name: 'Insider title', desc: 'Their title at the company (CEO, Director, 10% Owner...)' },
+    { name: 'Relationship', desc: 'Seli\'s grouping by seniority: strong (officers), medium (SVPs, general counsel and similar), weak (everyone else)' },
+    { name: 'Buy / sell', desc: 'Direction of the trade' },
+    { name: 'Transaction code', desc: 'SEC code: P open-market purchase, S sale, A grant, M option exercise, F tax withholding, and others' },
+    { name: 'Open market', desc: 'Whether it was an open-market buy or sale (codes P and S)' },
+    { name: 'Shares', desc: 'Shares traded' },
+    { name: 'Price per share', desc: 'Price reported on the filing' },
+    { name: 'Value', desc: 'Shares times price, in dollars' },
+    { name: '% owned change', desc: 'How much the trade changed their holding' },
+    { name: 'Sector', desc: 'Sector of the company' },
   ];
 
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -5126,39 +5057,24 @@ function DataDownloadPage() {
   );
 
   return (
-    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
-      <nav className="lp-nav">
-        <div className="lp-nav__frame">
-          <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </a>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
-            <a href="/about" className="lp-nav__link">About</a>
-            <button className="lp-btn-ghost lp-btn-ghost--icon" onClick={() => setDark(d => !d)} title="Toggle theme">
-              {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
-            </button>
-          </div>
-        </div>
-      </nav>
+    <div className="legal-page legal-page--framed">
       <div className="legal-content" style={{ maxWidth: 960 }}>
 
         <div className="lp-info__eyebrow">Insider Trading Data Export</div>
         <h1 style={{ fontSize: 'clamp(1.375rem, 5vw, 2.25rem)', fontWeight: 800, letterSpacing: '-1px', lineHeight: 1.1, marginBottom: 20 }}>Download 10+ Years of SEC Insider Trading Data</h1>
         <p style={{ fontSize: '0.9375rem', color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 8 }}>
-          The same insider trading data that powers Bloomberg terminals and institutional research desks — structured, clean, and
-          a fraction of the cost. Every open-market SEC Form 4 filing from corporate executives, directors, and 10% owners,
-          with routine-trade flags for separating signal from noise. One-time purchase, yours forever.
+          Every SEC Form 4 transaction Seli has on file from corporate executives, directors and 10% owners: open-market
+          buys and sales, plus grants, option exercises and the rest, each marked so you can filter to the trades that matter.
+          One-time purchase, yours to keep.
         </p>
         <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', marginBottom: 12 }}>
-          Compressed ZIP · one CSV per calendar year · {COLUMNS.length} fields per transaction · Excel, Python, R, or any tool that reads CSV
+          Compressed ZIP · one CSV per calendar year · opens in Excel, Python, R, or any tool that reads CSV
         </p>
         <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 28 }}>
           Researchers, quants, and serious investors use insider trading data to build models, screen for
-          investment ideas, and backtest strategies. Academic studies show insider purchases outperform the
-          market by 4–5% annually. This is the raw data behind those findings — ready for your own analysis.
-          Congressional disclosures are available for free within the app but are not included in the data export.
+          investment ideas, and backtest strategies. Published research (Seyhun, 1986; Lakonishok and Lee, 2001) found
+          that insider purchases have historically beaten the market. This is the kind of data those studies used, so you
+          can test it yourself. Congress trades are free to browse in the app but aren't included in the export.
         </p>
 
         {buyCTA}
@@ -5175,7 +5091,7 @@ function DataDownloadPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', minWidth: 420 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Date', 'Ticker', 'Insider', 'Type', 'Value', 'Role'].map(h => (
+                  {['Date', 'Ticker', 'Insider', 'Type', 'Value', 'Title'].map(h => (
                     <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, fontSize: '0.6875rem', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -5188,19 +5104,19 @@ function DataDownloadPage() {
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.insider}</td>
                     <td style={{ padding: '8px 10px' }}><span style={{ color: r.type === 'Buy' ? 'var(--green-600)' : 'var(--red-600)', fontWeight: 600 }}>{r.type}</span></td>
                     <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>{r.value}</td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.role}</td>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.title}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', fontStyle: 'italic' }}>
-            Representative sample showing 6 of {COLUMNS.length} fields. Actual export contains all columns listed below.
+            Example rows with made-up names, to show the format. The export has the columns listed below.
           </p>
         </section>
 
         <section className="lp-info__section">
-          <h2>Column schema ({COLUMNS.length} fields)</h2>
+          <h2>What's in each row</h2>
           <div style={{ overflowX: 'auto', margin: '12px 0', border: '0.5px solid var(--border)', borderRadius: 8 }}>
             <table className="legal-table" style={{ margin: 0 }}>
               <thead>
@@ -5227,9 +5143,7 @@ function DataDownloadPage() {
               consistent parsing, ready for statistical analysis.</li>
             <li><strong>Sector analysis.</strong> Aggregate insider buying and selling patterns by
               sector, time period, or insider role.</li>
-            <li><strong>Congressional trading.</strong> STOCK Act disclosures in the same schema as
-              corporate filings for direct comparison.</li>
-            <li><strong>Build your own models.</strong> The raw data behind Seli's scoring, available
+            <li><strong>Build your own models.</strong> The same Form 4 data Seli's signals are built on,
               for your own methodology.</li>
           </ul>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-2)' }}>
@@ -5244,29 +5158,11 @@ function DataDownloadPage() {
             One-time purchase. No subscription. Re-download anytime from your account.
           </p>
           <a href="/" style={{ fontSize: '0.875rem', color: 'var(--accent-strong)', textDecoration: 'none', fontWeight: 500 }}>
-            Or explore Seli free — real-time signals, scoring, and alerts →
+            Or use Seli free: signals, track records and email alerts →
           </a>
         </section>
 
       </div>
-      <footer className="lp-footer">
-        <div className="lp-footer__frame">
-          <div className="lp-footer__logo">
-            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </div>
-          <div className="lp-footer__links">
-            <a href="/">Home</a>
-            <span>·</span>
-            <a href="/about" className="lp-footer__link-muted">About</a>
-            <span>·</span>
-            <a href="/terms" className="lp-footer__link-muted">Terms</a>
-            <span>·</span>
-            <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
@@ -5326,15 +5222,7 @@ function PurchaseCompletePage() {
   }
 
   return (
-    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
-      <nav className="lp-nav">
-        <div className="lp-nav__frame">
-          <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-          </a>
-        </div>
-      </nav>
+    <div className="legal-page legal-page--framed">
       <div className="legal-content" style={{ maxWidth: 600, textAlign: 'center', paddingTop: 60 }}>
         {status === 'loading' && (
           <>
@@ -5516,19 +5404,7 @@ function RedownloadPage() {
   });
 
   return (
-    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
-      <nav className="lp-nav">
-        <div className="lp-nav__frame">
-          <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-          </a>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
-            <a href="/help" className="lp-nav__link">Help</a>
-            <a href="/data-download" className="lp-nav__link">Buy data</a>
-          </div>
-        </div>
-      </nav>
+    <div className="legal-page legal-page--framed">
       <div className="legal-content" style={{ maxWidth: 560, paddingTop: 48 }}>
 
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>Download your data export</h1>
@@ -5746,19 +5622,7 @@ function HelpCenterPage() {
   const [dark, setDark] = useTheme();
 
   return (
-    <div className="legal-page" data-theme={dark ? 'dark' : 'light'}>
-      <nav className="lp-nav">
-        <div className="lp-nav__frame">
-          <a className="lp-nav__logo" href="/">
-            <div className="lp-logo-mark"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </a>
-          <button className="lp-btn-ghost lp-btn-ghost--icon" style={{ marginLeft: 'auto' }} onClick={() => setDark(d => !d)} title="Toggle theme">
-            {dark ? <IconSun style={{ width: 15, height: 15 }} /> : <IconMoon style={{ width: 15, height: 15 }} />}
-          </button>
-        </div>
-      </nav>
+    <div className="legal-page legal-page--framed">
       <div className="legal-content help-center">
         <h1>Help Center</h1>
         <div className="help-center__body">
@@ -5779,24 +5643,6 @@ function HelpCenterPage() {
         </div>
         <RateSeli />
       </div>
-      <footer className="lp-footer">
-        <div className="lp-footer__frame">
-          <div className="lp-footer__logo">
-            <div className="lp-logo-mark lp-logo-mark--sm"><img src={logoSimple} alt="Seli" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
-            <span className="lp-wordmark">Seli</span>
-            <span className="beta-tag beta-tag--nav" title="Seli is in private beta">BETA</span>
-          </div>
-          <div className="lp-footer__links">
-            <a href="/">Home</a>
-            <span>·</span>
-            <a href="/terms" className="lp-footer__link-muted">Terms</a>
-            <span>·</span>
-            <a href="/privacy" className="lp-footer__link-muted">Privacy</a>
-            <span>·</span>
-            <a href="/cookies" className="lp-footer__link-muted">Cookies</a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
@@ -6992,6 +6838,37 @@ function LandingPage({ onEnter, dark, setDark }) {
 //   /leaderboard            Insider rankings (/insights redirects here)
 //   /watchlist              What you watch + what you hold
 //   /account                Plan, emails, linked brokerage (/settings redirects here)
+const STATIC_PAGES = {
+  '/terms': TermsPage, '/privacy': PrivacyPage, '/cookies': CookiePage, '/help': HelpCenterPage,
+  '/data-download': DataDownloadPage, '/purchase-complete': PurchaseCompletePage, '/redownload': RedownloadPage,
+};
+
+// Any URL Seli doesn't know: say so, and point somewhere useful.
+function NotFoundPage() {
+  useEffect(() => {
+    document.title = 'Page not found · Seli';
+    const m = document.createElement('meta');
+    m.name = 'robots'; m.content = 'noindex';
+    document.head.appendChild(m);
+    return () => m.remove();
+  }, []);
+  return (
+    <div className="sx-page sx-404">
+      <p className="sx-404__code">404</p>
+      <h1 className="sx-head__title">Page not found</h1>
+      <p className="sx-head__desc">The link may be old or mistyped. Try searching for a stock or person, or start from one of these.</p>
+      <div className="sx-404__search"><SearchBox variant="inline" placeholder="Search a stock, CEO, or member of Congress" /></div>
+      <p className="sx-404__links">
+        <Link to="/" className="sx-link">Home</Link>
+        <Link to="/trades" className="sx-link">Trades</Link>
+        <Link to="/leaderboard" className="sx-link">Insiders</Link>
+        <Link to="/blog" className="sx-link">News</Link>
+        <a href="/help" className="sx-link">Help</a>
+      </p>
+    </div>
+  );
+}
+
 function routeFromLocation(loc = window.location) {
   const parts = loc.pathname.split('/').filter(Boolean);
   const [a, b] = parts;
@@ -7012,14 +6889,19 @@ function routeFromLocation(loc = window.location) {
     }
     return { page: 'blogPost', slug: decodeURIComponent(b).toLowerCase() };
   }
-  if (a === 'data') return { page: 'dashboard' };
+  // The old Data explorer was folded into Trades.
+  if (a === 'data') return { page: 'trades', canonical: '/trades' };
   if (a === 'trades' && !b) return { page: 'trades' };
   if (a === 'leaderboard') return { page: 'leaderboard' };
   if (a === 'insights' || a === 'insiders') return { page: 'leaderboard', canonical: '/leaderboard' };
   if (a === 'watchlist') return { page: 'watchlist' };
   if (a === 'account') return { page: 'account' };
   if (a === 'settings') return { page: 'account', canonical: '/account' };
-  return { page: 'home', canonical: '/' };
+  // Help, legal and data-export pages: their own content inside the normal
+  // site frame (picked by path in AppInner).
+  if (STATIC_PAGES[`/${a}`] && !b) return { page: 'static' };
+  if (a === 'about' || a === 'onboard') return { page: 'home' };
+  return { page: 'notFound' };
 }
 const PAGE_PATHS = { home: '/', trades: '/trades', dashboard: '/data', data: '/data', signals: '/leaderboard', leaderboard: '/leaderboard', watchlist: '/watchlist', settings: '/account', account: '/account' };
 const PAGE_TITLES = { home: 'Home', dashboard: 'Data explorer', trades: 'Trades', leaderboard: 'Leaderboard', watchlist: 'Watchlist', account: 'Account' };
@@ -7340,13 +7222,9 @@ function AppInner() {
 
   // ── Standalone pages ──────────────────────────────────────────────────────
   const path = window.location.pathname.replace(/\/$/, '') || '/';
-  if (path === '/terms') return <TermsPage />;
-  if (path === '/privacy') return <PrivacyPage />;
-  if (path === '/cookies') return <CookiePage />;
-  if (path === '/help') return <HelpCenterPage />;
-  if (path === '/data-download') return <DataDownloadPage />;
-  if (path === '/purchase-complete') return <PurchaseCompletePage />;
-  if (path === '/redownload') return <RedownloadPage />;
+  // Help, legal and export pages sit in the same frame as everything else:
+  // the public nav when signed out, the app nav when signed in.
+  const StaticPage = route.page === 'static' ? STATIC_PAGES[path] : null;
 
   // Stock, insider, Congress and insider-buying pages are public. Signed-out
   // visitors (and Google) get the read-only version straight away, including
@@ -7356,6 +7234,14 @@ function AppInner() {
   // loads, not a flash of the signed-out page (index.html hides the server-
   // rendered copy for them the same way).
   if (!isLoaded && wasSignedIn && !isAboutPath) return <BootShell />;
+
+  if ((StaticPage || route.page === 'notFound') && (!isLoaded || !isSignedIn)) {
+    return (
+      <PublicShell page={route.page} logoSrc={logoSimple} isMobile={isMobileShell} plain>
+        {StaticPage ? <StaticPage /> : <NotFoundPage />}
+      </PublicShell>
+    );
+  }
 
   if (PUBLIC_PAGES.includes(route.page) && (!isLoaded || !isSignedIn) && !isAboutPath) {
     return (
@@ -7436,6 +7322,8 @@ function AppInner() {
           {page === 'blogPost' && <BlogPostPage key={route.slug} slug={route.slug} watchlist={watchlist} />}
           {page === 'watchlist' && <WatchlistPage watchlist={watchlist} portfolioTickers={billingPro ? portfolioTickers : []} onUpgrade={onUpgrade} alertsMasterOn={alertsMaster} />}
           {page === 'account' && <AccountPage user={user} onUpgrade={onUpgrade} dark={dark} setDark={setDark} />}
+          {StaticPage && <StaticPage />}
+          {page === 'notFound' && <NotFoundPage />}
           {/* Phones: the footer scrolls with the page and ends above the tab bar.
               (The one below stays pinned on desktop and is hidden on phones.) */}
           <PublicFooter logoSrc={logoSimple} className="sx-app-foot sx-app-foot--m" />
