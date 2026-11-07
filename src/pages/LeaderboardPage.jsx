@@ -130,7 +130,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
           </div>
         )}
         {visible && visible.length > 0 && !narrow && (
-          <div className={`sx-table-wrap${loading ? ' sx-dim' : ''}`}>
+          <div className={`sx-table-wrap sx-lb__scroll${loading ? ' sx-dim' : ''}`}>
             <table className="sx-table sx-table--lb">
               <thead>
                 <tr>
@@ -212,7 +212,7 @@ function RoleGuide() {
           </div>
         ))}
         <div className="sx-roles__item">
-          <dt><RoleTag role="Senator" congress /></dt>
+          <dt className="sx-roles__pair"><RoleTag role="Senator" congress /><RoleTag role="Representative" congress /></dt>
           <dd>Members of Congress. They report under the STOCK Act, in dollar ranges, up to 45 days after the trade.</dd>
         </div>
       </dl>

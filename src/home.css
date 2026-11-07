@@ -659,3 +659,11 @@
   .hx-wtable__name { grid-area: name; } .hx-wtable__amt { grid-area: amt; } .hx-wtable__when { grid-area: when; font-size: 12px; }
   .hx-wtable__what { grid-area: what; font-size: 12px; }
 }
+
+/* Watchlist capped at the newswire's bottom on desktop; scrolls inside. */
+.hx-wl__box { position: relative; }
+.hx-wl__scroll { overflow-y: auto; overscroll-behavior: contain; padding: 2px 2px 4px; margin: -2px -2px 0; }
+.hx-wl__scroll .hx-wtable__head { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+.hx-wl__box::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 44px; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--bg)); opacity: 0; transition: opacity .2s ease; }
+.hx-wl__box--more::after { opacity: 1; }

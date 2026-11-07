@@ -44,7 +44,7 @@ export const Tag = Chip;
 
 // Who someone is, the same way everywhere, color-coded: members of Congress
 // get a blue tag with a Capitol icon reading House, Senate or Congress;
-// company insiders get a neutral gray tag with their role in plain words. (So a
+// company insiders get a soft rose tag with their role in plain words. (So a
 // company's "President" can't be mistaken for anyone in government.) So the two never blur together in a mixed list, and
 // nobody has to decode "Dir" or "C-suite exec".
 // Pass congress (bool) when known; otherwise it's read from the role.

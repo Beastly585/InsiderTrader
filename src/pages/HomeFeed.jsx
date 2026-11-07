@@ -26,7 +26,7 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
   // Fixed for this page load: when your last visit ended (null until we know who you are).
   const since = useMemo(() => visitSince(user?.id), [user?.id]);
   const { data: d, error, reload } = useApi(user?.id ? `/api/feed?lite=1&days=${HOME_DAYS}${h ? `&h=${encodeURIComponent(h)}` : ''}` : null);
-  const { data: news } = useApi('/public/blog?page=1&limit=4');
+  const { data: news } = useApi('/public/blog?page=1&limit=8');
   // This week's market (featured buy, the Buys/Sells/Congress list) is the
   // same for everyone, so it comes from the public, edge-cached copy: the
   // right column shows up fast even when your own feed is slow.
@@ -60,7 +60,7 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
         </section>
         <aside className="hx__rail" aria-label="This week on Seli">
           {market?.featured ? <TopBuyTile c={market.featured} watchlist={watchlist} /> : !market && <Skeleton lines={6} />}
-          <NewsRail posts={news ? news.posts || [] : null} limit={3} title="From the newswire" skipSlug={news?.posts?.[0]?.slug} />
+          <NewsRail posts={news ? news.posts || [] : null} limit={6} title="From the newswire" skipSlug={news?.posts?.[0]?.slug} />
         </aside>
       </div>
     </div>
@@ -358,6 +358,29 @@ function WatchStrip({ items }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [view]);
+  // On desktop the watchlist stops where the newswire card ends and scrolls
+  // inside itself past that, so the page doesn't run on below the rail.
+  const boxRef = useRef(null);
+  const [cap, setCap] = useState(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const box = boxRef.current;
+    const rail = document.querySelector('.hx__rail');
+    if (!box || !rail || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => {
+      const last = rail.lastElementChild;
+      const b = box.getBoundingClientRect();
+      // Only when the rail sits beside the watchlist (not stacked under it).
+      if (!last || rail.getBoundingClientRect().left < b.right) { setCap(null); return; }
+      setCap(Math.max(320, Math.round(last.getBoundingClientRect().bottom - b.top)));
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(rail); ro.observe(box.parentElement);
+    window.addEventListener('resize', measure);
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, [view]);
+  const onScroll = () => { const el = boxRef.current; if (el) setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 4); };
+  useEffect(onScroll, [cap, view, list.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const nSig = list.filter(it => it.signal).length;
   const nActive = list.filter(it => it.tier === 3).length;
   return (
@@ -370,6 +393,8 @@ function WatchStrip({ items }) {
         </span>
         {!narrow && <Segmented size="sm" value={view} onChange={setView} options={[{ value: 'grid', label: 'Grid' }, { value: 'list', label: 'List' }]} />}
       </div>
+      <div className={`hx-wl__box${cap && more ? ' hx-wl__box--more' : ''}`}>
+      <div className="hx-wl__scroll" ref={boxRef} onScroll={onScroll} style={cap ? { maxHeight: cap } : undefined}>
       {view === 'grid' ? (
         // Tiles are dealt into columns left to right (so the order still reads
         // across), and each column is its own stack: a hovered tile grows in
@@ -424,6 +449,8 @@ function WatchStrip({ items }) {
           ))}
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 }

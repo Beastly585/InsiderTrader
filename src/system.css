@@ -5,8 +5,8 @@
      purple  brand: buttons, links, focus, Seli's own reads (signal, first
              buy, reversal, cluster)
      aqua    tickers
-     slate   company insiders (role tags: neutral on purpose, so they
-             don't compete with tickers, buys and sells)
+     rose    company insiders (role tags; kept soft so they don't compete
+             with tickers, buys and sells)
      blue    Congress (role tags, Congress amounts)
      green   bought      red  sold      gray  neutral / quiet
 */
@@ -21,8 +21,8 @@
   --tk:        #4FD1B1;               /* ticker text  */
   --tk-bg:     rgba(63, 191, 160, .13);
   --tk-hover:  rgba(63, 191, 160, .26);
-  --corp:      #C5CCD8;               /* company insider */
-  --corp-bg:   rgba(197, 204, 216, .11);
+  --corp:      #E7A6C0;               /* company insider */
+  --corp-bg:   rgba(231, 166, 192, .12);
   --cong:      #6CB4F2;               /* Congress */
   --cong-bg:   rgba(90, 171, 240, .14);
   --sig:       #A99FFF;               /* Seli's reads (brand purple, lighter for text) */
@@ -44,8 +44,8 @@
   --tk:        #0F766E;
   --tk-bg:     #DDF4EE;
   --tk-hover:  #C3EBE1;
-  --corp:      #3A4354;
-  --corp-bg:   #E9ECF1;
+  --corp:      #9A2F5E;
+  --corp-bg:   #FBE9F0;
   --cong:      #1A65C8;
   --cong-bg:   #DBEAFE;
   --sig:       #4338C9;
@@ -174,3 +174,7 @@
 }
 /* Tickers on the Insiders table follow the ticker color too. */
 .sx-lb__tk { color: var(--tk); }
+.sx-roles__pair { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Insiders table: shorter, scrolls inside, header stays put. */
+.sx-lb__scroll { max-height: min(640px, 68vh); overflow: auto; overscroll-behavior: contain; }
+.sx-lb__scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: inset 0 -0.5px 0 var(--border); }
