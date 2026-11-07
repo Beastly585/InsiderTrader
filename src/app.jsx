@@ -3,7 +3,9 @@ import logoSimple from './assets/logo-simple.png';
 import { isPro, buildSignals, processLeaderboardRows, RISK_APPETITE_THRESHOLDS, RISK_APPETITE_LABELS, tierFromPct, filterAndScoreSignals } from './lib/scoring.js';
 import { fmt } from './lib/format.js';
 import { useAuth, useUser, useClerk, SignInButton, SignedIn, SignedOut } from '@clerk/clerk-react';
-import { loadStripe } from '@stripe/stripe-js';
+// The "pure" entry doesn't add Stripe's script on import, so Stripe (and its
+// fraud-prevention cookies) only loads once a checkout window opens.
+import { loadStripe } from '@stripe/stripe-js/pure';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 // src/app.jsx — Seli — insider trading intelligence platform
 // const { useState, useEffect, useMemo, useCallback, useRef } = React;
@@ -4749,7 +4751,7 @@ function PrivacyPage() {
 
         <h3>Usage Data</h3>
         <p>We collect standard server logs (IP addresses, browser type, pages visited, timestamps) for security monitoring, performance optimization, and debugging.</p>
-        <p>We also use PostHog for product analytics: which pages are viewed, what's clicked, and basic device and browser details. PostHog stores a random ID in a first-party cookie and your browser's local storage so visits can be counted, and it isn't linked to your name or email. We use Sentry to collect error reports when something breaks: the error, the page it happened on, and browser details. Neither is used for advertising.</p>
+        <p>We also use PostHog for product analytics: which pages are viewed, what's clicked, and basic device and browser details. PostHog stores a random ID in a first-party cookie and your browser's local storage so visits can be counted, and it isn't linked to your name or email. We use Sentry to collect error reports when something breaks: the error, the page it happened on, and browser details. Cloudflare Web Analytics, which runs on the same network that serves the site, counts page views and load times without cookies. None of these is used for advertising.</p>
 
         <h2>3. How We Use Your Information</h2>
         <p>We use the information we collect to:</p>
@@ -4771,7 +4773,7 @@ function PrivacyPage() {
             <tr><td><a href="https://clerk.com/privacy" target="_blank" rel="noopener noreferrer">Clerk</a></td><td>Authentication, user management</td><td>Email, name, profile picture</td></tr>
             <tr><td><a href="https://stripe.com/privacy" target="_blank" rel="noopener noreferrer">Stripe</a></td><td>Payment processing</td><td>Email, payment method (direct to Stripe)</td></tr>
             <tr><td><a href="https://neon.tech/privacy" target="_blank" rel="noopener noreferrer">Neon</a></td><td>Database hosting</td><td>Account data, watchlist, preferences</td></tr>
-            <tr><td><a href="https://cloudflare.com/privacypolicy" target="_blank" rel="noopener noreferrer">Cloudflare</a></td><td>Hosting, CDN, security</td><td>Request metadata (IP, headers)</td></tr>
+            <tr><td><a href="https://cloudflare.com/privacypolicy" target="_blank" rel="noopener noreferrer">Cloudflare</a></td><td>Hosting, CDN, security, page-view analytics</td><td>Request metadata (IP, headers), pages viewed, load times</td></tr>
             <tr><td><a href="https://snaptrade.com/privacy" target="_blank" rel="noopener noreferrer">SnapTrade</a></td><td>Brokerage connection</td><td>Connection token, portfolio data</td></tr>
             <tr><td><a href="https://resend.com/privacy" target="_blank" rel="noopener noreferrer">Resend</a></td><td>Email delivery</td><td>Email address, email content</td></tr>
             <tr><td><a href="https://posthog.com/privacy" target="_blank" rel="noopener noreferrer">PostHog</a></td><td>Product analytics</td><td>Pages viewed, clicks, device and browser details, a random visitor ID</td></tr>
@@ -4807,7 +4809,7 @@ function PrivacyPage() {
         <p>Residents of Colorado, Connecticut, Virginia, Utah, and other states with consumer privacy laws have similar rights to access, correct, delete, and opt out of certain processing of personal data. Contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> to exercise these rights.</p>
 
         <h2>9. Cookies</h2>
-        <p>Seli uses an essential cookie for sign-in and a first-party analytics cookie (PostHog) to count visits. We do not use advertising cookies or cross-site tracking. Full details are in our <a href="/cookies">Cookie Policy</a>.</p>
+        <p>Seli uses an essential cookie for sign-in, a first-party analytics cookie (PostHog) to count visits, and Stripe's fraud-prevention cookies once you open a checkout. We do not use advertising cookies or cross-site tracking. Full details are in our <a href="/cookies">Cookie Policy</a>.</p>
 
         <h2>10. Children's Privacy</h2>
         <p>Seli is not directed at anyone under the age of 18. We do not knowingly collect personal information from anyone under 18. If we learn that we have collected personal information from someone under 18, we will delete it promptly.</p>
@@ -4841,7 +4843,7 @@ function CookiePage() {
         <p>Signing in and staying signed in requires a session cookie, set by Seli's authentication provider, Clerk (clerk.com). It's strictly necessary. Without it, Seli can't tell you're signed in, so there's no opt-out for it while still using an account.</p>
 
         <h2>3. Analytics</h2>
-        <p>Seli uses PostHog to see which pages get used and where people get stuck. PostHog sets a first-party cookie (its name starts with <code>ph_</code>) and keeps a matching entry in localStorage, holding a random visitor ID. It isn't tied to your name or email, it isn't shared with advertisers, and it's only set on seli.app. Error reports go to Sentry when something breaks; Sentry doesn't set cookies here.</p>
+        <p>Seli uses PostHog to see which pages get used and where people get stuck. PostHog sets a first-party cookie (its name starts with <code>ph_</code>) and keeps a matching entry in localStorage, holding a random visitor ID. It isn't tied to your name or email, it isn't shared with advertisers, and it's only set on seli.app. Error reports go to Sentry when something breaks, and Cloudflare Web Analytics counts page views; neither sets cookies.</p>
 
         <h2>4. Local Storage (Not a Cookie, But Similar)</h2>
         <p>Seli also uses your browser's localStorage for small preferences that stay on your device: your light/dark theme, whether you've seen the welcome guide, and view choices like grid or list. Clearing your browser's site data resets these to their defaults, and your account itself is untouched.</p>
@@ -4850,7 +4852,7 @@ function CookiePage() {
         <p>No advertising cookies. No cross-site tracking. No cookie-based fingerprinting.</p>
 
         <h2>6. Third-Party Services</h2>
-        <p>A few features route through services with their own cookie practices while you're actively using them, such as Stripe during checkout and your brokerage's own site during the SnapTrade connection flow. Seli doesn't control those cookies, and their own policies apply while you're on their pages.</p>
+        <p>Stripe, our payment processor, only loads when you open an upgrade or checkout window. From then on it sets two cookies on seli.app, <code>__stripe_mid</code> and <code>__stripe_sid</code>, which Stripe uses to prevent fraud. Your brokerage's own site sets its own cookies during the SnapTrade connection flow. Seli doesn't control those cookies, and Stripe's and your brokerage's policies apply to them.</p>
 
         <h2>7. Your Choices</h2>
         <p>Most browsers let you block or delete cookies in settings. Blocking the PostHog cookie, or using a content blocker that stops analytics, doesn't affect anything in Seli. Blocking Clerk's session cookie prevents sign-in entirely, since it's required for authentication, and there's no way around this while still using a Seli account.</p>
@@ -4919,8 +4921,8 @@ const HELP_SECTIONS = [
         <p>A trade set up months in advance under a written plan. Marked "Planned" in filings tables. These say less about what the insider thinks today.</p>
         <h3>Stake change</h3>
         <p>Shares bought compared with what the insider already held. A $200K buy that doubles someone's stake reads differently from one that adds 1%.</p>
-        <h3>Role tags</h3>
-        <p>Blue-green tags are a company insider's job (CEO, Board member, Major shareholder and so on). Blue tags with the Capitol icon are members of Congress (House or Senate). The full list is under the table on the Insiders page.</p>
+        <h3>Roles</h3>
+        <p>Next to each company insider's name is their job, from a short list: CEO, CFO, Executive (any other top officer), Board chair, VP, Board member, Major shareholder (owns 10%+) or Fund. The top jobs are in darker text; hover the role to see the exact title from the filing. Members of Congress get a blue House or Senate badge with a Capitol icon instead.</p>
         <h3>Hit rate</h3>
         <p>On insider pages and the Insiders ranking: the share of someone's open-market buys where the stock is now at least 5% higher than their buy price. Buys within 5% either way count as flat and are left out. The number of buys it's based on is always shown next to it.</p>
         <h3>Avg since buy vs. S&amp;P 500</h3>

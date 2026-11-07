@@ -1,7 +1,7 @@
 // src/components/ui.jsx — small building blocks for the research pages.
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useApi } from '../lib/api.js';
-import { roleText, isCongressRole, memberChamber, isEntityName } from '../lib/text.js';
+import { roleText, roleTag, isCongressRole, memberChamber, isEntityName } from '../lib/text.js';
 
 // True below a width, kept in sync as the window resizes. Tables use it to
 // switch to stacked rows on phones instead of squeezing columns.
@@ -42,11 +42,13 @@ export function Chip({ tone = 'neutral', children, title }) {
 }
 export const Tag = Chip;
 
-// Who someone is, the same way everywhere, color-coded: members of Congress
-// get a blue tag with a Capitol icon reading House, Senate or Congress;
-// company insiders get a deep petrol tag with their role in plain words. (So a
-// company's "President" can't be mistaken for anyone in government.) So the two never blur together in a mixed list, and
-// nobody has to decode "Dir" or "C-suite exec".
+// Who someone is, the same way everywhere. Members of Congress get a blue
+// badge with a Capitol icon reading House, Senate or Congress, since their
+// trades follow different rules (dollar ranges, up to 45 days late).
+// Company insiders get their role as plain text from a short list of seven
+// (CEO, CFO, Executive, VP, Board chair, Board member, Major shareholder),
+// darker for the top jobs, so the name and ticker stay the loudest things on
+// the row.
 // Pass congress (bool) when known; otherwise it's read from the role.
 export function RoleTag({ role, congress, title, name, className = '' }) {
   const cg = congress ?? isCongressRole(role);
@@ -54,10 +56,14 @@ export function RoleTag({ role, congress, title, name, className = '' }) {
     const chamber = memberChamber({ role, title }); // "House", "Senate" or "Congress"
     return <span className={`sx-role sx-role--congress ${className}`} title={chamber === 'Congress' ? 'Member of Congress' : `Member of Congress, ${chamber}`}><Icon name="capitol" size={11} />{chamber}</span>;
   }
-  // A fund or company filing as an insider (usually a big shareholder) has no
-  // job title; "Insider" says nothing, so name what it is.
-  const label = isEntityName(name) ? 'Fund' : roleText(role);
-  return <span className={`sx-role sx-role--corp ${className}`} title="Company insider">{label}</span>;
+  // Company insiders: the role as plain text (no badge), darker for the top
+  // jobs. Hover shows the exact title. A fund or company filing as an
+  // insider says Fund; an unknown title shows nothing.
+  if (isEntityName(name)) return <span className={`sx-role sx-role--corp ${className}`} title="A firm or fund that owns 10% or more">Fund</span>;
+  const t = roleTag(role);
+  if (!t) return null;
+  const exact = roleText(role);
+  return <span className={`sx-role sx-role--corp${t.top ? ' sx-role--top' : ''} ${className}`} title={exact !== t.label ? `${exact} · company insider` : 'Company insider'}>{t.label}</span>;
 }
 
 export function TypeBadge({ type, om = true }) {

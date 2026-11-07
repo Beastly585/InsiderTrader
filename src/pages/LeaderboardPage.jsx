@@ -183,31 +183,26 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
   );
 }
 
-// What each role tag means. Same tags (and colors) as the table above.
+// What the role labels mean: collapsed under the table, open on request.
 const ROLE_GUIDE = [
-  ['CEO', 'Chief executive. Runs the company day to day.'],
-  ['CFO', 'Chief financial officer. Runs the money side: reporting, cash, guidance.'],
-  ['COO', 'Chief operating officer. Runs operations.'],
-  ['CTO', 'Chief technology officer.'],
-  ['President', 'Often the CEO or number two. Senior officer either way.'],
-  ['Executive', 'Any other officer the company names: chief legal, chief marketing and the like.'],
-  ['Vice president', 'VP, SVP or EVP. Senior manager who has to report trades.'],
-  ['General counsel', 'Top lawyer at the company.'],
-  ['Board chair', 'Leads the board of directors.'],
-  ['Board member', 'Sits on the board. Usually not an employee, but sees the same inside picture.'],
-  ['Major shareholder', 'Owns 10% or more of the stock, so has to report trades like an insider.'],
-  ['Fund', 'A firm or fund (not a person) that owns 10%+. Not ranked here.'],
-  ['Insider', 'Filed a Form 4 without a clear title.'],
+  ['CEO', true, 'Chief executive. Runs the company day to day.'],
+  ['CFO', true, 'Chief financial officer. Runs the money side.'],
+  ['Executive', true, 'Any other top officer: COO, CTO, president, general counsel and the like. Hover a name\'s role to see the exact title.'],
+  ['Board chair', true, 'Leads the board of directors.'],
+  ['VP', false, 'Vice president (VP, SVP or EVP). Senior manager who has to report trades.'],
+  ['Board member', false, 'Sits on the board. Usually not an employee, but sees the same inside picture.'],
+  ['Major shareholder', false, 'Owns 10% or more of the stock, so has to report trades like an insider.'],
+  ['Fund', false, 'A firm or fund (not a person) that owns 10%+. Not ranked here.'],
 ];
 function RoleGuide() {
   return (
-    <section className="sx-roles" aria-labelledby="sx-roles-h">
-      <h2 id="sx-roles-h" className="hx-label">What the role tags mean</h2>
-      <p className="sx-roles__intro">Company insiders have to report their own trades to the SEC within 2 business days on a Form 4. The tag is their job at the company that filed.</p>
+    <details className="sx-roles">
+      <summary className="sx-roles__sum">What do the roles mean?</summary>
+      <p className="sx-roles__intro">Company insiders report their own trades to the SEC within 2 business days on a Form 4. The role is their job at the company that filed; the top jobs are in darker text.</p>
       <dl className="sx-roles__list">
-        {ROLE_GUIDE.map(([label, text]) => (
+        {ROLE_GUIDE.map(([label, top, text]) => (
           <div key={label} className="sx-roles__item">
-            <dt><span className="sx-role sx-role--corp">{label}</span></dt>
+            <dt><span className={`sx-role sx-role--corp${top ? ' sx-role--top' : ''}`}>{label}</span></dt>
             <dd>{text}</dd>
           </div>
         ))}
@@ -216,6 +211,6 @@ function RoleGuide() {
           <dd>Members of Congress. They report under the STOCK Act, in dollar ranges, up to 45 days after the trade.</dd>
         </div>
       </dl>
-    </section>
+    </details>
   );
 }

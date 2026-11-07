@@ -5,9 +5,7 @@
      purple  brand: buttons, links, focus, Seli's own reads (signal, first
              buy, reversal, cluster)
      aqua    tickers
-     petrol  company insiders (role tags: a solid deep blue-green, so they
-             read apart from tickers, Congress, buys and sells by weight
-             as well as hue)
+     (none)  company insiders: role as plain text, darker for top jobs
      blue    Congress (role tags, Congress amounts)
      green   bought      red  sold      gray  neutral / quiet
 */
@@ -83,7 +81,11 @@
 .sx-chip--buy, .sx-type--buy, .hx-tag--buy, .hx-sig--buy { background: var(--buy-bg); color: var(--buy); }
 .sx-chip--sell, .sx-type--sell, .hx-tag--sell, .hx-sig--sell { background: var(--sell-bg); color: var(--sell); }
 .sx-role--congress, .hx-tag--cg { background: var(--cong-bg); color: var(--cong); }
-.sx-role--corp { background: var(--corp-bg); color: var(--corp); }
+.sx-role--corp {
+  background: none; padding: 0; height: auto; border-radius: 0;
+  font: 500 12.5px/1.4 var(--font); color: var(--text-3);
+}
+.sx-role--corp.sx-role--top { color: var(--text-2); font-weight: 600; }
 /* Seli's reads: signal, first buy, reversal, cluster, new */
 .sx-chip--accent, .sx-chip--rev, .sx-chip--signal, .hx-tag--new, .hx-tag--rev, .hx-sig--accent, .hx-sig--rev, .hx-wc__sig {
   background: var(--sig-bg); color: var(--sig);
@@ -161,11 +163,18 @@
 }
 
 /* ── Role guide (Insiders page) ──────────────────────────────────────────── */
-.sx-roles { margin: 20px 0 8px; padding: 16px 18px; border: 0.5px solid var(--border); border-radius: var(--radius-lg, 12px); background: var(--surface); }
+.sx-roles { margin: 4px auto 8px; max-width: 900px; padding: 0 18px; }
+.sx-roles[open] { padding: 14px 18px 16px; border: 0.5px solid var(--border); border-radius: var(--radius-lg, 12px); background: var(--surface); }
+.sx-roles__sum { cursor: pointer; width: fit-content; margin: 0 auto; font-size: 13px; font-weight: 600; color: var(--accent-strong); list-style: none; }
+.sx-roles[open] .sx-roles__sum { margin: 0; color: var(--text-2); }
+.sx-roles__sum::-webkit-details-marker { display: none; }
+.sx-roles__sum::after { content: ' ›'; }
+.sx-roles[open] .sx-roles__sum::after { content: ''; }
+.sx-roles__sum:hover { text-decoration: underline; }
 .sx-roles h2 { margin: 0; padding: 0; border: 0; }
 .sx-roles__intro { margin: 6px 0 12px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
 .sx-roles__list { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; }
-.sx-roles__item { display: grid; grid-template-columns: 132px minmax(0, 1fr); align-items: baseline; gap: 10px; }
+.sx-roles__item { display: grid; grid-template-columns: 124px minmax(0, 1fr); align-items: baseline; gap: 10px; }
 .sx-roles__item dt { margin: 0; }
 .sx-roles__item dd { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
 @media (max-width: 720px) {
@@ -196,3 +205,5 @@
    page's link color and underline made it inline, and its shine layers
    spilled out as gray boxes). */
 .legal-content a.lp-btn-primary { display: inline-block; color: #fff; text-decoration: none; }
+/* Seli's reads under a trade (first buy, reversal): brand purple, both. */
+.sx-table__code--accent, .sx-table__code--rev { color: var(--sig); }

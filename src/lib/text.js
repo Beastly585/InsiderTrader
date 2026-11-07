@@ -226,6 +226,23 @@ const ROLE_WORDS = {
   Director: 'Board member', Dir: 'Board member',
 };
 export const roleText = role => ROLE_WORDS[role] || role || 'Insider';
+
+// The short list used for role labels next to names (the sentences above
+// keep the fuller words). Seven words, in two levels of seniority; an
+// unknown title shows nothing rather than a vague "Insider".
+const TAG_WORDS = {
+  CEO: 'CEO', CFO: 'CFO',
+  COO: 'Executive', CTO: 'Executive', 'C-suite exec': 'Executive', 'C-Suite': 'Executive', Exec: 'Executive',
+  Officer: 'Executive', President: 'Executive', 'General Counsel': 'Executive',
+  Chair: 'Board chair', VP: 'VP',
+  Director: 'Board member', Dir: 'Board member',
+  '10% owner': 'Major shareholder',
+};
+const TOP_TAGS = new Set(['CEO', 'CFO', 'Executive', 'Board chair']);
+export function roleTag(role) {
+  const label = TAG_WORDS[role] || null;
+  return label ? { label, top: TOP_TAGS.has(label) } : null;
+}
 export const isCongressRole = role => ['Senator', 'Representative', 'Congress'].includes(role);
 
 // Same rules as worker/lib/intel.js shortRole, for rows that arrive with a
