@@ -42,6 +42,7 @@ function LeaderList({ rows, sort, watchlist }) {
               <InsiderLink raw={r.raw} className="sx-lb__name">{r.name}</InsiderLink>
               <div className="sx-lb__who">
                 <RoleTag role={r.role} congress={!!r.congress} title={r.title} />
+                {(r.tickers || []).length > 0 && <span className="sx-lb__in">bought</span>}
                 {(r.tickers || []).slice(0, 2).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
               </div>
               <div className="sx-lb__stats">{bits.join(' · ')}</div>
@@ -135,6 +136,7 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
               <thead>
                 <tr>
                   <th>Insider</th>
+                  <th className="sx-hide-sm">Stocks</th>
                   <th className="sx-r">Hit rate</th>
                   <th className="sx-r sx-hide-sm">Avg since buy</th>
                   <th className="sx-r">vs S&amp;P 500</th>
@@ -149,10 +151,12 @@ export default function LeaderboardPage({ pro, onUpgrade, publicMode = false, wa
                     <tr key={r.raw}>
                       <td className="sx-table__who">
                         <InsiderLink raw={r.raw}>{r.name}</InsiderLink>
-                        <span className="sx-table__role">
-                          <RoleTag role={r.role} congress={!!r.congress} title={r.title} />
-                          {(r.tickers || []).slice(0, 3).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
-                        </span>
+                        <span className="sx-table__role"><RoleTag role={r.role} congress={!!r.congress} title={r.title} /></span>
+                      </td>
+                      {/* The stocks they bought, apart from their role, so a
+                          role never reads as a label on the ticker. */}
+                      <td className="sx-hide-sm sx-lb__stocks">
+                        {(r.tickers || []).slice(0, 3).map(t => <StockLink key={t} ticker={t} plain className="sx-lb__tk" />)}
                       </td>
                       <td className="sx-r sx-mono">{r.hit_rate != null ? `${r.hit_rate}%` : '—'}<span className="sx-n">{r.priced ? `of ${r.priced} scored` : ''}</span></td>
                       <td className={`sx-r sx-mono sx-hide-sm ${r.avg_return >= 0 ? 'sx-up' : 'sx-down'}`}>{r.avg_return != null ? pct(r.avg_return, 1) : '—'}</td>
