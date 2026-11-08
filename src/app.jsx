@@ -268,7 +268,7 @@ function UpgradeModal({ feature, pro, onClose }) {
         { step: '2', text: 'Seli checks every new SEC filing through the day' },
         { step: '3', text: 'Get an email the same day they file' },
       ],
-      cta: 'Start watching',
+      cta: 'Start following',
     },
     data: {
       title: 'See the full picture',
@@ -582,7 +582,7 @@ function ProWelcomeModal({ onClose }) {
       <h2 className="sx-dialog__title">You're on Pro</h2>
       <p className="sx-dialog__text">Thanks for backing Seli. Here's what just turned on:</p>
       <ul className="sx-dialog__list">
-        <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Unlimited watching.</b> As many stocks and people as you like.</span></li>
+        <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Unlimited following.</b> As many stocks and people as you like.</span></li>
         <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Same-day alerts.</b> An email when someone you follow files a trade.</span></li>
         <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>Full history.</b> Every trade{since ? ` back to ${since}` : ''}, on every page.</span></li>
         <li><IconCheck style={{ width: 14, height: 14 }} /><span><b>The full leaderboard.</b> 2 and 5 year views, plus brokerage linking.</span></li>
@@ -4886,7 +4886,7 @@ const HELP_SECTIONS = [
         <h3>Trades</h3>
         <p>Two views. <strong>Signals</strong> is the short list of trades worth a look (what counts is under What the numbers mean), ranked by strength. <strong>All trades</strong> is every open-market insider and Congress trade, with filters for dates, buys or sales, who's trading and size.</p>
         <h3>Insiders</h3>
-        <p>Ranks people by how their open-market buys have done against the S&amp;P 500. Every figure shows how many buys it's based on. The guide under the table explains each role tag.</p>
+        <p>Ranks people by how their open-market buys have done against the S&amp;P 500. Every figure shows how many buys it's based on. "What do the roles mean?" under the table explains each role.</p>
         <h3>Stock pages</h3>
         <p>A plain-English summary of what insiders have done lately, a price chart with every insider buy and sale marked on it, who's trading, and the filings themselves with links to the SEC originals.</p>
         <h3>Insider pages</h3>
@@ -4922,7 +4922,7 @@ const HELP_SECTIONS = [
         <h3>Stake change</h3>
         <p>Shares bought compared with what the insider already held. A $200K buy that doubles someone's stake reads differently from one that adds 1%.</p>
         <h3>Roles</h3>
-        <p>Next to each company insider's name is their job, from a short list: CEO, CFO, Executive (any other top officer), Board chair, VP, Board member, Major shareholder (owns 10%+) or Fund. The top jobs are in darker text; hover the role to see the exact title from the filing. Members of Congress get a blue House or Senate badge with a Capitol icon instead.</p>
+        <p>Next to each company insider's name is their job, from a short list: CEO, CFO, Executive (any other top officer), Board chair, VP, Officer (no title given), Board member, Major shareholder (owns 10%+) or Fund. If a filing gives no role at all, nothing is shown. The top jobs are in darker text; hover the role to see the exact title from the filing. Members of Congress get a blue House or Senate badge with a Capitol icon instead.</p>
         <h3>Hit rate</h3>
         <p>On insider pages and the Insiders ranking: the share of someone's open-market buys where the stock is now at least 5% higher than their buy price. Buys within 5% either way count as flat and are left out. The number of buys it's based on is always shown next to it.</p>
         <h3>Avg since buy vs. S&amp;P 500</h3>
@@ -5626,7 +5626,8 @@ function HelpCenterPage() {
   return (
     <div className="legal-page legal-page--framed">
       <div className="legal-content help-center">
-        <h1>Help Center</h1>
+        <h1>Help</h1>
+        <p className="help-center__sub">How Seli works, what the numbers mean, and how to reach us.</p>
         <div className="help-center__body">
           <nav className="help-center__nav" aria-label="Help topics">
             {HELP_SECTIONS.map(s => (
@@ -5640,10 +5641,11 @@ function HelpCenterPage() {
             ))}
           </nav>
           <div className="help-center__content">
+            <h2 className="help-center__title">{section.label}</h2>
             {section.render()}
+            <RateSeli />
           </div>
         </div>
-        <RateSeli />
       </div>
     </div>
   );
@@ -5968,7 +5970,7 @@ function AccountPage({ user, onUpgrade, dark, setDark }) {
               </select>
             </SxSetting>
           )}
-          <SxSetting label="Big executive buys anywhere" sub="A CEO, CFO or other C-suite executive buys at least this much of any stock, watched or not." pro locked={lock}>
+          <SxSetting label="Big executive buys anywhere" sub="A CEO, CFO or other C-suite executive buys at least this much of any stock, followed or not." pro locked={lock}>
             {pro && L.instant_high_conviction && (
               <select className="sx-select" value={L.instant_high_conviction_threshold} onChange={e => update({ instant_high_conviction_threshold: Number(e.target.value) })}>
                 <option value={250000}>$250K+</option><option value={500000}>$500K+</option><option value={1000000}>$1M+</option><option value={5000000}>$5M+</option>

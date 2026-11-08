@@ -21,6 +21,9 @@ import { SearchBox } from '../components/Search.jsx';
 
 const STARTERS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'JPM'];
 
+// Tags that are Seli's own reads (not plain facts) get the brand purple.
+const seliRead = t => /^(Reversal|First buy)/.test(t);
+
 export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
   const h = (portfolioTickers || []).slice(0, 60).join(',');
   // Fixed for this page load: when your last visit ended (null until we know who you are).
@@ -41,7 +44,7 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
   const activeN = y ? y.stocks.filter(s => s.active).length + y.people.filter(p => p.recent.length).length : 0;
   const totalN = y ? y.stocks.length + y.people.length : 0;
   const summary = !y ? 'What company insiders and members of Congress did with their own money.'
-    : !totalN ? 'Watch a few stocks or people and their insider trades show up here.'
+    : !totalN ? 'Follow a few stocks or people and their insider trades show up here.'
       : activeN ? `${activeN} of your ${plural(totalN, 'stock or person', 'stocks and people')} had insider activity in the last ${HOME_DAYS} days.`
         : `Nothing new on your ${plural(totalN, 'stock or person', 'stocks and people')} in the last ${HOME_DAYS} days.`;
 
@@ -52,7 +55,7 @@ export default function HomeFeed({ watchlist, portfolioTickers = [], user }) {
           <LatestPostPill post={news?.posts?.[0]} />
           <h1 className="hx-h1 hx-h1--in">{hello}</h1>
           <p className="hx-sub">{summary}</p>
-          <div className="hx-search"><SearchBox variant="inline" placeholder="Search a stock, CEO, or member of Congress" /></div>
+          <div className="hx-search"><SearchBox variant="inline" placeholder="Search stocks, CEOs, Congress" /></div>
           <Freshness className="hx-fresh" />
           {error && !d && <div style={{ marginTop: 24 }}><ErrorNote message={error} onRetry={reload} /></div>}
           {!d && !error && <div style={{ marginTop: 28 }}><Card><Skeleton lines={5} /></Card></div>}
@@ -199,7 +202,7 @@ function Yours({ d, watchlist, since }) {
       <>
         <div className="hx-sechead"><h2>Start with what you own</h2></div>
         <Card className="sx-yours sx-yours--empty">
-          <p className="sx-lead">Watch a few stocks or people. Their insider activity shows up here first, and in your {watchlist.pro ? 'digests' : 'Sunday email'}.</p>
+          <p className="sx-lead">Follow a few stocks or people. Their insider activity shows up here first, and in your {watchlist.pro ? 'digests' : 'Sunday email'}.</p>
           <div className="sx-yours__search"><SearchBox mode="pick" variant="inline" watchlist={watchlist} placeholder="Add a stock or person you follow"
             onPick={it => (it.kind === 'stock' ? watchlist.toggleTicker(it.id) : watchlist.toggleInsider(it.id))} /></div>
           <div className="sx-starters">
@@ -389,7 +392,7 @@ function WatchStrip({ items }) {
         <span className="hx-wl__counts">
           <b>{nActive}</b> active this week
           {nSig > 0 && <> · <span className="hx-wl__sigcount"><Icon name="trend" size={11} /> {plural(nSig, 'signal')}</span></>}
-          {' · '}{list.length} watched
+          {' · '}{list.length} followed
         </span>
         {!narrow && <Segmented size="sm" value={view} onChange={setView} options={[{ value: 'grid', label: 'Grid' }, { value: 'list', label: 'List' }]} />}
       </div>
@@ -415,7 +418,7 @@ function WatchStrip({ items }) {
                     <span className="hx-wc__what">{it.what}</span>
                     <span className="hx-wc__when">{it.date && it.tier > 0 ? ago(it.date) : 'No trades in a year'}</span>
                     <span className="hx-wc__more"><span className="hx-wc__morein">
-                      {it.tags.filter(t => t !== 'New').length > 0 && <span className="hx-wc__tags">{it.tags.filter(t => t !== 'New').map(t => <span key={t} className="hx-wtable__tag">{t}</span>)}</span>}
+                      {it.tags.filter(t => t !== 'New').length > 0 && <span className="hx-wc__tags">{it.tags.filter(t => t !== 'New').map(t => <span key={t} className={`hx-wtable__tag${seliRead(t) ? ' hx-tag--rev' : ''}`}>{t}</span>)}</span>}
                       <span className="hx-wc__detail">{it.detail}</span>
                       {it.signal && <span className="hx-wc__sigline"><Icon name="trend" size={10} /> {it.signal.why.slice(0, 2).join(' · ')}</span>}
                       <span className="hx-wc__go">Open <Icon name="arrow" size={11} /></span>
@@ -440,7 +443,7 @@ function WatchStrip({ items }) {
               </span>
               <span className="hx-wtable__what" role="cell">
                 {it.signal && <span className="hx-wc__sig" title={sigText(it.signal)}><Icon name="trend" size={10} />Signal</span>}
-                {it.tags.filter(t => t !== 'New' || !it.signal).map(t => <span key={t} className="hx-wtable__tag">{t}</span>)}
+                {it.tags.filter(t => t !== 'New' || !it.signal).map(t => <span key={t} className={`hx-wtable__tag${seliRead(t) ? ' hx-tag--rev' : ''}`}>{t}</span>)}
                 <span className="hx-wtable__detail">{it.detail}</span>
               </span>
               <span className={`hx-wtable__amt sx-mono sx-r ${sideClass(it)}`} role="cell">{it.amt || '—'}</span>

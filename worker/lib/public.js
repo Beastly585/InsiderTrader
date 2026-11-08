@@ -204,7 +204,7 @@ async function congressHub(ctx) {
   const [members, recent, popular] = await Promise.all([
     ctx.db(`
       SELECT f.insider_name,
-             MODE() WITHIN GROUP (ORDER BY f.insider_title) AS title,
+             MODE() WITHIN GROUP (ORDER BY NULLIF(NULLIF(f.insider_title, ''), 'Unknown')) AS title,
              COUNT(*)::int AS n,
              COUNT(*) FILTER (WHERE f.transaction_type = 'buy')::int AS buys,
              COUNT(*) FILTER (WHERE f.transaction_type = 'sell')::int AS sells,

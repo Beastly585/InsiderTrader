@@ -4,7 +4,8 @@
    Color roles (each has a dark and a light value):
      purple  brand: buttons, links, focus, Seli's own reads (signal, first
              buy, reversal, cluster)
-     aqua    tickers
+     ink     tickers (bright mono on a quiet chip: every hue already means
+             something, and green/aqua read as "bought")
      (none)  company insiders: role as plain text, darker for top jobs
      blue    Congress (role tags, Congress amounts)
      green   bought      red  sold      gray  neutral / quiet
@@ -17,9 +18,9 @@
   --blue-500:  #5AABF0;
   --amber-500: #E8A130;
 
-  --tk:        #4FD1B1;               /* ticker text  */
-  --tk-bg:     rgba(63, 191, 160, .13);
-  --tk-hover:  rgba(63, 191, 160, .26);
+  --tk:        #EDEEF5;               /* ticker text  */
+  --tk-bg:     rgba(255, 255, 255, .08);
+  --tk-hover:  rgba(255, 255, 255, .15);
   --corp:      #DDF2F7;               /* company insider */
   --corp-bg:   #1F5566;
   --cong:      #6CB4F2;               /* Congress */
@@ -40,9 +41,9 @@
   --blue-500:  #2563EB;
   --amber-500: #D97706;
 
-  --tk:        #0F766E;
-  --tk-bg:     #DDF4EE;
-  --tk-hover:  #C3EBE1;
+  --tk:        #161A24;
+  --tk-bg:     #ECEEF3;
+  --tk-hover:  #DFE2E9;
   --corp:      #FFFFFF;
   --corp-bg:   #1D5E72;
   --cong:      #1A65C8;
@@ -57,7 +58,7 @@
   --press:     rgba(15, 15, 30, .04);
 }
 
-/* ── Tickers: aqua, everywhere ───────────────────────────────────────────── */
+/* ── Tickers: one look, everywhere ───────────────────────────────────────────── */
 .sx-tk, .hx-post__tk {
   color: var(--tk); background: var(--tk-bg);
   transition: background-color .15s ease, color .15s ease;
@@ -186,7 +187,7 @@
 .sx-lb__tk { color: var(--tk); }
 .sx-roles__pair { display: flex; flex-wrap: wrap; gap: 4px; }
 /* Insiders table: shorter, scrolls inside, header stays put. */
-.sx-lb__scroll { max-height: min(640px, 68vh); overflow: auto; overscroll-behavior: contain; }
+.sx-lb__scroll { max-height: max(560px, calc(100vh - 230px)); overflow: auto; overscroll-behavior: contain; }
 .sx-lb__scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: inset 0 -0.5px 0 var(--border); }
 
 /* ── Help, legal and export pages inside the site frame ─────────────────── */
@@ -207,3 +208,36 @@
 .legal-content a.lp-btn-primary { display: inline-block; color: #fff; text-decoration: none; }
 /* Seli's reads under a trade (first buy, reversal): brand purple, both. */
 .sx-table__code--accent, .sx-table__code--rev { color: var(--sig); }
+
+/* Plain ticker lists (Insiders table) get the same chip as everywhere else. */
+.sx-lb__tk { color: var(--tk); background: var(--tk-bg); padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
+.sx-lb__tk:hover { background: var(--tk-hover); }
+.sx-table__role > .sx-lb__tk:first-child { margin-left: 0; }
+
+/* ── Active states: clearly "this one" ───────────────────────────────────── */
+.sx-seg__btn--on, .sx-seg__btn--on:hover {
+  background: var(--sig-bg); color: var(--sig); font-weight: 600;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.hx-viewtab { color: var(--text-3); }
+.hx-viewtab--on { color: var(--text); border-bottom-width: 2.5px; border-bottom-color: var(--accent); }
+.sx-nav__link--on { color: var(--text); border-bottom-width: 2.5px; }
+
+/* ── Help ────────────────────────────────────────────────────────────────── */
+.legal-content.help-center { max-width: 1040px; }
+.legal-content.help-center h1 { font-size: 26px; letter-spacing: -0.3px; margin-bottom: 4px; }
+.help-center__sub { margin: 0 0 28px; font-size: 14px; color: var(--text-2); }
+.help-center__body { gap: 44px; }
+.help-center__nav { width: 210px; top: 76px; padding: 6px; border: 0.5px solid var(--border); border-radius: 12px; background: var(--surface); }
+.help-center__nav-item { font-size: 13.5px; color: var(--text-2); }
+.help-center__nav-item--active, .help-center__nav-item--active:hover { background: var(--sig-bg); color: var(--sig); }
+.help-center__content { max-width: 700px; font-size: 14.5px; line-height: 1.65; }
+.help-center__title { margin: 0 0 18px; padding-bottom: 12px; border-bottom: 0.5px solid var(--border); font-size: 20px; font-weight: 700; color: var(--text); }
+.help-center__content h3 { font-size: 15px; margin-top: 26px; margin-bottom: 6px; }
+.help-center__title + h3, .help-center__title + p { margin-top: 0; }
+.help-center__content p { margin: 0 0 10px; }
+.help-center__content .sx-rate { margin-top: 44px; max-width: none; }
+@media (max-width: 640px) {
+  .help-center__nav { width: 100%; padding: 4px; gap: 4px; position: static; }
+  .help-center__nav-item { padding: 7px 10px; font-size: 13px; }
+}

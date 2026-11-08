@@ -457,7 +457,7 @@ function HowItWorks({ c, signUp }) {
         <div className="hx-how__arrow" aria-hidden="true"><Icon name="arrow" size={18} /></div>
         <div className="hx-how__col">
           <div className="hx-how__step"><span>3</span>Published and sent</div>
-          <p className="hx-how__cap">What's worth knowing goes up in plain English on every stock and person page and <a href="/blog" className="sx-link" onClick={navClick('/blog')}>the newswire</a>. Watch a stock or person and it lands in your inbox.</p>
+          <p className="hx-how__cap">What's worth knowing goes up in plain English on every stock and person page and <a href="/blog" className="sx-link" onClick={navClick('/blog')}>the newswire</a>. Follow a stock or person and it lands in your inbox.</p>
           <div className="hx-how__out-card">
             <div className="hx-notif">
               <span className="hx-notif__logo" aria-hidden="true">S</span>
@@ -634,7 +634,7 @@ export function PublicHome() {
               <li>Same-day email alerts and a daily digest</li>
               <li>Full history{since ? `, back to ${since}` : ''}</li>
               <li>The full leaderboard, 2 and 5 year views</li>
-              <li>Link your brokerage to watch what you hold</li>
+              <li>Link your brokerage to follow what you hold</li>
             </ul>
             <button className="sx-btn sx-btn--accent" onClick={goPro}>Go Pro</button>
           </div>

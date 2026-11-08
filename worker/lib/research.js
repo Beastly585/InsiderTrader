@@ -102,7 +102,7 @@ async function search(ctx, qRaw) {
          GROUP BY ticker
          ORDER BY ${up ? `(ticker = ${sqlVal(up)}) DESC,` : ''} COUNT(*) DESC LIMIT 6`),
       ctx.db(`
-        SELECT insider_name AS key, MODE() WITHIN GROUP (ORDER BY insider_title) AS sub,
+        SELECT insider_name AS key, MODE() WITHIN GROUP (ORDER BY NULLIF(NULLIF(insider_title, ''), 'Unknown')) AS sub,
                MODE() WITHIN GROUP (ORDER BY ticker) AS ticker, COUNT(*)::int AS n, MAX(filing_date) AS last_date,
                BOOL_OR(relationship = 'congress' OR transaction_code LIKE 'CONGRESS%') AS congress
           FROM public.filings
@@ -243,7 +243,7 @@ async function stock(ctx, ticker) {
        WHERE f.ticker = ${T} AND f.transaction_type IN ('buy','sell') AND ${date} < CURRENT_DATE - ${FREE_DAYS}`),
     ctx.db(`
       SELECT f.insider_name,
-             MODE() WITHIN GROUP (ORDER BY f.insider_title) AS title,
+             MODE() WITHIN GROUP (ORDER BY NULLIF(NULLIF(f.insider_title, ''), 'Unknown')) AS title,
              MODE() WITHIN GROUP (ORDER BY f.relationship) AS relationship,
              BOOL_OR(f.relationship = 'congress' OR f.transaction_code LIKE 'CONGRESS%') AS congress,
              (ARRAY_AGG(f.shares_owned_after::float ORDER BY ${date} DESC) FILTER (WHERE f.shares_owned_after IS NOT NULL))[1] AS owned,
@@ -551,7 +551,7 @@ async function marketFeed(ctx) {
                 OR f.relationship = 'congress' OR f.transaction_code LIKE 'CONGRESS%')`),
       ctx.db(`
         SELECT f.ticker, MAX(f.company_name) AS company_name, f.insider_name,
-               MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
+               MODE() WITHIN GROUP (ORDER BY NULLIF(NULLIF(f.insider_title, ''), 'Unknown')) AS insider_title,
                MODE() WITHIN GROUP (ORDER BY f.relationship) AS relationship,
                MAX(f.transaction_code) AS transaction_code,
                SUM(f.value)::float AS value, COUNT(*)::int AS n, MAX(COALESCE(f.transaction_date, f.filing_date)) AS trade_date,
@@ -831,7 +831,7 @@ async function buildLeaderboard(ctx, years, source) {
          ${sourceClause}
     )
     SELECT f.insider_name,
-           MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
+           MODE() WITHIN GROUP (ORDER BY NULLIF(NULLIF(f.insider_title, ''), 'Unknown')) AS insider_title,
            BOOL_OR(f.transaction_code LIKE 'CONGRESS%' OR f.relationship = 'congress') AS is_congress,
            COUNT(*) FILTER (WHERE ${buy})::int AS om_buys,
            COALESCE(SUM(f.value) FILTER (WHERE ${buy} AND f.value < 50000000000), 0)::float AS bought_value,

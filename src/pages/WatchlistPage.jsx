@@ -169,7 +169,7 @@ export default function WatchlistPage({ watchlist, portfolioTickers = [], onUpgr
           )}
 
           {d?.holdings?.length > 0 && (
-            <Card title="In your portfolio" sub="From your linked brokerage. Watch one to get it in alerts." pad={false}>
+            <Card title="In your portfolio" sub="From your linked brokerage. Follow one to get it in alerts." pad={false}>
               <ul className="sx-wl">
                 {d.holdings.map(s => (
                   <li key={s.ticker} className="sx-wl__row">

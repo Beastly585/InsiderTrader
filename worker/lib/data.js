@@ -357,7 +357,7 @@ function leadersSql({ years, source, min, limit, nameLike }) {
       SELECT close::float AS close FROM public.benchmark_prices WHERE symbol = 'SPY' ORDER BY date DESC LIMIT 1
     ), agg AS (
       SELECT f.insider_name,
-             MODE() WITHIN GROUP (ORDER BY f.insider_title) AS insider_title,
+             MODE() WITHIN GROUP (ORDER BY NULLIF(NULLIF(f.insider_title, ''), 'Unknown')) AS insider_title,
              MODE() WITHIN GROUP (ORDER BY f.relationship) AS relationship,
              BOOL_OR(f.transaction_code LIKE 'CONGRESS%') AS is_congress,
              COUNT(*) FILTER (WHERE ${buy}) AS om_buys,

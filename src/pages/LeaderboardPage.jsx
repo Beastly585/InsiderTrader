@@ -189,6 +189,7 @@ const ROLE_GUIDE = [
   ['CFO', true, 'Chief financial officer. Runs the money side.'],
   ['Executive', true, 'Any other top officer: COO, CTO, president, general counsel and the like. Hover a name\'s role to see the exact title.'],
   ['Board chair', true, 'Leads the board of directors.'],
+  ['Officer', false, 'An officer whose filing gave no title (only the officer box was ticked).'],
   ['VP', false, 'Vice president (VP, SVP or EVP). Senior manager who has to report trades.'],
   ['Board member', false, 'Sits on the board. Usually not an employee, but sees the same inside picture.'],
   ['Major shareholder', false, 'Owns 10% or more of the stock, so has to report trades like an insider.'],

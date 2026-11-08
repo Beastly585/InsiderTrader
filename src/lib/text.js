@@ -228,12 +228,14 @@ const ROLE_WORDS = {
 export const roleText = role => ROLE_WORDS[role] || role || 'Insider';
 
 // The short list used for role labels next to names (the sentences above
-// keep the fuller words). Seven words, in two levels of seniority; an
-// unknown title shows nothing rather than a vague "Insider".
+// keep the fuller words), in two levels of seniority. An unknown title shows
+// nothing rather than a vague "Insider".
 const TAG_WORDS = {
   CEO: 'CEO', CFO: 'CFO',
   COO: 'Executive', CTO: 'Executive', 'C-suite exec': 'Executive', 'C-Suite': 'Executive', Exec: 'Executive',
-  Officer: 'Executive', President: 'Executive', 'General Counsel': 'Executive',
+  President: 'Executive', 'General Counsel': 'Executive',
+  // "Officer" with no title: the filing only ticked the officer box.
+  Officer: 'Officer',
   Chair: 'Board chair', VP: 'VP',
   Director: 'Board member', Dir: 'Board member',
   '10% owner': 'Major shareholder',

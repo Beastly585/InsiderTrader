@@ -373,7 +373,7 @@ function StepConviction({ onNext }) {
         })}
       </div>
       <p className="ob-conviction__note">Sales aren't scored. Insiders sell for taxes, diversification and scheduled plans, so a sale on its own says little. Seli still shows every one.</p>
-      <button className="ob-cta" onClick={onNext}>Next: pick what to watch <IconArrowRight size={16} /></button>
+      <button className="ob-cta" onClick={onNext}>Next: pick what to follow <IconArrowRight size={16} /></button>
     </div>
   );
 }
@@ -388,8 +388,8 @@ function StepWatchlist({ watchlist, onNext }) {
     <div className="ob-step ob-step--watchlist">
       <div className="ob-step__header">
         <span className="ob-step__eyebrow">Welcome to Seli</span>
-        <h2 className="ob-step__title">What should Seli watch for you?</h2>
-        <p className="ob-step__subtitle">Pick stocks you own or are thinking about, or people to keep tabs on. You'll get an email when insiders trade them.{limit ? ` Free accounts watch up to ${limit}.` : ''}</p>
+        <h2 className="ob-step__title">What should Seli keep an eye on?</h2>
+        <p className="ob-step__subtitle">Pick stocks you own or are thinking about, or people to keep tabs on. You'll get an email when insiders trade them.{limit ? ` Free accounts can follow up to ${limit}.` : ''}</p>
       </div>
 
       <div className="ob-watchlist__search-wrap">
@@ -556,7 +556,7 @@ function StepReady({ watchlist, onComplete }) {
       <div className="ob-step__header">
         <h2 className="ob-step__title ob-ready__title">You're all set</h2>
         <p className="ob-step__subtitle">
-          {n > 0 ? `You're following ${n} ${n === 1 ? 'thing' : 'things'}. Home shows what insiders did with them first.` : 'Watch anything from its page, or from your Watchlist.'}
+          {n > 0 ? `You're following ${n} ${n === 1 ? 'thing' : 'things'}. Home shows what insiders did with them first.` : 'Follow anything from its page, or from your Watchlist.'}
         </p>
       </div>
       {watchlist.tickers.length > 0 && (
