@@ -139,7 +139,7 @@ function PopularStocks() {
   );
 }
 
-const FOOT_LINKS = [['All stocks', '/stocks'], ['Insider buying', '/insider-buying'], ['Congress trades', '/congress'], ['Insider trading news', '/blog'], ['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
+const FOOT_LINKS = [['All stocks', '/stocks'], ['Insider buying', '/insider-buying'], ['Congress trades', '/congress'], ['Insider trading news', '/blog'], ['About', '/about'], ['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookies', '/cookies'], ['Help', '/help']];
 
 export function PublicFooter({ logoSrc, className = '' }) {
   return (

@@ -441,9 +441,7 @@
 @media (max-width: 640px) { .hx-label__sub { display: block; margin: 2px 0 0; } .hx-mv { height: 122px; } .hx-mv__main { width: 104px; } }
 
 /* Right column stays quieter than the hero */
-.hx-topbuy .sx-watch { background: transparent; color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 55%, transparent); height: 30px; padding: 0 12px; }
-.hx-topbuy .sx-watch:hover { background: var(--accent-50); filter: none; }
-.hx-topbuy .sx-watch--on { color: var(--sig); background: var(--sig-bg); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.hx-topbuy .sx-watch { height: 30px; padding: 0 12px; }
 @media (min-width: 981px) {
   .hx-post__title, .hx-post:first-child .hx-post__title { font-size: 16px; line-height: 1.4; }
 }

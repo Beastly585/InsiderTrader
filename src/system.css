@@ -135,10 +135,14 @@
 .sx-btn:not(.sx-btn--accent):not(.sx-btn--ghost):hover, .hx-toggle:not(:disabled):hover, .hx-allnews:hover, .sx-wl-link:hover, .hx-select:hover {
   background: var(--surface-2); border-color: color-mix(in srgb, var(--accent) 40%, var(--border-md)); color: var(--text);
 }
-/* Pills: Watch / Following / Email */
-.sx-watch { border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); background: transparent; color: var(--accent-strong); }
-.sx-watch:hover { background: var(--sig-bg); filter: none; }
-.sx-watch--on { background: var(--sig-bg); color: var(--sig); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+/* Follow everywhere: gray outline when off, filled purple when on. */
+.sx-watch, .sx-follow2 { border: 1px solid var(--border-md); background: transparent; color: var(--text-2); }
+.sx-watch:hover, .sx-follow2:not(.sx-follow2--on):hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border-md)); background: var(--press); color: var(--text); filter: none; }
+.sx-watch--on, .sx-watch--on:hover, .sx-follow2--on {
+  background: var(--sig-bg); color: var(--sig);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.sx-watch--on:hover { background: color-mix(in srgb, var(--accent) 26%, transparent); }
 /* Quiet */
 .sx-btn--ghost:hover, .sx-nav__icon:hover, .sx-seg__btn:hover:not(.sx-seg__btn--on) { background: var(--press); color: var(--text); }
 .sx-seg__btn--on:hover { color: var(--text); }
@@ -255,3 +259,6 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .sx-follow--on:hover { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+/* About inside the site frame. */
+.lp-info--framed { padding-top: 40px; }
+@media (max-width: 640px) { .lp-info--framed { padding: 24px 16px 56px; } }
