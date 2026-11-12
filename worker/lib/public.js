@@ -272,7 +272,7 @@ async function congressHub(ctx) {
 //   stocks    an open-market buy or sale by a company insider in 12 months
 //   insiders  company insiders with an open-market trade in 12 months and
 //             2+ trades or $100K+ (funds and holding companies left out),
-//             top 15,000 by dollars
+//             top 3,000 by dollars
 //   congress  members with a trade in the last 2 years
 //
 // lastmod is the page's latest trade, so it only moves when the page does.
@@ -282,7 +282,10 @@ const urlset = urls => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="h
 }\n</urlset>\n`;
 const day = d => asDate(d) || null;
 const SM_TICKER = /^[A-Z0-9][A-Z0-9.\-]{0,9}$/;
-const SM_PEOPLE_MAX = 15000;
+// Kept to a few thousand on purpose (see the note above): with 15,000 people
+// Google left ~19,000 URLs as "discovered, not indexed". Everyone else still
+// has a page, linked from the stock pages they traded.
+const SM_PEOPLE_MAX = 3000;
 const CORP = `COALESCE(f.relationship, '') <> 'congress' AND COALESCE(f.transaction_code, '') NOT LIKE 'CONGRESS%'`;
 
 // Terms and privacy stay linked from every page's footer; they don't need to
